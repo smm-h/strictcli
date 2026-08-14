@@ -816,6 +816,13 @@ export class AppImpl implements App {
 	readonly configEnabled: boolean;
 	/** Explicit config path override, marker-resolved at construction. */
 	readonly configPathOverride: string | undefined;
+	/**
+	 * The config path AS DECLARED, retained beside its resolution because the
+	 * dumped schema publishes the declaration and never the resolution: a
+	 * resolved absolute path is a property of the dumping machine, not of the
+	 * committed source (contract §25.11).
+	 */
+	readonly configPathDeclared: string | InfraRootPath | undefined;
 	/** Absolute --dump-schema target, resolved once at construction. */
 	readonly schemaOutPath: string;
 	readonly configFormat: "json" | "toml";
@@ -931,6 +938,7 @@ export class AppImpl implements App {
 		}
 		// Resolve the config-path marker (if any) now that the roots exist
 		// (Python __post_init__ order: before global-flag marker validation).
+		this.configPathDeclared = spec.configPath;
 		if (spec.configPath !== undefined && isInfraRootPath(spec.configPath)) {
 			try {
 				this.configPathOverride = resolveInfraRootPath(

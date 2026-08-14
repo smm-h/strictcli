@@ -932,7 +932,11 @@ export function validateAndBuildKwargs(
 		if (idx < positionals.length) {
 			argValues.set(
 				a.name,
-				coerceArgValue(a.name, positionals[idx] as string, a.schema),
+				coerceArgValue(
+					a.name,
+					positionals[idx] as string,
+					elemSchemaOf(a.carrier),
+				),
 			);
 		} else if (a.opts.presence === "required") {
 			throw new ParseError(errMissingRequiredArgument(a.name));
@@ -951,7 +955,9 @@ export function validateAndBuildKwargs(
 		}
 		argValues.set(
 			lastArg.name,
-			remaining.map((p) => coerceArgValue(lastArg.name, p, lastArg.schema)),
+			remaining.map((p) =>
+				coerceArgValue(lastArg.name, p, elemSchemaOf(lastArg.carrier)),
+			),
 		);
 	} else if (positionals.length > args.length) {
 		throw new ParseError(

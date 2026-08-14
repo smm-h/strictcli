@@ -1,19 +1,19 @@
 /**
  * Schema dump tests (src/schema.ts).
  *
- * EXPECTED_JSON below was derived by running the PYTHON implementation's
- * --dump-schema on a byte-equivalent mirror app (Python is the divergence
- * ground truth) and normalizing the known TS model deltas:
- *  - compound flag types become the TS carrier schema strings ("list[str]",
- *    "list[int]", "dict[str,int]" instead of Python's JSON-schema objects),
+ * EXPECTED_JSON below is the schema format's version 2 (contract §25), whose
+ * every rule is cross-language: the fragment subset and its key order, the
+ * choices split, the selector encoding, the declared key order, the rewritten
+ * defaults block, the behavioral-completeness keys and the byte canon. The
+ * v1 delta this header used to record -- compound types as TS carrier schema
+ * strings -- is GONE with the `type` key: a list carrier and a repeatable
+ * scalar publish one array fragment now, whichever spelling declared them.
+ *
+ * Two TS-side deltas survive, and neither is a format rule:
  *  - dict flag defaults are emitted with sorted keys (the TS Map display
  *    convention; the mirror declared {"beta": 2, "alpha": 1}),
  *  - project_id is stripped (the written file adds it back from
  *    package.json).
- * Everything else -- key order, omission rules, the defaults block, the
- * auto-registered check command and config group, checks/config_fields/infra
- * sections, SCF float tokens, and bare integer tokens -- is byte-derived
- * from the Python output.
  */
 
 import { strict as assert } from "node:assert";
@@ -47,43 +47,63 @@ import {
 import { schemaJson } from "../src/schema.js";
 
 const EXPECTED_JSON = `{
-  "schema_version": 1,
+  "schema_version": 2,
   "defaults": {
-    "schema_version": 1,
+    "schema_version": 2,
     "app": {
       "env_prefix": null,
       "config": false,
+      "config_format": "json",
+      "config_path": null,
+      "config_conflict_mode": "cli-wins",
+      "proc_observe_allowlist": [],
       "global_flags": [],
       "commands": {},
       "groups": {},
       "deprecated": {},
-      "tag_contracts": {}
+      "tag_contracts": {},
+      "checks": {},
+      "config_fields": {},
+      "infra": {}
     },
     "flag": {
       "short": null,
-      "default": null,
       "env": null,
-      "choices": null,
-      "repeatable": false,
-      "unique": false,
       "env_separator": null,
-      "negatable": null,
-      "hidden": false
+      "prefixed": true,
+      "choices": null,
+      "elect_by": null,
+      "unique": false,
+      "conflict_mode": null,
+      "negatable": null
     },
     "arg": {
-      "type": "str",
-      "default": null,
       "variadic": false,
       "choices": null
     },
+    "choice": {
+      "flags": []
+    },
+    "choice_record": {
+      "help": null
+    },
     "command": {
+      "consequential": false,
+      "dry_run_supported": true,
+      "dry_run_unsupported_reason": null,
+      "payload_schema": null,
+      "owns_stdout": false,
       "passthrough": false,
       "flags": [],
+      "flag_sets": [],
       "args": [],
       "tags": [],
       "constraints": [],
       "hidden": false,
-      "interactive": false
+      "interactive": false,
+      "config_fields": [],
+      "grants": [],
+      "forwarding": null
     },
     "group": {
       "commands": {},
@@ -91,6 +111,18 @@ const EXPECTED_JSON = `{
       "deprecated": {},
       "tags": [],
       "hidden": false
+    },
+    "config_field": {
+      "default": null,
+      "bound_commands": []
+    },
+    "check": {
+      "scope": null
+    },
+    "infra": {
+      "roots": [],
+      "handshakes": [],
+      "connections": []
     }
   },
   "name": "richapp",
@@ -101,8 +133,10 @@ const EXPECTED_JSON = `{
   "global_flags": [
     {
       "name": "chatter",
-      "type": "bool",
       "help": "Enable chatter output",
+      "value_schema": {
+        "type": "boolean"
+      },
       "short": "V",
       "presence": "default",
       "default": false,
@@ -110,22 +144,40 @@ const EXPECTED_JSON = `{
     },
     {
       "name": "log-level",
-      "type": "str",
       "help": "Logging level",
+      "value_schema": {
+        "type": "string",
+        "enum": [
+          "debug",
+          "info",
+          "warn",
+          "error"
+        ]
+      },
       "presence": "default",
       "default": "info",
       "env": "RICH_LOG_LEVEL",
       "choices": [
-        "debug",
-        "info",
-        "warn",
-        "error"
+        {
+          "value": "debug"
+        },
+        {
+          "value": "info"
+        },
+        {
+          "value": "warn"
+        },
+        {
+          "value": "error"
+        }
       ]
     },
     {
       "name": "state-file",
-      "type": "str",
       "help": "State file relative to the infra root",
+      "value_schema": {
+        "type": "string"
+      },
       "presence": "default",
       "default": {
         "relative_to_root": {
@@ -152,38 +204,48 @@ const EXPECTED_JSON = `{
       "flags": [
         {
           "name": "all",
-          "type": "bool",
           "help": "Run every registered check regardless of tag or name filters",
+          "value_schema": {
+            "type": "boolean"
+          },
           "presence": "default",
           "default": false,
           "negatable": true
         },
         {
           "name": "tag",
-          "type": "str",
           "help": "Tag DSL expression to select checks (e.g. 'changelog & !quality')",
+          "value_schema": {
+            "type": "string"
+          },
           "presence": "default",
           "default": ""
         },
         {
           "name": "name",
-          "type": "str",
           "help": "Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')",
+          "value_schema": {
+            "type": "string"
+          },
           "presence": "default",
           "default": ""
         },
         {
           "name": "list",
-          "type": "bool",
           "help": "List all registered checks with their tags and exit without running",
+          "value_schema": {
+            "type": "boolean"
+          },
           "presence": "default",
           "default": false,
           "negatable": true
         },
         {
           "name": "ignore-warnings",
-          "type": "bool",
           "help": "Treat warn-severity results as passing so they do not cause nonzero exit",
+          "value_schema": {
+            "type": "boolean"
+          },
           "presence": "default",
           "default": false,
           "negatable": true
@@ -200,43 +262,55 @@ const EXPECTED_JSON = `{
       "flags": [
         {
           "name": "name",
-          "type": "str",
           "help": "A string flag",
+          "value_schema": {
+            "type": "string"
+          },
           "presence": "default",
           "default": "world"
         },
         {
           "name": "count",
-          "type": "int",
           "help": "An integer flag",
+          "value_schema": {
+            "type": "integer"
+          },
           "presence": "default",
           "default": 42
         },
         {
           "name": "big",
-          "type": "int",
           "help": "A big integer flag",
+          "value_schema": {
+            "type": "integer"
+          },
           "presence": "default",
           "default": 9007199254740993
         },
         {
           "name": "ratio",
-          "type": "float",
           "help": "A float flag",
+          "value_schema": {
+            "type": "number"
+          },
           "presence": "default",
           "default": 3.14
         },
         {
           "name": "sim-run",
-          "type": "bool",
           "help": "Dry run mode",
+          "value_schema": {
+            "type": "boolean"
+          },
           "presence": "required",
           "negatable": true
         },
         {
           "name": "cache-file",
-          "type": "str",
           "help": "Cache file relative to the infra root",
+          "value_schema": {
+            "type": "string"
+          },
           "presence": "default",
           "default": {
             "relative_to_root": {
@@ -252,6 +326,9 @@ const EXPECTED_JSON = `{
         {
           "name": "target",
           "help": "Target to process",
+          "value_schema": {
+            "type": "string"
+          },
           "presence": "required"
         }
       ]
@@ -263,18 +340,28 @@ const EXPECTED_JSON = `{
       "flags": [
         {
           "name": "tag",
-          "type": "list[str]",
           "help": "Tags to apply",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "presence": "default",
           "default": [],
           "env": "RICH_TAGS",
-          "unique": true,
-          "env_separator": ","
+          "env_separator": ",",
+          "unique": true
         },
         {
           "name": "port",
-          "type": "list[int]",
           "help": "Ports to open",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
           "presence": "default",
           "default": [
             80,
@@ -283,8 +370,13 @@ const EXPECTED_JSON = `{
         },
         {
           "name": "matrix",
-          "type": "dict[str,int]",
           "help": "Named weights",
+          "value_schema": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
           "presence": "default",
           "default": {
             "alpha": 1,
@@ -300,9 +392,7 @@ const EXPECTED_JSON = `{
       "flags": [
         {
           "name": "format",
-          "type": "choice",
           "help": "Output format",
-          "elect_by": "member-flags",
           "presence": "required",
           "choices": [
             {
@@ -317,7 +407,8 @@ const EXPECTED_JSON = `{
               "name": "text",
               "help": "Text output"
             }
-          ]
+          ],
+          "elect_by": "member-flags"
         }
       ]
     },
@@ -328,27 +419,35 @@ const EXPECTED_JSON = `{
       "flags": [
         {
           "name": "host",
-          "type": "str",
           "help": "Deploy host",
+          "value_schema": {
+            "type": "string"
+          },
           "presence": "optional"
         },
         {
           "name": "port-num",
-          "type": "int",
           "help": "Deploy port",
+          "value_schema": {
+            "type": "integer"
+          },
           "presence": "optional"
         },
         {
           "name": "ssl",
-          "type": "bool",
           "help": "Use SSL",
+          "value_schema": {
+            "type": "boolean"
+          },
           "presence": "required",
           "negatable": true
         },
         {
           "name": "cert",
-          "type": "str",
           "help": "SSL certificate path",
+          "value_schema": {
+            "type": "string"
+          },
           "presence": "optional"
         }
       ],
@@ -374,15 +473,19 @@ const EXPECTED_JSON = `{
       "flags": [
         {
           "name": "email",
-          "type": "bool",
           "help": "Send email notification",
+          "value_schema": {
+            "type": "boolean"
+          },
           "presence": "required",
           "negatable": true
         },
         {
           "name": "alert",
-          "type": "bool",
           "help": "Enable alerts",
+          "value_schema": {
+            "type": "boolean"
+          },
           "presence": "required",
           "negatable": true
         }
@@ -403,17 +506,30 @@ const EXPECTED_JSON = `{
       "flags": [
         {
           "name": "page",
-          "type": "int",
           "help": "Page number",
+          "value_schema": {
+            "type": "integer"
+          },
           "presence": "default",
           "default": 1
         },
         {
           "name": "per-page",
-          "type": "int",
           "help": "Items per page",
+          "value_schema": {
+            "type": "integer"
+          },
           "presence": "default",
           "default": 20
+        }
+      ],
+      "flag_sets": [
+        {
+          "name": "pagination",
+          "flags": [
+            "page",
+            "per-page"
+          ]
         }
       ]
     },
@@ -425,17 +541,29 @@ const EXPECTED_JSON = `{
         {
           "name": "src",
           "help": "Source directory",
+          "value_schema": {
+            "type": "string"
+          },
           "presence": "required"
         },
         {
           "name": "mode",
           "help": "Copy mode",
+          "value_schema": {
+            "type": "string"
+          },
           "presence": "default",
           "default": "fast"
         },
         {
           "name": "extra",
           "help": "Extra files",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "presence": "optional",
           "variadic": true
         }
@@ -463,28 +591,60 @@ const EXPECTED_JSON = `{
       "flags": [
         {
           "name": "priority",
-          "type": "int",
           "help": "Priority level",
+          "value_schema": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          },
           "presence": "default",
           "default": 3,
           "choices": [
-            1,
-            2,
-            3,
-            4,
-            5
+            {
+              "value": 1
+            },
+            {
+              "value": 2
+            },
+            {
+              "value": 3
+            },
+            {
+              "value": 4
+            },
+            {
+              "value": 5
+            }
           ]
         },
         {
           "name": "threshold",
-          "type": "float",
           "help": "Threshold value",
+          "value_schema": {
+            "type": "number",
+            "enum": [
+              0.1,
+              0.5,
+              0.9
+            ]
+          },
           "presence": "default",
           "default": 0.5,
           "choices": [
-            0.1,
-            0.5,
-            0.9
+            {
+              "value": 0.1
+            },
+            {
+              "value": 0.5
+            },
+            {
+              "value": 0.9
+            }
           ]
         }
       ]
@@ -496,24 +656,30 @@ const EXPECTED_JSON = `{
       "flags": [
         {
           "name": "format",
-          "type": "str",
           "help": "Output format",
+          "value_schema": {
+            "type": "string"
+          },
           "short": "f",
           "presence": "default",
           "default": "table"
         },
         {
           "name": "color-off",
-          "type": "bool",
           "help": "Disable colors",
+          "value_schema": {
+            "type": "boolean"
+          },
           "presence": "default",
           "default": false,
           "negatable": false
         },
         {
           "name": "strict-mode",
-          "type": "bool",
           "help": "Strict mode",
+          "value_schema": {
+            "type": "boolean"
+          },
           "presence": "default",
           "default": false,
           "conflict_mode": "error",
@@ -566,8 +732,10 @@ const EXPECTED_JSON = `{
           "flags": [
             {
               "name": "plain",
-              "type": "bool",
               "help": "Display config values in a human-readable table format",
+              "value_schema": {
+                "type": "boolean"
+              },
               "presence": "default",
               "default": false,
               "negatable": true
@@ -584,16 +752,20 @@ const EXPECTED_JSON = `{
           "flags": [
             {
               "name": "clear",
-              "type": "bool",
               "help": "Clear a repeatable flag by setting its value to an empty list",
+              "value_schema": {
+                "type": "boolean"
+              },
               "presence": "default",
               "default": false,
               "negatable": true
             },
             {
               "name": "default",
-              "type": "bool",
               "help": "Reset a key to its default value by removing it from the config file",
+              "value_schema": {
+                "type": "boolean"
+              },
               "presence": "default",
               "default": false,
               "negatable": true
@@ -603,11 +775,17 @@ const EXPECTED_JSON = `{
             {
               "name": "key",
               "help": "The config key to set, matching a registered flag name",
+              "value_schema": {
+                "type": "string"
+              },
               "presence": "required"
             },
             {
               "name": "value",
               "help": "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
+              "value_schema": {
+                "type": "string"
+              },
               "presence": "optional"
             }
           ],
@@ -645,8 +823,10 @@ const EXPECTED_JSON = `{
           "flags": [
             {
               "name": "steps",
-              "type": "int",
               "help": "Migration steps",
+              "value_schema": {
+                "type": "integer"
+              },
               "presence": "optional"
             }
           ],
@@ -686,8 +866,10 @@ const EXPECTED_JSON = `{
               "flags": [
                 {
                   "name": "detailed",
-                  "type": "bool",
                   "help": "Show detailed stats",
+                  "value_schema": {
+                    "type": "boolean"
+                  },
                   "presence": "required",
                   "negatable": true
                 }
@@ -714,16 +896,6 @@ const EXPECTED_JSON = `{
     "quality": "chatter"
   },
   "checks": {
-    "lint-clean": {
-      "tags": [
-        "quality"
-      ],
-      "severity": "error",
-      "fast": true,
-      "pure": true,
-      "needs_network": false,
-      "depends_on": []
-    },
     "db-ping": {
       "tags": [
         "infra"
@@ -736,11 +908,23 @@ const EXPECTED_JSON = `{
         "lint-clean"
       ],
       "scope": "db"
+    },
+    "lint-clean": {
+      "tags": [
+        "quality"
+      ],
+      "severity": "error",
+      "fast": true,
+      "pure": true,
+      "needs_network": false,
+      "depends_on": []
     }
   },
   "config_fields": {
     "api.key": {
-      "type": "str",
+      "value_schema": {
+        "type": "string"
+      },
       "help": "API key for the service",
       "required": true,
       "bound_commands": [
@@ -748,7 +932,9 @@ const EXPECTED_JSON = `{
       ]
     },
     "listen_port": {
-      "type": "int",
+      "value_schema": {
+        "type": "integer"
+      },
       "help": "Port to listen on",
       "required": false,
       "default": 8080,
@@ -758,7 +944,9 @@ const EXPECTED_JSON = `{
       ]
     },
     "debug": {
-      "type": "bool",
+      "value_schema": {
+        "type": "boolean"
+      },
       "help": "Enable debug mode",
       "required": false,
       "default": false
@@ -1201,7 +1389,7 @@ test("--dump-schema writes the expected rich-app schema file", async () => {
 
 		const raw = readFileSync(schemaPath, "utf8");
 		// Exact sibling formatting: 2-space indent, ": " separator, trailing \n.
-		assert.ok(raw.startsWith('{\n  "schema_version": 1,\n  "defaults": {\n'));
+		assert.ok(raw.startsWith('{\n  "schema_version": 2,\n  "defaults": {\n'));
 		assert.ok(raw.endsWith("\n"));
 		assert.ok(!raw.endsWith("\n\n"));
 		// BigInt defaults are bare integer tokens, precise beyond 2^53.
@@ -1228,7 +1416,7 @@ test("dumpSchemaDict is CWD-free, has no project_id, and matches the file conten
 	const dict = buildRichApp().dumpSchemaDict();
 	assert.ok(!("project_id" in dict));
 	// Integer schema values are bigint (BigInt int64 end-to-end).
-	assert.equal(dict.schema_version, 1n);
+	assert.equal(dict.schema_version, 2n);
 	assert.deepEqual(JSON.parse(schemaJson(dict)), JSON.parse(EXPECTED_JSON));
 });
 
@@ -1512,4 +1700,357 @@ test("schema: presence is on every flag and arg entry, always", () => {
 	}
 	const defaults = dict.defaults as { arg: Record<string, unknown> };
 	assert.ok(!("required" in defaults.arg));
+});
+
+// ---------------------------------------------------------------------------
+// Schema format v2 (contract §25)
+// ---------------------------------------------------------------------------
+
+/** The command entry of a one-command app, as the dump publishes it. */
+function commandEntry(app: App, name = "cmd"): Record<string, unknown> {
+	const dict = app.dumpSchemaDict() as { commands: Record<string, unknown> };
+	return dict.commands[name] as Record<string, unknown>;
+}
+
+function flagEntries(app: App, name = "cmd"): Record<string, unknown>[] {
+	return (commandEntry(app, name).flags ?? []) as Record<string, unknown>[];
+}
+
+function oneFlagApp(f: ReturnType<typeof flag>): App {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: { a: f },
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("v2: the fragment table's rows, and the fragment's own key order", () => {
+	// Every row of §25.2's table that a TS declaration can produce, with the
+	// keys in the pinned order `type`, `items`, `additionalProperties`, `enum`.
+	const rows: [ReturnType<typeof flag>, unknown][] = [
+		[flag("a", t.str, { help: "h", presence: "optional" }), { type: "string" }],
+		[
+			flag("a", t.bool, { help: "h", presence: "optional" }),
+			{ type: "boolean" },
+		],
+		[
+			flag("a", t.int, { help: "h", presence: "optional" }),
+			{ type: "integer" },
+		],
+		[
+			flag("a", t.float, { help: "h", presence: "optional" }),
+			{ type: "number" },
+		],
+		[
+			flag("a", t.list(t.str), { help: "h", presence: "optional" }),
+			{ type: "array", items: { type: "string" } },
+		],
+		[
+			flag("a", t.dict(t.float), { help: "h", presence: "optional" }),
+			{ type: "object", additionalProperties: { type: "number" } },
+		],
+		[
+			flag("a", t.str, {
+				help: "h",
+				presence: "optional",
+				choices: [{ value: "x" }, { value: "y" }],
+			}),
+			{ type: "string", enum: ["x", "y"] },
+		],
+		[
+			// An ARRAY-shaped carrier carries its enum INSIDE items, describing
+			// the element -- never at the fragment root, which would say the array
+			// itself must equal one of the choices.
+			flag("a", t.list(t.int), {
+				help: "h",
+				presence: "optional",
+				choices: [{ value: 1n }, { value: 2n }],
+			}),
+			{ type: "array", items: { type: "integer", enum: [1n, 2n] } },
+		],
+	];
+	for (const [f, fragment] of rows) {
+		const entry = flagEntries(oneFlagApp(f))[0] as Record<string, unknown>;
+		assert.deepEqual(entry.value_schema, fragment);
+		assert.deepEqual(
+			Object.keys(entry.value_schema as object),
+			Object.keys(fragment as object),
+		);
+		// The v1 keys are GONE: the fragment carries the value's shape, arity
+		// included, so `type` and `repeatable` were two more spellings of it.
+		assert.ok(!("type" in entry));
+		assert.ok(!("repeatable" in entry));
+	}
+});
+
+test("v2: an optional flag emits the plain type -- there is no null in a fragment", () => {
+	const entry = flagEntries(
+		oneFlagApp(flag("a", t.str, { help: "h", presence: "optional" })),
+	)[0] as Record<string, unknown>;
+	// Presence is the sole authority on absence; a nullable fragment would be a
+	// second statement about the same fact.
+	assert.deepEqual(entry.value_schema, { type: "string" });
+	assert.equal(entry.presence, "optional");
+});
+
+test("v2: a variadic arg publishes the array fragment in either spelling", () => {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			args: [
+				arg("files", t.str, {
+					help: "the files",
+					presence: "optional",
+					variadic: true,
+					choices: [{ value: "a" }, { value: "b" }],
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
+	const args = commandEntry(app).args as Record<string, unknown>[];
+	assert.deepEqual((args[0] as Record<string, unknown>).value_schema, {
+		type: "array",
+		items: { type: "string", enum: ["a", "b"] },
+	});
+	// `variadic` SURVIVES the arity rule that deleted `repeatable`: it names a
+	// token-consumption rule a consumer needs for `<files>...`.
+	assert.equal((args[0] as Record<string, unknown>).variadic, true);
+});
+
+test("v2: a choices declaration splits into an enum and the sibling records", () => {
+	const entry = flagEntries(
+		oneFlagApp(
+			flag("a", t.str, {
+				help: "h",
+				presence: "optional",
+				choices: [
+					{ value: "head", help: "the current commit only" },
+					{ value: "branches" },
+				],
+			}),
+		),
+	)[0] as Record<string, unknown>;
+	assert.deepEqual(entry.value_schema, {
+		type: "string",
+		enum: ["head", "branches"],
+	});
+	// `help` is omitted when the entry declares none, so an absent help and an
+	// empty one cannot produce different bytes for the same declaration.
+	assert.deepEqual(entry.choices, [
+		{ value: "head", help: "the current commit only" },
+		{ value: "branches" },
+	]);
+});
+
+test("v2: the flag entry's key order is the pinned one", () => {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				it: flag("it", t.list(t.str), {
+					help: "h",
+					short: "i",
+					env: "MYAPP_IT",
+					envSeparator: ",",
+					prefixed: false,
+					unique: true,
+					conflictMode: "error",
+					choices: [{ value: "x" }],
+					presence: "default",
+					default: [],
+				}),
+			},
+			handler: () => 0,
+		}),
+	);
+	assert.deepEqual(Object.keys(flagEntries(app)[0] as object), [
+		"name",
+		"help",
+		"value_schema",
+		"short",
+		"presence",
+		"default",
+		"env",
+		"env_separator",
+		"prefixed",
+		"choices",
+		"unique",
+		"conflict_mode",
+	]);
+});
+
+test("v2: prefixed is omitted at its baseline and emitted when declared false", () => {
+	const declared = flagEntries(
+		oneFlagApp(
+			flag("a", t.str, { help: "h", presence: "optional", prefixed: false }),
+		),
+	)[0] as Record<string, unknown>;
+	assert.equal(declared.prefixed, false);
+	const baseline = flagEntries(
+		oneFlagApp(flag("a", t.str, { help: "h", presence: "optional" })),
+	)[0] as Record<string, unknown>;
+	assert.ok(!("prefixed" in baseline));
+});
+
+test("v2: a command's flag sets are published beside its flags", () => {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	const pagination = flagSet("pagination", {
+		page: flag("page", t.int, {
+			help: "page",
+			presence: "default",
+			default: 1n,
+		}),
+	});
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flagSets: [pagination],
+			handler: () => 0,
+		}),
+	);
+	const entry = commandEntry(app);
+	// The member flags keep their ordinary entries, so this adds a grouping
+	// without duplicating a declaration.
+	assert.deepEqual(entry.flag_sets, [{ name: "pagination", flags: ["page"] }]);
+	assert.equal((entry.flags as unknown[]).length, 1);
+});
+
+test("v2: the three app-level config keys appear only off their baseline", () => {
+	const plain = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "t",
+		config: true,
+	}).dumpSchemaDict();
+	assert.ok(!("config_format" in plain));
+	assert.ok(!("config_path" in plain));
+	assert.ok(!("config_conflict_mode" in plain));
+
+	const declared = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "t",
+		config: true,
+		configFormat: "toml",
+		configPath: "./etc/myapp.toml",
+		configConflictMode: "error",
+	}).dumpSchemaDict();
+	assert.equal(declared.config_format, "toml");
+	// The DECLARATION, never the resolution: the resolved absolute path is a
+	// property of the dumping machine.
+	assert.equal(declared.config_path, "./etc/myapp.toml");
+	assert.equal(declared.config_conflict_mode, "error");
+});
+
+test("v2: a relativeToRoot config path publishes the marker, not the resolution", () => {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "t",
+		config: true,
+		infraRoot: { MYAPP_HOME: "/opt/myapp" },
+		configPath: relativeToRoot("MYAPP_HOME", "etc", "config.json"),
+	});
+	assert.deepEqual(app.dumpSchemaDict().config_path, {
+		relative_to_root: { env_var: "MYAPP_HOME", parts: ["etc", "config.json"] },
+	});
+});
+
+test("v2: a config field entry carries a fragment and keeps `required`", () => {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "t",
+		config: true,
+	});
+	app.configField("listen_port", {
+		type: t.int,
+		help: "the port",
+		default: 8080n,
+	});
+	const fields = app.dumpSchemaDict().config_fields as Record<
+		string,
+		Record<string, unknown>
+	>;
+	assert.deepEqual(Object.keys(fields.listen_port as object), [
+		"value_schema",
+		"help",
+		"required",
+		"default",
+	]);
+	assert.deepEqual(
+		(fields.listen_port as Record<string, unknown>).value_schema,
+		{
+			type: "integer",
+		},
+	);
+	assert.equal((fields.listen_port as Record<string, unknown>).required, false);
+});
+
+// ---------------------------------------------------------------------------
+// The byte canon (§25.8)
+//
+// The committed .strictcli/schema.json must be DUMPER-INDEPENDENT: a repository
+// whose file is written sometimes by one implementation and sometimes by
+// another must see a diff exactly when something changed.
+// ---------------------------------------------------------------------------
+
+test("canon: escaping is exactly what JSON mandates, and nothing else", () => {
+	// Non-ASCII is raw UTF-8; `<`, `>` and `&` are literal; `/` is never
+	// escaped. Control characters take JSON's short escapes where one exists
+	// and \u00XX otherwise.
+	assert.equal(schemaJson("héllo — ünïcode"), '"héllo — ünïcode"');
+	assert.equal(schemaJson("<a href='x'> & </a>"), "\"<a href='x'> & </a>\"");
+	assert.equal(schemaJson("a/b/c"), '"a/b/c"');
+	assert.equal(
+		schemaJson('quote " and backslash \\'),
+		'"quote \\" and backslash \\\\"',
+	);
+	assert.equal(schemaJson("tab\tnewline\n"), '"tab\\tnewline\\n"');
+	assert.equal(schemaJson("bell"), '"bell\\u0007"');
+	// A lone surrogate is reachable only from a TS string literal, and the
+	// alternative to escaping it is emitting invalid UTF-8.
+	assert.equal(schemaJson("\ud800"), '"\\ud800"');
+});
+
+test("canon: numbers are SCF floats and bare integer tokens", () => {
+	assert.equal(schemaJson(1n), "1");
+	assert.equal(schemaJson(-9007199254740993n), "-9007199254740993");
+	assert.equal(schemaJson(0.1), "0.1");
+	assert.equal(schemaJson(1e-7), "1e-7");
+	assert.equal(schemaJson(3), "3.0");
+});
+
+test("canon: layout is two-space indent, one member per line, inline empties", () => {
+	assert.equal(
+		schemaJson({ a: 1n, b: [1n, 2n], c: {}, d: [] }),
+		[
+			"{",
+			'  "a": 1,',
+			'  "b": [',
+			"    1,",
+			"    2",
+			"  ],",
+			'  "c": {},',
+			'  "d": []',
+			"}",
+		].join("\n"),
+	);
+});
+
+test("canon: the written file ends with exactly one newline", async () => {
+	await withTempCwd(async (dir) => {
+		writeFileSync("package.json", '{"name": "canonapp"}\n');
+		await buildMinimalApp().test(["--dump-schema"]);
+		const raw = readFileSync(join(dir, ".strictcli", "schema.json"), "utf8");
+		assert.ok(raw.endsWith("}\n"));
+		assert.ok(!raw.endsWith("\n\n"));
+	});
 });

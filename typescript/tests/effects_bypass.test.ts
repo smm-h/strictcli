@@ -304,9 +304,10 @@ test("bypass: the provider check is excluded from the static schema", () => {
 		checksEmbed: 'app = "t"\n',
 	});
 	// Provider-sourced checks materialize lazily per cwd, so they are not part
-	// of the committed schema.
+	// of the committed schema -- and a block with nothing left in it is omitted
+	// entirely, which is the baseline the `defaults` block states (§25.7).
 	const schema = app.dumpSchemaDict();
-	assert.deepEqual(schema.checks, {});
+	assert.equal(schema.checks, undefined);
 });
 
 test("bypass: the provider is identifiable so tests can drop it", () => {

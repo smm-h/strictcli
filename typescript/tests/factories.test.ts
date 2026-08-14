@@ -238,8 +238,9 @@ void [
 		}),
 	// @ts-expect-error dict carriers are not allowed on args
 	() => arg("values", t.dict(t.int), { help: "h", presence: "required" }),
-	// @ts-expect-error list args are expressed as scalar carrier + variadic: true
-	() => arg("values", t.list(t.float), { help: "h", presence: "required" }),
+	// A list carrier on a NON-variadic arg is a registration error, not a type
+	// error: only a variadic arg delivers a list, and the type system cannot
+	// see which way `variadic` was declared here (§25.4).
 	() =>
 		flag("level", t.int, {
 			help: "h",

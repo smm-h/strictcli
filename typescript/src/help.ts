@@ -470,8 +470,11 @@ function argBlockRows(args: readonly AnyArg[]): FlagBlockRow[] {
 
 function argMeta(a: AnyArg): string {
 	const metaParts: string[] = [];
-	if (a.schema !== "str") {
-		metaParts.push(`type: ${a.schema}`);
+	// The ELEMENT type, so a variadic arg reads the same in either spelling:
+	// the element carrier plus `variadic: true`, or the list carrier (§25.4).
+	const elem = elemSchemaOf(a.carrier);
+	if (elem !== "str") {
+		metaParts.push(`type: ${elem}`);
 	}
 	const choices = argChoices(a);
 	// The one-line `[choices: a, b, c]` form survives only while the arg
@@ -484,9 +487,7 @@ function argMeta(a: AnyArg): string {
 	// positional renders `[required]` where nothing was rendered before, since
 	// this framework's help has no usage line to show requiredness any other
 	// way (contract §23.8).
-	metaParts.push(
-		presenceMeta(a.opts.presence, a.opts.default, "scalar", a.schema),
-	);
+	metaParts.push(presenceMeta(a.opts.presence, a.opts.default, "scalar", elem));
 	return ` [${metaParts.join("] [")}]`;
 }
 

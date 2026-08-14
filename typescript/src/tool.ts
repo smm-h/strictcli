@@ -29,16 +29,14 @@ import {
 	type AnyCommand,
 	type AnyDecl,
 	type AnyFlag,
-	choiceValues,
-	elemSchemaOf,
 	flagOpts,
 	memberList,
-	schemaKind,
+	scalarFragment,
+	valueSchemaFragment,
 } from "./factories.js";
 import { type CallOptions, commandClassification } from "./invoke.js";
 import { flagParamName } from "./parse.js";
 import { resolveCommand } from "./routing.js";
-import type { ScalarSchema } from "./types.js";
 import { formatChoices, formatValueForError } from "./values.js";
 
 /**
@@ -62,14 +60,6 @@ export interface Tool {
 	) => Promise<unknown>;
 }
 
-/** Scalar schema -> JSON Schema type string. */
-const JSON_SCHEMA_TYPES: Readonly<Record<ScalarSchema, string>> = {
-	str: "string",
-	bool: "boolean",
-	int: "integer",
-	float: "number",
-};
-
 /**
  * Builds a JSON Schema parameters object for a command's flags and
  * positional args (Go buildJSONSchema / Python _build_json_schema).
@@ -82,28 +72,18 @@ export function buildJSONSchema(
 	const properties: Record<string, unknown> = {};
 	const required: string[] = [];
 
-	/** One ordinary flag's property, at root scope or any depth. */
-	const flagProperty = (f: AnyFlag): Record<string, unknown> => {
-		const prop: Record<string, unknown> = {};
-		const kind = schemaKind(f.schema);
-		if (kind === "dict") {
-			prop.type = "object";
-			prop.additionalProperties = {
-				type: JSON_SCHEMA_TYPES[elemSchemaOf(f.carrier)],
-			};
-		} else if (kind === "list") {
-			prop.type = "array";
-			prop.items = { type: JSON_SCHEMA_TYPES[elemSchemaOf(f.carrier)] };
-		} else {
-			prop.type = JSON_SCHEMA_TYPES[f.schema as ScalarSchema];
-		}
-		const o = flagOpts(f);
-		if (o.choices !== undefined) {
-			prop.enum = [...choiceValues(o.choices)];
-		}
-		prop.description = o.help;
-		return prop;
-	};
+	/**
+	 * One ordinary flag's property, at root scope or any depth. The parameter
+	 * schema is the SAME fragment the dump publishes (§25.13), so a tool
+	 * schema's shape and a dumped one cannot disagree -- and an `enum` on an
+	 * array-shaped parameter therefore sits inside `items`, describing the
+	 * element, rather than at the property root, which would say the array
+	 * itself must equal one of the choices.
+	 */
+	const flagProperty = (f: AnyFlag): Record<string, unknown> => ({
+		...valueSchemaFragment(f),
+		description: flagOpts(f).help,
+	});
 
 	/**
 	 * The MCP projection is FLATTEN plus a description map (contract §24.11):
@@ -129,7 +109,7 @@ export function buildJSONSchema(
 			for (const [choiceName, c] of Object.entries(d.choices)) {
 				if (c.value !== undefined) {
 					properties[flagParamName(choiceName)] = {
-						type: JSON_SCHEMA_TYPES[c.value.schema],
+						...scalarFragment(c.value.schema, undefined),
 						description: c.help,
 					};
 				}
@@ -163,22 +143,10 @@ export function buildJSONSchema(
 
 	const args = cmd.def.kind === "command" ? cmd.def.args : [];
 	for (const a of args) {
-		const prop: Record<string, unknown> = {};
-		if (a.opts.variadic === true) {
-			prop.type = "array";
-			prop.items = { type: JSON_SCHEMA_TYPES[a.schema] };
-		} else {
-			prop.type = JSON_SCHEMA_TYPES[a.schema];
-		}
-		const opts = a.opts as {
-			readonly choices?: readonly { readonly value: unknown }[];
+		properties[a.name] = {
+			...valueSchemaFragment(a),
+			description: a.opts.help,
 		};
-		if (opts.choices !== undefined) {
-			prop.enum = [...choiceValues(opts.choices)];
-		}
-		prop.description = a.opts.help;
-		properties[a.name] = prop;
-
 		if (a.opts.presence === "required") {
 			required.push(a.name);
 		}

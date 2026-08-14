@@ -579,3 +579,82 @@ test("Tool.execute: the router forwards consent without laundering it", async ()
 	);
 	assert.deepEqual(result, { released: true });
 });
+
+// ---------------------------------------------------------------------------
+// §25.13 -- the projection derives its shape from the arity rule
+// ---------------------------------------------------------------------------
+
+test("jsonSchema: an array parameter carries its enum inside items", () => {
+	const app = buildApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				tag: flag("tag", t.list(t.str), {
+					help: "the tags",
+					choices: [{ value: "a" }, { value: "b" }],
+					presence: "required",
+				}),
+			},
+			args: [
+				arg("mode", t.str, {
+					help: "the modes",
+					variadic: true,
+					choices: [{ value: "fast" }, { value: "slow" }],
+					presence: "optional",
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
+	const p = props(app.jsonSchema("cmd"));
+	// At the property root, `enum` would say the ARRAY must equal one of the
+	// choices; inside `items` it describes an element, which is what the
+	// declaration means and what the dumped fragment publishes.
+	assert.deepEqual(p.tag, {
+		type: "array",
+		items: { type: "string", enum: ["a", "b"] },
+		description: "the tags",
+	});
+	assert.deepEqual(p.mode, {
+		type: "array",
+		items: { type: "string", enum: ["fast", "slow"] },
+		description: "the modes",
+	});
+	assert.equal("enum" in (p.tag ?? {}), false);
+	assert.equal("enum" in (p.mode ?? {}), false);
+});
+
+test("jsonSchema: a variadic arg and a dict flag project their real shapes", () => {
+	const app = buildApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				meta: flag("meta", t.dict(t.int), {
+					help: "the metadata",
+					presence: "optional",
+				}),
+			},
+			args: [
+				arg("files", t.str, {
+					help: "the files",
+					variadic: true,
+					presence: "optional",
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
+	const p = props(app.jsonSchema("cmd"));
+	assert.deepEqual(p.meta, {
+		type: "object",
+		additionalProperties: { type: "integer" },
+		description: "the metadata",
+	});
+	assert.deepEqual(p.files, {
+		type: "array",
+		items: { type: "string" },
+		description: "the files",
+	});
+});

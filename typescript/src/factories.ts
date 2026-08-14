@@ -456,6 +456,77 @@ export function elemSchemaOf(carrier: Carrier<unknown, Schema>): ScalarSchema {
 	return (carrier.elem?.schema ?? carrier.schema) as ScalarSchema;
 }
 
+/** The carrier's four scalars under JSON Schema's own type names (§25.2). */
+export const JSON_SCHEMA_TYPES: Readonly<Record<ScalarSchema, string>> = {
+	str: "string",
+	bool: "boolean",
+	int: "integer",
+	float: "number",
+};
+
+/** One scalar row of §25.2's fragment table, with its `enum` if any. */
+export function scalarFragment(
+	elem: ScalarSchema,
+	values: readonly unknown[] | undefined,
+): Record<string, unknown> {
+	const frag: Record<string, unknown> = { type: JSON_SCHEMA_TYPES[elem] };
+	if (values !== undefined) {
+		frag.enum = [...values];
+	}
+	return frag;
+}
+
+/**
+ * The JSON Schema fragment describing the value a declaration delivers: a real
+ * fragment from the closed four-keyword subset (`type`, `items`,
+ * `additionalProperties`, `enum`) with JSON Schema's own type names, emitted in
+ * that key order (contract §25.2).
+ *
+ * ARITY IS VALUE SHAPE (§25.3): a list carrier and a variadic arg publish the
+ * identical array fragment, which is what makes the deleted `repeatable` key a
+ * second spelling of a fact the shape already carries.
+ *
+ * An optional declaration emits the plain type: there is no `null` in any
+ * fragment and no type list, because presence is the sole authority on absence
+ * and a nullable fragment would be a second statement about it.
+ *
+ * The same function feeds the MCP projection, so a tool schema's parameter
+ * shape and the dumped one cannot disagree (§25.13).
+ */
+export function valueSchemaFragment(
+	decl: AnyFlag | AnyArg,
+): Record<string, unknown> {
+	if (decl.kind === "arg") {
+		const values = argChoiceValues(decl);
+		const elem = elemSchemaOf(decl.carrier);
+		return decl.opts.variadic === true || schemaKind(decl.schema) === "list"
+			? { type: "array", items: scalarFragment(elem, values) }
+			: scalarFragment(elem, values);
+	}
+	const kind = schemaKind(decl.schema);
+	const elem = elemSchemaOf(decl.carrier);
+	if (kind === "dict") {
+		// A JSON object's keys are strings by definition, so the value type is a
+		// complete description -- there is no `propertyNames` in the subset and
+		// none is needed. A dict flag is refused choices at registration.
+		return {
+			type: "object",
+			additionalProperties: { type: JSON_SCHEMA_TYPES[elem] },
+		};
+	}
+	const declared = flagOpts(decl).choices;
+	const values = declared === undefined ? undefined : choiceValues(declared);
+	return kind === "list"
+		? { type: "array", items: scalarFragment(elem, values) }
+		: scalarFragment(elem, values);
+}
+
+/** An arg's declared choice values, or undefined when it declares none. */
+export function argChoiceValues(a: AnyArg): readonly unknown[] | undefined {
+	const declared = (a.opts as ArgOptsView).choices;
+	return declared === undefined ? undefined : choiceValues(declared);
+}
+
 /**
  * The four flag names the effects regime reserves for the framework. The ban is
  * UNCONDITIONAL and applies at every level -- command flags, flag-set flags,
@@ -808,9 +879,16 @@ export function flag<
 
 // --- Args ---
 
-type ArgChoices<Out, S extends ScalarSchema> = S extends "bool"
+/**
+ * The carriers a positional arg accepts: the scalars, plus the list carriers a
+ * VARIADIC arg may be spelled with (§25.4). A dict carrier is refused at the
+ * type level and at registration -- no implementation has ever accepted one.
+ */
+export type ArgSchema = ScalarSchema | ListSchema;
+
+type ArgChoices<Out, S extends ArgSchema> = S extends "bool"
 	? never
-	: readonly [ChoiceRecord<Out>, ...ChoiceRecord<Out>[]];
+	: readonly [ChoiceRecord<ElementOf<Out>>, ...ChoiceRecord<ElementOf<Out>>[]];
 
 /**
  * Args take scalar carriers only; a variadic arg collects Out[] (the list-arg
@@ -822,7 +900,7 @@ type ArgChoices<Out, S extends ScalarSchema> = S extends "bool"
  * `required` means at least one value and `optional` means possibly none;
  * `presence: "default"` on a variadic arg is a registration error.
  */
-export type ArgOpts<Out, S extends ScalarSchema> =
+export type ArgOpts<Out, S extends ArgSchema> =
 	| {
 			readonly help: string;
 			readonly presence: "required";
@@ -851,7 +929,7 @@ export type ArgOpts<Out, S extends ScalarSchema> =
 export interface ArgDef<
 	N extends string,
 	Out,
-	S extends ScalarSchema,
+	S extends ArgSchema,
 	O extends ArgOpts<Out, S>,
 > {
 	readonly kind: "arg";
@@ -867,8 +945,12 @@ export interface ArgDef<
 export interface AnyArg {
 	readonly kind: "arg";
 	readonly name: string;
-	readonly schema: ScalarSchema;
-	readonly carrier: Carrier<unknown, ScalarSchema>;
+	/**
+	 * A scalar carrier, or -- on a VARIADIC arg only -- a list carrier: the two
+	 * spellings register, deliver and publish identically (§25.4).
+	 */
+	readonly schema: Schema;
+	readonly carrier: Carrier<unknown, Schema>;
 	readonly opts: {
 		readonly help: string;
 		readonly presence: Presence;
@@ -895,7 +977,7 @@ export interface ArgOptsView {
 export function arg<
 	const N extends string,
 	Out,
-	S extends ScalarSchema,
+	S extends ArgSchema,
 	const O extends ArgOpts<Out, S>,
 >(name: N, carrier: Carrier<Out, S>, opts: O): ArgDef<N, Out, S, O> {
 	const o = opts as ArgOptsView;
@@ -917,20 +999,17 @@ export function arg<
 	if (kind === "dict") {
 		throw new RegistrationError(errArgDictTypeNotSupportedOnArgs(name));
 	}
-	if (kind === "list") {
-		if (o.variadic !== true) {
-			throw new RegistrationError(
-				errArgListTypeOnArgsRequiresVariadicTrue(name),
-			);
-		}
-		// TS-only: variadic args are declared with the ELEMENT carrier plus
-		// variadic: true; a list carrier here is an inexpressible shape.
-		throw new RegistrationError(
-			`Arg "${name}": variadic args take a scalar element type, not a list type`,
-		);
+	// A variadic arg takes either spelling: the element carrier plus
+	// `variadic: true` (the idiomatic one), or the list carrier the siblings
+	// spell it with. Both deliver the same array and publish the same fragment
+	// (§25.4); a list carrier on a NON-variadic arg is still refused, because
+	// only a variadic arg delivers a list.
+	if (kind === "list" && o.variadic !== true) {
+		throw new RegistrationError(errArgListTypeOnArgsRequiresVariadicTrue(name));
 	}
+	const elem = elemSchemaOf(carrier as Carrier<unknown, Schema>);
 	if (o.choices !== undefined) {
-		if (carrier.schema === "bool") {
+		if (elem === "bool") {
 			throw new RegistrationError(errArgChoicesIncompatibleBool(name));
 		}
 		if (!Array.isArray(o.choices) || o.choices.length === 0) {
@@ -942,9 +1021,9 @@ export function arg<
 			() => errArgHelpEmpty(),
 		);
 		for (const c of choiceValues(o.choices)) {
-			if (!matchesScalar(carrier.schema, c)) {
+			if (!matchesScalar(elem, c)) {
 				throw new RegistrationError(
-					errArgChoiceTypeMismatch(name, pyRepr(c), carrier.schema),
+					errArgChoiceTypeMismatch(name, pyRepr(c), elem),
 				);
 			}
 		}
@@ -954,9 +1033,9 @@ export function arg<
 	}
 	// As on flags, the value checks below apply to a declared value only.
 	const dflt = presence === "default" ? o.default : undefined;
-	if (dflt !== undefined && !matchesScalar(carrier.schema, dflt)) {
+	if (dflt !== undefined && !matchesScalar(elem, dflt)) {
 		const got = pyTypeName(dflt);
-		switch (carrier.schema) {
+		switch (elem) {
 			case "str":
 				throw new RegistrationError(errArgStrDefaultTypeMismatch(name, got));
 			case "int":

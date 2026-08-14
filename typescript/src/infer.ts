@@ -123,8 +123,16 @@ type ArgKeyIsOptional<D extends AnyArg> = D["opts"] extends {
 		? true
 		: false;
 
+/**
+ * A variadic arg always delivers a list. Both declaration spellings converge
+ * on the same one (§25.4): the element carrier plus `variadic: true` wraps its
+ * output, and a list carrier -- whose output already IS the array -- is
+ * delivered as declared rather than wrapped twice.
+ */
 type ArgValue<D extends AnyArg> = D["opts"] extends { readonly variadic: true }
-	? NonNullable<D["_out"]>[]
+	? NonNullable<D["_out"]> extends readonly unknown[]
+		? NonNullable<D["_out"]>
+		: NonNullable<D["_out"]>[]
 	: NonNullable<D["_out"]>;
 
 type RequiredArgKeys<A extends readonly AnyArg[]> = {

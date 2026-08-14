@@ -1824,3 +1824,228 @@ test("guard: a list carrier's int choices are covered too", () => {
 		`Flag "ids": choice 9007199254740993: ${MAGNITUDE_CLAUSE}`,
 	);
 });
+
+// =========================================================================
+// The selector encoding (§25.6)
+// =========================================================================
+
+/** The `flags` array of a one-command app's dumped command entry. */
+function dumpedFlags(app: App): Record<string, unknown>[] {
+	const dict = (
+		app as unknown as { dumpSchemaDict: () => Record<string, unknown> }
+	).dumpSchemaDict();
+	const commands = dict.commands as Record<string, Record<string, unknown>>;
+	const first = Object.values(commands)[0] as Record<string, unknown>;
+	return first.flags as Record<string, unknown>[];
+}
+
+test("schema: a token-spelled selector publishes its choices, scopes and spelling", () => {
+	const entry = dumpedFlags(notifyApp())[0] as Record<string, unknown>;
+	// A selector has NO value_schema, and its absence IS the declaration: a
+	// variant is inexpressible in the closed four-keyword subset, and the
+	// presence of `elect_by` is what tells a reader which shape it holds.
+	assert.ok(!("value_schema" in entry));
+	assert.deepEqual(Object.keys(entry), [
+		"name",
+		"help",
+		"short",
+		"presence",
+		"choices",
+		"elect_by",
+	]);
+	assert.deepEqual(entry, {
+		name: "via",
+		help: "delivery channel",
+		short: "v",
+		presence: "required",
+		choices: [
+			{
+				name: "email",
+				help: "deliver the notification as an email message",
+				flags: [
+					{
+						name: "subject",
+						help: "subject line of the message",
+						value_schema: { type: "string" },
+						presence: "required",
+					},
+					{
+						name: "recipient",
+						help: "destination email address",
+						value_schema: { type: "string" },
+						presence: "optional",
+					},
+				],
+			},
+			{
+				name: "sms",
+				help: "deliver the notification as a text message",
+				flags: [
+					{
+						name: "phone-number",
+						help: "destination number in E.164 form",
+						value_schema: { type: "string" },
+						presence: "required",
+						env: "MYAPP_PHONE",
+					},
+				],
+			},
+		],
+		elect_by: "selector-token",
+	});
+});
+
+test("schema: a member-spelled choice's payload is the first scope entry", () => {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			flags: {
+				target: memberChoiceFlag(
+					"target",
+					{
+						profile: choice({
+							help: "operate on one named profile",
+							value: t.str,
+							flags: {
+								create_missing: flag("create-missing", t.bool, {
+									help: "create the profile when absent",
+									presence: "default",
+									default: false,
+								}),
+							},
+						}),
+						all_profiles: choice({ help: "operate on every profile" }),
+					},
+					{ help: "which profiles to operate on", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	const entry = dumpedFlags(app)[0] as Record<string, unknown>;
+	// The payload is supplied by electing the member, and required-once-elected
+	// is exactly what a member flag's presence means. A payload-less member has
+	// no `value` entry, and an empty scope omits `flags` entirely.
+	assert.deepEqual(entry.choices, [
+		{
+			name: "profile",
+			help: "operate on one named profile",
+			flags: [
+				{
+					name: "value",
+					help: "operate on one named profile",
+					value_schema: { type: "string" },
+					presence: "required",
+				},
+				{
+					name: "create-missing",
+					help: "create the profile when absent",
+					value_schema: { type: "boolean" },
+					presence: "default",
+					default: false,
+					negatable: true,
+				},
+			],
+		},
+		{ name: "all_profiles", help: "operate on every profile" },
+	]);
+	assert.equal(entry.elect_by, "member-flags");
+});
+
+test("schema: a nested selector is an ordinary entry inside a flags array", () => {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("add", {
+			help: "add an entry",
+			flags: {
+				visibility: choiceFlag(
+					"visibility",
+					{
+						"user-facing": choice({
+							help: "a change users read about",
+							flags: {
+								type: choiceFlag(
+									"type",
+									{
+										feature: choice({ help: "a user-facing feature" }),
+										fix: choice({ help: "a user-facing fix" }),
+									},
+									{ help: "the kind of change", presence: "required" },
+								),
+							},
+						}),
+						internal: choice({ help: "a change nobody upgrades for" }),
+					},
+					{ help: "who the entry is for", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	const entry = dumpedFlags(app)[0] as Record<string, unknown>;
+	const outer = (entry.choices as Record<string, unknown>[])[0] as Record<
+		string,
+		unknown
+	>;
+	const nested = (outer.flags as Record<string, unknown>[])[0] as Record<
+		string,
+		unknown
+	>;
+	// Recursion is free: a nested selector is a full flag entry carrying its
+	// own `choices` and `elect_by`, to any depth.
+	assert.equal(nested.name, "type");
+	assert.equal(nested.elect_by, "selector-token");
+	assert.ok(!("value_schema" in nested));
+	assert.deepEqual(nested.choices, [
+		{ name: "feature", help: "a user-facing feature" },
+		{ name: "fix", help: "a user-facing fix" },
+	]);
+});
+
+test("schema: a defaulted selector publishes the flat map", () => {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send it",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						webhook: choice({
+							help: "post to a URL",
+							flags: {
+								url: flag("url", t.str, {
+									help: "the endpoint",
+									presence: "default",
+									default: "https://example.test/hook",
+								}),
+								retries: flag("retries", t.int, {
+									help: "attempts",
+									presence: "default",
+									default: 3n,
+								}),
+								tag: flag("tag", t.str, {
+									help: "a tag",
+									presence: "optional",
+								}),
+							},
+						}),
+						shout: choice({ help: "shout it" }),
+					},
+					{ help: "delivery channel", presence: "default", default: "webhook" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	const entry = dumpedFlags(app)[0] as Record<string, unknown>;
+	// The choice's name under the reserved key `choice`, then each field that
+	// HAS a value, in declaration order. A field with no value is omitted,
+	// which is unambiguous because `null` is not a declarable default anywhere.
+	assert.deepEqual(entry.default, {
+		choice: "webhook",
+		url: "https://example.test/hook",
+		retries: 3n,
+	});
+});

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { AppImpl } from "../src/app.js";
+import type { App } from "../src/index.js";
 import {
 	arg,
 	choice,
@@ -507,16 +508,71 @@ test("arg: compound carriers are rejected", () => {
 		() => arg("v", loose(t.list(t.int)), { help: "h", presence: "required" }),
 		'Arg "v": list type on args requires variadic=True',
 	);
-	// TS-only: variadic args take the element carrier, never a list carrier.
-	rejects(
-		() =>
-			arg("v", loose(t.list(t.int)), {
-				help: "h",
-				variadic: true,
-				presence: "required",
+	// The refusal that stood here is DELETED (§25.4): a variadic arg takes
+	// either spelling -- the element carrier plus `variadic: true`, or the list
+	// carrier the siblings spell it with -- and both register, deliver the same
+	// array and publish the same fragment. This widens the surface; the element
+	// spelling stays legal and stays the idiomatic one.
+	arg("v", t.list(t.int), { help: "h", variadic: true, presence: "required" });
+});
+
+test("arg: both variadic spellings deliver and publish identically (§25.4)", async () => {
+	const mk = (listCarrier: boolean): App => {
+		const app = createApp({
+			name: "myapp",
+			version: "1.0.0",
+			help: "test app",
+		});
+		app.command(
+			defineReadOnlyCommand("cmd", {
+				help: "a command",
+				args: [
+					listCarrier
+						? arg("files", t.list(t.str), {
+								help: "the files",
+								variadic: true,
+								presence: "optional",
+							})
+						: arg("files", t.str, {
+								help: "the files",
+								variadic: true,
+								presence: "optional",
+							}),
+				],
+				handler: (a, ctx) => {
+					ctx.info(`files=${(a.files as readonly string[]).join(",")}`);
+					return 0;
+				},
 			}),
-		'Arg "v": variadic args take a scalar element type, not a list type',
+		);
+		return app;
+	};
+	const elementSpelling = await mk(false).test(["cmd", "a", "b"]);
+	const listSpelling = await mk(true).test(["cmd", "a", "b"]);
+	assert.equal(listSpelling.stdout, "files=a,b\n");
+	assert.equal(listSpelling.stdout, elementSpelling.stdout);
+	assert.equal(
+		(await mk(true).test(["cmd", "--help"])).stdout,
+		(await mk(false).test(["cmd", "--help"])).stdout,
 	);
+	const dumped = (app: App): unknown =>
+		(
+			(
+				app.dumpSchemaDict() as {
+					commands: Record<string, { args: unknown[] }>;
+				}
+			).commands.cmd as { args: unknown[] }
+		).args;
+	assert.deepEqual(dumped(mk(true)), dumped(mk(false)));
+	assert.deepEqual(dumped(mk(true)), [
+		{
+			name: "files",
+			help: "the files",
+			value_schema: { type: "array", items: { type: "string" } },
+			presence: "optional",
+			variadic: true,
+		},
+	]);
 });
 
 test("arg: choices validation", () => {

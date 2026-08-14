@@ -37,13 +37,18 @@ import {
 } from "./errors.js";
 import {
 	type AnyArg,
+	type AnyChoice,
 	type AnyChoiceFlag,
 	type AnyCommand,
 	type AnyDecl,
 	type AnyFlag,
-	choiceValues,
+	type ArgOptsView,
+	CHOICE_VALUE_KEY,
+	type ChoiceRecordView,
 	flagOpts,
+	scalarFragment,
 	schemaKind,
+	valueSchemaFragment,
 } from "./factories.js";
 import { formatFloatCanonical } from "./float.js";
 import { type InfraRootPath, isInfraRootPath } from "./infra.js";
@@ -105,7 +110,29 @@ export function schemaJson(value: unknown, indent = 0): string {
 	}
 }
 
-// --- Serializers (field order matches Python's insertion order) ---
+// --- Serializers (field order is §25.9's declared order) ---
+
+/** One check definition, as the schema reads it. */
+interface CheckDefView {
+	readonly tags: readonly string[];
+	readonly severity: string;
+	readonly fast: boolean;
+	readonly pure: boolean;
+	readonly needsNetwork: boolean;
+	readonly dependsOn: readonly string[];
+	readonly scope: string;
+}
+
+/** A keyed block emitted SORTED ascending by key (§25.9's second rule). */
+function sortedRecord(
+	entries: ReadonlyMap<string, string>,
+): Record<string, string> {
+	const out: Record<string, string> = {};
+	for (const key of [...entries.keys()].sort()) {
+		out[key] = entries.get(key) as string;
+	}
+	return out;
+}
 
 /**
  * Serializes a RelativeToRoot marker machine-stably: only the declared env
@@ -122,14 +149,46 @@ function serializeMarker(m: InfraRootPath): Record<string, unknown> {
 	};
 }
 
-/** Serializes a Flag. Fields matching the schema defaults are omitted. */
+/**
+ * A value flag's (or arg's) `choices=` entries, as the records item 164 made
+ * them (§25.5). The machine-readable half of a choices declaration lives in
+ * the fragment's `enum`; this is the human-readable half, which JSON Schema
+ * has no vocabulary for. `help` is OMITTED when the entry declares none, so
+ * the two spellings of "no help" -- an absent one and Go's empty string --
+ * cannot produce different bytes for the same declaration.
+ */
+function serializeChoiceRecords(
+	records: readonly ChoiceRecordView[],
+): Record<string, unknown>[] {
+	return records.map((r) => {
+		const entry: Record<string, unknown> = { value: r.value };
+		if (r.help !== undefined && r.help !== "") {
+			entry.help = r.help;
+		}
+		return entry;
+	});
+}
+
+/** A declared default, as the schema publishes it (marker shape preserved). */
+function serializeDefaultValue(value: unknown): unknown {
+	return isInfraRootPath(value) ? serializeMarker(value) : value;
+}
+
+/**
+ * Serializes a Flag (contract §25). Keys are emitted in the canonical order
+ * §25.9 pins for a flag entry; nothing is sorted at serialization time.
+ */
 function serializeFlag(f: AnyFlag): Record<string, unknown> {
 	const o = flagOpts(f);
 	const kind = schemaKind(f.schema);
 	const d: Record<string, unknown> = {
 		name: f.name,
-		type: f.schema,
 		help: o.help,
+		// The value's shape is a real JSON Schema fragment now, and the v1
+		// `type` key -- which had three spellings across three implementations
+		// -- is gone with `repeatable`, whose fact the shape already carries
+		// (§25.2, §25.3).
+		value_schema: valueSchemaFragment(f),
 	};
 	if (o.short !== undefined) {
 		d.short = o.short;
@@ -154,106 +213,168 @@ function serializeFlag(f: AnyFlag): Record<string, unknown> {
 	if (o.env !== undefined) {
 		d.env = o.env;
 	}
-	// §24.2's records: the dumped `choices` array carries the declared VALUES,
-	// and the per-entry help rides the schema-v2 sibling key that round
-	// authors. Emitting the records here would pin bytes this round does not
-	// own (§24.11, §24.15).
-	if (o.choices !== undefined) {
-		d.choices = [...choiceValues(o.choices)];
-	}
-	// repeatable: never emitted (see the module comment).
-	if (o.unique === true) {
-		d.unique = true;
-	}
-	// conflict_mode: serialized only when explicitly set (omitted when
-	// inheriting the app default). Additive; schema_version stays 1, so
-	// consumers must treat absence as "inherit the app config_conflict_mode".
-	if (o.conflictMode !== undefined) {
-		d.conflict_mode = o.conflictMode;
-	}
 	if (o.envSeparator !== undefined) {
 		d.env_separator = o.envSeparator;
 	}
-	// negatable: bool flags always emit it (default nil covers non-bools).
+	// Omitted when true, which is the framework's behavior: the key appears
+	// exactly on the flags that depart from it (§25.11).
+	if (o.prefixed === false) {
+		d.prefixed = false;
+	}
+	if (o.choices !== undefined) {
+		d.choices = serializeChoiceRecords(o.choices);
+	}
+	if (o.unique === true) {
+		d.unique = true;
+	}
+	// Per-flag conflict mode: serialized only when explicitly set. Absence
+	// means "inherit the app default", which v2 publishes as
+	// `config_conflict_mode`, so the effective mode is finally computable from
+	// the dump alone (§25.11).
+	if (o.conflictMode !== undefined) {
+		d.conflict_mode = o.conflictMode;
+	}
+	// negatable: bool flags always emit it (null covers non-bools).
 	if (f.schema === "bool") {
 		d.negatable = o.negatable !== false;
-	}
-	// hidden: always false in the current impl, so always omitted.
-	return d;
-}
-
-/** Serializes an Arg. Fields matching the schema defaults are omitted. */
-function serializeArg(a: AnyArg): Record<string, unknown> {
-	const o = a.opts;
-	const d: Record<string, unknown> = {
-		name: a.name,
-		help: o.help,
-	};
-	if (a.schema !== "str") {
-		d.type = a.schema;
-	}
-	// The arg entry's `required` key is deleted: it was the arg-side spelling
-	// of the same fact, and keeping it beside `presence` would put two keys on
-	// one fact (contract §13's presence-round amendment).
-	d.presence = o.presence;
-	if (o.presence === "default") {
-		d.default = o.default;
-	}
-	if (o.variadic === true) {
-		d.variadic = true;
-	}
-	const choices = (o as { choices?: readonly { value: unknown }[] }).choices;
-	if (choices !== undefined) {
-		d.choices = [...choiceValues(choices)];
 	}
 	return d;
 }
 
 /**
- * Serializes one root-level declaration: an ordinary flag, or a SELECTOR.
+ * Serializes an Arg (contract §25).
  *
- * The dumped schema's selector encoding is NOT pinned by the scoped-selector
- * round -- a selector's value shape is a variant, which the closed JSON Schema
- * subset cannot express, so the encoding belongs to the schema-v2 amendment
- * (contract §24.11, §24.15). What that round pins is what the encoding must
- * CARRY, and this provisional shape carries exactly that and nothing more:
- * the nested choices and scopes, each choice's help, each scoped entry's
- * presence and default on §13's terms, and the spelling. A dump that flattened
- * a selector away would not be a legal intermediate state, which is why this
- * is a real encoding rather than an omission.
+ * `variadic` SURVIVES the arity rule that deleted `repeatable`, and the
+ * asymmetry is deliberate: it names a token-consumption rule -- this arg takes
+ * every remaining positional token, and only the last arg may -- which a
+ * consumer needs in order to render `<files>...` in a usage line.
  */
+function serializeArg(a: AnyArg): Record<string, unknown> {
+	const o = a.opts as ArgOptsView;
+	const d: Record<string, unknown> = {
+		name: a.name,
+		help: o.help,
+		value_schema: valueSchemaFragment(a),
+	};
+	// The arg entry's `required` key is deleted: it was the arg-side spelling
+	// of the same fact, and keeping it beside `presence` would put two keys on
+	// one fact (contract §13's presence-round amendment).
+	d.presence = o.presence;
+	if (o.presence === "default") {
+		d.default = serializeDefaultValue(o.default);
+	}
+	if (o.variadic === true) {
+		d.variadic = true;
+	}
+	if (o.choices !== undefined) {
+		d.choices = serializeChoiceRecords(o.choices);
+	}
+	return d;
+}
+
+/** Serializes one declaration: an ordinary flag, or a SELECTOR. */
 function serializeDecl(d: AnyDecl): Record<string, unknown> {
 	return d.kind === "flag" ? serializeFlag(d) : serializeSelector(d);
 }
 
+/**
+ * One choice of one selector: `name`, `help`, and its scope (§25.6).
+ *
+ * `flags` is omitted when the scope is empty. A member-spelled choice's
+ * payload is the FIRST entry of that array, under the reserved name `value`
+ * with `presence: "required"` -- the payload is supplied by electing the
+ * member, and required-once-elected is exactly what a member flag's presence
+ * means. The scope's own declared flags follow it, in declaration order.
+ */
+function serializeChoiceObject(
+	name: string,
+	c: AnyChoice,
+): Record<string, unknown> {
+	const entry: Record<string, unknown> = { name, help: c.help };
+	const scope: Record<string, unknown>[] = [];
+	if (c.value !== undefined) {
+		// TypeScript's member payload is a bare carrier declared beside the
+		// choice's own help, so the choice's help IS the payload's help -- it is
+		// the only help the declaration carries, and the same one the member's
+		// help line renders.
+		scope.push({
+			name: CHOICE_VALUE_KEY,
+			help: c.help,
+			value_schema: scalarFragment(c.value.schema, undefined),
+			presence: "required",
+		});
+	}
+	for (const sub of Object.values(c.flags)) {
+		scope.push(serializeDecl(sub));
+	}
+	if (scope.length > 0) {
+		entry.flags = scope;
+	}
+	return entry;
+}
+
+/**
+ * A selector's declared default, as the flat map §25.6 pins:
+ * `{"choice": "<name>", "<field>": <value>, ...}` -- the choice's name under
+ * the reserved key `choice`, followed by each field that HAS a value in the
+ * default selection, in declaration order.
+ *
+ * TypeScript's default names a choice and the scope supplies the values, so a
+ * field with no declared default is omitted -- which is unambiguous because
+ * `null` is not a declarable default anywhere in the framework. A nested
+ * selector is excluded: it publishes its own entry with its own default.
+ */
+function serializeSelectorDefault(sel: AnyChoiceFlag): Record<string, unknown> {
+	const elected = sel.opts.default as string;
+	const flat: Record<string, unknown> = { choice: elected };
+	for (const sub of Object.values(sel.choices[elected]?.flags ?? {})) {
+		if (sub.kind !== "flag") {
+			continue;
+		}
+		const o = flagOpts(sub);
+		if (o.presence !== "default") {
+			continue;
+		}
+		flat[sub.name] = serializeDefaultValue(o.default);
+	}
+	return flat;
+}
+
+/**
+ * Serializes one selector, in the encoding §25.6 pins.
+ *
+ * A selector flag has NO `value_schema`, and its absence is the declaration: a
+ * selector's value is a variant -- one tagged record chosen from several, each
+ * with a different set of fields -- and the closed four-keyword subset cannot
+ * express one. Publishing a wrong fragment would be worse than publishing
+ * none, because a reader would validate against it.
+ *
+ * `elect_by` is the discriminator: an entry carrying it is a selector, and its
+ * `choices` are choice objects; an entry without it is an ordinary flag, and
+ * its `choices` (if any) are value records. Each scoped entry is a FULL flag
+ * entry, which is what makes recursion free -- a nested selector is an entry
+ * inside a `flags` array carrying its own `choices` and `elect_by`, to any
+ * depth.
+ */
 function serializeSelector(sel: AnyChoiceFlag): Record<string, unknown> {
 	const d: Record<string, unknown> = {
 		name: sel.name,
-		type: "choice",
 		help: sel.opts.help,
 	};
 	if (sel.opts.short !== undefined) {
 		d.short = sel.opts.short;
 	}
-	d.elect_by = sel.electBy;
 	d.presence = sel.opts.presence;
 	if (sel.opts.presence === "default") {
-		d.default = sel.opts.default;
+		d.default = serializeSelectorDefault(sel);
 	}
 	if (sel.opts.env !== undefined) {
 		d.env = sel.opts.env;
 	}
-	d.choices = Object.entries(sel.choices).map(([name, c]) => {
-		const entry: Record<string, unknown> = { name, help: c.help };
-		if (c.value !== undefined) {
-			entry.value = { type: c.value.schema };
-		}
-		const scope = Object.values(c.flags);
-		if (scope.length > 0) {
-			entry.flags = scope.map(serializeDecl);
-		}
-		return entry;
-	});
+	d.choices = Object.entries(sel.choices).map(([name, c]) =>
+		serializeChoiceObject(name, c),
+	);
+	d.elect_by = sel.electBy;
 	return d;
 }
 
@@ -332,12 +453,24 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 	if (rc.kind === "passthrough") {
 		d.passthrough = true;
 	}
+	// Flags and selectors share ONE array, interleaved in declaration order: a
+	// selector IS a flag (§24.2), and the presence of `elect_by` is what tells
+	// a reader which shape it is holding (§25.6).
 	const decls = rc.kind === "command" ? (rc.def as AnyCommand).allDecls : [];
 	if (decls.length > 0) {
 		d.flags = decls.map(serializeDecl);
 	}
 	if (rc.kind === "command") {
 		const def = rc.def as AnyCommand;
+		// The grouping v1 discarded when it merged a set's flags into the
+		// command's flag list. Members keep their ordinary entries above, so this
+		// adds a grouping without duplicating a declaration (§25.11).
+		if (def.flagSets.length > 0) {
+			d.flag_sets = def.flagSets.map((fs) => ({
+				name: fs.name,
+				flags: Object.values(fs.flags).map((f) => f.name),
+			}));
+		}
 		if (def.args.length > 0) {
 			d.args = def.args.map(serializeArg);
 		}
@@ -415,44 +548,67 @@ function serializeGroup(grp: GroupImpl): Record<string, unknown> {
  */
 function buildSchemaDefaults(): Record<string, unknown> {
 	return {
-		schema_version: 1n,
+		schema_version: 2n,
 		app: {
 			env_prefix: null,
 			config: false,
+			config_format: "json",
+			config_path: null,
+			config_conflict_mode: "cli-wins",
+			proc_observe_allowlist: [],
 			global_flags: [],
 			commands: {},
 			groups: {},
 			deprecated: {},
 			tag_contracts: {},
+			checks: {},
+			config_fields: {},
+			infra: {},
 		},
+		// `default` has NO baseline on a flag or an arg: since presence became
+		// the authority it is emitted exactly when `presence` is `"default"`,
+		// and a `null` baseline for it would state something false. Nor does
+		// `value_schema`: a selector carries no fragment at all and its absence
+		// IS the declaration, so every answer a baseline could give is false for
+		// the one entry that omits the key (§25.10).
 		flag: {
 			short: null,
-			default: null,
 			env: null,
-			choices: null,
-			repeatable: false,
-			unique: false,
 			env_separator: null,
+			prefixed: true,
+			choices: null,
+			elect_by: null,
+			unique: false,
+			conflict_mode: null,
 			negatable: null,
-			hidden: false,
 		},
-		// `required` is gone with the arg entry's key: presence is always
-		// emitted, so there is no default to reconstruct it from (§13's
-		// presence-round amendment).
 		arg: {
-			type: "str",
-			default: null,
 			variadic: false,
 			choices: null,
 		},
+		// The two choice entities, which is what makes this block the complete
+		// omission map it is defined to be: a selector choice object's `flags` is
+		// omitted when the scope is empty, and a value-flag choice record's
+		// `help` is omitted when the entry declares none.
+		choice: { flags: [] },
+		choice_record: { help: null },
 		command: {
+			consequential: false,
+			dry_run_supported: true,
+			dry_run_unsupported_reason: null,
+			payload_schema: null,
+			owns_stdout: false,
 			passthrough: false,
 			flags: [],
+			flag_sets: [],
 			args: [],
 			tags: [],
 			constraints: [],
 			hidden: false,
 			interactive: false,
+			config_fields: [],
+			grants: [],
+			forwarding: null,
 		},
 		group: {
 			commands: {},
@@ -461,6 +617,9 @@ function buildSchemaDefaults(): Record<string, unknown> {
 			tags: [],
 			hidden: false,
 		},
+		config_field: { default: null, bound_commands: [] },
+		check: { scope: null },
+		infra: { roots: [], handshakes: [], connections: [] },
 	};
 }
 
@@ -497,13 +656,21 @@ function collectConfigFieldBindings(app: AppImpl): Map<string, string[]> {
 	return bindings;
 }
 
-/** Serializes one declared config field entry. */
+/**
+ * Serializes one declared config field entry (§25.7).
+ *
+ * Config fields are scalar-only in every implementation, so the fragment is
+ * always a scalar row. `required` STAYS beside it: it is not §23's presence
+ * declaration under another name -- a config field has no CLI surface and no
+ * three-way declaration, and `required` there means "the config file must
+ * contain it".
+ */
 function serializeConfigField(
 	cf: ConfigFieldRt,
 	boundCommands: readonly string[],
 ): Record<string, unknown> {
 	const entry: Record<string, unknown> = {
-		type: cf.schema,
+		value_schema: scalarFragment(cf.schema, undefined),
 		help: cf.help,
 		required: cf.required,
 	};
@@ -526,7 +693,7 @@ function serializeConfigField(
  */
 export function dumpSchemaCore(app: AppImpl): Record<string, unknown> {
 	const schema: Record<string, unknown> = {
-		schema_version: 1n,
+		schema_version: 2n,
 		defaults: buildSchemaDefaults(),
 		name: app.name,
 		version: app.version,
@@ -537,6 +704,21 @@ export function dumpSchemaCore(app: AppImpl): Record<string, unknown> {
 	}
 	if (app.configEnabled) {
 		schema.config = true;
+	}
+	// The three app-level config keys v1 was blind to. Until v2 an app could
+	// relocate every user's config file, or switch it from JSON to TOML, while
+	// its dumped schema stayed byte-identical (§25.11).
+	if (app.configFormat !== "json") {
+		schema.config_format = app.configFormat;
+	}
+	// The DECLARATION, never the resolution: a declared literal path as
+	// declared, and a relativeToRoot() marker in its machine-stable shape. The
+	// resolved absolute path is a property of the dumping machine.
+	if (app.configPathDeclared !== undefined) {
+		schema.config_path = serializeDefaultValue(app.configPathDeclared);
+	}
+	if (app.configConflictMode !== "cli-wins") {
+		schema.config_conflict_mode = app.configConflictMode;
 	}
 	if (app.procObserveAllowlist.length > 0) {
 		schema.proc_observe_allowlist = app.procObserveAllowlist.map((p) => [...p]);
@@ -558,11 +740,16 @@ export function dumpSchemaCore(app: AppImpl): Record<string, unknown> {
 		}
 		schema.groups = groups;
 	}
+	// `deprecated`, `tag_contracts` and `checks` are emitted SORTED ascending by
+	// key: no implementation retains a declaration order for all three, and a
+	// canon that cannot be produced from what an implementation holds is not a
+	// canon (§25.9). Every key here is ASCII by registration rule, so byte,
+	// code-point and UTF-16 order coincide.
 	if (app.deprecated.size > 0) {
-		schema.deprecated = Object.fromEntries(app.deprecated);
+		schema.deprecated = sortedRecord(app.deprecated);
 	}
 	if (app.tagContracts.size > 0) {
-		schema.tag_contracts = Object.fromEntries(app.tagContracts);
+		schema.tag_contracts = sortedRecord(app.tagContracts);
 	}
 	// checks: only present when checks are enabled. Provider-sourced checks
 	// (registerCheckProvider) are deliberately EXCLUDED: providers materialize
@@ -571,10 +758,11 @@ export function dumpSchemaCore(app: AppImpl): Record<string, unknown> {
 	// dynamically-materialized one.
 	if (app.checks.enabled) {
 		const checksMap: Record<string, unknown> = {};
-		for (const [name, def] of app.checks.defs) {
+		for (const name of [...app.checks.defs.keys()].sort()) {
 			if (app.checks.providerSourcedNames.has(name)) {
 				continue;
 			}
+			const def = app.checks.defs.get(name) as CheckDefView;
 			const entry: Record<string, unknown> = {
 				tags: [...def.tags],
 				severity: def.severity,
@@ -588,7 +776,12 @@ export function dumpSchemaCore(app: AppImpl): Record<string, unknown> {
 			}
 			checksMap[name] = entry;
 		}
-		schema.checks = checksMap;
+		// Omitted when empty, which is the baseline the `defaults` block states:
+		// an app whose only checks are provider-sourced publishes no block at all
+		// rather than an empty one.
+		if (Object.keys(checksMap).length > 0) {
+			schema.checks = checksMap;
+		}
 	}
 	if (app.configFields.size > 0) {
 		const bindings = collectConfigFieldBindings(app);
