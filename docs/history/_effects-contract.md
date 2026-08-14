@@ -117,6 +117,17 @@ propagated decisions already made into the sites that still contradicted them, a
 one reading that had been presented as forced when it was authored (§20.1, item 112). §18.9
 records what the sweep authored.
 
+The presence round was likewise **swept the same day, after its implementation**, once all three
+languages had shipped §23. Every sweep amendment is marked `Amendment (2026-08-14, presence round
+-- implementation sweep)` and they touch §12.12, §23.3, §23.5, §23.6 and §23.8; §18.14 carries them
+as items 151-158, continuing that round's numbering. **The sweep reverses no ruling.** It pins
+spellings the pre-implementation text left open (the arg twins' parenthetical, the
+three-declarations rendering, two language-specific template families), deletes a template family
+the round's own rules made unreachable, and records three places where the round's text described
+convergence that did not yet exist -- Python's `validate`-on-default, Go's and TypeScript's
+dependency predicate counting an `infra` default as supplied, and two help renderings. Those three
+are behaviour changes, named as such rather than left inside a table cell.
+
 One sweep spelling was **reversed the same day** by a post-sweep ruling: §12.1's reserved-name ban
 for `json` keeps the separate `json`-specific template the three implementations carry, instead of
 the sweep's appended-to-the-quartet rendering. The superseded box stays in place under a
@@ -2546,6 +2557,21 @@ second)`. All three. `<first>` and `<second>` are drawn from the table above; th
 default spelling is rendered by the same value formatter the other declaration guards use
 (`formatValueForError` / `_format_value_for_error`).
 
+> **Amendment (2026-08-14, presence round -- implementation sweep): three declarations at once,
+> and the nil default's spelling inside this message.** Two pins the paragraph above left open,
+> both surfaced by writing the resolver:
+>
+> - **Three declared is not a fourth message.** A declaration carrying all three facts renders the
+>   same declared-twice error, naming the **first two** in the canonical order `required`,
+>   `optional`, `default`. The message's job is to say that more than one was declared and to name
+>   what to remove, and a third name changes neither. The count is never printed, so a
+>   two-declaration error and a three-declaration error are byte-identical whenever they share
+>   their first two spellings.
+> - **Go renders a nil default as `Default(nil)` / `ArgDefault(nil)`** inside this message rather
+>   than routing it through `formatValueForError`. The null-valued default has its own error
+>   (§23.1), but the count check runs first, so `Required()` written beside `Default(nil)` reaches
+>   the declared-twice message and must name the spelling that was actually written.
+
 **The null-valued default** -- one spelling per fact, so the value-shaped spelling of optionality is
 refused and redirected rather than accepted as a second synonym:
 
@@ -2559,6 +2585,26 @@ refused and redirected rather than accepted as a second synonym:
 `errArgDefaultNullNotOptional(name)` with `ArgDefault(nil)` / `ArgOptional()` in Go. All three. The
 parenthetical is not decoration: the value the reader wanted is exactly what the redirected
 spelling delivers, and saying so is what stops the redirect reading like a prohibition.
+
+> **Amendment (2026-08-14, presence round -- implementation sweep): the arg twins substitute the
+> noun in the trailing parenthetical too.** The paragraph above named the substitutions the twin
+> makes in the Go row (`ArgDefault(nil)`, `ArgOptional()`) and said nothing about the
+> parenthetical, which left `(it delivers nil when the flag is absent)` readable as the twin's own
+> text on an arg. All three implementations wrote the noun substitution independently, and it is
+> pinned here as the general rule rather than as three coincidences:
+>
+> **An `Arg` message is the `Flag` message with three substitutions and no others** -- `Flag` ->
+> `Arg` in the prefix, the flag spellings -> the arg spellings, and the noun in every trailing
+> parenthetical -> `arg`. That third substitution governs the whole §12.12 family, not just the
+> null-default redirect.
+>
+> The three arg-side texts of the redirect are therefore:
+>
+> | Impl | Text |
+> |------|------|
+> | Python | `Arg "<name>": default=None does not declare optionality: use presence="optional" (it delivers None when the arg is absent)` |
+> | Go | `Arg "<name>": ArgDefault(nil) does not declare optionality: use ArgOptional() (it delivers nil when the arg is absent)` |
+> | TypeScript | `Arg "<name>": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the arg is absent)` |
 
 **A mutex member declaring requiredness** (§21, §23.5's mutex row):
 
@@ -2591,8 +2637,52 @@ author to re-sentinelize with. There is no site to check, not a check that was s
 twin substitutes `optional arg '<arg>'` for `optional flag '--<flag>'`
 (`_msg_handler_param_optional_arg_default`).
 
-**Deleted at this round.** Four registration templates lose their reason to exist and are removed
-from all three catalogs, not left dormant:
+> **Amendment (2026-08-14, presence round -- implementation sweep): two language-specific template
+> families, excluded from cross-language error parity by construction.** Every other template in
+> this section is one sentence in three spellings. These two are not. Each names a state **only
+> one language's spelling can reach**, so a sibling has no input that could produce the message,
+> and a parity assertion over it would be asserting that the other two implementations carry text
+> no code path can print. They are recorded here so their absence elsewhere reads as a consequence
+> of the spelling rather than as a parity defect, and `check_error_parity.py` carries them as
+> `excluded:` entries with that rationale.
+>
+> **Python only -- a `presence=` value that is neither fact.** Python spells the declaration as a
+> keyword taking a string, so `presence="defualt"`, `presence="default"` and `presence=3` are all
+> writable. Go's three sibling `FlagOption`s and TypeScript's discriminated union have no input
+> that could carry a bad presence value: there is nothing to mistype.
+>
+> ```
+> Flag "<name>": presence must be "required" or "optional", got '<value>'; a default value is declared with default=<value>
+> ```
+>
+> `_raise_presence_value_invalid(surface, name, value)`, with `Arg` substituted for `Flag` on the
+> arg surface. `<value>` is the repr of what was written, and `default=<value>` in the trailing
+> clause is literal -- it is the spelling being named, not an interpolation. The redirect is the
+> same discipline as the null-default message: naming the third spelling is what stops the error
+> leaving the reader with two of three.
+>
+> **TypeScript only -- `presence: "default"` with no `default`.** TypeScript is the only language
+> whose default spelling has **two parts**, so the union member can reach the factory carrying its
+> discriminant and not its value, through a widened option object the compiler never narrowed.
+> Python's `default=<value>` and Go's `Default(v)` *are* the value, so a half-written default
+> declaration is inexpressible there.
+>
+> ```
+> Flag "<name>": presence: "default" requires a default value: declare default: <value>, or presence: "optional" for no value
+> ```
+>
+> ```
+> Arg "<name>": presence: "default" requires a default value: declare default: <value>, or presence: "optional" for no value
+> ```
+>
+> `errFlagDefaultValueMissing(name)` / `errArgDefaultValueMissing(name)`. Both `<value>` tokens are
+> literal here for the same reason: the message names the spelling to write, and there is no value
+> in hand to interpolate.
+
+**Deleted at this round.** ~~Four registration templates lose~~ *(amended 2026-08-14, presence
+round -- implementation sweep: the count is no longer four; see the amendment box under the table)*
+Registration templates that lose their reason to exist are removed from all three catalogs, not
+left dormant:
 
 | Template | Text | Why it goes |
 |---|---|---|
@@ -2600,6 +2690,28 @@ from all three catalogs, not left dormant:
 | `errFlagExplicitEmptyDefaultRedundantDict` | `Flag "<name>": explicit empty default is redundant for dict flags, omit the default` | as above, with `{}` |
 | `errFlagExplicitEmptyDefaultRedundantRepeatable` | `Flag "<name>": explicit empty default is redundant for repeatable flags, omit the default` | as above |
 | `errRequiredArgCannotHaveDefault` | `required arg cannot have a default` | Subsumed by the two-declared error, which says the same thing for every pair and names both spellings. It is also the one message in the family with no `Arg "<name>": ` prefix, so nothing is lost twice |
+
+> **Amendment (2026-08-14, presence round -- implementation sweep): the unreachable arg-side
+> list-default validation family goes with them.** A second group, found by reading the arg
+> factories after the round's own rules were in place. All of it validates the **default value of
+> a list-typed positional arg**, and after §23.3 no such declaration can exist: a list-typed arg
+> must be variadic, and a variadic arg refuses any default. The reason is one sentence and it
+> covers every row -- *a list-typed arg must be variadic, and a variadic arg refuses any default,
+> so these can never fire.*
+>
+> | Template | Text |
+> |---|---|
+> | `errArgListDefaultMustBeList` | `Arg "<name>": list arg default must be a list` |
+> | `errArgExplicitEmptyDefaultRedundantList` | `Arg "<name>": explicit empty default is redundant for list args, omit the default` |
+> | the arg-side element-type checks (`errArgDefaultElementTypeMismatch`) | `Arg "<name>": default element <i> is not of type <type>` |
+>
+> **All three implementations delete them.** Go carries the whole group and removes it with its
+> call sites; TypeScript removes `errArgExplicitEmptyDefaultRedundantList`; Python's equivalent
+> block was already deleted when the round rewrote the arg surface, so the deletion is what put
+> the other two where Python already stood. The rule is §12.12's standing one, applied to
+> unreachability rather than to obsolescence: a template no code path can reach is a claim about
+> behaviour that does not exist, and leaving it in the catalog would make the error-parity surface
+> assert agreement about a message none of the three can print.
 
 ---
 
@@ -4303,8 +4415,15 @@ the correction that made the promise true.
 This round is the first phase of the declaration-regime campaign. It adds §23, adds §12.12, amends
 §0 and §13, and amends §21.3 in place. Items 137, 138, 143 and 147 are **ruled upstream**; the rest
 are authored spellings in the §18.3 class -- the mechanical remainder the rulings left open, decided
-here so implementors have nothing left to decide, and written **before** any implementation, which
-is the §19 discipline this campaign adopted explicitly.
+here so implementors have nothing left to decide, and ~~written **before** any implementation, which
+is the §19 discipline this campaign adopted explicitly.~~ *(amended 2026-08-14, implementation
+sweep)* written **before** any implementation, which is the §19 discipline this campaign adopted
+explicitly. **Items 137-150 are that pre-implementation record and are unchanged. Items 151-158
+were added after the three implementations shipped**, and each of them records something the
+implementations surfaced that the pre-implementation text had left open, under-specified, or
+described as settled when it was not. They are all in the §18.3 authored class -- implementation-
+forced spellings and convergence picks -- and carry no origin tag, because none of them is an
+upstream ruling of either kind.
 
 **Origin tags.** This section is the first in §18 to carry them, because the campaign's own decision
 record distinguishes two kinds of upstream ruling and the distinction should survive into this
@@ -4450,6 +4569,91 @@ of optional-flag absence in any language.
      arise for it. The constraint system, the update-command construct and the consumer-side
      retirement of the `default=""` idiom are separate work with their own amendments. Stating the
      boundary is what stops a later reader treating an untouched surface as an oversight.
+
+**Added after implementation (2026-08-14, implementation sweep).** Items 151-158 continue this
+round's numbering rather than opening a section of their own: they belong to the presence round,
+they amend only sections the round added or rewrote, and none of them reverses a ruling above.
+Three are convergence picks -- one implementation was right and the other two change (152, 156,
+157) -- and the rest are spellings the pre-implementation text left open. All are §18.3-class.
+
+151. **The arg twins substitute the noun in the trailing parenthetical (§12.12).** An `Arg` message
+     is its `Flag` message with three substitutions and no others: the prefix, the spellings, and
+     the noun inside every trailing parenthetical (`... when the arg is absent`). The
+     pre-implementation text named the first two and left the third to inference, which made the
+     flag-side parenthetical readable as the arg twin's own text. All three implementations wrote
+     the substitution independently; pinning it turns three coincidences into the rule that governs
+     the whole family, including any template the family later grows.
+
+152. **The unreachable arg-side list-default validation family is deleted (§12.12).** Three
+     templates validating the default value of a **list-typed positional arg** -- must-be-a-list,
+     explicit-empty-is-redundant, and the element-type loop behind them. A list-typed arg must be
+     variadic and a variadic arg refuses any default (item 140), so no declaration can reach them.
+     All three implementations delete the family; Python's block was already gone from the round's
+     own arg rewrite, so this is Go and TypeScript converging onto where Python stood. The rule
+     applied is item 149's, extended from obsolescence to unreachability: a template no code path
+     can reach is a claim about behaviour that does not exist, and keeping it would make the
+     error-parity surface certify agreement about a message none of the three can print.
+
+153. **Two language-specific template families are ratified, and excluded from cross-language error
+     parity (§12.12).** Each names a state only one language's spelling can reach, so a sibling has
+     no input that could produce it. Python-only: a `presence=` value that is neither `"required"`
+     nor `"optional"`, which exists because Python spells the declaration as a keyword taking a
+     string and Go's options and TypeScript's union have nothing to mistype. TypeScript-only:
+     `presence: "default"` carrying no `default`, which exists because TypeScript is the only
+     language whose default spelling has two parts -- Python's `default=<value>` and Go's
+     `Default(v)` *are* the value. The exclusion is a consequence of the spellings item 139
+     authored, not a parity defect, and it is recorded here so a later reader does not "fix" it by
+     porting dead text into two catalogs.
+
+154. **Three declarations at once, and the nil default's spelling inside the declared-twice message
+     (§12.12).** A declaration carrying all three facts renders the same declared-twice error,
+     naming the **first two** in the canonical order `required`, `optional`, `default` -- the
+     message's job is to say more than one was declared and to name what to remove, and a third
+     name changes neither. The count is never printed, so a two- and a three-declaration error are
+     byte-identical when their first two spellings agree. Second: Go renders a nil default as
+     `Default(nil)` / `ArgDefault(nil)` inside that message rather than through
+     `formatValueForError`, because the count check runs before the null-default refusal, so
+     `Required()` beside `Default(nil)` reaches the declared-twice message and must name what was
+     written.
+
+155. **The handler-parameter check reads narrowly (§23.3).** It fires only when the bound parameter
+     **has** a default and that default is not `None`; a **bare** parameter is legal. The wide
+     reading -- every optional-bound parameter written `=None` -- is unimplementable, because
+     Python forbids a parameter without a default after one that has it, so the rule would force
+     handler authors to reorder parameter lists that have nothing to do with presence. It is also
+     unnecessary: absence arrives as a present key on every dispatch, so a bare parameter receives
+     the framework's `None` and there is no competing value. The hazard item 147 exists for is a
+     *written* sentinel, and a bare parameter writes none.
+
+156. **The `validate` row's `default` cell supersedes shipped Python behaviour (§23.5).** Item
+     142's matrix was presented as pinning cells that were either new decisions or unwritten
+     descriptions of today. This cell is neither: Python **ran `validate` on the declared default**
+     when nothing supplied a value, and Go and TypeScript did not. The matrix picks the majority,
+     Python changes, and the reason is the round's own -- a default is the declaration's value, the
+     author's to get right at registration, and validating it at parse time makes a declaration's
+     legality depend on an invocation that never mentioned it. Recorded as a behaviour change so a
+     reader of the cell does not take it for a restatement.
+
+157. **The dependency predicate excludes `infra`, which changes shipped Go and TypeScript behaviour
+     (§23.6).** Item 143 said `ctx.provided` reuses the predicate `CoRequired`, `Requires` and
+     `Implies` already use, "so the framework has one definition of was this supplied, not two". It
+     had two: all three excluded `default`, but only Python also excluded `infra`, so a
+     `RelativeToRoot`-defaulted flag inside a dependency family counted as present in Go and
+     TypeScript. The pin is one predicate excluding both labels in all three, with Python as the
+     reference. The consequence is real: an infra-defaulted flag no longer satisfies a dependency
+     on its own. That is the direction item 143's own dividing line requires -- an infra default is
+     a declared default whose label says only *which* default it was.
+
+158. **Three help renderings the presence invariant reached (§23.8).** A **bool default renders
+     lowercase everywhere**, positional args included: item 146 said so about flags, and Python's
+     arg side rendered `[default: True]` through its generic formatter, so one declared value
+     rendered two ways in one help page. A **non-empty dict default renders as sorted `key=value`
+     pairs** (`[default: a=1, b=2]`) in all three, which closes a live divergence rather than
+     restating agreement -- Go rendered nothing at all for one, leaving the line without the
+     presence part the invariant requires. And the **app-level `Global flags:` summary carries no
+     bracketed metadata and deliberately keeps none**: it is an index of what exists, the flag's
+     full line is rendered at command level where it is used, and putting a presence part in both
+     places would state one fact twice in a single help run.
 
 ---
 
@@ -5436,6 +5640,27 @@ parameters. It is a registration-time hard error (§12.12). Go and TypeScript ha
 their handlers receive one kwargs map / one args object and no per-parameter defaults exist to
 check.
 
+> **Amendment (2026-08-14, presence round -- implementation sweep): the check reads narrowly, and
+> the narrow reading is the only implementable one.** It fires on exactly one shape: the bound
+> parameter **has** a default and that default is **not** `None`. A **bare** parameter -- one
+> declaring no default at all, `def h(ctx, target)` bound to an optional `--target` -- is legal
+> and is not an error. The wide reading ("every parameter bound to an optional declaration must
+> literally be written `=None`") is the natural first reading of the paragraph above, and it is
+> refused for two independent reasons, either of which is sufficient on its own:
+>
+> - **The wide reading is unimplementable.** Python forbids a parameter without a default after
+>   one that has it, so requiring `=None` on every optional-bound parameter would force handler
+>   authors to reorder parameter lists that have nothing to do with presence. A rule satisfiable
+>   only by rewriting unrelated parameter order is not a rule about re-sentinelization.
+> - **A bare parameter is not a re-sentinelization site.** The framework passes every declared
+>   value as a keyword argument on **every** dispatch -- that is this section's delivery rule,
+>   absence as a present key -- so a bare parameter receives the framework's `None` and no second
+>   value competes with it. The hazard the check exists for is a *written* sentinel, `target=""`,
+>   and a bare parameter writes none.
+>
+> A `**kwargs` handler under guard v2's declared forwarding (§10.2) names no parameter at all and
+> is likewise unaffected: the same absent site Go and TypeScript have everywhere.
+
 ### 23.4 What is deleted
 
 Five mechanisms, all of them inferences, all of them removed rather than left unreachable:
@@ -5476,7 +5701,8 @@ because it was never written down and the round is what makes it a promise.
 | **`RelativeToRoot`** | n/a | the marker **is** a `default=` declaration: `presence` is `default`, the value resolves at parse time, the source label is `infra` | n/a |
 | **URL-class flag (`connection_url`)** | requiredness is satisfied by the bound connection env's value, which is the `env` row; no extra guard | legal | legal |
 
-Two whole-table notes:
+~~Two~~ **Three** whole-table notes *(amended 2026-08-14, presence round -- implementation sweep:
+the third is added below)*:
 
 - **The default-in-choices check applies to declared VALUES only, never to absence.** That single
   sentence is what makes `choices` compose with `optional` in both directions, and it is the reason
@@ -5486,6 +5712,18 @@ Two whole-table notes:
   implication. It is not a "must be typed on the command line" rule. The one exception is the
   mutex row, and it is §21.3's exception rather than this round's: env and config are not consulted
   for a mutex member at all.
+- **The `validate` row's `default` cell SUPERSEDES shipped Python behaviour** *(added 2026-08-14,
+  presence round -- implementation sweep)*. The cell reads *runs on a supplied value, never on the
+  default*, and this section's preamble says a row stating today's behaviour is stated only
+  because it was never written down. That preamble does not cover this cell: Python **ran a flag's
+  `validate` callable on the declared default** when nothing supplied a value, and Go and
+  TypeScript did not. The cell is the converged rule, all three now do it, and Python loses the
+  shipped behaviour. The reasoning is the round's own: a default is the declaration's value, the
+  author's to get right at registration, and validating it at parse time makes a declaration's
+  legality depend on an invocation that never mentioned it -- surfacing as a parse error against a
+  command line that supplied nothing wrong. It is recorded as a whole-table note rather than left
+  inside the cell because a reader of the cell would otherwise take it for a restatement of what
+  all three already did.
 
 ### 23.6 `ctx.provided`
 
@@ -5515,6 +5753,26 @@ It accepts dashed or underscored names, underscore form tried first, exactly as 
 One sentence covers it: **`provided` is true when the invocation caused the value and false when
 the declaration did.** The same predicate is what `CoRequired`, `Requires` and `Implies` already
 use to decide presence, so the framework has one definition of "was this supplied", not two.
+
+> **Amendment (2026-08-14, presence round -- implementation sweep): the shared definition excludes
+> `infra`, and enforcing that changes shipped Go and TypeScript behaviour.** The sentence above was
+> written as a description of what the three already did, and it was true of two of them. The
+> dependency predicate -- `is_present_for_deps` / `isPresentForDeps` and the `Implies`-trigger and
+> `CoRequired` / `Requires` call sites that read it -- excluded `default` in all three, but
+> **Python alone also excluded `infra`**. So a `RelativeToRoot`-defaulted flag sitting inside a
+> `CoRequired` or `Requires` family **counted as present** in Go and TypeScript and did not in
+> Python: two definitions of "supplied", invisible until this round because there was no
+> `ctx.provided` for either to contradict.
+>
+> The pin: **the dependency predicate excludes both `default` and `infra`, in all three languages,
+> and it is the same predicate `ctx.provided` reads.** One definition, one implementation of it,
+> as the sentence above promises. Python is the reference here; Go and TypeScript change.
+>
+> The behaviour change is real and narrow, and it is the correct direction under §23.6's own
+> dividing line: an infra default is a declared default whose label merely says *which* default it
+> was, so the declaration caused the value and the invocation did not. After this round a
+> `RelativeToRoot`-defaulted flag no longer satisfies a dependency on its own, and a `CoRequired`
+> group whose members are all infra-defaulted is satisfied by nothing rather than by everything.
 
 **An optional flag that received nothing** carries source `default` and `provided() == false`. It
 has no declared default value; `default` is the label for "the declaration decided", and an
@@ -5570,6 +5828,31 @@ Two consequences of the invariant, both of which change bytes:
   it, and there is no usage line anywhere in the help output that showed requiredness some other
   way -- so a required positional was the one declaration in the framework whose presence was
   invisible to a reader. It is now rendered exactly as a required flag's is.
+
+> **Amendment (2026-08-14, presence round -- implementation sweep): three renderings the invariant
+> reached and this section had not pinned.**
+>
+> - **A bool default renders lowercase everywhere, positional args included.** `[default: true]` /
+>   `[default: false]`, never the host language's own spelling of the literal. The paragraph above
+>   already said so, but said it about flags: Python's **arg** side ran the value through its
+>   generic formatter and rendered `[default: True]`, so one declared value rendered two ways in a
+>   single help page depending on which surface carried it. The arg side converges onto the
+>   lowercase form -- it is what the other two produce, and it is what a reader would type back on
+>   the command line.
+> - **A non-empty dict default renders as sorted `key=value` pairs**: `[default: a=1, b=2]`. Keys
+>   sorted, `, ` between pairs, each value through the same error-message value formatter the rest
+>   of the family uses. This closes a live divergence rather than restating agreement: **Go
+>   rendered nothing at all** for a non-empty dict default, which left the flag's line with no
+>   presence part -- precisely the hole the exactly-one-presence-part invariant exists to close.
+>   The empty case stays `[default: {}]` per the first bullet above.
+> - **The app-level `Global flags:` summary carries no bracketed metadata, and deliberately keeps
+>   none.** App-level help lists each global flag as its spec plus its help text and nothing else.
+>   The flag's full line -- type, compound, choices, env, and the one presence part -- is rendered
+>   where the flag is *used*, at command level, which is where this section's invariant applies.
+>   The summary is an index of what exists, not a statement of how each entry behaves, and giving
+>   it a presence part would put the same fact on two lines of one help run. This is pinned
+>   because "every flag and every arg renders exactly one presence part" would otherwise read as
+>   reaching it, and a later reader would take the absent brackets for an omission.
 
 ### 23.9 What this round does not touch
 
