@@ -1687,6 +1687,49 @@ test("dependencies: implies auto-set, default, conflict, agreement", async () =>
 	);
 });
 
+// An Implies TRIGGER never fires from its own default (§23.5's Implies-trigger
+// row). The trigger declares `default: true` and nothing supplies it, so the
+// implied target keeps its own declaration; supplying the same value on the
+// command line does fire it, which is what makes provision the distinguisher.
+function impliesDefaultedTriggerApp(out: string[]): AppImpl {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				release: flag("release", t.bool, {
+					help: "release build",
+					presence: "default",
+					default: true,
+				}),
+				signed: flag("signed", t.bool, {
+					help: "signed build",
+					presence: "optional",
+				}),
+			},
+			dependencies: [implies({ flag: "release", implies: "signed", value: true })],
+			handler: (a) => {
+				out.push(`release=${fmt(a.release)} signed=${fmt(a.signed)}`);
+			},
+		}),
+	);
+	return app;
+}
+
+test("dependencies: a defaulted implies trigger does not fire", async () => {
+	const out: string[] = [];
+	assert.equal(
+		(await run(impliesDefaultedTriggerApp(out), ["cmd"], out)).stdout,
+		"release=true signed=None",
+	);
+	const out2: string[] = [];
+	assert.equal(
+		(await run(impliesDefaultedTriggerApp(out2), ["cmd", "--release"], out2))
+			.stdout,
+		"release=true signed=true",
+	);
+});
+
 test("dependencies: implies env var trigger fires implication", async () => {
 	await withEnv({ MYAPP_FAST: "true" }, async () => {
 		const out: string[] = [];
@@ -3158,6 +3201,49 @@ test("presence: requiredness is satisfied by env, not only by a CLI token", asyn
 	await withEnv({ MYAPP_TARGET: "from-env" }, async () => {
 		assert.deepEqual(await kwargsOf(app, ["cmd"]), { target: "from-env" });
 	});
+});
+
+test("presence: a co-required group with a required member", async () => {
+	// §23.5's CoRequired row: a required member is always provided, so the
+	// group then forces every other member to be provided in every invocation.
+	// The shape is legal; these are the two errors it can reach.
+	const mk = (): AppImpl => {
+		const app = makeApp();
+		app.command(
+			defineReadOnlyCommand("cmd", {
+				help: "a command",
+				flags: {
+					cert: flag("cert", t.str, {
+						help: "the certificate",
+						presence: "required",
+					}),
+					key: flag("key", t.str, {
+						help: "the private key",
+						presence: "optional",
+					}),
+				},
+				dependencies: [coRequired(["cert", "key"])],
+				handler: () => 0,
+			}),
+		);
+		return app;
+	};
+	assert.deepEqual(await kwargsOf(mk(), ["cmd", "--cert", "c", "--key", "k"]), {
+		cert: "c",
+		key: "k",
+	});
+	// Only the required member: the group is violated, because a required
+	// member cannot be absent to leave the group vacuously satisfied.
+	assert.equal(
+		(await run(mk(), ["cmd", "--cert", "c"])).stderr,
+		errOut("flags --cert, --key must be used together", "myapp cmd"),
+	);
+	// Neither: the dependency check sees an empty group and the required check
+	// is what fires.
+	assert.equal(
+		(await run(mk(), ["cmd"])).stderr,
+		errOut("flag '--cert' is required", "myapp cmd"),
+	);
 });
 
 test("presence: an optional arg delivers a present key holding absence", async () => {

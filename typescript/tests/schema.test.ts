@@ -1235,6 +1235,46 @@ test("dumpSchemaDict is CWD-free, has no project_id, and matches the file conten
 	assert.deepEqual(JSON.parse(schemaJson(dict)), JSON.parse(EXPECTED_JSON));
 });
 
+// Contract §23.7: `default` is emitted exactly when presence is "default", and
+// then ALWAYS -- including for the empty collections, which used to be the
+// framework's own silent value and had nothing to announce. The Python and Go
+// suites pin the same pair on their own dumps.
+test("empty-collection defaults are emitted, not omitted", () => {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "t" });
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				tag: flag("tag", t.list(t.str), {
+					help: "tags",
+					presence: "default",
+					default: [],
+				}),
+				header: flag("header", t.dict(t.str), {
+					help: "headers",
+					presence: "default",
+					default: new Map(),
+				}),
+			},
+			handler: () => 0,
+		}),
+	);
+	const dumped = JSON.parse(schemaJson(app.dumpSchemaDict())) as {
+		commands: {
+			cmd: { flags: { name: string; presence: string; default: unknown }[] };
+		};
+	};
+	const byName = (name: string) => {
+		const f = dumped.commands.cmd.flags.find((e) => e.name === name);
+		assert.ok(f, `flag ${name} missing from the dump`);
+		return f;
+	};
+	assert.equal(byName("tag").presence, "default");
+	assert.deepEqual(byName("tag").default, []);
+	assert.equal(byName("header").presence, "default");
+	assert.deepEqual(byName("header").default, {});
+});
+
 // --- Conformance case behaviors (cases/dump_schema.json) ---
 
 test("--dump-schema exits 0 and prints the absolute schema path", async () => {

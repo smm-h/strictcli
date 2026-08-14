@@ -128,6 +128,79 @@ test("connection: hermetic suppresses the env read", async () => {
 	});
 });
 
+// --- Presence: a REQUIRED connection-URL flag (contract §23.5's env row) ---
+
+// The bound connection env must satisfy requiredness on its own: that is
+// §23.5's env row, and the URL-class row adds no guard on top of it.
+function requiredConnApp() {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "t",
+		connectionEnv: { DATABASE_URL: "Postgres connection string" },
+	});
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			flags: {
+				dsn: flag("dsn", t.str, {
+					help: "connection string",
+					presence: "required",
+					connectionUrl: true,
+					connectionEnv: "DATABASE_URL",
+				}),
+			},
+			handler: (args, ctx) => {
+				ctx.info(`${ctx.source("dsn")}:${ctx.provided("dsn")}:${args.dsn}`);
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+test("connection: a required connection flag is satisfied by the env", async () => {
+	await withEnv({ DATABASE_URL: "postgres://from-env/db" }, async () => {
+		const r = await requiredConnApp().test(["run"]);
+		assert.equal(r.exitCode, 0, r.stderr);
+		assert.equal(r.stdout, "env:true:postgres://from-env/db\n");
+	});
+});
+
+test("connection: a required connection flag with the env unset is the required error", async () => {
+	await withEnv({ DATABASE_URL: undefined }, async () => {
+		const r = await requiredConnApp().test(["run"]);
+		assert.equal(r.exitCode, 1);
+		assert.equal(
+			r.stderr,
+			"error: flag '--dsn' is required\ntry 'myapp run --help'\n",
+		);
+	});
+});
+
+test("connection: CLI beats the env on a required connection flag", async () => {
+	await withEnv({ DATABASE_URL: "postgres://from-env/db" }, async () => {
+		const r = await requiredConnApp().test([
+			"run",
+			"--dsn",
+			"postgres://from-cli/db",
+		]);
+		assert.equal(r.exitCode, 0, r.stderr);
+		assert.equal(r.stdout, "cli:true:postgres://from-cli/db\n");
+	});
+});
+
+test("connection: hermetic suppresses the env, so a required connection flag errors", async () => {
+	await withEnv({ DATABASE_URL: "postgres://from-env/db" }, async () => {
+		const r = await requiredConnApp().test(["--hermetic", "run"]);
+		assert.equal(r.exitCode, 1);
+		assert.equal(
+			r.stderr,
+			"error: flag '--dsn' is required\ntry 'myapp run --help'\n",
+		);
+	});
+});
+
 // --- Handler-side infraValue / connectionEnvValue ---
 
 test("connection: infraValue and connectionEnvValue resolve live", async () => {
