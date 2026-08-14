@@ -211,6 +211,62 @@ func TestArgPresenceDeclaredTwice(t *testing.T) {
 	}
 }
 
+// TestPresenceDeclaredTwiceRendersNilDefaultAsNilSpelling pins the second half
+// of §12.12's implementation-sweep box (ledger item 154): the count check runs
+// BEFORE the null-default refusal, so a nil default written beside a presence
+// declaration reaches the declared-twice message -- and there it renders as
+// `Default(nil)` / `ArgDefault(nil)` rather than through formatValueForError,
+// because the message must name the spelling that was actually written.
+//
+// The redirect is reserved for the nil default written as the sole declaration
+// (the two tests below).
+func TestPresenceDeclaredTwiceRendersNilDefaultAsNilSpelling(t *testing.T) {
+	cases := []struct {
+		name string
+		fn   func()
+		want string
+	}{
+		{
+			"flag required+nil default",
+			func() { StringFlag("x", "h", Required(), Default(nil)) },
+			`Flag "x": presence is declared twice: Required() and Default(nil) cannot be combined; declare exactly one`,
+		},
+		{
+			"flag optional+nil default",
+			func() { StringFlag("x", "h", Optional(), Default(nil)) },
+			`Flag "x": presence is declared twice: Optional() and Default(nil) cannot be combined; declare exactly one`,
+		},
+		{
+			// Written default-first, rendered the canonical way round.
+			"flag nil default+required",
+			func() { StringFlag("x", "h", Default(nil), Required()) },
+			`Flag "x": presence is declared twice: Required() and Default(nil) cannot be combined; declare exactly one`,
+		},
+		{
+			"arg required+nil default",
+			func() { NewArg("x", "h", ArgRequired(), ArgDefault(nil)) },
+			`Arg "x": presence is declared twice: ArgRequired() and ArgDefault(nil) cannot be combined; declare exactly one`,
+		},
+		{
+			"arg optional+nil default",
+			func() { NewArg("x", "h", ArgOptional(), ArgDefault(nil)) },
+			`Arg "x": presence is declared twice: ArgOptional() and ArgDefault(nil) cannot be combined; declare exactly one`,
+		},
+		{
+			"arg nil default+optional",
+			func() { NewArg("x", "h", ArgDefault(nil), ArgOptional()) },
+			`Arg "x": presence is declared twice: ArgOptional() and ArgDefault(nil) cannot be combined; declare exactly one`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mustPanic(t, tc.fn); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // The null-valued default: refused, and redirected to the one spelling
 // ---------------------------------------------------------------------------
@@ -523,6 +579,78 @@ func TestRequiredSatisfiedByImplication(t *testing.T) {
 	}
 	if !strings.Contains(r.Stderr, "flag '--verbose-out' must be passed as --verbose-out or --no-verbose-out") {
 		t.Fatalf("got %q", r.Stderr)
+	}
+}
+
+// §23.5's CoRequired row: a required member is always provided, so the group
+// then forces every other member to be provided in every invocation. The shape
+// is legal; these are the two errors it can reach.
+func TestCoRequiredWithARequiredMember(t *testing.T) {
+	newApp := func() *App {
+		return simpleApp("cmd", "a command", "cert={cert} key={key}",
+			WithFlags(
+				StringFlag("cert", "the certificate", Required()),
+				StringFlag("key", "the private key", Optional()),
+			),
+			WithDependencies(CoRequired{Flags: []string{"cert", "key"}}))
+	}
+	r := newApp().Test([]string{"cmd", "--cert", "c.pem", "--key", "k.pem"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "cert=c.pem key=k.pem" {
+		t.Fatalf("got %q", r.Stdout)
+	}
+	// Only the required member: the group is violated, because a required
+	// member cannot be absent to leave the group vacuously satisfied.
+	r = newApp().Test([]string{"cmd", "--cert", "c.pem"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	want := "error: flags --cert, --key must be used together\ntry 'myapp cmd --help'\n"
+	if r.Stderr != want {
+		t.Fatalf("stderr = %q, want %q", r.Stderr, want)
+	}
+	// Neither: the dependency check sees an empty group and the required check
+	// is what fires.
+	r = newApp().Test([]string{"cmd"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	want = "error: flag '--cert' is required\ntry 'myapp cmd --help'\n"
+	if r.Stderr != want {
+		t.Fatalf("stderr = %q, want %q", r.Stderr, want)
+	}
+}
+
+// An Implies TRIGGER never fires from its own default (§23.5's Implies-trigger
+// row): the trigger declares Default(true) and nothing supplies it, so the
+// implied target keeps its own declaration rather than the implied value.
+func TestImpliesTriggerNeverFiresFromItsOwnDefault(t *testing.T) {
+	newApp := func() *App {
+		return simpleApp("cmd", "a command", "release={release} signed={signed}",
+			WithFlags(
+				BoolFlag("release", "release build", Default(true)),
+				BoolFlag("signed", "signed build", Optional()),
+			),
+			WithDependencies(Implies{Flag: "release", Implies: "signed", Value: true}))
+	}
+	// Trigger defaulted (not supplied): no implication.
+	r := newApp().Test([]string{"cmd"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "release=true signed=None" {
+		t.Fatalf("a defaulted trigger must not fire; got %q", r.Stdout)
+	}
+	// Supplying the very same value on the command line DOES fire it: the
+	// difference is provision, not the value.
+	r = newApp().Test([]string{"cmd", "--release"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r.Stdout != "release=true signed=true" {
+		t.Fatalf("a provided trigger must fire; got %q", r.Stdout)
 	}
 }
 
