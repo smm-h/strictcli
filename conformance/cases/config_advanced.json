@@ -18,18 +18,21 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             },
             {
               "name": "debug",
               "help": "debug mode",
+              "presence": "default",
               "type": "bool",
               "default": false
             },
             {
               "name": "rate",
               "help": "a rate",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             }
@@ -70,18 +73,21 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             },
             {
               "name": "debug",
               "help": "debug mode",
+              "presence": "default",
               "type": "bool",
               "default": false
             },
             {
               "name": "rate",
               "help": "a rate",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             }
@@ -122,6 +128,7 @@
             {
               "name": "port",
               "help": "port number",
+              "presence": "default",
               "type": "int",
               "default": 80,
               "env": "APP_PORT"
@@ -157,6 +164,7 @@
             {
               "name": "port",
               "help": "port number",
+              "presence": "default",
               "type": "int",
               "default": 80,
               "env": "APP_PORT"
@@ -194,6 +202,7 @@
             {
               "name": "port",
               "help": "port number",
+              "presence": "default",
               "type": "int",
               "default": 80,
               "env": "APP_PORT"
@@ -232,12 +241,14 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             },
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": "world"
             }
@@ -306,6 +317,7 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             }
@@ -343,6 +355,7 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             }
@@ -380,6 +393,7 @@
             {
               "name": "debug",
               "help": "debug mode",
+              "presence": "default",
               "type": "bool",
               "default": false
             }
@@ -417,12 +431,14 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             },
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": "world"
             }
@@ -462,12 +478,14 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             },
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": "world"
             }
@@ -511,6 +529,7 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             }
@@ -546,6 +565,7 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             }
@@ -583,6 +603,7 @@
             {
               "name": "size",
               "help": "how big",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             }
@@ -621,6 +642,7 @@
             {
               "name": "port",
               "help": "port number",
+              "presence": "default",
               "type": "int",
               "default": 80
             }

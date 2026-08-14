@@ -16,6 +16,7 @@
             {
               "name": "output",
               "help": "Output file",
+              "presence": "default",
               "type": "str",
               "env": "MYAPP_OUTPUT",
               "default": "none"
@@ -23,6 +24,7 @@
             {
               "name": "level",
               "help": "Verbosity level",
+              "presence": "default",
               "type": "int",
               "env": "MYAPP_LEVEL",
               "default": 0
@@ -63,6 +65,7 @@
             {
               "name": "level",
               "help": "Level",
+              "presence": "default",
               "type": "int",
               "env": "MYAPP_LEVEL",
               "default": 0
@@ -153,6 +156,7 @@
             {
               "name": "name",
               "help": "Name to use",
+              "presence": "required",
               "type": "str",
               "env": "MYAPP_NAME"
             }
@@ -183,6 +187,7 @@
           "name": "hermetic",
           "type": "bool",
           "help": "should be rejected",
+          "presence": "default",
           "default": false
         }
       ],
@@ -220,6 +225,7 @@
             {
               "name": "level",
               "help": "Level",
+              "presence": "default",
               "type": "int",
               "env": "MYAPP_LEVEL",
               "default": 5
@@ -257,6 +263,7 @@
             {
               "name": "level",
               "help": "Level",
+              "presence": "default",
               "type": "int",
               "env": "MYAPP_LEVEL",
               "default": 0

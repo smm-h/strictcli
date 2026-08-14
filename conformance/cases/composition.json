@@ -18,14 +18,14 @@
                   "name": "file",
                   "type": "str",
                   "help": "read from file",
-                  "default": null,
+                  "presence": "optional",
                   "env": "MYAPP_FILE"
                 },
                 {
                   "name": "url",
                   "type": "str",
                   "help": "read from URL",
-                  "default": null,
+                  "presence": "optional",
                   "env": "MYAPP_URL"
                 }
               ]
@@ -70,14 +70,14 @@
                   "name": "file",
                   "type": "str",
                   "help": "read from file",
-                  "default": null,
+                  "presence": "optional",
                   "env": "MYAPP_FILE"
                 },
                 {
                   "name": "url",
                   "type": "str",
                   "help": "read from URL",
-                  "default": null,
+                  "presence": "optional",
                   "env": "MYAPP_URL"
                 }
               ]
@@ -123,14 +123,14 @@
                   "name": "file",
                   "type": "str",
                   "help": "read from file",
-                  "default": null,
+                  "presence": "optional",
                   "env": "MYAPP_FILE"
                 },
                 {
                   "name": "url",
                   "type": "str",
                   "help": "read from URL",
-                  "default": null,
+                  "presence": "optional",
                   "env": "MYAPP_URL"
                 }
               ]
@@ -164,6 +164,7 @@
           "name": "format",
           "type": "str",
           "help": "output format",
+          "presence": "default",
           "choices_str": [
             "text",
             "json"
@@ -201,6 +202,7 @@
           "name": "format",
           "type": "str",
           "help": "output format",
+          "presence": "default",
           "choices_str": [
             "text",
             "json"
@@ -239,6 +241,7 @@
           "name": "format",
           "type": "str",
           "help": "output format",
+          "presence": "default",
           "choices_str": [
             "text",
             "json"
@@ -279,6 +282,7 @@
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "short": "c",
           "default": "/etc/myapp",
           "env": "MYAPP_SETTINGS"
@@ -315,6 +319,7 @@
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "short": "c",
           "default": "/etc/myapp",
           "env": "MYAPP_SETTINGS"
@@ -362,12 +367,14 @@
                     {
                       "name": "local",
                       "type": "bool",
-                      "help": "set local config"
+                      "help": "set local config",
+                      "presence": "optional"
                     },
                     {
                       "name": "system",
                       "type": "bool",
-                      "help": "set system config"
+                      "help": "set system config",
+                      "presence": "optional"
                     }
                   ]
                 }
@@ -410,12 +417,14 @@
                     {
                       "name": "local",
                       "type": "bool",
-                      "help": "set local config"
+                      "help": "set local config",
+                      "presence": "optional"
                     },
                     {
                       "name": "system",
                       "type": "bool",
-                      "help": "set system config"
+                      "help": "set system config",
+                      "presence": "optional"
                     }
                   ]
                 }
@@ -453,6 +462,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -502,6 +512,7 @@
                   "name": "format",
                   "type": "str",
                   "help": "output format",
+                  "presence": "default",
                   "default": "text",
                   "env": "MYAPP_FORMAT"
                 }
@@ -542,6 +553,7 @@
                   "name": "format",
                   "type": "str",
                   "help": "output format",
+                  "presence": "required",
                   "choices_str": [
                     "text",
                     "json",
@@ -584,6 +596,7 @@
                   "name": "format",
                   "type": "str",
                   "help": "output format",
+                  "presence": "required",
                   "choices_str": [
                     "text",
                     "json",
@@ -630,6 +643,7 @@
                   "name": "label",
                   "type": "str",
                   "help": "filter by label",
+                  "presence": "required",
                   "repeatable": true,
                   "unique": false
                 }
@@ -669,6 +683,7 @@
               "name": "level",
               "type": "str",
               "help": "log level",
+              "presence": "required",
               "repeatable": true,
               "choices_str": [
                 "debug",
@@ -713,6 +728,7 @@
               "name": "level",
               "type": "str",
               "help": "log level",
+              "presence": "required",
               "repeatable": true,
               "choices_str": [
                 "debug",
@@ -756,6 +772,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "env": "MYAPP_CHATTER",
           "default": false
         }
@@ -812,6 +829,7 @@
                       "name": "format",
                       "type": "str",
                       "help": "output format",
+                      "presence": "default",
                       "default": "table"
                     }
                   ]
@@ -854,6 +872,7 @@
                 {
                   "name": "files",
                   "help": "source files",
+                  "presence": "required",
                   "variadic": true
                 }
               ],
@@ -892,6 +911,7 @@
               "name": "port",
               "type": "int",
               "help": "server port",
+              "presence": "default",
               "default": 3000,
               "env": "MYAPP_PORT"
             }
@@ -928,6 +948,7 @@
               "name": "port",
               "type": "int",
               "help": "server port",
+              "presence": "default",
               "default": 3000,
               "env": "MYAPP_PORT"
             }
@@ -962,6 +983,7 @@
               "type": "int",
               "short": "p",
               "help": "server port",
+              "presence": "default",
               "default": 3000,
               "env": "MYAPP_PORT"
             }
@@ -1001,6 +1023,7 @@
               "type": "int",
               "short": "p",
               "help": "server port",
+              "presence": "default",
               "default": 3000,
               "env": "MYAPP_PORT"
             }
@@ -1031,6 +1054,7 @@
           "name": "tag",
           "type": "str",
           "help": "add a tag",
+          "presence": "required",
           "repeatable": true,
           "unique": false
         }
@@ -1067,8 +1091,10 @@
           "name": "tag",
           "type": "str",
           "help": "add a tag",
+          "presence": "default",
           "repeatable": true,
-          "unique": false
+          "unique": false,
+          "default": []
         }
       ],
       "commands": [
@@ -1100,6 +1126,7 @@
           "name": "tag",
           "type": "str",
           "help": "add a tag",
+          "presence": "required",
           "repeatable": true,
           "env": "MYAPP_TAG",
           "unique": false,

@@ -14,7 +14,8 @@
             {
               "name": "rate",
               "type": "float",
-              "help": "the rate"
+              "help": "the rate",
+              "presence": "required"
             }
           ],
           "handler_prints": "rate={rate}"
@@ -46,7 +47,8 @@
             {
               "name": "rate",
               "type": "float",
-              "help": "the rate"
+              "help": "the rate",
+              "presence": "required"
             }
           ],
           "handler_prints": "rate={rate}"
@@ -78,6 +80,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "default",
               "default": 2.5
             }
           ],
@@ -110,6 +113,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "default",
               "default": 1.5,
               "env": "MYAPP_RATE"
             }
@@ -144,7 +148,8 @@
             {
               "name": "rate",
               "type": "float",
-              "help": "the rate"
+              "help": "the rate",
+              "presence": "required"
             }
           ],
           "handler_prints": "rate={rate}"
@@ -175,7 +180,8 @@
             {
               "name": "rate",
               "type": "float",
-              "help": "the rate"
+              "help": "the rate",
+              "presence": "required"
             }
           ],
           "handler_prints": "rate={rate}"
@@ -211,7 +217,8 @@
             {
               "name": "rate",
               "type": "float",
-              "help": "the rate"
+              "help": "the rate",
+              "presence": "required"
             }
           ],
           "handler_prints": "rate={rate}"
@@ -243,7 +250,8 @@
             {
               "name": "rate",
               "type": "float",
-              "help": "the rate"
+              "help": "the rate",
+              "presence": "required"
             }
           ],
           "handler_prints": "rate={rate}"
@@ -276,6 +284,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "choices_float": [
                 1.5,
                 2.5,
@@ -313,6 +322,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "choices_float": [
                 1.5,
                 2.5,
@@ -352,7 +362,8 @@
             {
               "name": "temp",
               "type": "float",
-              "help": "temperature"
+              "help": "temperature",
+              "presence": "required"
             }
           ],
           "handler_prints": "temp={temp}"
@@ -385,6 +396,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "env": "MYAPP_RATE"
             }
           ],
@@ -418,7 +430,8 @@
             {
               "name": "rate",
               "type": "float",
-              "help": "the rate"
+              "help": "the rate",
+              "presence": "required"
             }
           ],
           "handler_prints": "rate={rate}"
@@ -457,13 +470,13 @@
                   "name": "rate",
                   "type": "float",
                   "help": "the rate",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "preset",
                   "type": "str",
                   "help": "a named preset",
-                  "default": null
+                  "presence": "optional"
                 }
               ]
             }
@@ -498,7 +511,7 @@
               "name": "ratio",
               "type": "float",
               "help": "the ratio",
-              "required": false
+              "presence": "optional"
             }
           ],
           "handler_prints": "ratio={ratio}"

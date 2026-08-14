@@ -14,7 +14,8 @@
             {
               "name": "chatter",
               "type": "bool",
-              "help": "be chatter"
+              "help": "be chatter",
+              "presence": "required"
             }
           ],
           "handler_prints": "chatter={chatter}"
@@ -45,6 +46,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "required",
               "negatable": false
             }
           ],
@@ -75,7 +77,8 @@
             {
               "name": "chatter",
               "type": "bool",
-              "help": "be chatter"
+              "help": "be chatter",
+              "presence": "required"
             }
           ],
           "handler_prints": "chatter={chatter}"
@@ -106,7 +109,8 @@
             {
               "name": "chatter",
               "type": "bool",
-              "help": "be chatter"
+              "help": "be chatter",
+              "presence": "required"
             }
           ],
           "handler_prints": "chatter={chatter}"
@@ -139,6 +143,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "required",
               "env": "MYAPP_CHATTER"
             }
           ],
@@ -173,7 +178,8 @@
               "name": "chatter",
               "type": "bool",
               "short": "v",
-              "help": "be chatter"
+              "help": "be chatter",
+              "presence": "required"
             }
           ],
           "handler_prints": "chatter={chatter}"
@@ -205,6 +211,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],

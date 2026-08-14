@@ -15,6 +15,7 @@
               "name": "force",
               "type": "bool",
               "help": "force it",
+              "presence": "default",
               "default": false
             }
           ],
@@ -46,6 +47,7 @@
               "name": "no-commit",
               "type": "bool",
               "help": "skip commit",
+              "presence": "default",
               "default": false
             }
           ],
@@ -77,6 +79,7 @@
               "name": "force-overwrite",
               "type": "bool",
               "help": "force overwrite",
+              "presence": "default",
               "default": false
             }
           ],
@@ -109,6 +112,7 @@
               "name": "watch",
               "type": "bool",
               "help": "watch for changes",
+              "presence": "default",
               "default": true,
               "negatable": true
             }

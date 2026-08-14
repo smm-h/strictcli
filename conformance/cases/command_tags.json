@@ -17,7 +17,8 @@
           "flags": [
             {
               "name": "name",
-              "help": "who to greet"
+              "help": "who to greet",
+              "presence": "required"
             }
           ]
         }
@@ -196,6 +197,7 @@
               "name": "as-json",
               "type": "bool",
               "help": "output as json",
+              "presence": "default",
               "default": false
             }
           ]
@@ -284,6 +286,7 @@
           "name": "as-json",
           "type": "bool",
           "help": "output as json",
+          "presence": "default",
           "default": false
         }
       ],

@@ -13,6 +13,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -48,6 +49,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -83,6 +85,7 @@
           "name": "tags",
           "type": "list[str]",
           "help": "tags",
+          "presence": "default",
           "unique": false,
           "default": [
             "from-default"
@@ -121,7 +124,8 @@
         {
           "name": "labels",
           "type": "dict[str,str]",
-          "help": "labels"
+          "help": "labels",
+          "presence": "required"
         }
       ],
       "commands": [

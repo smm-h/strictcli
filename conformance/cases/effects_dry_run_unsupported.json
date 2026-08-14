@@ -16,7 +16,10 @@
         }
       ]
     },
-    "argv": ["release", "--dry-run"],
+    "argv": [
+      "release",
+      "--dry-run"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "",
@@ -40,7 +43,10 @@
         }
       ]
     },
-    "argv": ["--dry-run", "release"],
+    "argv": [
+      "--dry-run",
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "",
@@ -64,7 +70,9 @@
         }
       ]
     },
-    "argv": ["release"],
+    "argv": [
+      "release"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "released\n",
@@ -88,7 +96,11 @@
         }
       ]
     },
-    "argv": ["release", "--dry-run", "--help"],
+    "argv": [
+      "release",
+      "--dry-run",
+      "--help"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "myapp release -- a command whose preview would lie\n\nDry run:\n  --dry-run is not supported: later steps read what the earlier ones write\n",
@@ -126,7 +138,11 @@
         }
       ]
     },
-    "argv": ["release", "run", "--dry-run"],
+    "argv": [
+      "release",
+      "run",
+      "--dry-run"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "",
@@ -170,7 +186,12 @@
         }
       ]
     },
-    "argv": ["release", "remote", "--dry-run", "run"],
+    "argv": [
+      "release",
+      "remote",
+      "--dry-run",
+      "run"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "",
@@ -195,14 +216,18 @@
             {
               "name": "items",
               "help": "literal items to release",
-              "required": false,
+              "presence": "optional",
               "variadic": true
             }
           ]
         }
       ]
     },
-    "argv": ["release", "--", "--dry-run"],
+    "argv": [
+      "release",
+      "--",
+      "--dry-run"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "released\n",
@@ -227,7 +252,11 @@
         }
       ]
     },
-    "argv": ["exec", "--dry-run", "x"],
+    "argv": [
+      "exec",
+      "--dry-run",
+      "x"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "exec:--dry-run,x\n",
@@ -252,7 +281,11 @@
         }
       ]
     },
-    "argv": ["--dry-run", "exec", "x"],
+    "argv": [
+      "--dry-run",
+      "exec",
+      "x"
+    ],
     "expect": {
       "exit_code": 1,
       "stdout_equals": "",
@@ -276,7 +309,9 @@
         }
       ]
     },
-    "argv": ["look"],
+    "argv": [
+      "look"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"look\": a read_only command cannot declare dry_run_supported=false (a command that changes nothing has no effects a preview could misrepresent)"
@@ -300,7 +335,9 @@
         }
       ]
     },
-    "argv": ["release"],
+    "argv": [
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"release\": dry_run_supported=false requires a non-empty dry_run_unsupported_reason (say what a preview cannot honestly show)"
@@ -322,7 +359,9 @@
         }
       ]
     },
-    "argv": ["release"],
+    "argv": [
+      "release"
+    ],
     "expect": {
       "exit_code": 1,
       "stderr_contains": "command \"release\": dry_run_unsupported_reason requires dry_run_supported=false (there is nothing to explain while dry run is supported)"
@@ -351,7 +390,9 @@
         }
       ]
     },
-    "argv": ["--dump-schema"],
+    "argv": [
+      "--dump-schema"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_contains": ".strictcli/schema.json",
@@ -366,7 +407,10 @@
         }
       },
       "schema_command_absent_keys": {
-        "build": ["dry_run_supported", "dry_run_unsupported_reason"]
+        "build": [
+          "dry_run_supported",
+          "dry_run_unsupported_reason"
+        ]
       }
     }
   }

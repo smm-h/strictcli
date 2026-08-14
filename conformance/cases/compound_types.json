@@ -15,6 +15,7 @@
               "name": "ids",
               "type": "list[int]",
               "help": "list of ids",
+              "presence": "required",
               "unique": false
             }
           ],
@@ -52,6 +53,7 @@
               "name": "ids",
               "type": "list[int]",
               "help": "list of ids",
+              "presence": "required",
               "unique": false
             }
           ],
@@ -85,6 +87,7 @@
               "name": "tags",
               "type": "list[str]",
               "help": "list of tags",
+              "presence": "required",
               "unique": false
             }
           ],
@@ -120,6 +123,7 @@
               "name": "ids",
               "type": "list[int]",
               "help": "list of ids",
+              "presence": "required",
               "unique": false
             }
           ],
@@ -155,7 +159,8 @@
             {
               "name": "header",
               "type": "dict[str,str]",
-              "help": "HTTP headers"
+              "help": "HTTP headers",
+              "presence": "required"
             }
           ],
           "handler_prints": "header={header}"
@@ -187,7 +192,8 @@
             {
               "name": "header",
               "type": "dict[str,str]",
-              "help": "HTTP headers"
+              "help": "HTTP headers",
+              "presence": "required"
             }
           ],
           "handler_prints": "header={header}"
@@ -220,7 +226,9 @@
               "name": "ids",
               "type": "list[int]",
               "help": "list of ids",
-              "unique": false
+              "presence": "default",
+              "unique": false,
+              "default": []
             }
           ],
           "handler_prints": "ids={ids}"

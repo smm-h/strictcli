@@ -14,7 +14,8 @@
             {
               "name": "msg",
               "type": "str",
-              "help": "message"
+              "help": "message",
+              "presence": "required"
             }
           ],
           "handler_prints": "{msg}"
@@ -46,7 +47,8 @@
             {
               "name": "msg",
               "type": "str",
-              "help": "message"
+              "help": "message",
+              "presence": "required"
             }
           ],
           "handler_prints": "{msg}"
@@ -78,7 +80,8 @@
             {
               "name": "msg",
               "type": "str",
-              "help": "message"
+              "help": "message",
+              "presence": "required"
             }
           ],
           "handler_prints": "{msg}"
@@ -110,7 +113,8 @@
             {
               "name": "msg",
               "type": "str",
-              "help": "message"
+              "help": "message",
+              "presence": "required"
             }
           ],
           "handler_prints": "[{msg}]"
@@ -142,7 +146,8 @@
             {
               "name": "msg",
               "type": "str",
-              "help": "message"
+              "help": "message",
+              "presence": "required"
             }
           ],
           "handler_prints": "{msg}"
@@ -174,7 +179,8 @@
             {
               "name": "msg",
               "type": "str",
-              "help": "message"
+              "help": "message",
+              "presence": "required"
             }
           ],
           "handler_prints": "{msg}"
@@ -206,7 +212,8 @@
             {
               "name": "msg",
               "type": "str",
-              "help": "message"
+              "help": "message",
+              "presence": "required"
             }
           ],
           "handler_prints": "{msg}"
@@ -237,7 +244,8 @@
             {
               "name": "msg",
               "type": "str",
-              "help": "message"
+              "help": "message",
+              "presence": "required"
             }
           ],
           "handler_prints": "{msg}"
@@ -270,7 +278,8 @@
             {
               "name": "count",
               "type": "int",
-              "help": "count"
+              "help": "count",
+              "presence": "required"
             }
           ],
           "handler_prints": "count={count}"

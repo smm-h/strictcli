@@ -85,7 +85,8 @@
           "args": [
             {
               "name": "target",
-              "help": "deploy target"
+              "help": "deploy target",
+              "presence": "required"
             }
           ],
           "flags": [
@@ -93,6 +94,7 @@
               "name": "force-deploy",
               "type": "bool",
               "help": "force deploy",
+              "presence": "default",
               "default": false
             }
           ],

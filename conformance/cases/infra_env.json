@@ -18,6 +18,7 @@
             {
               "name": "db",
               "help": "Database path",
+              "presence": "default",
               "type": "str",
               "default_relative_to_root": {
                 "env_var": "MYAPP_HOME",
@@ -60,6 +61,7 @@
             {
               "name": "db",
               "help": "Database path",
+              "presence": "default",
               "type": "str",
               "default_relative_to_root": {
                 "env_var": "MYAPP_HOME",
@@ -99,6 +101,7 @@
             {
               "name": "db",
               "help": "Database path",
+              "presence": "default",
               "type": "str",
               "default_relative_to_root": {
                 "env_var": "MYAPP_HOME",
@@ -142,6 +145,7 @@
             {
               "name": "db",
               "help": "Database path",
+              "presence": "default",
               "type": "str",
               "default_relative_to_root": {
                 "env_var": "MYAPP_HOME",

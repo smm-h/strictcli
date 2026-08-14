@@ -63,6 +63,7 @@
             {
               "name": "port",
               "help": "server port",
+              "presence": "default",
               "type": "int",
               "default": 8080
             }
@@ -132,6 +133,7 @@
             {
               "name": "port",
               "help": "port number",
+              "presence": "default",
               "type": "int",
               "default": 80
             }
@@ -165,6 +167,7 @@
             {
               "name": "port",
               "help": "port number",
+              "presence": "default",
               "type": "int",
               "default": 80
             }

@@ -204,6 +204,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "chatter output",
+              "presence": "default",
               "default": false
             }
           ]

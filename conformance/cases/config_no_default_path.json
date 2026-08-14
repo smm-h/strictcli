@@ -17,6 +17,7 @@
             {
               "name": "port",
               "help": "port number",
+              "presence": "default",
               "type": "int",
               "default": 80
             }

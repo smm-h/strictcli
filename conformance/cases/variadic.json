@@ -14,6 +14,7 @@
             {
               "name": "files",
               "help": "files to process",
+              "presence": "required",
               "variadic": true
             }
           ],
@@ -47,6 +48,7 @@
             {
               "name": "files",
               "help": "files to process",
+              "presence": "required",
               "variadic": true
             }
           ],
@@ -78,6 +80,7 @@
             {
               "name": "files",
               "help": "files to process",
+              "presence": "required",
               "variadic": true
             }
           ],
@@ -109,8 +112,8 @@
             {
               "name": "files",
               "help": "files to process",
-              "variadic": true,
-              "required": false
+              "presence": "optional",
+              "variadic": true
             }
           ],
           "handler_prints": "files={files}"
@@ -140,6 +143,7 @@
             {
               "name": "files",
               "help": "files to process",
+              "presence": "required",
               "variadic": true
             }
           ],
@@ -172,11 +176,13 @@
           "args": [
             {
               "name": "target",
-              "help": "build target"
+              "help": "build target",
+              "presence": "required"
             },
             {
               "name": "files",
               "help": "files to process",
+              "presence": "required",
               "variadic": true
             }
           ],
@@ -210,6 +216,7 @@
             {
               "name": "files",
               "help": "files to process",
+              "presence": "required",
               "variadic": true
             }
           ],
@@ -224,7 +231,7 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": "files...",
-      "stdout_equals": "myapp cmd -- a command\n\nArguments:\n  files...    files to process"
+      "stdout_equals": "myapp cmd -- a command\n\nArguments:\n  files...    files to process [required]"
     }
   },
   {
@@ -242,11 +249,13 @@
             {
               "name": "files",
               "help": "files to process",
+              "presence": "required",
               "variadic": true
             },
             {
               "name": "targets",
               "help": "targets",
+              "presence": "required",
               "variadic": true
             }
           ],
@@ -278,11 +287,13 @@
             {
               "name": "files",
               "help": "files to process",
+              "presence": "required",
               "variadic": true
             },
             {
               "name": "target",
-              "help": "build target"
+              "help": "build target",
+              "presence": "required"
             }
           ],
           "handler_prints": "ok"

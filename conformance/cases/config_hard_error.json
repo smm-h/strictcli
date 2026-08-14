@@ -18,6 +18,7 @@
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": ""
             }
@@ -64,6 +65,7 @@
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": ""
             }
@@ -171,6 +173,7 @@
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": ""
             }
@@ -207,6 +210,7 @@
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": "",
               "env": "MYAPP_NAME"
@@ -244,6 +248,7 @@
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": ""
             }
@@ -280,6 +285,7 @@
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": ""
             }
@@ -316,6 +322,7 @@
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": "",
               "conflict_mode": "error"
@@ -353,6 +360,7 @@
             {
               "name": "name",
               "help": "a name",
+              "presence": "default",
               "type": "str",
               "default": "",
               "conflict_mode": "cli-wins"
@@ -390,6 +398,7 @@
             {
               "name": "tag",
               "help": "tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": false
@@ -429,6 +438,7 @@
             {
               "name": "tag",
               "help": "tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": false
@@ -468,6 +478,7 @@
             {
               "name": "tag",
               "help": "tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": true
@@ -502,6 +513,7 @@
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "default": "from-default"
         }
       ],
@@ -538,6 +550,7 @@
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "default": "from-default",
           "conflict_mode": "error"
         }
@@ -575,6 +588,7 @@
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "default": "from-default"
         }
       ],
@@ -611,6 +625,7 @@
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "default": "from-default"
         }
       ],
@@ -647,6 +662,7 @@
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "default": "from-default"
         }
       ],
@@ -684,6 +700,7 @@
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "default": "from-default",
           "env": "MYAPP_SETTINGS"
         }

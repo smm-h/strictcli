@@ -15,12 +15,14 @@
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             },
             {
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -68,12 +70,14 @@
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             },
             {
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -113,12 +117,14 @@
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             },
             {
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -161,12 +167,14 @@
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             },
             {
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -209,12 +217,14 @@
               "name": "chatter",
               "type": "bool",
               "help": "chatter output",
+              "presence": "default",
               "default": false
             },
             {
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -255,12 +265,14 @@
               "name": "chatter",
               "type": "bool",
               "help": "chatter output",
+              "presence": "default",
               "default": false
             },
             {
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -298,12 +310,14 @@
               "name": "chatter",
               "type": "bool",
               "help": "chatter output",
+              "presence": "default",
               "default": false
             },
             {
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -343,12 +357,14 @@
               "name": "chatter",
               "type": "bool",
               "help": "chatter output",
+              "presence": "default",
               "default": false
             },
             {
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -388,12 +404,14 @@
               "name": "fast",
               "type": "bool",
               "help": "fast mode",
+              "presence": "default",
               "default": false
             },
             {
               "name": "embeddings",
               "type": "bool",
               "help": "enable embeddings",
+              "presence": "default",
               "default": true
             }
           ],
@@ -437,12 +455,14 @@
               "name": "fast",
               "type": "bool",
               "help": "fast mode",
+              "presence": "default",
               "default": false
             },
             {
               "name": "embeddings",
               "type": "bool",
               "help": "enable embeddings",
+              "presence": "default",
               "default": true
             }
           ],
@@ -485,12 +505,14 @@
               "name": "fast",
               "type": "bool",
               "help": "fast mode",
+              "presence": "default",
               "default": false
             },
             {
               "name": "embeddings",
               "type": "bool",
               "help": "enable embeddings",
+              "presence": "default",
               "default": true
             }
           ],
@@ -532,12 +554,14 @@
               "name": "fast",
               "type": "bool",
               "help": "fast mode",
+              "presence": "default",
               "default": false
             },
             {
               "name": "embeddings",
               "type": "bool",
               "help": "enable embeddings",
+              "presence": "default",
               "default": true
             }
           ],
@@ -583,6 +607,7 @@
               "name": "fast",
               "type": "bool",
               "help": "fast mode",
+              "presence": "default",
               "env": "MYAPP_FAST",
               "default": false
             },
@@ -590,6 +615,7 @@
               "name": "embeddings",
               "type": "bool",
               "help": "enable embeddings",
+              "presence": "default",
               "default": true
             }
           ],
@@ -636,12 +662,14 @@
               "name": "fast",
               "type": "bool",
               "help": "fast mode",
+              "presence": "default",
               "default": false
             },
             {
               "name": "embeddings",
               "type": "bool",
               "help": "enable embeddings",
+              "presence": "default",
               "default": true
             }
           ],
@@ -682,12 +710,14 @@
               "name": "fast",
               "type": "bool",
               "help": "fast mode",
+              "presence": "default",
               "default": false
             },
             {
               "name": "embeddings",
               "type": "bool",
               "help": "enable embeddings",
+              "presence": "default",
               "default": true
             }
           ],
@@ -728,6 +758,7 @@
               "name": "fast",
               "type": "bool",
               "help": "fast mode",
+              "presence": "default",
               "default": false
             }
           ],
@@ -768,12 +799,14 @@
               "name": "mode",
               "type": "str",
               "help": "operation mode",
+              "presence": "default",
               "default": "normal"
             },
             {
               "name": "embeddings",
               "type": "bool",
               "help": "enable embeddings",
+              "presence": "default",
               "default": true
             }
           ],
@@ -814,12 +847,14 @@
               "name": "fast",
               "type": "bool",
               "help": "fast mode",
+              "presence": "default",
               "default": false
             },
             {
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             }
           ],

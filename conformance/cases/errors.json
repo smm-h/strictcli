@@ -15,6 +15,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],
@@ -72,7 +73,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             }
           ],
           "handler_prints": "ok"
@@ -131,7 +133,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             }
           ],
           "handler_prints": "ok"
@@ -191,6 +194,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],
@@ -223,7 +227,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             }
           ],
           "handler_prints": "target={target}"
@@ -255,12 +260,14 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             },
             {
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],
@@ -318,7 +325,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             }
           ],
           "handler_prints": "ok"

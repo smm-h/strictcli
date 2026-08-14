@@ -17,6 +17,7 @@
             {
               "name": "tags",
               "help": "the tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": true
@@ -26,7 +27,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "tags",
       "a,a"
@@ -54,6 +55,7 @@
             {
               "name": "tags",
               "help": "the tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": false
@@ -63,7 +65,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "tags",
       "--clear"
@@ -90,6 +92,7 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             }
@@ -98,7 +101,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "count",
       "--clear"
@@ -126,6 +129,7 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             }
@@ -134,7 +138,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "count",
       "--default"
@@ -162,6 +166,7 @@
             {
               "name": "tags",
               "help": "the tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": false
@@ -171,7 +176,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "tags",
       "a,b",
@@ -200,6 +205,7 @@
             {
               "name": "count",
               "help": "a count",
+              "presence": "default",
               "type": "int",
               "default": 0
             }
@@ -208,7 +214,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "count",
       "42",
@@ -237,6 +243,7 @@
             {
               "name": "tags",
               "help": "the tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": false
@@ -246,7 +253,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "tags",
       "--clear",

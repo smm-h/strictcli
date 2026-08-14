@@ -25,6 +25,7 @@
             {
               "name": "target",
               "help": "deploy target",
+              "presence": "default",
               "type": "str",
               "default": "prod"
             }
@@ -71,6 +72,7 @@
             {
               "name": "target",
               "help": "deploy target",
+              "presence": "default",
               "type": "str",
               "default": "prod"
             }

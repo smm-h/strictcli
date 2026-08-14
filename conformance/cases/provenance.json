@@ -15,11 +15,13 @@
             {
               "name": "output",
               "help": "Output file",
+              "presence": "required",
               "type": "str"
             },
             {
               "name": "chatter",
               "help": "Enable chatter mode",
+              "presence": "default",
               "type": "bool",
               "default": false
             }
@@ -54,6 +56,7 @@
             {
               "name": "level",
               "help": "Level",
+              "presence": "default",
               "type": "int",
               "env": "PROV_LEVEL",
               "default": 0
@@ -91,6 +94,7 @@
             {
               "name": "level",
               "help": "Level",
+              "presence": "default",
               "type": "int",
               "default": 0
             }
@@ -122,6 +126,7 @@
             {
               "name": "level",
               "help": "Level",
+              "presence": "default",
               "type": "int",
               "default": 0
             }
@@ -153,12 +158,14 @@
             {
               "name": "all",
               "help": "Enable all",
+              "presence": "default",
               "type": "bool",
               "default": false
             },
             {
               "name": "chatter",
               "help": "Chatter mode",
+              "presence": "default",
               "type": "bool",
               "default": false
             }
@@ -200,6 +207,7 @@
             {
               "name": "level",
               "help": "Level",
+              "presence": "default",
               "type": "int",
               "env": "PROV_LEVEL",
               "default": 5
@@ -237,6 +245,7 @@
             {
               "name": "level",
               "help": "Level",
+              "presence": "default",
               "type": "int",
               "env": "PROV_LEVEL",
               "default": 0
@@ -268,6 +277,7 @@
         {
           "name": "settings",
           "help": "settings path",
+          "presence": "default",
           "type": "str",
           "default": "from-default"
         }
@@ -302,6 +312,7 @@
         {
           "name": "settings",
           "help": "settings path",
+          "presence": "default",
           "type": "str",
           "default": "from-default"
         }

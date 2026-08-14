@@ -15,6 +15,7 @@
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "required",
               "choices_str": [
                 "text",
                 "json"
@@ -51,6 +52,7 @@
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "required",
               "choices_str": [
                 "text",
                 "json"
@@ -93,6 +95,7 @@
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "default",
               "choices_str": [
                 "text",
                 "json"
@@ -130,6 +133,7 @@
               "name": "port",
               "type": "int",
               "help": "the port",
+              "presence": "required",
               "choices_int": [
                 80,
                 443,
@@ -167,6 +171,7 @@
               "name": "port",
               "type": "int",
               "help": "the port",
+              "presence": "required",
               "choices_int": [
                 80,
                 443,
@@ -209,6 +214,7 @@
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "default",
               "choices_str": [
                 "text",
                 "json"
@@ -249,6 +255,7 @@
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "default",
               "choices_str": [
                 "text",
                 "json"
@@ -291,8 +298,7 @@
             {
               "name": "env",
               "help": "target env",
-              "required": false,
-              "default": null,
+              "presence": "optional",
               "choices_str": [
                 "dev",
                 "prod"
@@ -326,7 +332,7 @@
             {
               "name": "env",
               "help": "target env",
-              "required": false,
+              "presence": "optional",
               "choices_str": [
                 "dev",
                 "prod"
@@ -360,8 +366,7 @@
             {
               "name": "env",
               "help": "target env",
-              "required": false,
-              "default": null,
+              "presence": "optional",
               "choices_str": [
                 "dev",
                 "prod"
@@ -403,7 +408,7 @@
                   "name": "format",
                   "type": "str",
                   "help": "output format",
-                  "default": null,
+                  "presence": "optional",
                   "choices_str": [
                     "text",
                     "json"
@@ -413,7 +418,7 @@
                   "name": "output",
                   "type": "str",
                   "help": "output path",
-                  "default": null
+                  "presence": "optional"
                 }
               ]
             }

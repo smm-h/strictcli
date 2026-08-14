@@ -209,7 +209,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "where to"
+              "help": "where to",
+              "presence": "required"
             }
           ],
           "handler_returns": {

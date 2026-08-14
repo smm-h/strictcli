@@ -16,12 +16,14 @@
                 {
                   "name": "chatter",
                   "type": "bool",
-                  "help": "chatter output"
+                  "help": "chatter output",
+                  "presence": "optional"
                 },
                 {
                   "name": "muted",
                   "type": "bool",
-                  "help": "muted output"
+                  "help": "muted output",
+                  "presence": "optional"
                 }
               ]
             }
@@ -58,12 +60,14 @@
                 {
                   "name": "chatter",
                   "type": "bool",
-                  "help": "chatter output"
+                  "help": "chatter output",
+                  "presence": "optional"
                 },
                 {
                   "name": "muted",
                   "type": "bool",
-                  "help": "muted output"
+                  "help": "muted output",
+                  "presence": "optional"
                 }
               ]
             }
@@ -102,12 +106,14 @@
                 {
                   "name": "chatter",
                   "type": "bool",
-                  "help": "chatter output"
+                  "help": "chatter output",
+                  "presence": "optional"
                 },
                 {
                   "name": "muted",
                   "type": "bool",
-                  "help": "muted output"
+                  "help": "muted output",
+                  "presence": "optional"
                 }
               ]
             }
@@ -148,12 +154,14 @@
                 {
                   "name": "chatter",
                   "type": "bool",
-                  "help": "chatter output"
+                  "help": "chatter output",
+                  "presence": "optional"
                 },
                 {
                   "name": "muted",
                   "type": "bool",
-                  "help": "muted output"
+                  "help": "muted output",
+                  "presence": "optional"
                 }
               ]
             }
@@ -192,12 +200,14 @@
                 {
                   "name": "chatter",
                   "type": "bool",
-                  "help": "chatter output"
+                  "help": "chatter output",
+                  "presence": "optional"
                 },
                 {
                   "name": "muted",
                   "type": "bool",
-                  "help": "muted output"
+                  "help": "muted output",
+                  "presence": "optional"
                 }
               ]
             }
@@ -237,13 +247,13 @@
                   "name": "file",
                   "type": "str",
                   "help": "read from file",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "url",
                   "type": "str",
                   "help": "read from URL",
-                  "default": null
+                  "presence": "optional"
                 }
               ]
             }
@@ -281,13 +291,13 @@
                   "name": "file",
                   "type": "str",
                   "help": "read from file",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "url",
                   "type": "str",
                   "help": "read from URL",
-                  "default": null
+                  "presence": "optional"
                 }
               ]
             }
@@ -329,6 +339,7 @@
               "name": "name",
               "type": "str",
               "help": "your name",
+              "presence": "default",
               "default": "anon"
             }
           ],
@@ -338,12 +349,14 @@
                 {
                   "name": "chatter",
                   "type": "bool",
-                  "help": "chatter output"
+                  "help": "chatter output",
+                  "presence": "optional"
                 },
                 {
                   "name": "muted",
                   "type": "bool",
-                  "help": "muted output"
+                  "help": "muted output",
+                  "presence": "optional"
                 }
               ]
             }
@@ -365,7 +378,7 @@
         "Flags:",
         "--name"
       ],
-      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [required]\n  --muted, --no-muted        muted output [required]"
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [optional]\n  --muted, --no-muted        muted output [optional]"
     }
   },
   {
@@ -385,12 +398,14 @@
                 {
                   "name": "chatter",
                   "type": "bool",
-                  "help": "chatter output"
+                  "help": "chatter output",
+                  "presence": "optional"
                 },
                 {
                   "name": "muted",
                   "type": "bool",
-                  "help": "muted output"
+                  "help": "muted output",
+                  "presence": "optional"
                 }
               ]
             }
@@ -406,7 +421,7 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": "Flags (mutually exclusive):",
-      "stdout_equals": "myapp cmd -- a command\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [required]\n  --muted, --no-muted        muted output [required]"
+      "stdout_equals": "myapp cmd -- a command\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [optional]\n  --muted, --no-muted        muted output [optional]"
     }
   },
   {
@@ -427,17 +442,19 @@
                   "name": "profile",
                   "type": "str",
                   "help": "a profile",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "all-profiles",
                   "type": "bool",
-                  "help": "every profile"
+                  "help": "every profile",
+                  "presence": "optional"
                 },
                 {
                   "name": "current-profile",
                   "type": "bool",
-                  "help": "the current profile"
+                  "help": "the current profile",
+                  "presence": "optional"
                 }
               ]
             }
@@ -477,17 +494,19 @@
                   "name": "profile",
                   "type": "str",
                   "help": "a profile",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "all-profiles",
                   "type": "bool",
-                  "help": "every profile"
+                  "help": "every profile",
+                  "presence": "optional"
                 },
                 {
                   "name": "current-profile",
                   "type": "bool",
-                  "help": "the current profile"
+                  "help": "the current profile",
+                  "presence": "optional"
                 }
               ]
             }
@@ -523,17 +542,19 @@
                   "name": "profile",
                   "type": "str",
                   "help": "a profile",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "all-profiles",
                   "type": "bool",
-                  "help": "every profile"
+                  "help": "every profile",
+                  "presence": "optional"
                 },
                 {
                   "name": "current-profile",
                   "type": "bool",
-                  "help": "the current profile"
+                  "help": "the current profile",
+                  "presence": "optional"
                 }
               ]
             }
@@ -570,17 +591,19 @@
                   "name": "profile",
                   "type": "str",
                   "help": "a profile",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "all-profiles",
                   "type": "bool",
-                  "help": "every profile"
+                  "help": "every profile",
+                  "presence": "optional"
                 },
                 {
                   "name": "current-profile",
                   "type": "bool",
-                  "help": "the current profile"
+                  "help": "the current profile",
+                  "presence": "optional"
                 }
               ]
             }
@@ -617,17 +640,19 @@
                   "name": "profile",
                   "type": "str",
                   "help": "a profile",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "all-profiles",
                   "type": "bool",
-                  "help": "every profile"
+                  "help": "every profile",
+                  "presence": "optional"
                 },
                 {
                   "name": "current-profile",
                   "type": "bool",
-                  "help": "the current profile"
+                  "help": "the current profile",
+                  "presence": "optional"
                 }
               ]
             }
@@ -662,17 +687,19 @@
                   "name": "profile",
                   "type": "str",
                   "help": "a profile",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "all-profiles",
                   "type": "bool",
-                  "help": "every profile"
+                  "help": "every profile",
+                  "presence": "optional"
                 },
                 {
                   "name": "current-profile",
                   "type": "bool",
-                  "help": "the current profile"
+                  "help": "the current profile",
+                  "presence": "optional"
                 }
               ]
             }
@@ -714,17 +741,19 @@
                   "name": "profile",
                   "type": "str",
                   "help": "a profile",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "all-profiles",
                   "type": "bool",
-                  "help": "every profile"
+                  "help": "every profile",
+                  "presence": "optional"
                 },
                 {
                   "name": "current-profile",
                   "type": "bool",
-                  "help": "the current profile"
+                  "help": "the current profile",
+                  "presence": "optional"
                 }
               ]
             }
@@ -763,17 +792,19 @@
                   "name": "profile",
                   "type": "str",
                   "help": "a profile",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "all-profiles",
                   "type": "bool",
-                  "help": "every profile"
+                  "help": "every profile",
+                  "presence": "optional"
                 },
                 {
                   "name": "current-profile",
                   "type": "bool",
-                  "help": "the current profile"
+                  "help": "the current profile",
+                  "presence": "optional"
                 }
               ]
             }
@@ -813,13 +844,13 @@
                   "name": "file",
                   "type": "str",
                   "help": "read from file",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "url",
                   "type": "str",
                   "help": "read from URL",
-                  "default": null
+                  "presence": "optional"
                 }
               ]
             }
@@ -856,13 +887,13 @@
                   "name": "file",
                   "type": "str",
                   "help": "read from file",
-                  "default": null
+                  "presence": "optional"
                 },
                 {
                   "name": "url",
                   "type": "str",
                   "help": "read from URL",
-                  "default": null
+                  "presence": "optional"
                 }
               ]
             }

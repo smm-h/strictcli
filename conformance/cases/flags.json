@@ -14,7 +14,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             }
           ],
           "handler_prints": "target={target}"
@@ -46,7 +47,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             }
           ],
           "handler_prints": "target={target}"
@@ -78,6 +80,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],
@@ -110,6 +113,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],
@@ -141,6 +145,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],
@@ -174,6 +179,7 @@
               "type": "bool",
               "short": "V",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],
@@ -206,7 +212,8 @@
               "name": "target",
               "type": "str",
               "short": "t",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             }
           ],
           "handler_prints": "target={target}"
@@ -239,6 +246,7 @@
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "default",
               "default": "text"
             }
           ],
@@ -270,6 +278,7 @@
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "default",
               "default": "text"
             }
           ],
@@ -302,7 +311,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             }
           ],
           "handler_prints": "target={target}"
@@ -334,6 +344,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],
@@ -367,6 +378,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "negatable": false,
               "default": false
             }
@@ -401,6 +413,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "negatable": true,
               "default": false
             }

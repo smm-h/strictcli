@@ -47,7 +47,8 @@
           "args": [
             {
               "name": "target",
-              "help": "deploy target"
+              "help": "deploy target",
+              "presence": "required"
             }
           ],
           "flags": [
@@ -55,6 +56,7 @@
               "name": "preview",
               "type": "bool",
               "help": "preview changes",
+              "presence": "default",
               "default": false
             }
           ],
@@ -74,7 +76,7 @@
         "target",
         "deploy the app"
       ],
-      "stdout_equals": "myapp deploy -- deploy the app\n\nArguments:\n  target    deploy target\n\nFlags:\n  --preview, --no-preview    preview changes [default: false]"
+      "stdout_equals": "myapp deploy -- deploy the app\n\nArguments:\n  target    deploy target [required]\n\nFlags:\n  --preview, --no-preview    preview changes [default: false]"
     }
   },
   {
@@ -118,6 +120,7 @@
               "name": "output",
               "type": "str",
               "help": "output path",
+              "presence": "default",
               "default": "out.txt"
             }
           ],
@@ -153,7 +156,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             }
           ],
           "handler_prints": "ok"
@@ -217,7 +221,7 @@
             {
               "name": "path",
               "help": "project dir",
-              "required": false,
+              "presence": "default",
               "default": "."
             }
           ],
@@ -250,7 +254,7 @@
             {
               "name": "path",
               "help": "project dir",
-              "required": false
+              "presence": "optional"
             }
           ],
           "handler_prints": "ok"

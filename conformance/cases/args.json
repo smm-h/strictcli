@@ -13,7 +13,8 @@
           "args": [
             {
               "name": "name",
-              "help": "who to greet"
+              "help": "who to greet",
+              "presence": "required"
             }
           ],
           "handler_prints": "hello {name}"
@@ -43,7 +44,8 @@
           "args": [
             {
               "name": "name",
-              "help": "who to greet"
+              "help": "who to greet",
+              "presence": "required"
             }
           ],
           "handler_prints": "hello {name}"
@@ -73,11 +75,13 @@
           "args": [
             {
               "name": "src",
-              "help": "source file"
+              "help": "source file",
+              "presence": "required"
             },
             {
               "name": "dst",
-              "help": "destination file"
+              "help": "destination file",
+              "presence": "required"
             }
           ],
           "handler_prints": "{src}->{dst}"
@@ -134,7 +138,7 @@
             {
               "name": "path",
               "help": "project dir",
-              "required": false,
+              "presence": "default",
               "default": "."
             }
           ],
@@ -166,7 +170,7 @@
             {
               "name": "path",
               "help": "project dir",
-              "required": false,
+              "presence": "default",
               "default": "."
             }
           ],
@@ -196,12 +200,13 @@
           "args": [
             {
               "name": "src",
-              "help": "source file"
+              "help": "source file",
+              "presence": "required"
             },
             {
               "name": "dst",
               "help": "destination",
-              "required": false,
+              "presence": "default",
               "default": "out"
             }
           ],
@@ -233,7 +238,7 @@
             {
               "name": "path",
               "help": "project dir",
-              "required": false
+              "presence": "optional"
             }
           ],
           "handler_prints": "path={path}"
@@ -262,7 +267,8 @@
           "args": [
             {
               "name": "path",
-              "help": "a path"
+              "help": "a path",
+              "presence": "required"
             }
           ],
           "flags": [
@@ -270,6 +276,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],

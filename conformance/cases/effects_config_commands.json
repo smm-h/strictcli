@@ -14,12 +14,24 @@
           "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "opt", "help": "an option", "type": "str", "default": ""}
+            {
+              "name": "opt",
+              "help": "an option",
+              "presence": "default",
+              "type": "str",
+              "default": ""
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "config", "set", "opt", "after"],
+    "argv": [
+      "--dry-run",
+      "config",
+      "set",
+      "opt",
+      "after"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_matches": "^DRY RUN — no changes were made\\. Would do:\n  1\\. write: .*strictcli_cfg_.*\\.json \\(\\d+ bytes\\)\n$",
@@ -42,12 +54,24 @@
           "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "opt", "help": "an option", "type": "str", "default": ""}
+            {
+              "name": "opt",
+              "help": "an option",
+              "presence": "default",
+              "type": "str",
+              "default": ""
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "config", "set", "opt", "--default"],
+    "argv": [
+      "--dry-run",
+      "config",
+      "set",
+      "opt",
+      "--default"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_matches": "^DRY RUN — no changes were made\\. Would do:\n  1\\. write: .*strictcli_cfg_.*\\.json \\(\\d+ bytes\\)\n$",
@@ -70,12 +94,24 @@
           "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "opt", "help": "an option", "type": "str", "default": ""}
+            {
+              "name": "opt",
+              "help": "an option",
+              "presence": "default",
+              "type": "str",
+              "default": ""
+            }
           ]
         }
       ]
     },
-    "argv": ["--dry-run", "config", "set", "opt", "after"],
+    "argv": [
+      "--dry-run",
+      "config",
+      "set",
+      "opt",
+      "after"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_matches": "^DRY RUN — no changes were made\\. Would do:\n  1\\. write: .*strictcli_cfg_.*\\.toml \\(\\d+ bytes\\)\n$",
@@ -98,13 +134,25 @@
           "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "opt", "help": "an option", "type": "str", "default": ""}
+            {
+              "name": "opt",
+              "help": "an option",
+              "presence": "default",
+              "type": "str",
+              "default": ""
+            }
           ]
         }
       ]
     },
-    "env": {"EDITOR": "false"},
-    "argv": ["--dry-run", "config", "edit"],
+    "env": {
+      "EDITOR": "false"
+    },
+    "argv": [
+      "--dry-run",
+      "config",
+      "edit"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_matches": "^DRY RUN — no changes were made\\. Would do:\n  1\\. run: false .*strictcli_cfg_.*\\.json\n$",
@@ -126,12 +174,23 @@
           "effect": "read_only",
           "handler_prints": "ok",
           "flags": [
-            {"name": "opt", "help": "an option", "type": "str", "default": ""}
+            {
+              "name": "opt",
+              "help": "an option",
+              "presence": "default",
+              "type": "str",
+              "default": ""
+            }
           ]
         }
       ]
     },
-    "argv": ["config", "set", "opt", "after"],
+    "argv": [
+      "config",
+      "set",
+      "opt",
+      "after"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",

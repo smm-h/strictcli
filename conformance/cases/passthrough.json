@@ -86,6 +86,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -125,6 +126,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -229,6 +231,7 @@
               "name": "force-checkout",
               "type": "bool",
               "help": "force checkout",
+              "presence": "default",
               "default": false
             }
           ]
@@ -260,7 +263,8 @@
           "args": [
             {
               "name": "branch",
-              "help": "branch name"
+              "help": "branch name",
+              "presence": "required"
             }
           ]
         }
@@ -381,7 +385,8 @@
                 {
                   "name": "chatter",
                   "type": "bool",
-                  "help": "chatter output"
+                  "help": "chatter output",
+                  "presence": "required"
                 }
               ]
             }
@@ -417,12 +422,14 @@
                 {
                   "name": "chatter",
                   "type": "bool",
-                  "help": "chatter output"
+                  "help": "chatter output",
+                  "presence": "optional"
                 },
                 {
                   "name": "muted",
                   "type": "bool",
-                  "help": "muted output"
+                  "help": "muted output",
+                  "presence": "optional"
                 }
               ]
             }

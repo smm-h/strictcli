@@ -50,12 +50,14 @@
                 {
                   "name": "key",
                   "type": "str",
-                  "help": "config key"
+                  "help": "config key",
+                  "presence": "required"
                 },
                 {
                   "name": "value",
                   "type": "str",
-                  "help": "config value"
+                  "help": "config value",
+                  "presence": "required"
                 }
               ],
               "handler_prints": "{key}={value}"
@@ -65,7 +67,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "--key",
       "name",
@@ -238,12 +240,14 @@
                 {
                   "name": "key",
                   "type": "str",
-                  "help": "config key"
+                  "help": "config key",
+                  "presence": "required"
                 },
                 {
                   "name": "value",
                   "type": "str",
-                  "help": "config value"
+                  "help": "config value",
+                  "presence": "required"
                 }
               ],
               "handler_prints": "ok"
@@ -253,7 +257,7 @@
       ]
     },
     "argv": [
-            "config",
+      "config",
       "set",
       "--help"
     ],
@@ -542,7 +546,8 @@
                     {
                       "name": "name",
                       "type": "str",
-                      "help": "zone name"
+                      "help": "zone name",
+                      "presence": "required"
                     }
                   ],
                   "handler_prints": "created {name}"
@@ -589,7 +594,8 @@
                     {
                       "name": "name",
                       "type": "str",
-                      "help": "zone name"
+                      "help": "zone name",
+                      "presence": "required"
                     }
                   ],
                   "handler_prints": "ok"

@@ -63,6 +63,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "",
+              "presence": "default",
               "default": false
             }
           ],
@@ -93,7 +94,8 @@
           "args": [
             {
               "name": "file",
-              "help": ""
+              "help": "",
+              "presence": "required"
             }
           ],
           "handler_prints": "ok"
@@ -158,6 +160,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "repeatable": true,
               "default": false
             }
@@ -194,6 +197,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "choices_str": [
                 "yes",
                 "no"
@@ -235,7 +239,8 @@
                 {
                   "name": "chatter",
                   "type": "bool",
-                  "help": "chatter output"
+                  "help": "chatter output",
+                  "presence": "optional"
                 }
               ]
             }
@@ -268,12 +273,14 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             },
             {
               "name": "target",
               "type": "str",
-              "help": "the target again"
+              "help": "the target again",
+              "presence": "required"
             }
           ],
           "handler_prints": "ok"
@@ -303,11 +310,13 @@
           "args": [
             {
               "name": "file",
-              "help": "the file"
+              "help": "the file",
+              "presence": "required"
             },
             {
               "name": "file",
-              "help": "the file again"
+              "help": "the file again",
+              "presence": "required"
             }
           ],
           "handler_prints": "ok"
@@ -336,6 +345,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -349,6 +359,7 @@
               "name": "chatter",
               "type": "bool",
               "help": "be chatter",
+              "presence": "default",
               "default": false
             }
           ],
@@ -382,6 +393,7 @@
               "name": "target",
               "type": "str",
               "help": "the target",
+              "presence": "required",
               "env": "WRONG_TARGET"
             }
           ],
@@ -401,39 +413,6 @@
     }
   },
   {
-    "name": "registration: required arg with default",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test app",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "args": [
-            {
-              "name": "file",
-              "help": "the file",
-              "required": true,
-              "default": "default.txt"
-            }
-          ],
-          "handler_prints": "ok"
-        }
-      ]
-    },
-    "argv": [
-      "cmd",
-      "test.txt"
-    ],
-    "expect": {
-      "exit_code": 1,
-      "stderr_contains": "required arg cannot have a default",
-      "stderr_equals": "error: required arg cannot have a default"
-    }
-  },
-  {
     "name": "registration: duplicate global flag names",
     "app": {
       "name": "myapp",
@@ -444,12 +423,14 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         },
         {
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output again",
+          "presence": "default",
           "default": false
         }
       ],
@@ -487,6 +468,7 @@
               "name": "port",
               "type": "int",
               "help": "the port",
+              "presence": "default",
               "default": "abc"
             }
           ],
@@ -522,6 +504,7 @@
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "default",
               "choices_str": [
                 "json",
                 "csv"
@@ -563,12 +546,14 @@
                 {
                   "name": "as-json",
                   "type": "bool",
-                  "help": "output as json"
+                  "help": "output as json",
+                  "presence": "optional"
                 },
                 {
                   "name": "csv",
                   "type": "bool",
-                  "help": "output as csv"
+                  "help": "output as csv",
+                  "presence": "optional"
                 }
               ]
             },
@@ -577,12 +562,14 @@
                 {
                   "name": "csv",
                   "type": "bool",
-                  "help": "output as csv"
+                  "help": "output as csv",
+                  "presence": "optional"
                 },
                 {
                   "name": "xml",
                   "type": "bool",
-                  "help": "output as xml"
+                  "help": "output as xml",
+                  "presence": "optional"
                 }
               ]
             }
@@ -616,6 +603,7 @@
               "name": "format",
               "type": "str",
               "help": "output format",
+              "presence": "required",
               "choices_str": []
             }
           ],
@@ -643,6 +631,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "",
+          "presence": "default",
           "default": false
         }
       ],
@@ -680,6 +669,7 @@
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -720,12 +710,14 @@
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             },
             {
               "name": "format",
               "type": "str",
               "help": "format",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -766,12 +758,14 @@
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             },
             {
               "name": "format",
               "type": "str",
               "help": "format",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -812,6 +806,7 @@
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -850,6 +845,7 @@
               "name": "output",
               "type": "str",
               "help": "output file",
+              "presence": "default",
               "default": "none"
             }
           ],
@@ -888,6 +884,7 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
+              "presence": "required",
               "unique": true
             }
           ],
@@ -920,6 +917,7 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
+              "presence": "required",
               "repeatable": true
             }
           ],
@@ -953,6 +951,7 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
+              "presence": "required",
               "env": "MYAPP_TAG",
               "env_separator": ","
             }
@@ -986,6 +985,7 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
+              "presence": "required",
               "repeatable": true,
               "unique": false,
               "env_separator": ","
@@ -1021,6 +1021,7 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
+              "presence": "required",
               "repeatable": true,
               "unique": false,
               "env": "MYAPP_TAG"
@@ -1056,6 +1057,7 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
+              "presence": "required",
               "repeatable": true,
               "unique": false,
               "env": "MYAPP_TAG",
@@ -1092,6 +1094,7 @@
               "name": "tag",
               "type": "str",
               "help": "a tag",
+              "presence": "required",
               "repeatable": true,
               "unique": false,
               "env": "MYAPP_TAG",

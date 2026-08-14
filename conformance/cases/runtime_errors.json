@@ -14,7 +14,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "the target"
+              "help": "the target",
+              "presence": "required"
             }
           ],
           "handler_prints": "target={target}"
@@ -44,6 +45,7 @@
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "default": "/etc"
         }
       ],
@@ -76,6 +78,7 @@
           "name": "port",
           "type": "int",
           "help": "server port",
+          "presence": "default",
           "default": 3000
         }
       ],
@@ -112,7 +115,8 @@
         {
           "name": "settings",
           "type": "str",
-          "help": "settings path"
+          "help": "settings path",
+          "presence": "required"
         }
       ],
       "commands": [
@@ -148,6 +152,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "env": "MYAPP_CHATTER",
           "default": false
         }
@@ -192,7 +197,8 @@
             {
               "name": "port",
               "type": "int",
-              "help": "the port"
+              "help": "the port",
+              "presence": "required"
             }
           ],
           "handler_prints": "port={port}"
@@ -228,7 +234,8 @@
             {
               "name": "port",
               "type": "int",
-              "help": "the port"
+              "help": "the port",
+              "presence": "required"
             }
           ],
           "handler_prints": "port={port}"
@@ -264,7 +271,8 @@
             {
               "name": "port",
               "type": "int",
-              "help": "the port"
+              "help": "the port",
+              "presence": "required"
             }
           ],
           "handler_prints": "port={port}"

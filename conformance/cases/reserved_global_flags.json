@@ -9,7 +9,8 @@
         {
           "name": "help",
           "type": "str",
-          "help": "should be rejected"
+          "help": "should be rejected",
+          "presence": "required"
         }
       ],
       "commands": [
@@ -39,7 +40,8 @@
         {
           "name": "version",
           "type": "str",
-          "help": "should be rejected"
+          "help": "should be rejected",
+          "presence": "required"
         }
       ],
       "commands": [
@@ -70,6 +72,7 @@
           "name": "dump-schema",
           "type": "bool",
           "help": "should be rejected",
+          "presence": "default",
           "default": false
         }
       ],
@@ -101,6 +104,7 @@
           "name": "mcp",
           "type": "bool",
           "help": "should be rejected",
+          "presence": "default",
           "default": false
         }
       ],
@@ -131,7 +135,8 @@
         {
           "name": "config",
           "type": "str",
-          "help": "should be rejected"
+          "help": "should be rejected",
+          "presence": "required"
         }
       ],
       "commands": [
@@ -162,6 +167,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         }
       ],

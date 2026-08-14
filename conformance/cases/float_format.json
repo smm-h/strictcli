@@ -18,90 +18,105 @@
             {
               "name": "whole",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "neg",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "half",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "negzero",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "hundred",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "fix15",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "big16",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "big20",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "top21",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "small4",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "small5",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "tiny7",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "tenth",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "twop53",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             },
             {
               "name": "e300",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             }
@@ -159,90 +174,105 @@
             {
               "name": "whole",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 1.0
             },
             {
               "name": "neg",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": -1.0
             },
             {
               "name": "half",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.5
             },
             {
               "name": "negzero",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": -0.0
             },
             {
               "name": "hundred",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 100.0
             },
             {
               "name": "fix15",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 1000000000000000.0
             },
             {
               "name": "big16",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 1e+16
             },
             {
               "name": "big20",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 1e+20
             },
             {
               "name": "top21",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 1e+21
             },
             {
               "name": "small4",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.0001
             },
             {
               "name": "small5",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 1e-05
             },
             {
               "name": "tiny7",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 1e-07
             },
             {
               "name": "tenth",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 0.1
             },
             {
               "name": "e300",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 1.5e+300
             },
             {
               "name": "twop53",
               "help": "v",
+              "presence": "default",
               "type": "float",
               "default": 9007199254740992.0
             }
@@ -299,6 +329,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "choices_float": [
                 1.5,
                 2.5
@@ -335,6 +366,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "choices_float": [
                 1.5,
                 2.5
@@ -371,6 +403,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "choices_float": [
                 1.5,
                 2.5
@@ -407,6 +440,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "choices_float": [
                 1.5,
                 2.5
@@ -443,6 +477,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "choices_float": [
                 1.5,
                 2.5
@@ -479,6 +514,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "choices_float": [
                 1.5,
                 2.5
@@ -515,6 +551,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "choices_float": [
                 1.5,
                 2.5
@@ -551,6 +588,7 @@
               "name": "rate",
               "type": "float",
               "help": "the rate",
+              "presence": "required",
               "choices_float": [
                 1.5,
                 2.5
@@ -590,6 +628,7 @@
             {
               "name": "rate",
               "help": "a rate",
+              "presence": "default",
               "type": "float",
               "default": 0.0
             }

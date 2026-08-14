@@ -15,7 +15,8 @@
             {
               "name": "dry-run",
               "type": "bool",
-              "help": "should be rejected"
+              "help": "should be rejected",
+              "presence": "required"
             }
           ]
         }
@@ -45,7 +46,8 @@
             {
               "name": "approve-consequential",
               "type": "bool",
-              "help": "should be rejected"
+              "help": "should be rejected",
+              "presence": "required"
             }
           ]
         }
@@ -75,7 +77,8 @@
             {
               "name": "approve_consequential",
               "type": "bool",
-              "help": "should be rejected"
+              "help": "should be rejected",
+              "presence": "required"
             }
           ]
         }
@@ -99,7 +102,8 @@
         {
           "name": "approve_consequential",
           "type": "bool",
-          "help": "should be rejected"
+          "help": "should be rejected",
+          "presence": "required"
         }
       ],
       "commands": [
@@ -134,7 +138,8 @@
           "args": [
             {
               "name": "approve_consequential",
-              "help": "should be rejected"
+              "help": "should be rejected",
+              "presence": "required"
             }
           ]
         }
@@ -165,7 +170,8 @@
             {
               "name": "yes",
               "type": "bool",
-              "help": "should be rejected"
+              "help": "should be rejected",
+              "presence": "required"
             }
           ]
         }
@@ -189,7 +195,8 @@
         {
           "name": "yes",
           "type": "bool",
-          "help": "should be rejected"
+          "help": "should be rejected",
+          "presence": "required"
         }
       ],
       "commands": [
@@ -225,7 +232,8 @@
             {
               "name": "quiet",
               "type": "bool",
-              "help": "should be rejected"
+              "help": "should be rejected",
+              "presence": "required"
             }
           ]
         }
@@ -255,7 +263,8 @@
             {
               "name": "verbose",
               "type": "bool",
-              "help": "should be rejected"
+              "help": "should be rejected",
+              "presence": "required"
             }
           ]
         }
@@ -279,7 +288,8 @@
         {
           "name": "dry-run",
           "type": "bool",
-          "help": "should be rejected"
+          "help": "should be rejected",
+          "presence": "required"
         }
       ],
       "commands": [
@@ -318,7 +328,8 @@
                 {
                   "name": "quiet",
                   "type": "bool",
-                  "help": "should be rejected"
+                  "help": "should be rejected",
+                  "presence": "required"
                 }
               ]
             }
@@ -352,12 +363,14 @@
                 {
                   "name": "verbose",
                   "type": "bool",
-                  "help": "should be rejected"
+                  "help": "should be rejected",
+                  "presence": "optional"
                 },
                 {
                   "name": "terse",
                   "type": "bool",
-                  "help": "the other side"
+                  "help": "the other side",
+                  "presence": "optional"
                 }
               ]
             }
@@ -388,7 +401,8 @@
           "args": [
             {
               "name": "verbose",
-              "help": "a positional, not a flag"
+              "help": "a positional, not a flag",
+              "presence": "required"
             }
           ]
         }
@@ -420,6 +434,7 @@
               "name": "output",
               "type": "str",
               "help": "an ordinary flag",
+              "presence": "default",
               "default": "text"
             }
           ]
@@ -453,6 +468,7 @@
               "name": "terse",
               "type": "bool",
               "help": "an ordinary flag",
+              "presence": "required",
               "short": "q"
             }
           ]
@@ -494,7 +510,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: d\n"
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: d\n"
     }
   },
   {
@@ -578,7 +594,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: n\n"
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: n\n"
     }
   },
   {
@@ -615,7 +631,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: n\n"
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: n\n"
     }
   },
   {
@@ -634,6 +650,7 @@
             {
               "name": "rest",
               "help": "trailing args",
+              "presence": "required",
               "variadic": true
             }
           ]
@@ -672,7 +689,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "looked\nDRY RUN \u2014 no changes were made. Would do:\n"
+      "stdout_equals": "looked\nDRY RUN — no changes were made. Would do:\n"
     }
   },
   {
@@ -722,7 +739,8 @@
           "args": [
             {
               "name": "name",
-              "help": "a positional"
+              "help": "a positional",
+              "presence": "required"
             }
           ]
         }
@@ -925,6 +943,7 @@
           "name": "profile",
           "type": "str",
           "help": "profile name",
+          "presence": "default",
           "default": "none"
         }
       ],
@@ -950,7 +969,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "DRY RUN \u2014 no changes were made. Would do:\n  1. mkdir: d\n"
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. mkdir: d\n"
     }
   },
   {
@@ -1018,7 +1037,8 @@
           "args": [
             {
               "name": "name",
-              "help": "a positional"
+              "help": "a positional",
+              "presence": "required"
             }
           ]
         }

@@ -10,6 +10,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -42,6 +43,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -74,6 +76,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -106,6 +109,7 @@
           "name": "settings",
           "type": "str",
           "help": "settings directory",
+          "presence": "default",
           "default": "/etc/myapp"
         }
       ],
@@ -139,6 +143,7 @@
           "name": "port",
           "type": "int",
           "help": "server port",
+          "presence": "default",
           "default": 3000
         }
       ],
@@ -172,12 +177,14 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         },
         {
           "name": "settings",
           "type": "str",
           "help": "settings directory",
+          "presence": "default",
           "default": "/etc/myapp"
         }
       ],
@@ -215,6 +222,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -252,6 +260,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "env": "MYAPP_CHATTER",
           "default": false
         }
@@ -287,6 +296,7 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         }
       ],
@@ -299,7 +309,8 @@
             {
               "name": "target",
               "type": "str",
-              "help": "deploy target"
+              "help": "deploy target",
+              "presence": "required"
             }
           ],
           "handler_prints": "chatter={chatter} target={target}"
@@ -328,12 +339,14 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         },
         {
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "default": "/etc/myapp"
         }
       ],
@@ -365,12 +378,14 @@
           "name": "chatter",
           "type": "bool",
           "help": "enable chatter output",
+          "presence": "default",
           "default": false
         },
         {
           "name": "settings",
           "type": "str",
           "help": "settings path",
+          "presence": "default",
           "default": "/etc/myapp"
         }
       ],
@@ -384,6 +399,7 @@
               "name": "force-deploy",
               "type": "bool",
               "help": "force deploy",
+              "presence": "default",
               "default": false
             }
           ],

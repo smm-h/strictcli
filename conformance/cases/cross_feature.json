@@ -16,13 +16,14 @@
                 {
                   "name": "force-mode",
                   "type": "bool",
-                  "help": "force mode"
+                  "help": "force mode",
+                  "presence": "optional"
                 },
                 {
                   "name": "target",
                   "type": "str",
                   "help": "target name",
-                  "default": null
+                  "presence": "optional"
                 }
               ]
             }
@@ -58,13 +59,14 @@
                 {
                   "name": "force-mode",
                   "type": "bool",
-                  "help": "force mode"
+                  "help": "force mode",
+                  "presence": "optional"
                 },
                 {
                   "name": "target",
                   "type": "str",
                   "help": "target name",
-                  "default": null
+                  "presence": "optional"
                 }
               ]
             }
@@ -101,13 +103,14 @@
                 {
                   "name": "force-mode",
                   "type": "bool",
-                  "help": "force mode"
+                  "help": "force mode",
+                  "presence": "optional"
                 },
                 {
                   "name": "target",
                   "type": "str",
                   "help": "target name",
-                  "default": null
+                  "presence": "optional"
                 }
               ]
             }
@@ -137,6 +140,7 @@
           "name": "force-mode",
           "type": "bool",
           "help": "force mode",
+          "presence": "required",
           "env": "MYAPP_FORCE_MODE"
         }
       ],
@@ -172,6 +176,7 @@
           "name": "force-mode",
           "type": "bool",
           "help": "force mode",
+          "presence": "required",
           "env": "MYAPP_FORCE_MODE"
         }
       ],
@@ -215,7 +220,8 @@
             {
               "name": "strict",
               "type": "bool",
-              "help": "strict mode"
+              "help": "strict mode",
+              "presence": "required"
             }
           ],
           "handler_prints": "strict={strict}"
@@ -253,7 +259,8 @@
             {
               "name": "strict",
               "type": "bool",
-              "help": "strict mode"
+              "help": "strict mode",
+              "presence": "required"
             }
           ],
           "handler_prints": "strict={strict}"
@@ -292,7 +299,8 @@
             {
               "name": "strict",
               "type": "bool",
-              "help": "strict mode"
+              "help": "strict mode",
+              "presence": "required"
             }
           ],
           "handler_prints": "strict={strict}"
@@ -331,7 +339,8 @@
             {
               "name": "strict",
               "type": "bool",
-              "help": "strict mode"
+              "help": "strict mode",
+              "presence": "required"
             }
           ],
           "handler_prints": "strict={strict}"
@@ -357,6 +366,7 @@
           "name": "format",
           "type": "str",
           "help": "output format",
+          "presence": "default",
           "default": "text"
         }
       ],
@@ -369,7 +379,8 @@
             {
               "name": "item",
               "type": "str",
-              "help": "item to show"
+              "help": "item to show",
+              "presence": "required"
             }
           ],
           "handler_prints": "format={format} item={item}"
@@ -399,6 +410,7 @@
           "name": "format",
           "type": "str",
           "help": "output format",
+          "presence": "default",
           "default": "text"
         }
       ],
@@ -411,7 +423,8 @@
             {
               "name": "item",
               "type": "str",
-              "help": "item to show"
+              "help": "item to show",
+              "presence": "required"
             }
           ],
           "handler_prints": "format={format} item={item}"

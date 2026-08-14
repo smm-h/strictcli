@@ -293,7 +293,8 @@
             {
               "name": "json",
               "type": "bool",
-              "help": "should be rejected"
+              "help": "should be rejected",
+              "presence": "required"
             }
           ]
         }
@@ -478,7 +479,7 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"chain\",\"exit_code\":1,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"git tag v1.2.3\",\"kind\":\"proc_mutate\",\"recorded\":true,\"seq\":1,\"verb\":\"run\"},{\"detail\":\"git push origin v1.2.3\",\"kind\":\"proc_mutate\",\"recorded\":true,\"seq\":2,\"verb\":\"run\"}],\"preview_error\":{\"kind\":\"truncated\",\"step\":3,\"command\":\"chain\",\"brand\":\"\u00abstep 2 output\u00bb\",\"message\":\"error: dry-run preview ends at step 3: chain branched on unsettled value \u00abstep 2 output\u00bb \u2014 cannot preview past this point\"},\"diagnostics\":[]}\n",
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"chain\",\"exit_code\":1,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"git tag v1.2.3\",\"kind\":\"proc_mutate\",\"recorded\":true,\"seq\":1,\"verb\":\"run\"},{\"detail\":\"git push origin v1.2.3\",\"kind\":\"proc_mutate\",\"recorded\":true,\"seq\":2,\"verb\":\"run\"}],\"preview_error\":{\"kind\":\"truncated\",\"step\":3,\"command\":\"chain\",\"brand\":\"«step 2 output»\",\"message\":\"error: dry-run preview ends at step 3: chain branched on unsettled value «step 2 output» — cannot preview past this point\"},\"diagnostics\":[]}\n",
       "stderr_equals": ""
     }
   },
@@ -515,7 +516,7 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"build\",\"exit_code\":1,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"build\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"mkdir\"},{\"bytes\":5,\"detail\":\"VERSION (5 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":2,\"verb\":\"write\"}],\"preview_error\":{\"kind\":\"aborted\",\"step\":3,\"command\":\"build\",\"brand\":null,\"message\":\"error: dry-run preview ends at step 3: build aborted \u2014 the preview above may be incomplete\"},\"diagnostics\":[]}\n",
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"build\",\"exit_code\":1,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"build\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"mkdir\"},{\"bytes\":5,\"detail\":\"VERSION (5 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":2,\"verb\":\"write\"}],\"preview_error\":{\"kind\":\"aborted\",\"step\":3,\"command\":\"build\",\"brand\":null,\"message\":\"error: dry-run preview ends at step 3: build aborted — the preview above may be incomplete\"},\"diagnostics\":[]}\n",
       "stderr_not_contains": "dry-run preview ends at step 3"
     },
     "targets": [
@@ -556,7 +557,7 @@
     ],
     "expect": {
       "exit_code": 2,
-      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"build\",\"exit_code\":2,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"build\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"mkdir\"},{\"bytes\":5,\"detail\":\"VERSION (5 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":2,\"verb\":\"write\"}],\"preview_error\":{\"kind\":\"aborted\",\"step\":3,\"command\":\"build\",\"brand\":null,\"message\":\"error: dry-run preview ends at step 3: build aborted \u2014 the preview above may be incomplete\"},\"diagnostics\":[]}\n",
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"build\",\"exit_code\":2,\"payload\":null,\"dry_run\":true,\"preview\":[{\"detail\":\"build\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"mkdir\"},{\"bytes\":5,\"detail\":\"VERSION (5 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":2,\"verb\":\"write\"}],\"preview_error\":{\"kind\":\"aborted\",\"step\":3,\"command\":\"build\",\"brand\":null,\"message\":\"error: dry-run preview ends at step 3: build aborted — the preview above may be incomplete\"},\"diagnostics\":[]}\n",
       "stderr_not_contains": "dry-run preview ends at step 3"
     },
     "targets": [

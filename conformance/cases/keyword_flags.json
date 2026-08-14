@@ -15,6 +15,7 @@
               "name": "global",
               "type": "bool",
               "help": "use global scope",
+              "presence": "default",
               "default": false
             }
           ],

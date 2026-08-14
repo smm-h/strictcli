@@ -15,7 +15,8 @@
             {
               "name": "json",
               "type": "bool",
-              "help": "should be rejected"
+              "help": "should be rejected",
+              "presence": "required"
             }
           ]
         }
@@ -39,7 +40,8 @@
         {
           "name": "json",
           "type": "bool",
-          "help": "should be rejected"
+          "help": "should be rejected",
+          "presence": "required"
         }
       ],
       "commands": [
@@ -78,7 +80,8 @@
                 {
                   "name": "json",
                   "type": "bool",
-                  "help": "should be rejected"
+                  "help": "should be rejected",
+                  "presence": "required"
                 }
               ]
             }
@@ -112,12 +115,14 @@
                 {
                   "name": "json",
                   "type": "bool",
-                  "help": "should be rejected"
+                  "help": "should be rejected",
+                  "presence": "optional"
                 },
                 {
                   "name": "text",
                   "type": "bool",
-                  "help": "text output"
+                  "help": "text output",
+                  "presence": "optional"
                 }
               ]
             }
@@ -148,7 +153,8 @@
           "args": [
             {
               "name": "json",
-              "help": "a file named json"
+              "help": "a file named json",
+              "presence": "required"
             }
           ]
         }
@@ -302,6 +308,7 @@
             {
               "name": "rest",
               "help": "the rest",
+              "presence": "required",
               "variadic": true
             }
           ]
@@ -394,7 +401,7 @@
           "handler_returns": {
             "kind": "data",
             "data": {
-              "text": "h\u00e9llo <b>&</b> \u65e5\u672c\u8a9e \u2014 \u00fcn\u00efcode"
+              "text": "héllo <b>&</b> 日本語 — ünïcode"
             }
           }
         }
@@ -406,7 +413,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":{\"text\":\"h\u00e9llo <b>&</b> \u65e5\u672c\u8a9e \u2014 \u00fcn\u00efcode\"},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"cmd\",\"exit_code\":0,\"payload\":{\"text\":\"héllo <b>&</b> 日本語 — ünïcode\"},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
     }
   },
   {
@@ -458,6 +465,7 @@
               "name": "count",
               "type": "int",
               "help": "a count",
+              "presence": "default",
               "default": 0
             }
           ]

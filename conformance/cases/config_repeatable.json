@@ -17,6 +17,7 @@
             {
               "name": "tags",
               "help": "the tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": false
@@ -51,6 +52,7 @@
             {
               "name": "tags",
               "help": "the tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": true
@@ -85,6 +87,7 @@
             {
               "name": "tags",
               "help": "the tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": false
@@ -123,6 +126,7 @@
             {
               "name": "tags",
               "help": "the tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": false
@@ -159,6 +163,7 @@
             {
               "name": "ports",
               "help": "the ports",
+              "presence": "required",
               "type": "int",
               "repeatable": true,
               "unique": false
@@ -193,6 +198,7 @@
             {
               "name": "tags",
               "help": "the tags",
+              "presence": "required",
               "type": "str",
               "repeatable": true,
               "unique": false
