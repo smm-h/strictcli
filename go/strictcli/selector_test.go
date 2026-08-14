@@ -1070,3 +1070,115 @@ func TestSchemaDumpCarriesTheSelectorEntry(t *testing.T) {
 		t.Fatalf("presence = %v", via["presence"])
 	}
 }
+
+// --- The remaining pinned origin clauses and "why" clause (§12.13) ---
+
+func TestElectionFromConfigNamesItself(t *testing.T) {
+	tmpDir, cleanup := configTestSetup(t)
+	defer cleanup()
+	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"via": "sms"})
+
+	app := NewApp("testapp", "1.0.0", "test app", WithConfig())
+	app.Command("send", "send it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithFlags(ChoiceFlag("via", "delivery channel", Required(),
+		Choice("email", "as an email", StringFlag("subject", "subject line", Required())),
+		Choice("sms", "as a text", StringFlag("phone-number", "the number", Required())),
+	)), WithEffect(EffectReadOnly))
+
+	r := app.Test([]string{"send", "--subject", "hi"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: flag '--subject' is only valid under '--via email', but '--via sms' was elected from config key 'via'\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+func TestElectionByDefaultNamesItself(t *testing.T) {
+	app := simpleApp("send", "send it", "via={via}",
+		WithFlags(ChoiceFlag("via", "delivery channel", Default("sms"),
+			Choice("email", "as an email", StringFlag("subject", "subject line", Optional())),
+			Choice("sms", "as a text", StringFlag("phone-number", "the number", Optional())),
+		)))
+	r := app.Test([]string{"send", "--subject", "hi"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: flag '--subject' is only valid under '--via email', but '--via sms' was elected by default\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// The member-spelled twin of "'--<sel>' was not provided": no selector token is
+// ever typed, so the clause names the members instead.
+func TestOutOfScopeWhenNoMemberElected(t *testing.T) {
+	app := simpleApp("run", "run it", "mode={mode}",
+		WithFlags(MemberChoiceFlag("mode", "which profiles", Required(),
+			MemberChoice(StringFlag("profile", "a profile", Required()), "one named profile",
+				BoolFlag("create-missing", "create it if absent", Default(false)),
+			),
+			MemberChoice(BoolFlag("all-profiles", "every profile", Required()), "every profile"),
+		)))
+	r := app.Test([]string{"run", "--create-missing"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: flag '--create-missing' is only valid under '--profile', but none of --profile, --all-profiles was elected\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// A required MEMBER-spelled selector one level down carries the scope suffix.
+func TestNestedMemberSelectorCarriesTheScopeSuffix(t *testing.T) {
+	app := simpleApp("cmd", "a command", "mode={mode}",
+		WithFlags(ChoiceFlag("mode", "the mode", Required(),
+			Choice("advanced", "the advanced mode",
+				MemberChoiceFlag("profile-set", "which profiles", Required(),
+					MemberChoice(StringFlag("profile", "a profile", Required()), "one named profile"),
+					MemberChoice(BoolFlag("all-profiles", "every profile", Required()), "every profile"),
+				)),
+			Choice("simple", "the simple mode"),
+		)))
+	r := app.Test([]string{"cmd", "--mode", "advanced"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: one of --profile, --all-profiles is required under '--mode advanced'\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// --- Match's other two dispatch guards (Go-only, §24.12) ---
+
+func TestMatchRefusesAForeignCase(t *testing.T) {
+	other := Choice("email", "a choice of another selector", StringFlag("subject", "s", Optional()))
+	ChoiceFlag("elsewhere", "another selector", Required(), other, Choice("z", "choice z"))
+
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("send", "send it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		_ = Match(GetElected(kwargs, "via"),
+			When(other, func(f Fields) string { return "other" }),
+			When(viaSMS, func(f Fields) string { return "sms" }),
+			When(viaWebhook, func(f Fields) string { return "hook" }),
+		)
+		return Exit(0)
+	}, WithFlags(ChoiceFlag("via", "delivery channel", Required(), viaEmail, viaSMS, viaWebhook)),
+		WithEffect(EffectReadOnly))
+
+	expectPanic(t, `strictcli.Match: case "email" is not a choice of choice flag "via"`, func() {
+		app.Test([]string{"send", "--via", "sms", "--phone-number", "+1"})
+	})
+}
+
+func TestChoiceValueBelongsToExactlyOneSelector(t *testing.T) {
+	shared := Choice("a", "choice a")
+	ChoiceFlag("first", "the first selector", Required(), shared, Choice("b", "choice b"))
+	expectPanic(t, `Choice "a" of "second": a choice value belongs to exactly one choice flag; it is already declared by "first"`, func() {
+		ChoiceFlag("second", "the second selector", Required(), shared, Choice("c", "choice c"))
+	})
+}
