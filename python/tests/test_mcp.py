@@ -1475,6 +1475,28 @@ class TestMcpLegacyConfirmation:
         )
         assert responses[3]["error"]["message"] == "requestState has already been used"
 
+    @pytest.mark.parametrize("answer", [
+        {"action": "decline"},
+        {"action": "cancel"},
+        {"action": "accept", "content": {"proceed": False}},
+    ])
+    def test_a_refused_exchange_consumes_its_state(self, answer):
+        """The exits that always consumed still do, after the reordering."""
+        def replay(seen):
+            return _call_request(
+                3, name="release", arguments={},
+                requestState=seen[1]["id"], inputResponses=_accept(),
+            )
+
+        responses = _Session(_confirming_app()).run(
+            _handshake(),
+            _legacy_call(2),
+            lambda seen: _answer(seen, answer),
+            replay,
+        )
+        assert responses[2]["result"]["isError"] is True
+        assert responses[3]["error"]["message"] == "requestState has already been used"
+
     def test_an_exchange_that_ends_unanswered_consumes_its_state(self):
         """The stream ending is an exit too, and it spends the blob as well."""
         def replay(seen):
