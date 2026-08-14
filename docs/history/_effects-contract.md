@@ -2868,6 +2868,19 @@ messages, so `flag '--phone-number' is required under '--via sms' (elected from 
 'NOTIFY_VIA')` -- with the parenthesized form used there because the clause follows a complete
 sentence rather than a verb.
 
+**The origin suffix** -- the parenthesized form that composition produces, given a name of its own
+so a conformance case references it instead of rebuilding it from the example above (§18.18 item
+212):
+
+```
+ (elected<origin>)
+```
+
+`errElectionOriginSuffix(origin)`. All three. It is appended **after** the scope suffix and never
+before it, `<origin>` is one of the three clauses above, and a command-line election produces the
+**empty** suffix rather than a bare `(elected)` -- the wrapper exists exactly when the clause it
+wraps does, which is the rule the scope suffix already follows at root scope.
+
 **A selector elected more than once** -- last-wins is right for a plain flag and wrong for an
 election, because discarding a value would discard a whole scope with it:
 
@@ -2895,8 +2908,19 @@ a choice name is unique only within its selector, so the prefix names both.
 | `errMemberFlagPresence(sel, m)` | `Choice "<m>" of "<sel>": a member flag must declare <required-spelling>, read as required once this member is elected` |
 | `errMemberSelectorShort(sel)` | `Flag "<sel>": a member-spelled choice flag is never typed, so it cannot carry a short: declare the short on a member` |
 | `errMemberDefaultCarriesValue(sel, c)` | `Flag "<sel>": <default-spelling> elects choice "<c>", whose flag carries a value nothing supplies: only a payload-less member can be a default` |
+| `errTokenChoiceCarriesPayload(sel, c)` | `Choice "<c>" of "<sel>": a token-spelled choice cannot carry a payload: the token names the choice, and a choice that carries its own value belongs to a member-spelled choice flag, declared with <member-selector-spelling>` |
 | `errChoicesEntryNotRecord(name, i)` | `Flag "<name>": choices entry <i> is a bare value: declare it as <record-spelling>` |
 | `errChoicesEntryIsChoiceClass(name, i, cls)` | `Flag "<name>": choices entry <i> is the choice class '<cls>', which declares a scope: a choice with a scope belongs to a choice flag, declared with <selector-spelling>`. **Python-only** -- Go's `Ch` and TypeScript's record literal are distinct types from a choice, so the sibling mis-declaration is a compile error (§24.12) |
+
+**`errTokenChoiceCarriesPayload` is what makes `<member-selector-spelling>` a used row** (§18.18
+items 210-211). §24.4 pinned the rule -- a payload is delivered under the reserved name `value` and
+only under member spelling, so declaring one on a token-spelled choice is a registration error --
+and left the message unwritten; the template above is that message, in the same shape
+`errChoicesEntryIsChoiceClass` already has, where the sentence names the construct the declaration
+belongs in and the row supplies each language's word for it. The row was the alternative candidate
+for striking, and it is kept rather than struck because the three member-spelled constructors
+genuinely diverge (§24.12: Python's `elect_by="member-flags"` keyword, Go's and TypeScript's twin
+constructors), so a remedy clause naming that construct cannot be written without it.
 
 **Reserved names inside a scope** (S15, §24.7). Two names are reserved because the delivered record
 uses them, and the rest of the reserved surface is not a new template at all -- it is the existing
@@ -2920,9 +2944,21 @@ requirement rather than a discovery.
 |---|---|
 | `errScopedNameCollidesRoot(c, sel, x)` | `Choice "<c>" of "<sel>": flag '--<x>' collides with a command-level flag of the same name: the scoped one could never be reached` |
 | `errScopedNameCollidesSelector(c, sel, x)` | `Choice "<c>" of "<sel>": flag '--<x>' collides with the choice flag's own name` |
-| `errSiblingScopeTypeMismatch(sel, x, a, b)` | `Flag "<sel>": flag '--<x>' is declared by choices "<a>" and "<b>" with different types: sibling scopes may reuse a name only with an identical type, because tokenizing '--<x>' cannot wait for an election` |
+| `errSiblingScopeShapeMismatch(sel, x, a, b)` | `Flag "<sel>": flag '--<x>' is declared by choices "<a>" and "<b>" with different value shapes: sibling scopes may reuse a name only with an identical type and arity, because tokenizing '--<x>' cannot wait for an election` |
 | `errCoElectableNameReuse(name, x, p1, p2)` | `command "<name>": flag '--<x>' is declared under '<p1>' and under '<p2>', which can be elected at the same time: simultaneously electable scopes may not reuse a flag name` |
 | `errShortCollidesAcrossScopes(name, s, a, b)` | `command "<name>": short '-<s>' is claimed by '--<a>' and '--<b>', which can be elected at the same time` |
+
+**The sibling-scope template covers type and arity in one sentence** (§18.18 item 208). §24.7's rule
+is "identical type **and** arity", and the template it belongs to named only types -- so a sibling
+pair declaring `--x` repeatable in one scope and scalar in the other had a rule and no message. The
+template is **widened rather than twinned**: one condition (a name reused by sibling scopes whose
+two declarations do not tokenize identically) gets one message, and minting an arity-only sibling
+would put two templates on one fact, which is what item 149's rule refuses and what the reuse table
+above exists to prevent. Two consequences of the widening are authored with it: the noun is **value
+shape**, which is §25.3's own word for type-and-arity together and is exactly what the two
+declarations' `value_schema` fragments would publish, so the reader diffs one thing rather than two;
+and the symbol is renamed to `errSiblingScopeShapeMismatch`, because a function named for types that
+fires on arity is the same two-facts-one-name defect one level down.
 
 **Scoped positionals** (S15, §24.7):
 
@@ -3233,6 +3269,124 @@ exclusion rationale.
 > **not** authored: neither the scoped-selector round nor the schema-v2 round pinned a case-level
 > spelling for a selector, for a choice's scope, or for §24.2's record-shaped `choices` entries --
 > and §12.13's parse-time templates each require a covering case that cannot be written without one.
+
+> **Amendment (2026-08-14, §18.18 item 207): the case schema's selector surface, authored.** The box
+> above named what `conformance/schema.json` still needs and left it open; this is it. The input side
+> mirrors §25.6's dump encoding wherever the two answer the same question, and departs from it
+> exactly where a *declaration* and a *published fact* differ -- item 200's own distinction, applied
+> a second time. The case schema's existing style is kept throughout: explicit keys, closed enums,
+> `additionalProperties: false`, and a presence declaration on every flag at every depth.
+>
+> **A selector flag entry.** `$defs/flag` gains two properties, `elect_by` and `choices`:
+>
+> ```json
+> {
+>   "name": "via",
+>   "help": "delivery channel",
+>   "short": "v",
+>   "presence": "required",
+>   "elect_by": "selector-token",
+>   "choices": [
+>     {"name": "email", "help": "deliver the notification as an email message",
+>      "flags": [
+>        {"name": "subject", "help": "subject line of the message", "type": "str",
+>         "presence": "required"},
+>        {"name": "recipient", "help": "destination email address", "type": "str",
+>         "presence": "required"}
+>      ]},
+>     {"name": "sms", "help": "deliver the notification as a text message",
+>      "flags": [
+>        {"name": "phone_number", "help": "destination number in E.164 form", "type": "str",
+>         "presence": "required"}
+>      ]}
+>   ]
+> }
+> ```
+>
+> - `elect_by` is `{"enum": ["selector-token", "member-flags"]}` -- §24.12's own two-value
+>   vocabulary, the same two strings §25.6 publishes, never a second pair of names for one fact.
+> - `choices` is an array of **choice objects**, a new `$defs/choice`: `name` and `help` required
+>   (help is mandatory on a choice, which is what `errChoiceHelpEmpty` refuses), `flags` optional and
+>   absent when the scope is empty, `value` optional (the member payload below),
+>   `additionalProperties: false`.
+> - **the scope is `{"$ref": "#/$defs/flag"}`**, the way `$defs/flag_set` already refs it, so
+>   recursion costs the schema nothing: a nested selector is an ordinary flag entry inside `flags`
+>   carrying its own `elect_by` and `choices`, to any depth -- the input-side twin of §25.6's
+>   "each scoped entry is a full flag entry".
+> - **presence is mandatory at every depth** with no new rule: `$defs/flag`'s `required` list already
+>   carries `presence`, and the recursive `$ref` applies that list to every scoped entry. That is the
+>   case-schema encoding of §24.1's "sub-flags declare presence like everything else", and it is why
+>   the presence round's corpus rule needs no restatement here.
+> - **`elect_by` is the discriminator on the input side too** (§25.6's rule, one boundary over): an
+>   entry carrying it declares no `type`, no `choices_str` / `choices_int` / `choices_float`, no
+>   `repeatable` and no `validate`; an entry not carrying it declares no `choices`. Spelled as the
+>   `if`/`then`/`else` pair `$defs/flag` already uses for presence-and-default co-occurrence.
+> - **a selector's `default`** is the same flat map §25.6 publishes, `{"choice": "<name>", "<field>":
+>   <value>, ...}`, declared beside `presence: "default"` and validating under `$defs/flag`'s
+>   existing object branch. A map carrying fields is a Python-target case, because Go's and
+>   TypeScript's default names a choice and `errSelectorDefaultIncomplete` is what guarantees its
+>   completeness (§24.5) -- the same target split that template already has.
+>
+> **A member-spelled selector**, where each choice's `name` is the member flag's own name and the
+> payload is the choice object's `value` key:
+>
+> ```json
+> {
+>   "name": "target",
+>   "help": "which profiles to operate on",
+>   "presence": "required",
+>   "elect_by": "member-flags",
+>   "choices": [
+>     {"name": "profile", "help": "operate on one named profile",
+>      "value": {"type": "str", "help": "profile name"},
+>      "flags": [
+>        {"name": "create_missing", "help": "create the profile when absent", "type": "bool",
+>         "presence": "default", "default": false}
+>      ]},
+>     {"name": "all_profiles", "help": "operate on every profile"}
+>   ]
+> }
+> ```
+>
+> - **the payload is its own key, not a `flags` entry**, and this is the one place the input side
+>   deliberately departs from §25.6. The dump places the payload **first in `flags`** under the
+>   reserved name `value`; a case that spelled it that way would be indistinguishable from a case
+>   declaring a scoped flag named `value`, which is the input `errScopedNameValueReserved` is
+>   asserted against -- and a schema that cannot spell the refused declaration cannot test the
+>   refusal, which is the presence box's own rule for `null`. The key is also what the three surfaces
+>   actually declare (§24.12): Python's `member_value(help=...)` field, Go's `MemberChoice(memberFlag,
+>   help, scope...)`, TypeScript's `choice({help, value, flags})`.
+> - the payload object is `{"type": <carrier>, "help": <string>}`, both required,
+>   `additionalProperties: false`, and it declares **no presence** -- electing the member supplies the
+>   value (§24.12), and §25.6's `"presence": "required"` on the dumped entry is what the serializer
+>   derives from that.
+> - **`value` stays spellable on a token-spelled choice** for the same testability reason: it is the
+>   input `errTokenChoiceCarriesPayload` (§12.13) is asserted against.
+>
+> **§24.2's record-shaped `choices` entries.** The three typed keys stay, and their items become
+> records:
+>
+> ```json
+> "choices_str": [{"value": "head", "help": "push only the current HEAD branch"}, {"value": "tags"}]
+> ```
+>
+> - `value` is required and carries the key's own type (string, integer, number); `help` is optional
+>   and `minLength: 1` when present, which is item 164's optional-but-non-empty rule.
+> - **the split by type survives**, because its reason is the input side's alone: JSON cannot tell an
+>   integer choice from a float one, and the harness must know which typed constructor to call. The
+>   dump needs no split because it publishes a value that is already typed (§25.5). The split is also
+>   what lets the selector's choice objects take the unqualified `choices` name without collision --
+>   on a case flag entry, `choices` always means choice objects and `choices_<T>` always means value
+>   records.
+>
+> **The three harnesses map all of the above onto §24.12's spellings**, which is the materialization
+> rule §14.4 already pins for `handler_effects`: `conformance/ref_python.py` emits `@choice`-decorated
+> frozen dataclasses with `choice_flag(..., elect_by=...)`, `sub_flag(...)`, `sub_choice_flag(...)`
+> and `member_value(...)`; `conformance/harness/main.go` builds `Choice` / `MemberChoice` identity
+> values and passes them to `ChoiceFlag` / `MemberChoiceFlag`; `conformance/harness_ts/main.js`
+> builds the keyed choice map for `choiceFlag` / `memberChoiceFlag`. One case declaration, three
+> idiomatic surfaces (B9) -- which is what lets each of §12.13's parse-time templates have a single
+> covering case asserted on all three targets.
 
 > **Amendment (2026-08-14, schema-v2 round): the app and command entries gain the behavioral keys
 > the dump was blind to, and the `defaults` block is rewritten.** Also §25's, and recorded here for
@@ -5531,6 +5685,7 @@ unbroken, and the reused code-level strings were checked against the three imple
      stands. Named with it, and **not** authored here: neither round pinned a case-level spelling
      for a selector, a choice's scope, or §24.2's record-shaped `choices` entries, and §12.13's
      parse-time templates each require a covering case that cannot be written without one.
+     **Authored at §18.18, item 207.**
 
 201. **The presence round's remaining mutex text is superseded (§23.2, §23.4, §23.5).** §18.15's
      supersession reached §23.1, §23.5's mutex row and §23.9's bullet, and left three sites
@@ -5548,7 +5703,7 @@ unbroken, and the reused code-level strings were checked against the three imple
      "<b>" with different types`), so an arity-only violation -- one scope declaring `--x`
      repeatable and its sibling declaring it scalar -- has a rule and no message. Widening that
      template's sentence or minting a sibling for it is a spelling decision this audit does not
-     take.
+     take. **Authored at §18.18, item 208** (widened, not twinned).
 
 203. **§25.9's array-order rule carves out the member payload's pinned position.** §25.6 places a
      member-spelled choice's `value` entry **first** in that choice's `flags` array; §25.9 said
@@ -5562,7 +5717,7 @@ unbroken, and the reused code-level strings were checked against the three imple
      empty) and a value-flag choice record's `help` (omitted when absent) are omit-at-baseline keys
      on entities the `defaults` block has no entry for, so the block is not yet the complete
      omission map it is defined to be. Naming those entities is a spelling decision, and this audit
-     leaves it to the round that takes it.
+     leaves it to the round that takes it. **Authored at §18.18, item 209.**
 
 205. **Two ledger-level lists are completed.** §18's own preamble still scoped its exhaustiveness
      claim to "§§19-20", four sections after that stopped being true; it now reads §§19-25. And
@@ -5576,7 +5731,99 @@ unbroken, and the reused code-level strings were checked against the three imple
      the origin clauses appended to a scope-suffix message are shown only through the example
      `flag '--phone-number' is required under '--via sms' (elected from env var 'NOTIFY_VIA')`,
      whose `(elected` … `)` wrapper composes exactly from the pinned clause but has no template name
-     of its own.
+     of its own. **Authored at §18.18, items 210-212** -- the payload template as
+     `errTokenChoiceCarriesPayload`, which is also what puts `<member-selector-spelling>` to use
+     (so the row is kept rather than struck), and the wrapper as `errElectionOriginSuffix`.
+
+### 18.18 Spellings authored after the two-amendment round's read-back audit (2026-08-14)
+
+The read-back audit (§18.17) closed its own findings but left **six spellings unauthored**, each
+recorded as a known remainder rather than as a discovery: the case-schema selector surface (item
+200), the arity-only sibling-scope violation (item 202), the two `defaults`-block choice entities
+(item 204), and item 206's three -- the token-spelled-payload template, the unused
+`<member-selector-spelling>` row, and the composed origin wrapper. This section authors all six. It
+adds no section, takes no ruling, changes no guarantee, and reverses nothing: every item below is
+the mechanical remainder of a rule §24 or §25 already pins, decided here so an implementor has
+nothing left to decide. Numbering continues §18.17's, for the reason §18.14 gave: the same
+campaign's ledger.
+
+**Origin tags**, per §18.14's preamble. Every item here is **untagged** -- they are authored
+spellings in the §18.3 class throughout, and there is no `(D)` directive and no `[%%]`
+recommendation among them, because each closes a hole the two rounds' own rulings had already
+decided the shape of.
+
+**Sites amended in place**: §12.13 (three templates and two explanatory paragraphs), §13 (one new
+box, authoring what item 200's correction box named as still needed), §24.4 (a cross-reference to
+the template it had a rule for), §25.10 (the `defaults` block and its always-emitted list), and
+§18.17's items 200, 202, 204 and 206, each of which gains a pointer to the item that closes it.
+
+207. **The case schema's selector surface is authored (§13's new box).** `$defs/flag` gains
+     `elect_by` (`{"enum": ["selector-token", "member-flags"]}`, §24.12's own two strings, the same
+     pair §25.6 publishes) and `choices` (an array of a new `$defs/choice`: `name` and `help`
+     required, `flags` and `value` optional). A scope is `{"$ref": "#/$defs/flag"}` the way
+     `$defs/flag_set` already refs it, so recursion costs the schema nothing and `presence` stays
+     mandatory at every depth through the `required` list that ref already carries. `elect_by` is the
+     input-side discriminator exactly as it is the dump's, and a selector's `default` is the same
+     flat map §25.6 publishes. Authored as a deliberate **departure** from the dump encoding: a
+     member payload is the choice object's own `value` **key**, not the first entry of `flags`,
+     because a case spelling it the dump's way would be indistinguishable from a case declaring a
+     scoped flag named `value` -- which is the input `errScopedNameValueReserved` is asserted
+     against, and the presence box's `null` rule already says a schema that cannot spell the refused
+     declaration cannot test the refusal. The payload object is `{"type", "help"}` and declares no
+     presence, because electing the member supplies the value (§24.12) and the dumped
+     `"presence": "required"` is derived from that. Authored with it: §24.2's records reach the case
+     schema as the items of the three **surviving** typed keys (`choices_str` / `choices_int` /
+     `choices_float`), whose split exists for a reason the input side alone has -- JSON cannot tell
+     an integer choice from a float one and the harness must pick a typed constructor -- and which is
+     also what lets the selector's choice objects hold the unqualified `choices` name. Item 200's
+     declaration-key-versus-dumped-key distinction is what licenses all three divergences.
+
+208. **The sibling-scope template is widened to type-and-arity, not twinned (§12.13).** §24.7's rule
+     is "identical type **and** arity" and the template named only types, so the arity-only violation
+     had a rule and no message. One condition gets one message: an arity-only sibling template would
+     be two templates on one fact, which item 149's rule refuses and which §12.13's own reuse table
+     exists to prevent. Authored with the widening: the noun is **value shape**, §25.3's own word for
+     type-and-arity together and precisely what the two declarations' fragments would publish, so the
+     new sentence reads `... with different value shapes: sibling scopes may reuse a name only with
+     an identical type and arity, because tokenizing '--<x>' cannot wait for an election`; and the
+     symbol is renamed `errSiblingScopeTypeMismatch` -> **`errSiblingScopeShapeMismatch`**, because a
+     function named for types that fires on arity is the same two-facts-one-name defect one level
+     down. Nothing else in the row moves -- same prefix family, same four parameters, same
+     `Flag "<sel>"` site.
+
+209. **The `defaults` block gains the two choice entities, and is a complete omission map again
+     (§25.10).** `"choice": {"flags": []}` and `"choice_record": {"help": null}`, placed between
+     `arg` and `command` where §25.9's entity sequence already puts them. The names are §25.9's own
+     two entity nouns rather than new coinages, and the unqualified `choice` goes to the selector's
+     choice object because §24.2 decides it: a selector's entry *is* a choice, where a value flag's
+     entry is a value that may carry help. Authored with them: the always-emitted list is
+     re-split accordingly (a **choice object's** `name` and `help`, a **choice record's** `value`),
+     since the single "a choice's `name` and `help`" phrase described only one of the two entities.
+
+210. **The token-spelled-payload registration template is authored (§12.13).**
+     `errTokenChoiceCarriesPayload(sel, c)`, in the `Choice "<c>" of "<sel>": ` prefix family:
+     `a token-spelled choice cannot carry a payload: the token names the choice, and a choice that
+     carries its own value belongs to a member-spelled choice flag, declared with
+     <member-selector-spelling>`. It is shaped after `errChoicesEntryIsChoiceClass`, the catalogue's
+     existing "this declaration belongs in the other construct" message, and it closes §24.4's
+     pinned-rule-with-no-message. All three implementations, like every other row in that table.
+
+211. **`<member-selector-spelling>` is kept and used, not struck (§12.13).** The alternative was to
+     strike an unused row with a visible note. It is kept because item 210's remedy clause cannot be
+     written without it: §24.12's three member-spelled constructors genuinely diverge -- Python's
+     `elect_by="member-flags"` keyword against Go's and TypeScript's twin constructors, which that
+     section chose deliberately so the spelling is one declaration rather than two that must agree --
+     so a sentence naming that construct is exactly the case §12.12's per-language-spelling mechanism
+     exists for. Striking the row would have left the only honest remedy unspellable; the row now has
+     the same status its two siblings have, one template each.
+
+212. **The origin wrapper is named (§12.13).** `errElectionOriginSuffix(origin)`, ` (elected<origin>)`,
+     appended after the scope suffix and never before it, with `<origin>` one of the three pinned
+     origin clauses. Authored with the name, because composition alone does not answer it: a
+     command-line election produces the **empty** suffix rather than a bare `(elected)` -- the
+     wrapper exists exactly when the clause it wraps does, which is the rule the scope suffix already
+     follows at root scope. The example sentence §18.17 item 206 quoted is now a composition of two
+     named templates rather than the only place the form appears.
 
 ---
 
@@ -7079,7 +7326,7 @@ short** -- it is never typed -- and a short declared on a member is an ordinary 
 
 **A payload is exactly one value, delivered under the reserved name `value`** (§24.7), and only
 under member spelling: a token-spelled choice is named by the token itself and has no payload to
-carry, so declaring one is a registration error.
+carry, so declaring one is a registration error (§12.13's `errTokenChoiceCarriesPayload`).
 
 ### 24.5 Presence on a selector
 
@@ -7970,6 +8217,8 @@ v2 makes it true.
     "elect_by": null, "unique": false, "conflict_mode": null, "negatable": null
   },
   "arg": { "variadic": false, "choices": null },
+  "choice": { "flags": [] },
+  "choice_record": { "help": null },
   "command": {
     "consequential": false, "dry_run_supported": true, "dry_run_unsupported_reason": null,
     "payload_schema": null, "owns_stdout": false, "passthrough": false, "flags": [],
@@ -7985,8 +8234,8 @@ v2 makes it true.
 
 Keys with **no** baseline are absent from the block on purpose, and the list is exactly the set of
 always-emitted facts: `name`, `help`, `version`, `schema_version`, `project_id`, `effect`,
-`presence`, `value_schema` **on every entry that has one**, a choice's `name` and `help`, a config
-field's `help` and `required`, and a check's six mandatory fields. `default` on a flag or arg is
+`presence`, `value_schema` **on every entry that has one**, a choice object's `name` and `help`, a
+choice record's `value`, a config field's `help` and `required`, and a check's six mandatory fields. `default` on a flag or arg is
 absent for the reason above: its emission is governed by another key, not by a baseline.
 
 **`value_schema` is the one entry in that list with a stated exception, and the exception is not an
@@ -7997,12 +8246,16 @@ the absence rather than tolerating it. So the block gains no `value_schema` base
 would have to say what an absent fragment means, and every answer it could give is false for the one
 entry that omits the key, which is exactly the kind of statement this section's rewrite removes.
 
-**Two omission rules this block does not yet carry**, named here rather than left to inference: a
-selector choice object's `flags`, omitted when the scope is empty (§25.6), and a value-flag choice
-record's `help`, omitted when the entry declares none (§25.5). Both are omit-at-baseline keys on
-entities the block has no entry for, so the block is not yet the complete omission map its own
-contract claims. The entity keys it would need are deliberately **not** invented here: naming them
-is a spelling decision, and it is recorded as an open one (§18.17 item 204).
+**The two choice entities carry the block's last two omission rules** (§18.18 item 209, closing
+§18.17 item 204's open spelling). A selector choice object's `flags` is omitted when the scope is
+empty (§25.6) and a value-flag choice record's `help` is omitted when the entry declares none
+(§25.5); both are omit-at-baseline keys, and until they had entities of their own the block was not
+the complete omission map it is defined to be. The entity keys are **`choice`** and
+**`choice_record`**, taken verbatim from §25.9's own two entity names ("Choice object (selector)"
+and "Choice record (value flag)") rather than minted here, and the unqualified name goes to the
+selector's choice object because §24.2 is what decides it: a selector's entry *is* a choice, while a
+value flag's entry is a value that may carry help. They sit between `arg` and `command` in the block,
+which is where §25.9's entity sequence already puts them.
 
 ### 25.11 Behavioral completeness
 
