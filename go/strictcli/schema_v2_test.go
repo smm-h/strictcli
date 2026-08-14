@@ -955,3 +955,260 @@ const pythonMinimalDump = `{
   }
 }
 `
+
+// A richer declaration, pinned against the Python implementation's bytes for
+// the same app: choices with and without help, both array spellings, a dict
+// carrier, a RelativeToRoot default, a member-spelled selector with a payload,
+// an arg block, a constraint, a grant and the infra block. This is what §25.8
+// buys -- one canon, three writers, one diff.
+func TestARichDeclarationMatchesTheSiblingImplementationsBytes(t *testing.T) {
+	app := schemaTestApp(t,
+		WithEnvPrefix("MYAPP"),
+		WithProcObserveAllowlist([][]string{{"git", "status"}}),
+		WithInfraRoot("MYAPP_HOME", "~/.myapp"),
+		WithHandshakeEnv("MYAPP_PARENT", "set by the invoking process"),
+	)
+	os.WriteFile("go.mod", []byte("module testproject\n"), 0o644)
+	app.Command("deploy", "Deploy it", noop,
+		WithEffect(EffectMutating), WithConsequential(), WithTags("release"),
+		WithGrants(Grant{Name: "write", Reason: "writes the release", Kind: "file_write"}),
+		WithDependencies(Requires{Flag: "region", DependsOn: "target"}),
+		WithFlags(
+			StringFlag("target", "Where to deploy", Short("t"), Default("prod"),
+				Env("MYAPP_TARGET"), Choices(Ch("prod", "production"), Ch("dev", ""))),
+			StringFlag("region", "Which region", Optional()),
+			StringFlag("tag", "A tag", Repeatable(), Unique(true), Default([]interface{}{})),
+			DictFlag(TypeStr, "header", "HTTP headers", Unique(false), Default(map[string]interface{}{})),
+			BoolFlag("verbose-output", "Say more", Default(false)),
+			StringFlag("path", "A path", Default(RelativeToRoot("MYAPP_HOME", "store"))),
+			MemberChoiceFlag("target-set", "which profiles to operate on", Required(),
+				MemberChoice(StringFlag("profile", "profile name", Required()),
+					"operate on one named profile",
+					BoolFlag("create-missing", "create the profile when absent", Default(false))),
+				MemberChoice(BoolFlag("all-profiles", "every profile", Required()),
+					"operate on every profile"),
+			),
+		),
+		WithArgs(
+			NewArg("env", "the environment", ArgRequired(),
+				ArgChoices(Ch("dev", "the dev one"), Ch("prod", ""))),
+			NewArg("files", "the files", Variadic(), ArgOptional()),
+		),
+	)
+	text := dumpText(t, app)
+	got := text[strings.Index(text, "\n  \"project_id\"")+1:]
+	if got != pythonRichDump {
+		t.Fatalf("the dump diverged from the sibling implementations:\n--- got ---\n%s\n--- want ---\n%s", got, pythonRichDump)
+	}
+}
+
+// pythonRichDump is the Python implementation's dump of the same declaration,
+// captured verbatim from `project_id` onward.
+const pythonRichDump = `  "project_id": "testproject",
+  "name": "testapp",
+  "version": "1.0.0",
+  "help": "A test app",
+  "env_prefix": "MYAPP",
+  "proc_observe_allowlist": [
+    [
+      "git",
+      "status"
+    ]
+  ],
+  "commands": {
+    "deploy": {
+      "name": "deploy",
+      "help": "Deploy it",
+      "effect": "mutating",
+      "consequential": true,
+      "flags": [
+        {
+          "name": "target",
+          "help": "Where to deploy",
+          "value_schema": {
+            "type": "string",
+            "enum": [
+              "prod",
+              "dev"
+            ]
+          },
+          "short": "t",
+          "presence": "default",
+          "default": "prod",
+          "env": "MYAPP_TARGET",
+          "choices": [
+            {
+              "value": "prod",
+              "help": "production"
+            },
+            {
+              "value": "dev"
+            }
+          ]
+        },
+        {
+          "name": "region",
+          "help": "Which region",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "tag",
+          "help": "A tag",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "default",
+          "default": [],
+          "unique": true
+        },
+        {
+          "name": "header",
+          "help": "HTTP headers",
+          "value_schema": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "presence": "default",
+          "default": {}
+        },
+        {
+          "name": "verbose-output",
+          "help": "Say more",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "default",
+          "default": false,
+          "negatable": true
+        },
+        {
+          "name": "path",
+          "help": "A path",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "default",
+          "default": {
+            "relative_to_root": {
+              "env_var": "MYAPP_HOME",
+              "parts": [
+                "store"
+              ]
+            }
+          }
+        },
+        {
+          "name": "target-set",
+          "help": "which profiles to operate on",
+          "presence": "required",
+          "choices": [
+            {
+              "name": "profile",
+              "help": "operate on one named profile",
+              "flags": [
+                {
+                  "name": "value",
+                  "help": "profile name",
+                  "value_schema": {
+                    "type": "string"
+                  },
+                  "presence": "required"
+                },
+                {
+                  "name": "create-missing",
+                  "help": "create the profile when absent",
+                  "value_schema": {
+                    "type": "boolean"
+                  },
+                  "presence": "default",
+                  "default": false,
+                  "negatable": true
+                }
+              ]
+            },
+            {
+              "name": "all-profiles",
+              "help": "operate on every profile"
+            }
+          ],
+          "elect_by": "member-flags"
+        }
+      ],
+      "args": [
+        {
+          "name": "env",
+          "help": "the environment",
+          "value_schema": {
+            "type": "string",
+            "enum": [
+              "dev",
+              "prod"
+            ]
+          },
+          "presence": "required",
+          "choices": [
+            {
+              "value": "dev",
+              "help": "the dev one"
+            },
+            {
+              "value": "prod"
+            }
+          ]
+        },
+        {
+          "name": "files",
+          "help": "the files",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional",
+          "variadic": true
+        }
+      ],
+      "tags": [
+        "release"
+      ],
+      "constraints": [
+        {
+          "type": "requires",
+          "flag": "region",
+          "depends_on": "target"
+        }
+      ],
+      "grants": [
+        {
+          "name": "write",
+          "reason": "writes the release",
+          "kind": "file_write"
+        }
+      ]
+    }
+  },
+  "infra": {
+    "roots": [
+      {
+        "env_var": "MYAPP_HOME",
+        "default": "~/.myapp"
+      }
+    ],
+    "handshakes": [
+      {
+        "env_var": "MYAPP_PARENT",
+        "help": "set by the invoking process"
+      }
+    ]
+  }
+}
+`
