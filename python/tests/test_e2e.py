@@ -33,7 +33,7 @@ def _build_rlsbl_app():
     @app.command(
         "release",
         effect="read_only", help="create a new release",
-        args=[strictcli.Arg(name="bump", help="version bump type")],
+        args=[strictcli.Arg(name="bump", help="version bump type", presence="required")],
         flag_sets=[auth_flag_set],
     )
     @strictcli.flag("sim-run", type=bool, default=False, help="preview without making changes")
@@ -51,7 +51,7 @@ def _build_rlsbl_app():
     @app.command(
         "watch",
         effect="read_only", help="monitor CI for a commit",
-        args=[strictcli.Arg(name="sha", help="commit SHA")],
+        args=[strictcli.Arg(name="sha", help="commit SHA", presence="required")],
     )
     def watch(ctx, sha):
         print(f"watching {sha}")
@@ -65,8 +65,8 @@ def _build_rlsbl_app():
         print(f"config format={format}")
 
     @config.command("set", effect="read_only", help="set a config value")
-    @strictcli.flag("key", type=str, help="config key")
-    @strictcli.flag("value", type=str, help="config value")
+    @strictcli.flag("key", type=str, help="config key", presence="required")
+    @strictcli.flag("value", type=str, help="config value", presence="required")
     def config_set(ctx, key, value):
         print(f"config {key}={value}")
 
@@ -230,7 +230,7 @@ def _build_kwargs_app():
     @app.command(
         "deploy",
         effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="deploy the app",
-        args=[strictcli.Arg(name="target", help="deploy target")],
+        args=[strictcli.Arg(name="target", help="deploy target", presence="required")],
     )
     @strictcli.flag("sim-run", type=bool, default=False, help="preview without making changes")
     @strictcli.flag("replicas", type=int, help="number of replicas", default=1)
@@ -314,7 +314,7 @@ def test_e2e_kwargs_handler_registration_no_error():
     @app.command(
         "cmd",
         effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="a command",
-        args=[strictcli.Arg(name="name", help="a name")],
+        args=[strictcli.Arg(name="name", help="a name", presence="required")],
     )
     @strictcli.flag("count", type=int, help="a count", default=0)
     @strictcli.flag("force-it", type=bool, default=False, help="force it")

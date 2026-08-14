@@ -133,7 +133,7 @@ class TestMcpToolsList:
         app = _build_app()
 
         @app.command("deploy", effect="read_only", help="deploy the app")
-        @strictcli.flag("target", type=str, help="deploy target")
+        @strictcli.flag("target", type=str, help="deploy target", presence="required")
         def deploy(ctx, target):
             pass
 
@@ -225,7 +225,7 @@ class TestMcpToolsList:
         app = _build_app()
 
         @app.command("deploy", effect="read_only", help="deploy the app")
-        @strictcli.flag("target", type=str, help="deploy target")
+        @strictcli.flag("target", type=str, help="deploy target", presence="required")
         @strictcli.flag("count", type=int, default=1, help="instance count")
         @strictcli.flag("loud", type=bool, default=False, help="loud mode")
         def deploy(ctx, target, count, loud):
@@ -270,7 +270,7 @@ class TestMcpToolsCall:
         app = _build_app()
 
         @app.command("deploy", effect="read_only", help="deploy", payload_schema={})
-        @strictcli.flag("target", type=str, help="deploy target")
+        @strictcli.flag("target", type=str, help="deploy target", presence="required")
         @strictcli.flag("count", type=int, default=1, help="instance count")
         def deploy(ctx, target, count):
             captured.update({"target": target, "count": count})
@@ -360,7 +360,7 @@ class TestMcpToolsCall:
         app = _build_app()
 
         @app.command("deploy", effect="read_only", help="deploy")
-        @strictcli.flag("target", type=str, help="deploy target")
+        @strictcli.flag("target", type=str, help="deploy target", presence="required")
         def deploy(ctx, target):
             pass
 
@@ -565,7 +565,7 @@ class TestMcpConversation:
         app = _build_app()
 
         @app.command("greet", effect="read_only", help="greet someone", payload_schema={})
-        @strictcli.flag("name", type=str, help="person to greet")
+        @strictcli.flag("name", type=str, help="person to greet", presence="required")
         def greet(ctx, name):
             captured["name"] = name
             ctx.payload({"greeting": f"hello {name}"})
@@ -645,7 +645,7 @@ class TestMcpEdgeCases:
         grp2 = grp1.group("storage", help="storage commands")
 
         @grp2.command("upload", effect="read_only", help="upload a file", payload_schema={})
-        @strictcli.flag("bucket", type=str, help="target bucket")
+        @strictcli.flag("bucket", type=str, help="target bucket", presence="required")
         def upload(ctx, bucket):
             ctx.payload({"uploaded_to": bucket})
             return strictcli.outcome()

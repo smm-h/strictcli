@@ -225,7 +225,7 @@ def test_choices_error_echoes_canonical():
     app = strictcli.App(name="testapp", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("rate", type=float, help="the rate", choices=[1.5, 2.5])
+    @strictcli.flag("rate", type=float, help="the rate", choices=[1.5, 2.5], presence="required")
     def cmd(ctx, rate):
         pass
 

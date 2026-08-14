@@ -59,7 +59,7 @@ class TestContextAlwaysInjected:
         captured = {}
 
         @app.command("greet", effect="read_only", help="greet someone")
-        @strictcli.flag("name", type=str, help="person to greet")
+        @strictcli.flag("name", type=str, help="person to greet", presence="required")
         def greet(ctx, name):
             captured["ctx"] = ctx
             captured["name"] = name
@@ -105,7 +105,7 @@ class TestContextAlwaysInjected:
         app = _build_app()
         with pytest.raises(ValueError, match='missing parameter "name"'):
             @app.command("greet", effect="read_only", help="greet")
-            @strictcli.flag("name", type=str, help="name")
+            @strictcli.flag("name", type=str, help="name", presence="required")
             def greet(name):  # noqa: only ctx slot, flag 'name' unbound
                 pass
 
@@ -267,7 +267,7 @@ class TestOutcomeViaCall:
         app = _build_app()
 
         @app.command("compute", effect="read_only", help="compute", payload_schema={})
-        @strictcli.flag("x", type=int, help="value")
+        @strictcli.flag("x", type=int, help="value", presence="required")
         def compute(ctx, x):
             ctx.payload({"squared": x * x})
             return strictcli.outcome()
@@ -278,7 +278,7 @@ class TestOutcomeViaCall:
         app = _build_app()
 
         @app.command("compute", effect="read_only", help="compute")
-        @strictcli.flag("x", type=int, help="value")
+        @strictcli.flag("x", type=int, help="value", presence="required")
         def compute(ctx, x):
             return x * 2
 
@@ -331,7 +331,7 @@ class TestContextWithInvoke:
         captured = {}
 
         @app.command("cmd", effect="read_only", help="test", payload_schema={})
-        @strictcli.flag("x", type=int, help="value")
+        @strictcli.flag("x", type=int, help="value", presence="required")
         def cmd(ctx, x):
             captured["x"] = x
             ctx.payload({"doubled": x * 2})
@@ -345,7 +345,7 @@ class TestContextWithInvoke:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="test")
-        @strictcli.flag("x", type=int, help="value")
+        @strictcli.flag("x", type=int, help="value", presence="required")
         def cmd(ctx, x):
             return x + 1
 

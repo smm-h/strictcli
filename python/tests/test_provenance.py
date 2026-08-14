@@ -55,8 +55,8 @@ def test_mutex_implied_source_not_present():
     """A flag with source=implied should NOT be 'present' for mutex evaluation."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="as-json", type=bool, default=None, help="JSON output"),
-            strictcli.Flag(name="text", type=bool, default=None, help="text output"),
+            strictcli.Flag(name="as-json", type=bool, presence="optional", help="JSON output"),
+            strictcli.Flag(name="text", type=bool, presence="optional", help="text output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -93,8 +93,8 @@ def test_mutex_cli_and_config_both_present():
     """
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="as-json", type=str, default=None, help="JSON output"),
-            strictcli.Flag(name="text", type=str, default=None, help="text output"),
+            strictcli.Flag(name="as-json", type=str, presence="optional", help="JSON output"),
+            strictcli.Flag(name="text", type=str, presence="optional", help="text output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -130,7 +130,7 @@ def test_requires_implied_source_counts_as_present():
     )
     @strictcli.flag("all", type=bool, default=False, help="deploy all")
     @strictcli.flag("loud", type=bool, default=False, help="loud mode")
-    @strictcli.flag("target", type=str, help="deploy target")
+    @strictcli.flag("target", type=str, help="deploy target", presence="required")
     def deploy(ctx, all, loud, target):
         print(f"all={all} loud={loud} target={target}")
 
@@ -155,7 +155,7 @@ def test_requires_default_source_not_present():
             strictcli.Requires(flag="target", depends_on="loud"),
         ],
     )
-    @strictcli.flag("target", type=str, help="deploy target")
+    @strictcli.flag("target", type=str, help="deploy target", presence="required")
     @strictcli.flag("loud", type=bool, default=False, help="loud mode")
     def deploy(ctx, target, loud):
         print(f"target={target} loud={loud}")
@@ -175,8 +175,8 @@ def test_invoke_mutex_provided_kwarg_is_cli_source():
     """Invoke: provided kwargs are SourceCLI, count for mutex."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="as-json", type=str, default=None, help="JSON output"),
-            strictcli.Flag(name="text", type=str, default=None, help="text output"),
+            strictcli.Flag(name="as-json", type=str, presence="optional", help="JSON output"),
+            strictcli.Flag(name="text", type=str, presence="optional", help="text output"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -199,7 +199,7 @@ def test_invoke_defaulted_not_present_for_requires():
             strictcli.Requires(flag="target", depends_on="loud"),
         ],
     )
-    @strictcli.flag("target", type=str, help="deploy target")
+    @strictcli.flag("target", type=str, help="deploy target", presence="required")
     @strictcli.flag("loud", type=bool, default=False, help="loud mode")
     def deploy(ctx, target, loud):
         print(f"target={target} loud={loud}")

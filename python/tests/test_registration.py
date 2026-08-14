@@ -9,7 +9,7 @@ def test_register_command_with_flags_and_args():
     """Register a command successfully with flags and args."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("greet", effect="read_only", help="say hello", args=[strictcli.Arg(name="name", help="who to greet")])
+    @app.command("greet", effect="read_only", help="say hello", args=[strictcli.Arg(name="name", help="who to greet", presence="required")])
     @strictcli.flag("loud", type=bool, default=False, help="shout it")
     def greet(ctx, name, loud):
         pass
@@ -36,13 +36,13 @@ def test_missing_help_on_command():
 def test_missing_help_on_flag():
     """Missing help on flag raises ValueError."""
     with pytest.raises(ValueError, match="must be a non-empty string"):
-        strictcli.Flag(name="oops", type=str, help="")
+        strictcli.Flag(name="oops", type=str, help="", presence="required")
 
 
 def test_missing_help_on_arg():
     """Missing help on arg raises ValueError."""
     with pytest.raises(ValueError, match="must be a non-empty string"):
-        strictcli.Arg(name="oops", help="")
+        strictcli.Arg(name="oops", help="", presence="required")
 
 
 def test_handler_missing_param():

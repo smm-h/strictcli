@@ -57,7 +57,7 @@ def build_app() -> sc.App:
         help="Cut a release",
         effect="mutating",
         grants=[sc.Grant("push", "release engine owns remote refs", sc.PROC_MUTATE)],
-        args=[sc.Arg(name="version", help="The version to release")],
+        args=[sc.Arg(name="version", help="The version to release", presence="required")],
     )
     def release_run(ctx, version):
         # Real-mode idempotency lives in the handler and branches on an

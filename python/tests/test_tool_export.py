@@ -23,7 +23,7 @@ class TestJsonSchemaBasicTypes:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("name", type=str, help="a name")
+        @strictcli.flag("name", type=str, help="a name", presence="required")
         def cmd(ctx, name):
             pass
 
@@ -34,7 +34,7 @@ class TestJsonSchemaBasicTypes:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("count", type=int, help="a count")
+        @strictcli.flag("count", type=int, help="a count", presence="required")
         def cmd(ctx, count):
             pass
 
@@ -45,7 +45,7 @@ class TestJsonSchemaBasicTypes:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("factor", type=float, help="a factor")
+        @strictcli.flag("factor", type=float, help="a factor", presence="required")
         def cmd(ctx, factor):
             pass
 
@@ -67,9 +67,9 @@ class TestJsonSchemaBasicTypes:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="multi-type command")
-        @strictcli.flag("name", type=str, help="string flag")
-        @strictcli.flag("count", type=int, help="integer flag")
-        @strictcli.flag("factor", type=float, help="number flag")
+        @strictcli.flag("name", type=str, help="string flag", presence="required")
+        @strictcli.flag("count", type=int, help="integer flag", presence="required")
+        @strictcli.flag("factor", type=float, help="number flag", presence="required")
         @strictcli.flag("loud", type=bool, default=False, help="boolean flag")
         def cmd(ctx, name, count, factor, loud):
             pass
@@ -91,7 +91,7 @@ class TestJsonSchemaRequired:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("name", type=str, help="required name")
+        @strictcli.flag("name", type=str, help="required name", presence="required")
         def cmd(ctx, name):
             pass
 
@@ -127,7 +127,7 @@ class TestJsonSchemaRequired:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("items", type=list[int], help="item list", unique=False)
+        @strictcli.flag("items", type=list[int], help="item list", unique=False, default=[])
         def cmd(ctx, items):
             pass
 
@@ -139,7 +139,7 @@ class TestJsonSchemaRequired:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("labels", type=dict[str, str], help="label map")
+        @strictcli.flag("labels", type=dict[str, str], help="label map", default={})
         def cmd(ctx, labels):
             pass
 
@@ -150,7 +150,7 @@ class TestJsonSchemaRequired:
         """A required positional arg appears in 'required'."""
         app = _build_app()
 
-        @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="target", help="the target")])
+        @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="target", help="the target", presence="required")])
         def cmd(ctx, target):
             pass
 
@@ -162,7 +162,7 @@ class TestJsonSchemaRequired:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command", args=[
-            strictcli.Arg(name="target", help="the target", required=False),
+            strictcli.Arg(name="target", help="the target", presence="optional"),
         ])
         def cmd(ctx, target):
             pass
@@ -178,7 +178,7 @@ class TestJsonSchemaChoices:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("env", type=str, choices=["dev", "staging", "prod"], help="environment")
+        @strictcli.flag("env", type=str, choices=["dev", "staging", "prod"], help="environment", presence="required")
         def cmd(ctx, env):
             pass
 
@@ -189,7 +189,7 @@ class TestJsonSchemaChoices:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command", args=[
-            strictcli.Arg(name="level", help="log level", choices=["debug", "info", "warn"]),
+            strictcli.Arg(name="level", help="log level", choices=["debug", "info", "warn"], presence="required"),
         ])
         def cmd(ctx, level):
             pass
@@ -201,7 +201,7 @@ class TestJsonSchemaChoices:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("name", type=str, help="a name")
+        @strictcli.flag("name", type=str, help="a name", presence="required")
         def cmd(ctx, name):
             pass
 
@@ -216,7 +216,7 @@ class TestJsonSchemaDescription:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("name", type=str, help="the person's name")
+        @strictcli.flag("name", type=str, help="the person's name", presence="required")
         def cmd(ctx, name):
             pass
 
@@ -227,7 +227,7 @@ class TestJsonSchemaDescription:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command", args=[
-            strictcli.Arg(name="target", help="deployment target"),
+            strictcli.Arg(name="target", help="deployment target", presence="required"),
         ])
         def cmd(ctx, target):
             pass
@@ -243,7 +243,7 @@ class TestJsonSchemaPositionalArgs:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command", args=[
-            strictcli.Arg(name="filename", help="file to process"),
+            strictcli.Arg(name="filename", help="file to process", presence="required"),
         ])
         def cmd(ctx, filename):
             pass
@@ -256,7 +256,7 @@ class TestJsonSchemaPositionalArgs:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command", args=[
-            strictcli.Arg(name="port", help="port number", type=int),
+            strictcli.Arg(name="port", help="port number", type=int, presence="required"),
         ])
         def cmd(ctx, port):
             pass
@@ -269,7 +269,7 @@ class TestJsonSchemaPositionalArgs:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command", args=[
-            strictcli.Arg(name="target", help="the target"),
+            strictcli.Arg(name="target", help="the target", presence="required"),
         ])
         @strictcli.flag("loud", type=bool, default=False, help="loud mode")
         def cmd(ctx, target, loud):
@@ -287,7 +287,7 @@ class TestJsonSchemaListFlag:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("ids", type=list[int], help="list of ids", unique=False)
+        @strictcli.flag("ids", type=list[int], help="list of ids", unique=False, default=[])
         def cmd(ctx, ids):
             pass
 
@@ -300,7 +300,7 @@ class TestJsonSchemaListFlag:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("tags", type=list[str], help="tag list", unique=False)
+        @strictcli.flag("tags", type=list[str], help="tag list", unique=False, default=[])
         def cmd(ctx, tags):
             pass
 
@@ -313,7 +313,7 @@ class TestJsonSchemaListFlag:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("weights", type=list[float], help="weight list", unique=False)
+        @strictcli.flag("weights", type=list[float], help="weight list", unique=False, default=[])
         def cmd(ctx, weights):
             pass
 
@@ -330,7 +330,7 @@ class TestJsonSchemaDictFlag:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("labels", type=dict[str, str], help="label map")
+        @strictcli.flag("labels", type=dict[str, str], help="label map", default={})
         def cmd(ctx, labels):
             pass
 
@@ -343,7 +343,7 @@ class TestJsonSchemaDictFlag:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("counts", type=dict[str, int], help="count map")
+        @strictcli.flag("counts", type=dict[str, int], help="count map", default={})
         def cmd(ctx, counts):
             pass
 
@@ -375,7 +375,7 @@ class TestJsonSchemaNestedPath:
         grp2 = grp1.group("storage", help="storage commands")
 
         @grp2.command("upload", effect="read_only", help="upload a file")
-        @strictcli.flag("bucket", type=str, help="target bucket")
+        @strictcli.flag("bucket", type=str, help="target bucket", presence="required")
         def upload(ctx, bucket):
             pass
 
@@ -433,7 +433,7 @@ class TestJsonSchemaVariadicArg:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command", args=[
-            strictcli.Arg(name="numbers", help="numbers to sum", type=list[int], variadic=True),
+            strictcli.Arg(name="numbers", help="numbers to sum", type=list[int], variadic=True, presence="required"),
         ])
         def cmd(ctx, numbers):
             pass
@@ -451,7 +451,7 @@ class TestJsonSchemaStructure:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("name", type=str, help="a name")
+        @strictcli.flag("name", type=str, help="a name", presence="required")
         def cmd(ctx, name):
             pass
 
@@ -640,7 +640,7 @@ class TestAsToolsToolAttributes:
         app = _build_app()
 
         @app.command("deploy", effect="read_only", help="deploy the app")
-        @strictcli.flag("target", type=str, help="deploy target")
+        @strictcli.flag("target", type=str, help="deploy target", presence="required")
         def deploy(ctx, target):
             pass
 
@@ -764,7 +764,7 @@ class TestRouterTool:
         app = _build_app()
 
         @app.command("greet", effect="read_only", help="greet someone", payload_schema={})
-        @strictcli.flag("name", type=str, help="person to greet")
+        @strictcli.flag("name", type=str, help="person to greet", presence="required")
         def greet(ctx, name):
             captured["name"] = name
             ctx.payload({"greeting": f"hello {name}"})
@@ -825,7 +825,7 @@ class TestToolExecute:
         app = _build_app()
 
         @app.command("deploy", effect="read_only", help="deploy", payload_schema={})
-        @strictcli.flag("target", type=str, help="deploy target")
+        @strictcli.flag("target", type=str, help="deploy target", presence="required")
         @strictcli.flag("count", type=int, default=1, help="instance count")
         def deploy(ctx, target, count):
             captured.update({"target": target, "count": count})
@@ -871,7 +871,7 @@ class TestToolExecuteErrors:
         app = _build_app()
 
         @app.command("deploy", effect="read_only", help="deploy")
-        @strictcli.flag("target", type=str, help="deploy target")
+        @strictcli.flag("target", type=str, help="deploy target", presence="required")
         def deploy(ctx, target):
             pass
 

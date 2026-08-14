@@ -12,7 +12,7 @@ def test_optional_arg_with_default_value_provided():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
+        args=[strictcli.Arg(name="path", help="project directory", default=".")],
     )
     def cmd(ctx, path):
         print(f"path={path}")
@@ -29,7 +29,7 @@ def test_optional_arg_with_default_value_omitted():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
+        args=[strictcli.Arg(name="path", help="project directory", default=".")],
     )
     def cmd(ctx, path):
         print(f"path={path}")
@@ -46,7 +46,7 @@ def test_optional_arg_without_default_omitted():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="path", help="project directory", required=False)],
+        args=[strictcli.Arg(name="path", help="project directory", presence="optional")],
     )
     def cmd(ctx, path=None):
         print(f"path={path}")
@@ -57,9 +57,21 @@ def test_optional_arg_without_default_omitted():
 
 
 def test_required_arg_with_default_raises():
-    """Required arg with default -> ValueError at registration."""
-    with pytest.raises(ValueError, match="required arg cannot have a default"):
-        strictcli.Arg(name="path", help="project directory", required=True, default=".")
+    """Required arg with default -> the two-declared presence error.
+
+    The old `required arg cannot have a default` message is deleted: the
+    two-declared error says the same thing for every pair and names both
+    spellings (contract §12.12).
+    """
+    with pytest.raises(ValueError) as exc:
+        strictcli.Arg(
+            name="path", help="project directory",
+            presence="required", default=".",
+        )
+    assert str(exc.value) == (
+        'Arg "path": presence is declared twice: presence="required" and '
+        "default=. cannot be combined; declare exactly one"
+    )
 
 
 def test_default_shown_in_help():
@@ -69,7 +81,7 @@ def test_default_shown_in_help():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
+        args=[strictcli.Arg(name="path", help="project directory", default=".")],
     )
     def cmd(ctx, path):
         print(f"path={path}")
@@ -87,7 +99,7 @@ def test_optional_arg_without_default_shows_optional_in_help():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="path", help="project directory", required=False)],
+        args=[strictcli.Arg(name="path", help="project directory", presence="optional")],
     )
     def cmd(ctx, path=None):
         print(f"path={path}")
@@ -106,8 +118,8 @@ def test_multiple_args_first_required_second_optional_with_default():
         "cmd",
         effect="read_only", help="a command",
         args=[
-            strictcli.Arg(name="src", help="source file"),
-            strictcli.Arg(name="dst", help="destination", required=False, default="out"),
+            strictcli.Arg(name="src", help="source file", presence="required"),
+            strictcli.Arg(name="dst", help="destination", default="out"),
         ],
     )
     def cmd(ctx, src, dst):
@@ -134,7 +146,7 @@ def test_handler_receives_default_when_arg_omitted():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="path", help="project directory", required=False, default=".")],
+        args=[strictcli.Arg(name="path", help="project directory", default=".")],
     )
     def cmd(ctx, path):
         received["path"] = path
@@ -148,7 +160,7 @@ def test_arg_decorator_with_default():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.arg("path", help="project directory", required=False, default=".")
+    @strictcli.arg("path", help="project directory", default=".")
     def cmd(ctx, path):
         print(f"path={path}")
 
@@ -158,11 +170,18 @@ def test_arg_decorator_with_default():
 
 
 def test_arg_decorator_required_with_default_raises():
-    """The arg() decorator with required=True and default raises ValueError."""
+    """The arg() decorator with presence="required" and a default raises."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
-    with pytest.raises(ValueError, match="required arg cannot have a default"):
+    with pytest.raises(ValueError) as exc:
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.arg("path", help="project directory", required=True, default=".")
+        @strictcli.arg(
+            "path", help="project directory", presence="required", default=".",
+        )
         def cmd(ctx, path):
             pass
+
+    assert str(exc.value) == (
+        'Arg "path": presence is declared twice: presence="required" and '
+        "default=. cannot be combined; declare exactly one"
+    )

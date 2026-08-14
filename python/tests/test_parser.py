@@ -5,6 +5,10 @@ import strictcli
 
 def _make_app_with_str_flag(**flag_kwargs):
     """Helper: app with a single command that has one str flag."""
+    # Presence is mandatory (contract §23); these helpers declare the plain
+    # required case unless the caller states its own.
+    if "default" not in flag_kwargs and "presence" not in flag_kwargs:
+        flag_kwargs["presence"] = "required"
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
@@ -86,7 +90,7 @@ def test_short_flag_with_value():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("target", short="t", type=str, help="the target")
+    @strictcli.flag("target", short="t", type=str, help="the target", presence="required")
     def cmd(ctx, target):
         print(f"target={target}")
 
@@ -115,7 +119,7 @@ def test_double_dash_separator():
     """-- separator stops flag parsing; remaining tokens become positional."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="path", help="a path")])
+    @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="path", help="a path", presence="required")])
     @strictcli.flag("loud", type=bool, default=False, help="be loud")
     def cmd(ctx, loud, path):
         print(f"loud={loud} path={path}")
@@ -133,7 +137,7 @@ def test_positional_args_in_order():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="src", help="source"), strictcli.Arg(name="dst", help="dest")],
+        args=[strictcli.Arg(name="src", help="source", presence="required"), strictcli.Arg(name="dst", help="dest", presence="required")],
     )
     def cmd(ctx, src, dst):
         print(f"src={src} dst={dst}")
@@ -148,7 +152,7 @@ def test_missing_required_positional_arg():
     """Missing required positional arg raises error."""
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="path", help="a path")])
+    @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="path", help="a path", presence="required")])
     def cmd(ctx, path):
         pass
 
@@ -183,7 +187,7 @@ def test_str_flag_value_starting_with_hyphen():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("offset", short="o", type=str, help="the offset")
+    @strictcli.flag("offset", short="o", type=str, help="the offset", presence="required")
     def cmd(ctx, offset):
         print(f"offset={offset}")
 

@@ -126,8 +126,8 @@ def test_str_mutex_one_provided_ok():
     """Mutex with str flags, one provided -> OK."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="file", type=str, help="read from file", default=None),
-            strictcli.Flag(name="url", type=str, help="read from URL", default=None),
+            strictcli.Flag(name="file", type=str, help="read from file", presence="optional"),
+            strictcli.Flag(name="url", type=str, help="read from URL", presence="optional"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -145,8 +145,8 @@ def test_str_mutex_both_provided_error():
     """Mutex with str flags, both provided -> error."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="file", type=str, help="read from file", default=None),
-            strictcli.Flag(name="url", type=str, help="read from URL", default=None),
+            strictcli.Flag(name="file", type=str, help="read from file", presence="optional"),
+            strictcli.Flag(name="url", type=str, help="read from URL", presence="optional"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -172,7 +172,7 @@ def test_mixed_type_mutex():
     mg = strictcli.MutexGroup(
         flags=[
             strictcli.Flag(name="interactive", type=bool, default=False, help="interactive mode"),
-            strictcli.Flag(name="script", type=str, help="script file", default=None),
+            strictcli.Flag(name="script", type=str, help="script file", presence="optional"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -256,11 +256,11 @@ def test_mutex_env_sets_one_cli_sets_another_ok(monkeypatch):
     mg = strictcli.MutexGroup(
         flags=[
             strictcli.Flag(
-                name="file", type=str, help="read from file", default=None,
+                name="file", type=str, help="read from file", presence="optional",
                 env="TEST_FILE", prefixed=False,
             ),
             strictcli.Flag(
-                name="url", type=str, help="read from URL", default=None,
+                name="url", type=str, help="read from URL", presence="optional",
                 env="TEST_URL", prefixed=False,
             ),
         ],
@@ -286,11 +286,11 @@ def test_mutex_env_sets_one_only_is_error(monkeypatch):
     mg = strictcli.MutexGroup(
         flags=[
             strictcli.Flag(
-                name="file", type=str, help="read from file", default=None,
+                name="file", type=str, help="read from file", presence="optional",
                 env="TEST_FILE2", prefixed=False,
             ),
             strictcli.Flag(
-                name="url", type=str, help="read from URL", default=None,
+                name="url", type=str, help="read from URL", presence="optional",
                 env="TEST_URL2", prefixed=False,
             ),
         ],
@@ -313,8 +313,8 @@ def test_mutex_config_value_does_not_elect(tmp_path, monkeypatch):
     cfg.write_text('{"file": "from-config.txt"}\n')
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="file", type=str, help="read from file", default=None),
-            strictcli.Flag(name="url", type=str, help="read from URL", default=None),
+            strictcli.Flag(name="file", type=str, help="read from file", presence="optional"),
+            strictcli.Flag(name="url", type=str, help="read from URL", presence="optional"),
         ],
     )
     app = strictcli.App(
@@ -344,14 +344,14 @@ def _election_app():
     """App with one mixed mutex group: str + negatable bool + negatable bool."""
     mg = strictcli.MutexGroup(
         flags=[
-            strictcli.Flag(name="profile", type=str, help="a profile", default=None),
+            strictcli.Flag(name="profile", type=str, help="a profile", presence="optional"),
             strictcli.Flag(
                 name="all-profiles", type=bool, negatable=True,
-                help="every profile", default=None,
+                help="every profile", presence="optional",
             ),
             strictcli.Flag(
                 name="current-profile", type=bool, negatable=True,
-                help="the current profile", default=None,
+                help="the current profile", presence="optional",
             ),
         ],
     )

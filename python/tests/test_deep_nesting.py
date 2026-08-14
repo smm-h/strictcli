@@ -16,7 +16,7 @@ def _make_3level_app():
         print("listing zones")
 
     @zone.command("create", effect="read_only", help="create a zone")
-    @strictcli.flag("name", type=str, help="zone name")
+    @strictcli.flag("name", type=str, help="zone name", presence="required")
     def create_zone(ctx, name):
         print(f"creating zone {name}")
 

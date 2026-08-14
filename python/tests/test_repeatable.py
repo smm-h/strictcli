@@ -7,6 +7,11 @@ import strictcli
 
 def _make_app_with_repeatable(**flag_kwargs):
     """Helper: app with a single command that has one repeatable flag."""
+    # Presence is mandatory (contract §23); a repeatable flag no longer gets a
+    # silent [], so these helpers declare the empty-list default explicitly
+    # unless the caller states its own.
+    if "default" not in flag_kwargs and "presence" not in flag_kwargs:
+        flag_kwargs["default"] = []
     flag_kwargs.setdefault("unique", False)
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
@@ -47,7 +52,7 @@ def test_repeatable_with_type_int():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("port", type=int, help="a port", repeatable=True, unique=False)
+    @strictcli.flag("port", type=int, help="a port", repeatable=True, unique=False, default=[])
     def cmd(ctx, port):
         print(f"port={port!r}")
 
@@ -79,7 +84,7 @@ def test_repeatable_bad_int_value():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("port", type=int, help="a port", repeatable=True, unique=False)
+    @strictcli.flag("port", type=int, help="a port", repeatable=True, unique=False, default=[])
     def cmd(ctx, port):
         print(f"port={port!r}")
 
@@ -93,7 +98,7 @@ def test_repeatable_with_bool_raises():
     """repeatable=True with type=bool raises ValueError at registration."""
     with pytest.raises(ValueError, match="repeatable is incompatible with type=bool"):
         strictcli.Flag(
-            name="loud", type=bool, help="be loud", repeatable=True,
+            name="loud", type=bool, help="be loud", repeatable=True, default=[],
         )
 
 
@@ -101,7 +106,7 @@ def test_unique_requires_repeatable():
     """unique=True on a non-repeatable flag raises ValueError."""
     with pytest.raises(ValueError, match='unique requires repeatable=True'):
         strictcli.Flag(
-            name="tag", type=str, help="a tag", unique=True,
+            name="tag", type=str, help="a tag", unique=True, presence="required",
         )
 
 
@@ -109,7 +114,7 @@ def test_unique_false_requires_repeatable():
     """unique=False on a non-repeatable flag raises ValueError."""
     with pytest.raises(ValueError, match='unique requires repeatable=True'):
         strictcli.Flag(
-            name="tag", type=str, help="a tag", unique=False,
+            name="tag", type=str, help="a tag", unique=False, presence="required",
         )
 
 
@@ -120,7 +125,7 @@ def test_repeatable_requires_explicit_unique():
         match='repeatable requires explicit unique',
     ):
         strictcli.Flag(
-            name="tag", type=str, help="a tag", repeatable=True,
+            name="tag", type=str, help="a tag", repeatable=True, default=[],
         )
 
 
@@ -139,7 +144,7 @@ def test_repeatable_with_env_var(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "record", help="a record", repeatable=True, unique=False,
-        env="MYAPP_RECORD", env_separator=",",
+        env="MYAPP_RECORD", env_separator=",", default=[],
     )
     def cmd(ctx, record):
         print(f"record={record!r}")
@@ -198,7 +203,7 @@ def test_repeatable_env_var_with_type_int(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "port", type=int, help="a port", repeatable=True, unique=False,
-        env="MYAPP_PORT", env_separator=",",
+        env="MYAPP_PORT", env_separator=",", default=[],
     )
     def cmd(ctx, port):
         print(f"port={port!r}")
@@ -214,7 +219,7 @@ def test_env_separator_requires_repeatable():
     with pytest.raises(ValueError, match='env_separator requires repeatable=True'):
         strictcli.Flag(
             name="tag", type=str, help="a tag",
-            env="MYAPP_TAG", env_separator=",",
+            env="MYAPP_TAG", env_separator=",", presence="required",
         )
 
 
@@ -223,7 +228,7 @@ def test_env_separator_requires_env():
     with pytest.raises(ValueError, match='env_separator requires env'):
         strictcli.Flag(
             name="tag", type=str, help="a tag",
-            repeatable=True, unique=False, env_separator=",",
+            repeatable=True, unique=False, env_separator=",", default=[],
         )
 
 
@@ -235,7 +240,7 @@ def test_repeatable_env_requires_separator():
     ):
         strictcli.Flag(
             name="tag", type=str, help="a tag",
-            repeatable=True, unique=False, env="MYAPP_TAG",
+            repeatable=True, unique=False, env="MYAPP_TAG", default=[],
         )
 
 
@@ -244,7 +249,7 @@ def test_env_separator_must_be_single_char():
     with pytest.raises(ValueError, match='env_separator must be a single character'):
         strictcli.Flag(
             name="tag", type=str, help="a tag",
-            repeatable=True, unique=False, env="MYAPP_TAG", env_separator="::",
+            repeatable=True, unique=False, env="MYAPP_TAG", env_separator="::", default=[],
         )
 
 
@@ -253,7 +258,7 @@ def test_env_separator_cannot_be_backslash():
     with pytest.raises(ValueError, match='env_separator cannot be a backslash'):
         strictcli.Flag(
             name="tag", type=str, help="a tag",
-            repeatable=True, unique=False, env="MYAPP_TAG", env_separator="\\",
+            repeatable=True, unique=False, env="MYAPP_TAG", env_separator="\\", default=[],
         )
 
 
@@ -264,7 +269,7 @@ def test_env_separator_shown_in_help():
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tags", help="tags to apply", repeatable=True, unique=False,
-        env="MY_TAGS", env_separator=",",
+        env="MY_TAGS", env_separator=",", default=[],
     )
     def cmd(ctx, tags):
         print(f"tags={tags!r}")
@@ -284,7 +289,7 @@ def test_env_separator_splits_value(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=False,
-        env="TAGS", env_separator=",",
+        env="TAGS", env_separator=",", default=[],
     )
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
@@ -302,7 +307,7 @@ def test_env_separator_escaped_separator(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=False,
-        env="TAGS", env_separator=",",
+        env="TAGS", env_separator=",", default=[],
     )
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
@@ -320,7 +325,7 @@ def test_env_separator_single_value(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=False,
-        env="TAGS", env_separator=",",
+        env="TAGS", env_separator=",", default=[],
     )
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
@@ -338,7 +343,7 @@ def test_env_separator_int_coercion(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "count", type=int, help="a count", repeatable=True, unique=False,
-        env="COUNTS", env_separator=",",
+        env="COUNTS", env_separator=",", default=[],
     )
     def cmd(ctx, count):
         print(f"count={count!r}")
@@ -356,7 +361,7 @@ def test_env_separator_int_coercion_error(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "count", type=int, help="a count", repeatable=True, unique=False,
-        env="COUNTS", env_separator=",",
+        env="COUNTS", env_separator=",", default=[],
     )
     def cmd(ctx, count):
         print(f"count={count!r}")
@@ -374,7 +379,7 @@ def test_env_separator_unique_duplicate_error(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=True,
-        env="TAGS", env_separator=",",
+        env="TAGS", env_separator=",", default=[],
     )
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
@@ -392,7 +397,7 @@ def test_env_separator_unique_no_duplicate(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=True,
-        env="TAGS", env_separator=",",
+        env="TAGS", env_separator=",", default=[],
     )
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
@@ -410,7 +415,7 @@ def test_env_separator_cli_overrides_env(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=False,
-        env="TAGS", env_separator=",",
+        env="TAGS", env_separator=",", default=[],
     )
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
@@ -428,7 +433,7 @@ def test_env_separator_colon_separator(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "path", help="a path", repeatable=True, unique=False,
-        env="PATHS", env_separator=":",
+        env="PATHS", env_separator=":", default=[],
     )
     def cmd(ctx, path):
         print(f"path={path!r}")
@@ -449,7 +454,7 @@ def test_env_separator_at_prefix_per_element(monkeypatch, tmp_path):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "tag", help="a tag", repeatable=True, unique=False,
-        env="TAGS", env_separator=",",
+        env="TAGS", env_separator=",", default=[],
     )
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
@@ -467,7 +472,7 @@ def test_env_separator_global_flag(monkeypatch):
         flags=[
             strictcli.Flag(
                 name="tag", type=str, help="a tag", repeatable=True,
-                unique=False, env="TAGS", env_separator=",",
+                unique=False, env="TAGS", env_separator=",", default=[],
             ),
         ],
     )
@@ -489,7 +494,7 @@ def test_env_separator_float_coercion(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "rate", type=float, help="a rate", repeatable=True, unique=False,
-        env="RATES", env_separator=",",
+        env="RATES", env_separator=",", default=[],
     )
     def cmd(ctx, rate):
         print(f"rate={rate!r}")
@@ -507,7 +512,7 @@ def test_env_separator_float_coercion_error(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "rate", type=float, help="a rate", repeatable=True, unique=False,
-        env="RATES", env_separator=",",
+        env="RATES", env_separator=",", default=[],
     )
     def cmd(ctx, rate):
         print(f"rate={rate!r}")
@@ -525,7 +530,7 @@ def test_env_separator_float_nan_error(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "rate", type=float, help="a rate", repeatable=True, unique=False,
-        env="RATES", env_separator=",",
+        env="RATES", env_separator=",", default=[],
     )
     def cmd(ctx, rate):
         print(f"rate={rate!r}")
@@ -545,13 +550,12 @@ def test_repeatable_default_must_be_list():
         _make_app_with_repeatable(type=str, default="not a list")
 
 
-def test_repeatable_default_empty_list_error():
-    """Repeatable flag with explicit default=[] raises ValueError."""
-    with pytest.raises(
-        ValueError,
-        match='Flag "record": explicit empty default is redundant for repeatable flags, omit the default',
-    ):
-        _make_app_with_repeatable(type=str, default=[])
+def test_repeatable_default_empty_list_is_a_declaration():
+    """An explicit `default=[]` is legal and is what an empty list is declared with."""
+    app = _make_app_with_repeatable(type=str, default=[])
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "record=[]" in r.stdout
 
 
 def test_repeatable_default_wrong_element_type_str():
@@ -613,12 +617,20 @@ def test_repeatable_default_shown_in_help():
     assert "[default: x, y]" in r.stdout
 
 
-def test_repeatable_no_default_not_in_help():
-    """Repeatable flag with no explicit default shows no default in help."""
-    app = _make_app_with_repeatable(type=str)
+def test_repeatable_empty_default_renders_in_help():
+    """A declared empty collection renders `[default: []]` (contract §23.8)."""
+    app = _make_app_with_repeatable(type=str, default=[])
     r = app.test(["cmd", "--help"])
     assert r.exit_code == 0
-    assert "[default" not in r.stdout
+    assert "[default: []]" in r.stdout
+
+
+def test_repeatable_optional_renders_in_help():
+    """A repeatable flag can also declare optional, and renders `[optional]`."""
+    app = _make_app_with_repeatable(type=str, presence="optional")
+    r = app.test(["cmd", "--help"])
+    assert r.exit_code == 0
+    assert "[optional]" in r.stdout
 
 
 def test_repeatable_default_int_in_help():

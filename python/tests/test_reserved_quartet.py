@@ -106,7 +106,7 @@ class TestReservedNameBan:
 
     def test_arg_names_are_unaffected(self):
         """A positional arg has no `--` spelling, so the ban does not apply."""
-        a = strictcli.Arg(name="verbose", help="a positional named verbose")
+        a = strictcli.Arg(name="verbose", help="a positional named verbose", presence="required")
         assert a.name == "verbose"
 
 
@@ -227,7 +227,7 @@ class TestDelivery:
         app = strictcli.App(name="app", version="1.0.0", help="app")
 
         @app.command("run", effect="read_only", help="run",
-                     args=[strictcli.Arg(name="name", help="a positional")], payload_schema={})
+                     args=[strictcli.Arg(name="name", help="a positional", presence="required")], payload_schema={})
         def _run(ctx, name):
             ctx.payload({"name": name, "quiet": ctx.quiet})
             return strictcli.outcome()
@@ -242,7 +242,7 @@ class TestDelivery:
 
         @app.command("run", effect="read_only", help="run",
                      args=[strictcli.Arg(name="rest", help="trailing args",
-                                         variadic=True)], payload_schema={})
+                                         variadic=True, presence="required")], payload_schema={})
         def _run(ctx, rest):
             ctx.payload({"rest": rest, "dry_run": ctx.dry_run})
             return strictcli.outcome()

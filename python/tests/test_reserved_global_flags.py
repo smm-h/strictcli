@@ -15,7 +15,7 @@ class TestReservedGlobalFlagNames:
                 name="testapp",
                 version="1.0.0",
                 help="test",
-                flags=[strictcli.Flag(name=name, type=str, help="test flag")],
+                flags=[strictcli.Flag(name=name, type=str, help="test flag", presence="required")],
             )
 
     @pytest.mark.parametrize("short", ["h", "v"])
@@ -27,7 +27,7 @@ class TestReservedGlobalFlagNames:
                 help="test",
                 flags=[
                     strictcli.Flag(
-                        name="custom", type=str, help="test flag", short=short
+                        name="custom", type=str, help="test flag", short=short, presence="required"
                     )
                 ],
             )
@@ -42,7 +42,7 @@ class TestReservedGlobalFlagNames:
                 strictcli.Flag(
                     name="loud", type=bool, help="enable loud output", default=False
                 ),
-                strictcli.Flag(name="output", type=str, help="output file"),
+                strictcli.Flag(name="output", type=str, help="output file", presence="required"),
             ],
         )
         assert len(app.flags) == 2

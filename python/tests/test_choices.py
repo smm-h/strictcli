@@ -7,6 +7,10 @@ import strictcli
 
 def _make_app_with_choices(**flag_kwargs):
     """Helper: app with a single command that has one flag with choices."""
+    # Presence is mandatory (contract §23); these helpers declare the plain
+    # required case unless the caller states its own.
+    if "default" not in flag_kwargs and "presence" not in flag_kwargs:
+        flag_kwargs["presence"] = "required"
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
@@ -49,7 +53,7 @@ def test_choices_with_int_type():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("port", type=int, help="the port", choices=[80, 443, 8080])
+    @strictcli.flag("port", type=int, help="the port", choices=[80, 443, 8080], presence="required")
     def cmd(ctx, port):
         print(f"port={port}")
 
@@ -63,7 +67,7 @@ def test_invalid_int_choice_rejected():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("port", type=int, help="the port", choices=[80, 443, 8080])
+    @strictcli.flag("port", type=int, help="the port", choices=[80, 443, 8080], presence="required")
     def cmd(ctx, port):
         print(f"port={port}")
 
@@ -127,7 +131,7 @@ def test_choices_with_bool_raises():
     with pytest.raises(ValueError, match="incompatible with type=bool"):
         strictcli.Flag(
             name="loud", type=bool, help="be loud",
-            choices=[True, False],
+            choices=[True, False], presence="required",
         )
 
 
@@ -136,5 +140,5 @@ def test_empty_choices_raises():
     with pytest.raises(ValueError, match="non-empty list"):
         strictcli.Flag(
             name="format", type=str, help="output format",
-            choices=[],
+            choices=[], presence="required",
         )

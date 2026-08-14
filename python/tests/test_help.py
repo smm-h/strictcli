@@ -15,7 +15,7 @@ def _make_full_app():
     @app.command(
         "build",
         effect="read_only", help="build the project",
-        args=[strictcli.Arg(name="target", help="build target")],
+        args=[strictcli.Arg(name="target", help="build target", presence="required")],
     )
     @strictcli.flag("output", short="o", type=str, help="output directory", default="dist")
     def build(ctx, target, output):
@@ -28,7 +28,7 @@ def _make_full_app():
         pass
 
     @grp.command("set", effect="read_only", help="set a config value")
-    @strictcli.flag("key", type=str, help="config key")
+    @strictcli.flag("key", type=str, help="config key", presence="required")
     def set_(ctx, key):
         pass
 
@@ -151,7 +151,7 @@ def test_help_not_after_separator():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="items", help="items to process", variadic=True)],
+        args=[strictcli.Arg(name="items", help="items to process", variadic=True, presence="required")],
     )
     def cmd(ctx, items):
         print(",".join(items))

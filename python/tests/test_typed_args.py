@@ -12,61 +12,61 @@ import strictcli
 
 def test_arg_type_defaults_to_str():
     """Arg with no explicit type defaults to str."""
-    a = strictcli.Arg(name="x", help="a value")
+    a = strictcli.Arg(name="x", help="a value", presence="required")
     assert a.type is str
 
 
 def test_arg_type_int():
     """Arg can be declared with type=int."""
-    a = strictcli.Arg(name="x", help="a value", type=int)
+    a = strictcli.Arg(name="x", help="a value", type=int, presence="required")
     assert a.type is int
 
 
 def test_arg_type_float():
     """Arg can be declared with type=float."""
-    a = strictcli.Arg(name="x", help="a value", type=float)
+    a = strictcli.Arg(name="x", help="a value", type=float, presence="required")
     assert a.type is float
 
 
 def test_arg_type_bool():
     """Arg can be declared with type=bool."""
-    a = strictcli.Arg(name="x", help="a value", type=bool)
+    a = strictcli.Arg(name="x", help="a value", type=bool, presence="required")
     assert a.type is bool
 
 
 def test_arg_invalid_type_raises():
     """Arg with unsupported type raises ValueError at registration."""
     with pytest.raises(ValueError, match="Arg.type must be str, bool, int, or float"):
-        strictcli.Arg(name="x", help="a value", type=list)
+        strictcli.Arg(name="x", help="a value", type=list, presence="required")
 
 
 def test_arg_int_default_type_validated():
     """type=int requires an int default."""
     with pytest.raises(ValueError, match="type=int requires an int default"):
-        strictcli.Arg(name="x", help="a value", type=int, required=False, default="5")
+        strictcli.Arg(name="x", help="a value", type=int, default="5")
 
 
 def test_arg_float_default_type_validated():
     """type=float requires a float default."""
     with pytest.raises(ValueError, match="type=float requires a float default"):
-        strictcli.Arg(name="x", help="a value", type=float, required=False, default="5.0")
+        strictcli.Arg(name="x", help="a value", type=float, default="5.0")
 
 
 def test_arg_bool_default_type_validated():
     """type=bool requires a bool default."""
     with pytest.raises(ValueError, match="type=bool requires a bool default"):
-        strictcli.Arg(name="x", help="a value", type=bool, required=False, default="true")
+        strictcli.Arg(name="x", help="a value", type=bool, default="true")
 
 
 def test_arg_int_default_rejects_bool():
     """type=int rejects bool as default (bool is subclass of int in Python)."""
     with pytest.raises(ValueError, match="type=int requires an int default"):
-        strictcli.Arg(name="x", help="a value", type=int, required=False, default=True)
+        strictcli.Arg(name="x", help="a value", type=int, default=True)
 
 
 def test_arg_float_default_accepts_int():
     """type=float accepts int default (int is valid for float)."""
-    a = strictcli.Arg(name="x", help="a value", type=float, required=False, default=5)
+    a = strictcli.Arg(name="x", help="a value", type=float, default=5)
     assert a.default == 5
 
 
@@ -82,7 +82,7 @@ def test_int_arg_valid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="count", help="a count", type=int)],
+        args=[strictcli.Arg(name="count", help="a count", type=int, presence="required")],
     )
     def cmd(ctx, count):
         print(f"count={count} type={type(count).__name__}")
@@ -99,7 +99,7 @@ def test_int_arg_invalid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="count", help="a count", type=int)],
+        args=[strictcli.Arg(name="count", help="a count", type=int, presence="required")],
     )
     def cmd(ctx, count):
         pass
@@ -116,7 +116,7 @@ def test_int_arg_rejects_float_string():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="count", help="a count", type=int)],
+        args=[strictcli.Arg(name="count", help="a count", type=int, presence="required")],
     )
     def cmd(ctx, count):
         pass
@@ -133,7 +133,7 @@ def test_int_arg_rejects_underscore_separators():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="count", help="a count", type=int)],
+        args=[strictcli.Arg(name="count", help="a count", type=int, presence="required")],
     )
     def cmd(ctx, count):
         pass
@@ -150,7 +150,7 @@ def test_int_arg_negative():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="offset", help="offset value", type=int)],
+        args=[strictcli.Arg(name="offset", help="offset value", type=int, presence="required")],
     )
     def cmd(ctx, offset):
         print(f"offset={offset} type={type(offset).__name__}")
@@ -167,7 +167,7 @@ def test_float_arg_valid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="ratio", help="a ratio", type=float)],
+        args=[strictcli.Arg(name="ratio", help="a ratio", type=float, presence="required")],
     )
     def cmd(ctx, ratio):
         print(f"ratio={ratio} type={type(ratio).__name__}")
@@ -184,7 +184,7 @@ def test_float_arg_invalid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="ratio", help="a ratio", type=float)],
+        args=[strictcli.Arg(name="ratio", help="a ratio", type=float, presence="required")],
     )
     def cmd(ctx, ratio):
         pass
@@ -201,7 +201,7 @@ def test_float_arg_rejects_nan():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="ratio", help="a ratio", type=float)],
+        args=[strictcli.Arg(name="ratio", help="a ratio", type=float, presence="required")],
     )
     def cmd(ctx, ratio):
         pass
@@ -218,7 +218,7 @@ def test_float_arg_rejects_inf():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="ratio", help="a ratio", type=float)],
+        args=[strictcli.Arg(name="ratio", help="a ratio", type=float, presence="required")],
     )
     def cmd(ctx, ratio):
         pass
@@ -235,7 +235,7 @@ def test_float_arg_rejects_overflow_to_infinity():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="ratio", help="a ratio", type=float)],
+        args=[strictcli.Arg(name="ratio", help="a ratio", type=float, presence="required")],
     )
     def cmd(ctx, ratio):
         pass
@@ -252,7 +252,7 @@ def test_float_arg_integer_string():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="ratio", help="a ratio", type=float)],
+        args=[strictcli.Arg(name="ratio", help="a ratio", type=float, presence="required")],
     )
     def cmd(ctx, ratio):
         print(f"ratio={ratio} type={type(ratio).__name__}")
@@ -269,7 +269,7 @@ def test_bool_arg_valid_true():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="flag", help="a flag", type=bool)],
+        args=[strictcli.Arg(name="flag", help="a flag", type=bool, presence="required")],
     )
     def cmd(ctx, flag):
         print(f"flag={flag} type={type(flag).__name__}")
@@ -287,7 +287,7 @@ def test_bool_arg_valid_false():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="flag", help="a flag", type=bool)],
+        args=[strictcli.Arg(name="flag", help="a flag", type=bool, presence="required")],
     )
     def cmd(ctx, flag):
         print(f"flag={flag} type={type(flag).__name__}")
@@ -305,7 +305,7 @@ def test_bool_arg_invalid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="flag", help="a flag", type=bool)],
+        args=[strictcli.Arg(name="flag", help="a flag", type=bool, presence="required")],
     )
     def cmd(ctx, flag):
         pass
@@ -322,7 +322,7 @@ def test_str_arg_backward_compat():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="name", help="a name")],
+        args=[strictcli.Arg(name="name", help="a name", presence="required")],
     )
     def cmd(ctx, name):
         print(f"name={name} type={type(name).__name__}")
@@ -339,7 +339,7 @@ def test_str_arg_explicit_type():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="name", help="a name", type=str)],
+        args=[strictcli.Arg(name="name", help="a name", type=str, presence="required")],
     )
     def cmd(ctx, name):
         print(f"name={name} type={type(name).__name__}")
@@ -361,7 +361,7 @@ def test_variadic_int_args():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="numbers", help="numbers", type=int, variadic=True)],
+        args=[strictcli.Arg(name="numbers", help="numbers", type=int, variadic=True, presence="required")],
     )
     def cmd(ctx, numbers):
         total = sum(numbers)
@@ -381,7 +381,7 @@ def test_variadic_int_args_invalid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="numbers", help="numbers", type=int, variadic=True)],
+        args=[strictcli.Arg(name="numbers", help="numbers", type=int, variadic=True, presence="required")],
     )
     def cmd(ctx, numbers):
         pass
@@ -398,7 +398,7 @@ def test_variadic_float_args():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="values", help="values", type=float, variadic=True)],
+        args=[strictcli.Arg(name="values", help="values", type=float, variadic=True, presence="required")],
     )
     def cmd(ctx, values):
         types = [type(v).__name__ for v in values]
@@ -421,7 +421,7 @@ def test_str_arg_choices_valid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="color", help="pick a color", choices=["red", "blue", "green"])],
+        args=[strictcli.Arg(name="color", help="pick a color", choices=["red", "blue", "green"], presence="required")],
     )
     def cmd(ctx, color):
         print(f"color={color}")
@@ -438,7 +438,7 @@ def test_str_arg_choices_invalid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="color", help="pick a color", choices=["red", "blue", "green"])],
+        args=[strictcli.Arg(name="color", help="pick a color", choices=["red", "blue", "green"], presence="required")],
     )
     def cmd(ctx, color):
         pass
@@ -456,7 +456,7 @@ def test_int_arg_choices_valid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[1, 2, 3])],
+        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[1, 2, 3], presence="required")],
     )
     def cmd(ctx, level):
         print(f"level={level} type={type(level).__name__}")
@@ -473,7 +473,7 @@ def test_int_arg_choices_invalid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[1, 2, 3])],
+        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[1, 2, 3], presence="required")],
     )
     def cmd(ctx, level):
         pass
@@ -487,26 +487,26 @@ def test_int_arg_choices_invalid():
 def test_choices_registration_type_mismatch():
     """Choices items must match the arg's type at registration."""
     with pytest.raises(ValueError, match="choice 'x' is not of type int"):
-        strictcli.Arg(name="level", help="pick", type=int, choices=["x", "y"])
+        strictcli.Arg(name="level", help="pick", type=int, choices=["x", "y"], presence="required")
 
 
 def test_choices_bool_incompatible():
     """Choices is incompatible with type=bool."""
     with pytest.raises(ValueError, match="choices is incompatible with type=bool"):
-        strictcli.Arg(name="flag", help="pick", type=bool, choices=[True, False])
+        strictcli.Arg(name="flag", help="pick", type=bool, choices=[True, False], presence="required")
 
 
 def test_choices_empty_list():
     """Empty choices list raises ValueError."""
     with pytest.raises(ValueError, match="choices must be a non-empty list"):
-        strictcli.Arg(name="x", help="pick", choices=[])
+        strictcli.Arg(name="x", help="pick", choices=[], presence="required")
 
 
 def test_choices_default_must_be_in_choices():
     """Default value must be in choices if both are set."""
     with pytest.raises(ValueError, match="default .* is not in choices"):
         strictcli.Arg(
-            name="x", help="pick", required=False,
+            name="x", help="pick", 
             default="yellow", choices=["red", "blue"],
         )
 
@@ -514,7 +514,7 @@ def test_choices_default_must_be_in_choices():
 def test_choices_default_valid():
     """Default value in choices is accepted."""
     a = strictcli.Arg(
-        name="x", help="pick", required=False,
+        name="x", help="pick", 
         default="red", choices=["red", "blue"],
     )
     assert a.default == "red"
@@ -529,7 +529,7 @@ def test_variadic_int_arg_choices():
         effect="read_only", help="a command",
         args=[strictcli.Arg(
             name="levels", help="pick levels", type=int,
-            choices=[1, 2, 3], variadic=True,
+            choices=[1, 2, 3], variadic=True, presence="required",
         )],
     )
     def cmd(ctx, levels):
@@ -557,7 +557,7 @@ def test_invoke_int_arg():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="count", help="a count", type=int)],
+        args=[strictcli.Arg(name="count", help="a count", type=int, presence="required")],
     )
     def cmd(ctx, count):
         captured["count"] = count
@@ -582,7 +582,7 @@ def test_invoke_float_arg():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="ratio", help="a ratio", type=float)],
+        args=[strictcli.Arg(name="ratio", help="a ratio", type=float, presence="required")],
     )
     def cmd(ctx, ratio):
         captured["ratio"] = ratio
@@ -607,7 +607,7 @@ def test_invoke_bool_arg():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="flag", help="a flag", type=bool)],
+        args=[strictcli.Arg(name="flag", help="a flag", type=bool, presence="required")],
     )
     def cmd(ctx, flag):
         captured["flag"] = flag
@@ -632,7 +632,7 @@ def test_invoke_variadic_int_args():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="numbers", help="numbers", type=int, variadic=True)],
+        args=[strictcli.Arg(name="numbers", help="numbers", type=int, variadic=True, presence="required")],
     )
     def cmd(ctx, numbers):
         captured["numbers"] = numbers
@@ -657,7 +657,7 @@ def test_invoke_str_arg_backward_compat():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="name", help="a name")],
+        args=[strictcli.Arg(name="name", help="a name", presence="required")],
     )
     def cmd(ctx, name):
         captured["name"] = name
@@ -676,7 +676,7 @@ def test_invoke_int_arg_with_choices():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[1, 2, 3])],
+        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[1, 2, 3], presence="required")],
     )
     def cmd(ctx, level):
         captured["level"] = level
@@ -700,7 +700,7 @@ def test_int_arg_error_matches_flag_pattern():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="count", help="a count", type=int)],
+        args=[strictcli.Arg(name="count", help="a count", type=int, presence="required")],
     )
     def cmd(ctx, count):
         pass
@@ -719,7 +719,7 @@ def test_float_arg_error_matches_flag_pattern():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="ratio", help="a ratio", type=float)],
+        args=[strictcli.Arg(name="ratio", help="a ratio", type=float, presence="required")],
     )
     def cmd(ctx, ratio):
         pass
@@ -738,7 +738,7 @@ def test_bool_arg_error_matches_flag_pattern():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="flag", help="a flag", type=bool)],
+        args=[strictcli.Arg(name="flag", help="a flag", type=bool, presence="required")],
     )
     def cmd(ctx, flag):
         pass
@@ -761,7 +761,7 @@ def test_typed_arg_shows_type_in_help():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="count", help="a count", type=int)],
+        args=[strictcli.Arg(name="count", help="a count", type=int, presence="required")],
     )
     def cmd(ctx, count):
         pass
@@ -778,7 +778,7 @@ def test_str_arg_no_type_in_help():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="name", help="a name")],
+        args=[strictcli.Arg(name="name", help="a name", presence="required")],
     )
     def cmd(ctx, name):
         pass
@@ -795,7 +795,7 @@ def test_choices_shown_in_help():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="color", help="pick a color", choices=["red", "blue"])],
+        args=[strictcli.Arg(name="color", help="pick a color", choices=["red", "blue"], presence="required")],
     )
     def cmd(ctx, color):
         pass
@@ -815,7 +815,7 @@ def test_decorator_int_arg():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.arg("count", help="a count", type=int)
+    @strictcli.arg("count", help="a count", type=int, presence="required")
     def cmd(ctx, count):
         print(f"count={count} type={type(count).__name__}")
 
@@ -829,7 +829,7 @@ def test_decorator_arg_with_choices():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.arg("color", help="pick a color", choices=["red", "blue"])
+    @strictcli.arg("color", help="pick a color", choices=["red", "blue"], presence="required")
     def cmd(ctx, color):
         print(f"color={color}")
 
@@ -854,7 +854,7 @@ def test_mixed_typed_arg_and_flags():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="count", help="a count", type=int)],
+        args=[strictcli.Arg(name="count", help="a count", type=int, presence="required")],
     )
     @strictcli.flag("loud", type=bool, default=False, help="loud output")
     def cmd(ctx, count, loud):
@@ -873,7 +873,7 @@ def test_int_arg_with_leading_whitespace():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="count", help="a count", type=int)],
+        args=[strictcli.Arg(name="count", help="a count", type=int, presence="required")],
     )
     def cmd(ctx, count):
         pass

@@ -7,6 +7,10 @@ import strictcli
 
 def _make_app_with_int_flag(**flag_kwargs):
     """Helper: app with a single command that has one int flag."""
+    # Presence is mandatory (contract §23); these helpers declare the plain
+    # required case unless the caller states its own.
+    if "default" not in flag_kwargs and "presence" not in flag_kwargs:
+        flag_kwargs["presence"] = "required"
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
@@ -30,7 +34,7 @@ def test_int_flag_value_is_int():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("port", type=int, help="the port")
+    @strictcli.flag("port", type=int, help="the port", presence="required")
     def cmd(ctx, port):
         print(f"type={type(port).__name__}")
 
@@ -134,7 +138,7 @@ def test_int_flag_negative_value():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("offset", type=int, help="the offset")
+    @strictcli.flag("offset", type=int, help="the offset", presence="required")
     def cmd(ctx, offset):
         print(f"offset={offset}")
 
@@ -162,7 +166,7 @@ def test_int_flag_short_form():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("port", short="p", type=int, help="the port")
+    @strictcli.flag("port", short="p", type=int, help="the port", presence="required")
     def cmd(ctx, port):
         print(f"port={port}")
 

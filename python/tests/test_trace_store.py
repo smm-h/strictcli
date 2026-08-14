@@ -843,7 +843,8 @@ app = sc.App(name="chain", version="9.9.9", help="chain")
 
 @app.command(
     "go", help="go", effect="mutating",
-    args=[sc.Arg(name="depth", type=int, help="how many more children to start")],
+    args=[sc.Arg(name="depth", type=int, help="how many more children to start",
+                 presence="required")],
 )
 def _go(ctx, depth):
     if depth > 0:

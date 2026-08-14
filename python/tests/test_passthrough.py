@@ -167,7 +167,7 @@ class TestPassthroughWithArgsRaisesValueError:
         try:
             @app.command(
                 "exec", effect="read_only", help="run", passthrough=pt,
-                args=[strictcli.Arg(name="target", help="target")],
+                args=[strictcli.Arg(name="target", help="target", presence="required")],
             )
             def exec_cmd(target):
                 pass
@@ -181,7 +181,7 @@ class TestPassthroughWithArgsRaisesValueError:
         app = _build_app()
         try:
             @app.command("exec", effect="read_only", help="run", passthrough=pt)
-            @strictcli.arg("target", help="target")
+            @strictcli.arg("target", help="target", presence="required")
             def exec_cmd(target):
                 pass
             assert False, "should have raised ValueError"

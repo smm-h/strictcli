@@ -10,6 +10,10 @@ def _positive_int(value):
 
 def _make_app_with_validate(**flag_kwargs):
     """Helper: app with a single command that has one flag with validate."""
+    # Presence is mandatory (contract §23); these helpers declare the plain
+    # required case unless the caller states its own.
+    if "default" not in flag_kwargs and "presence" not in flag_kwargs:
+        flag_kwargs["presence"] = "required"
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
@@ -44,7 +48,7 @@ def test_validate_runs_on_env_var(monkeypatch):
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "port", type=int, help="the port",
-        env="MYAPP_PORT", validate=_positive_int,
+        env="MYAPP_PORT", validate=_positive_int, presence="required",
     )
     def cmd(ctx, port):
         print(f"port={port}")
@@ -56,13 +60,33 @@ def test_validate_runs_on_env_var(monkeypatch):
     assert "must be a positive integer" in r.stderr
 
 
-def test_validate_runs_on_default():
-    """Validation runs on default values."""
+def test_validate_never_runs_on_the_declared_default():
+    """Validation runs on a SUPPLIED value, never on the declared default.
+
+    Contract §23.5's validate row: a default is the declaration deciding, and
+    the declaration is not something the invocation asked to have validated.
+    """
     app = _make_app_with_validate(default=-5, validate=_positive_int)
     r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "port=-5" in r.stdout
+
+
+def test_validate_runs_on_a_value_supplied_over_the_default():
+    """The same flag validates the value the invocation supplies."""
+    app = _make_app_with_validate(default=-5, validate=_positive_int)
+    r = app.test(["cmd", "--port", "-1"])
     assert r.exit_code == 1
     assert "--port" in r.stderr
     assert "must be a positive integer" in r.stderr
+
+
+def test_validate_never_runs_on_absence():
+    """An optional flag that received nothing is never validated."""
+    app = _make_app_with_validate(presence="optional", validate=_positive_int)
+    r = app.test(["cmd"])
+    assert r.exit_code == 0
+    assert "port=None" in r.stdout
 
 
 def test_validate_receives_coerced_int():
@@ -92,7 +116,7 @@ def test_validate_runs_after_choices():
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "port", type=int, help="the port",
-        choices=[80, 443], validate=tracking_validator,
+        choices=[80, 443], validate=tracking_validator, presence="required",
     )
     def cmd(ctx, port):
         print(f"port={port}")
@@ -121,7 +145,7 @@ def test_validate_with_str_flag():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("name", help="the name", validate=no_spaces)
+    @strictcli.flag("name", help="the name", validate=no_spaces, presence="required")
     def cmd(ctx, name):
         print(f"name={name}")
 

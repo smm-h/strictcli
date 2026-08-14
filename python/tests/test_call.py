@@ -243,7 +243,7 @@ class TestCallErrorCases:
         app = _build_app()
 
         @app.command("greet", effect="read_only", help="greet")
-        @strictcli.flag("name", type=str, help="name")
+        @strictcli.flag("name", type=str, help="name", presence="required")
         def greet(ctx, name):
             pass
 
@@ -255,7 +255,7 @@ class TestCallErrorCases:
 
         @app.command(
             "deploy", effect="read_only", help="deploy",
-            args=[strictcli.Arg(name="target", help="deploy target")],
+            args=[strictcli.Arg(name="target", help="deploy target", presence="required")],
         )
         def deploy(ctx, target):
             pass
@@ -486,7 +486,7 @@ class TestAcall:
         app = _build_app()
 
         @app.command("greet", effect="read_only", help="greet", payload_schema={})
-        @strictcli.flag("name", type=str, help="person to greet")
+        @strictcli.flag("name", type=str, help="person to greet", presence="required")
         def greet(ctx, name):
             ctx.payload({"greeting": f"hello {name}"})
             return strictcli.outcome()
@@ -545,7 +545,7 @@ class TestBackwardCompat:
         app = _build_app()
 
         @app.command("greet", effect="read_only", help="greet", payload_schema={})
-        @strictcli.flag("name", type=str, help="name")
+        @strictcli.flag("name", type=str, help="name", presence="required")
         def greet(ctx, name):
             ctx.payload({"greeting": f"hello {name}"})
             return strictcli.outcome()

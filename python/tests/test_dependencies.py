@@ -18,8 +18,8 @@ def test_corequired_both_provided_ok():
         "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
-    @strictcli.flag("output", type=str, help="output path", default=None)
-    @strictcli.flag("format", type=str, help="output format", default=None)
+    @strictcli.flag("output", type=str, help="output path", presence="optional")
+    @strictcli.flag("format", type=str, help="output format", presence="optional")
     def cmd(ctx, output, format):
         print(f"output={output} format={format}")
 
@@ -66,8 +66,8 @@ def test_corequired_one_provided_error():
         "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
-    @strictcli.flag("output", type=str, help="output path", default=None)
-    @strictcli.flag("format", type=str, help="output format", default=None)
+    @strictcli.flag("output", type=str, help="output path", presence="optional")
+    @strictcli.flag("format", type=str, help="output format", presence="optional")
     def cmd(ctx, output, format):
         pass
 
@@ -86,8 +86,8 @@ def test_corequired_second_provided_without_first_error():
         "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
-    @strictcli.flag("output", type=str, help="output path", default=None)
-    @strictcli.flag("format", type=str, help="output format", default=None)
+    @strictcli.flag("output", type=str, help="output path", presence="optional")
+    @strictcli.flag("format", type=str, help="output format", presence="optional")
     def cmd(ctx, output, format):
         pass
 
@@ -109,9 +109,9 @@ def test_corequired_env_sets_one_cli_sets_another_ok(monkeypatch):
         "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
-    @strictcli.flag("output", type=str, help="output path", default=None,
+    @strictcli.flag("output", type=str, help="output path", presence="optional",
                     env="TEST_DEP_OUTPUT", prefixed=False)
-    @strictcli.flag("format", type=str, help="output format", default=None,
+    @strictcli.flag("format", type=str, help="output format", presence="optional",
                     env="TEST_DEP_FORMAT", prefixed=False)
     def cmd(ctx, output, format):
         print(f"output={output} format={format}")
@@ -131,9 +131,9 @@ def test_corequired_env_sets_one_not_other_error(monkeypatch):
         "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.CoRequired(flags=["output", "format"])],
     )
-    @strictcli.flag("output", type=str, help="output path", default=None,
+    @strictcli.flag("output", type=str, help="output path", presence="optional",
                     env="TEST_DEP_OUTPUT2", prefixed=False)
-    @strictcli.flag("format", type=str, help="output format", default=None,
+    @strictcli.flag("format", type=str, help="output format", presence="optional",
                     env="TEST_DEP_FORMAT2", prefixed=False)
     def cmd(ctx, output, format):
         pass
@@ -157,8 +157,8 @@ def test_requires_both_provided_ok():
         "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Requires(flag="format", depends_on="output")],
     )
-    @strictcli.flag("output", type=str, help="output path", default=None)
-    @strictcli.flag("format", type=str, help="output format", default=None)
+    @strictcli.flag("output", type=str, help="output path", presence="optional")
+    @strictcli.flag("format", type=str, help="output format", presence="optional")
     def cmd(ctx, output, format):
         print(f"output={output} format={format}")
 
@@ -229,8 +229,8 @@ def test_requires_flag_without_depends_on_error():
         "cmd", effect="read_only", help="a command",
         dependencies=[strictcli.Requires(flag="format", depends_on="output")],
     )
-    @strictcli.flag("output", type=str, help="output path", default=None)
-    @strictcli.flag("format", type=str, help="output format", default=None)
+    @strictcli.flag("output", type=str, help="output path", presence="optional")
+    @strictcli.flag("format", type=str, help="output format", presence="optional")
     def cmd(ctx, output, format):
         pass
 
@@ -256,7 +256,7 @@ def test_corequired_fewer_than_2_flags_error():
             "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.CoRequired(flags=["output"])],
         )
-        @strictcli.flag("output", type=str, help="output path", default=None)
+        @strictcli.flag("output", type=str, help="output path", presence="optional")
         def cmd(ctx, output):
             pass
 
@@ -276,7 +276,7 @@ def test_corequired_unknown_flag_error():
             "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.CoRequired(flags=["output", "nonexistent"])],
         )
-        @strictcli.flag("output", type=str, help="output path", default=None)
+        @strictcli.flag("output", type=str, help="output path", presence="optional")
         def cmd(ctx, output):
             pass
 
@@ -296,7 +296,7 @@ def test_requires_unknown_flag_error():
             "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Requires(flag="format", depends_on="nonexistent")],
         )
-        @strictcli.flag("format", type=str, help="output format", default=None)
+        @strictcli.flag("format", type=str, help="output format", presence="optional")
         def cmd(ctx, format):
             pass
 
@@ -311,7 +311,7 @@ def test_requires_unknown_depends_on_error():
             "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Requires(flag="nonexistent", depends_on="format")],
         )
-        @strictcli.flag("format", type=str, help="output format", default=None)
+        @strictcli.flag("format", type=str, help="output format", presence="optional")
         def cmd(ctx, format):
             pass
 
@@ -331,7 +331,7 @@ def test_requires_same_flag_error():
             "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.Requires(flag="output", depends_on="output")],
         )
-        @strictcli.flag("output", type=str, help="output path", default=None)
+        @strictcli.flag("output", type=str, help="output path", presence="optional")
         def cmd(ctx, output):
             pass
 
@@ -395,7 +395,7 @@ def test_corequired_duplicate_flag_error():
             "cmd", effect="read_only", help="a command",
             dependencies=[strictcli.CoRequired(flags=["output", "output"])],
         )
-        @strictcli.flag("output", type=str, help="output path", default=None)
+        @strictcli.flag("output", type=str, help="output path", presence="optional")
         def cmd(ctx, output):
             pass
 
@@ -649,7 +649,7 @@ def test_implies_with_requires_interaction():
     )
     @strictcli.flag("fast", type=bool, default=False, help="fast mode")
     @strictcli.flag("embeddings", type=bool, default=False, help="use embeddings")
-    @strictcli.flag("output", type=str, help="output path", default=None)
+    @strictcli.flag("output", type=str, help="output path", presence="optional")
     def cmd(ctx, fast, embeddings, output):
         print(f"fast={fast} embeddings={embeddings} output={output}")
 

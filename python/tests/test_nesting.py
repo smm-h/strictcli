@@ -13,8 +13,8 @@ def _make_group_app():
         print("showing config")
 
     @grp.command("set", effect="read_only", help="set a config value")
-    @strictcli.flag("key", type=str, help="config key")
-    @strictcli.flag("value", type=str, help="config value")
+    @strictcli.flag("key", type=str, help="config key", presence="required")
+    @strictcli.flag("value", type=str, help="config value", presence="required")
     def set_(ctx, key, value):
         print(f"set {key}={value}")
 

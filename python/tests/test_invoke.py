@@ -18,7 +18,7 @@ class TestInvokeBasicFlags:
         app = _build_app()
 
         @app.command("greet", effect="read_only", help="greet someone")
-        @strictcli.flag("name", type=str, help="person to greet")
+        @strictcli.flag("name", type=str, help="person to greet", presence="required")
         def greet(ctx, name):
             captured["name"] = name
 
@@ -53,7 +53,7 @@ class TestInvokeBasicFlags:
         app = _build_app()
 
         @app.command("run", effect="read_only", help="run")
-        @strictcli.flag("count", type=int, help="number of runs")
+        @strictcli.flag("count", type=int, help="number of runs", presence="required")
         def run(ctx, count):
             captured["count"] = count
 
@@ -70,7 +70,7 @@ class TestInvokeBasicFlags:
         app = _build_app()
 
         @app.command("scale", effect="read_only", help="scale")
-        @strictcli.flag("factor", type=float, help="scale factor")
+        @strictcli.flag("factor", type=float, help="scale factor", presence="required")
         def scale(ctx, factor):
             captured["factor"] = factor
 
@@ -115,7 +115,7 @@ class TestInvokeWithDefaults:
         app = _build_app()
 
         @app.command("greet", effect="read_only", help="greet")
-        @strictcli.flag("name", type=str, help="name")
+        @strictcli.flag("name", type=str, help="name", presence="required")
         def greet(ctx, name):
             pass
 
@@ -132,7 +132,7 @@ class TestInvokePositionalArgs:
 
         @app.command(
             "deploy", effect="read_only", help="deploy",
-            args=[strictcli.Arg(name="target", help="deploy target")],
+            args=[strictcli.Arg(name="target", help="deploy target", presence="required")],
         )
         def deploy(ctx, target):
             captured["target"] = target
@@ -152,7 +152,7 @@ class TestInvokePositionalArgs:
 
         @app.command(
             "deploy", effect="read_only", help="deploy",
-            args=[strictcli.Arg(name="target", help="deploy target")],
+            args=[strictcli.Arg(name="target", help="deploy target", presence="required")],
         )
         @strictcli.flag("sim-run", type=bool, default=False, help="dry run mode")
         def deploy(ctx, target, sim_run):
@@ -172,7 +172,7 @@ class TestInvokePositionalArgs:
 
         @app.command(
             "deploy", effect="read_only", help="deploy",
-            args=[strictcli.Arg(name="target", help="deploy target")],
+            args=[strictcli.Arg(name="target", help="deploy target", presence="required")],
         )
         def deploy(ctx, target):
             pass
@@ -186,7 +186,7 @@ class TestInvokePositionalArgs:
 
         @app.command(
             "deploy", effect="read_only", help="deploy",
-            args=[strictcli.Arg(name="target", help="deploy target", required=False, default="local")],
+            args=[strictcli.Arg(name="target", help="deploy target", default="local")],
         )
         def deploy(ctx, target):
             captured["target"] = target
@@ -415,7 +415,7 @@ class TestInvokePassthrough:
 
         app = _build_app(
             flags=[
-                strictcli.Flag(name="token", type=str, help="auth token"),
+                strictcli.Flag(name="token", type=str, help="auth token", presence="required"),
             ],
         )
         pt = strictcli.Passthrough(handler=pt_handler)
@@ -532,8 +532,8 @@ class TestInvokeDependencies:
                 strictcli.CoRequired(flags=["host", "port"]),
             ],
         )
-        @strictcli.flag("host", type=str, help="host", default=None)
-        @strictcli.flag("port", type=int, help="port", default=None)
+        @strictcli.flag("host", type=str, help="host", presence="optional")
+        @strictcli.flag("port", type=int, help="port", presence="optional")
         def deploy(ctx, host, port):
             pass
 
@@ -549,8 +549,8 @@ class TestInvokeDependencies:
                 strictcli.Requires(flag="port", depends_on="host"),
             ],
         )
-        @strictcli.flag("host", type=str, help="host", default=None)
-        @strictcli.flag("port", type=int, help="port", default=None)
+        @strictcli.flag("host", type=str, help="host", presence="optional")
+        @strictcli.flag("port", type=int, help="port", presence="optional")
         def deploy(ctx, host, port):
             pass
 
@@ -565,7 +565,7 @@ class TestInvokeChoices:
         app = _build_app()
 
         @app.command("set-level", effect="read_only", help="set level")
-        @strictcli.flag("level", type=str, help="log level", choices=["debug", "info", "warn", "error"])
+        @strictcli.flag("level", type=str, help="log level", choices=["debug", "info", "warn", "error"], presence="required")
         def set_level(ctx, level):
             pass
 
@@ -577,7 +577,7 @@ class TestInvokeChoices:
         app = _build_app()
 
         @app.command("set-level", effect="read_only", help="set level")
-        @strictcli.flag("level", type=str, help="log level", choices=["debug", "info", "warn", "error"])
+        @strictcli.flag("level", type=str, help="log level", choices=["debug", "info", "warn", "error"], presence="required")
         def set_level(ctx, level):
             captured["level"] = level
 
@@ -617,7 +617,7 @@ class TestInvokeVariadicArgs:
 
         @app.command(
             "install", effect="read_only", help="install packages",
-            args=[strictcli.Arg(name="packages", help="packages to install", variadic=True)],
+            args=[strictcli.Arg(name="packages", help="packages to install", variadic=True, presence="required")],
         )
         def install(ctx, packages):
             captured["packages"] = packages

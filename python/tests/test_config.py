@@ -808,7 +808,7 @@ def _make_repeatable_config_app(tmp_path, monkeypatch, config_data,
 
     @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run something")
     @strictcli.flag(flag_name, type=flag_type, help="the flag",
-                     repeatable=True, unique=False)
+                     repeatable=True, unique=False, default=[])
     def run(ctx, **kwargs):
         val = kwargs[flag_name.replace("-", "_")]
         print(f"val={val}")
@@ -929,7 +929,7 @@ def _make_unique_config_app(tmp_path, monkeypatch, config_data,
 
     @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run something")
     @strictcli.flag(flag_name, type=flag_type, help="the flag",
-                     repeatable=True, unique=unique)
+                     repeatable=True, unique=unique, default=[])
     def run(ctx, **kwargs):
         val = kwargs[flag_name.replace("-", "_")]
         print(f"val={val}")
@@ -969,7 +969,7 @@ def test_config_show_plain_array(tmp_path, monkeypatch):
 
     @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run something")
     @strictcli.flag("tags", type=str, help="the tags",
-                     repeatable=True, unique=False)
+                     repeatable=True, unique=False, default=[])
     def run(ctx, **kwargs):
         pass
 
@@ -992,7 +992,7 @@ def test_config_show_json_array(tmp_path, monkeypatch):
 
     @app.command("run", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="run something")
     @strictcli.flag("tags", type=str, help="the tags",
-                     repeatable=True, unique=False)
+                     repeatable=True, unique=False, default=[])
     def run(ctx, **kwargs):
         pass
 
@@ -1016,7 +1016,7 @@ def test_config_unique_enforcement_global_flag(tmp_path, monkeypatch):
         flags=[
             strictcli.Flag(
                 name="tags", type=str, help="the tags",
-                repeatable=True, unique=True,
+                repeatable=True, unique=True, default=[],
             ),
         ],
     )
@@ -1123,13 +1123,13 @@ def _make_config_set_app(config_path=None, config_format="json"):
     )
 
     @app.command("run", effect="read_only", help="run something")
-    @strictcli.flag("tags", type=str, help="tags", repeatable=True, unique=False)
+    @strictcli.flag("tags", type=str, help="tags", repeatable=True, unique=False, default=[])
     @strictcli.flag("counts", type=int, help="counts", repeatable=True,
-                    unique=False)
+                    unique=False, default=[])
     @strictcli.flag("rates", type=float, help="rates", repeatable=True,
-                    unique=False)
+                    unique=False, default=[])
     @strictcli.flag("ids", type=int, help="unique ids", repeatable=True,
-                    unique=True)
+                    unique=True, default=[])
     @strictcli.flag("name", type=str, help="name", default="default")
     def run(ctx, tags, counts, rates, ids, name):
         print(f"tags={tags} counts={counts} rates={rates} ids={ids} name={name}")
@@ -1788,13 +1788,13 @@ def test_per_flag_cli_wins_beats_app_error(tmp_path, monkeypatch):
 def test_conflict_repeatable_order_sensitive(tmp_path, monkeypatch):
     """Plain repeatable: same elements different order diverge -> error."""
     _write_cfg(tmp_path, monkeypatch, {"target": ["a", "b"]})
-    app = _conflict_app(conflict_mode="error", default=None,
+    app = _conflict_app(conflict_mode="error", default=[],
                         repeatable=True, unique=False)
     # Same order -> equal -> pass
     r = app.test(["run", "--target", "a", "--target", "b"])
     assert r.exit_code == 0, r.stderr
     # Different order -> divergent -> error
-    app2 = _conflict_app(conflict_mode="error", default=None,
+    app2 = _conflict_app(conflict_mode="error", default=[],
                          repeatable=True, unique=False)
     r2 = app2.test(["run", "--target", "b", "--target", "a"])
     assert r2.exit_code == 1
@@ -1804,7 +1804,7 @@ def test_conflict_repeatable_order_sensitive(tmp_path, monkeypatch):
 def test_conflict_unique_order_insensitive(tmp_path, monkeypatch):
     """Unique: same elements different order are equal (multiset) -> pass."""
     _write_cfg(tmp_path, monkeypatch, {"target": ["a", "b"]})
-    app = _conflict_app(conflict_mode="error", default=None,
+    app = _conflict_app(conflict_mode="error", default=[],
                         repeatable=True, unique=True)
     r = app.test(["run", "--target", "b", "--target", "a"])
     assert r.exit_code == 0, r.stderr
@@ -1822,7 +1822,7 @@ def test_conflict_malformed_config_value_errors_cleanly(tmp_path, monkeypatch):
 def test_flag_conflict_mode_invalid_value_raises():
     """Registration: invalid per-flag conflict_mode is a ValueError."""
     with pytest.raises(ValueError, match="conflict_mode"):
-        strictcli.Flag(name="x", type=str, help="h", conflict_mode="bogus")
+        strictcli.Flag(name="x", type=str, help="h", conflict_mode="bogus", presence="required")
 
 
 # --- Config set: TOML comment/order preservation (Phase 8.2) ---

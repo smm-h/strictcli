@@ -12,7 +12,7 @@ def test_variadic_collects_multiple_values():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="files", help="input files", variadic=True)],
+        args=[strictcli.Arg(name="files", help="input files", variadic=True, presence="required")],
     )
     def cmd(ctx, files):
         print(f"files={files}")
@@ -29,7 +29,7 @@ def test_variadic_collects_single_value():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="files", help="input files", variadic=True)],
+        args=[strictcli.Arg(name="files", help="input files", variadic=True, presence="required")],
     )
     def cmd(ctx, files):
         print(f"files={files}")
@@ -46,7 +46,7 @@ def test_variadic_required_zero_values_error():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="files", help="input files", variadic=True)],
+        args=[strictcli.Arg(name="files", help="input files", variadic=True, presence="required")],
     )
     def cmd(ctx, files):
         pass
@@ -64,7 +64,7 @@ def test_variadic_optional_zero_values_empty_list():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="files", help="input files", required=False, variadic=True)],
+        args=[strictcli.Arg(name="files", help="input files", presence="optional", variadic=True)],
     )
     def cmd(ctx, files):
         received["files"] = files
@@ -81,7 +81,7 @@ def test_variadic_after_double_dash():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="args", help="arguments", variadic=True)],
+        args=[strictcli.Arg(name="args", help="arguments", variadic=True, presence="required")],
     )
     def cmd(ctx, args):
         print(f"args={args}")
@@ -100,8 +100,8 @@ def test_variadic_with_preceding_required_arg():
         "cmd",
         effect="read_only", help="a command",
         args=[
-            strictcli.Arg(name="src", help="source directory"),
-            strictcli.Arg(name="files", help="files to copy", variadic=True),
+            strictcli.Arg(name="src", help="source directory", presence="required"),
+            strictcli.Arg(name="files", help="files to copy", variadic=True, presence="required"),
         ],
     )
     def cmd(ctx, src, files):
@@ -121,7 +121,7 @@ def test_variadic_shown_in_help():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="files", help="input files", variadic=True)],
+        args=[strictcli.Arg(name="files", help="input files", variadic=True, presence="required")],
     )
     def cmd(ctx, files):
         pass
@@ -140,8 +140,8 @@ def test_multiple_variadic_args_registration_error():
             "cmd",
             effect="read_only", help="a command",
             args=[
-                strictcli.Arg(name="a", help="first", variadic=True),
-                strictcli.Arg(name="b", help="second", variadic=True),
+                strictcli.Arg(name="a", help="first", variadic=True, presence="required"),
+                strictcli.Arg(name="b", help="second", variadic=True, presence="required"),
             ],
         )
         def cmd(ctx, a, b):
@@ -157,8 +157,8 @@ def test_variadic_not_last_arg_registration_error():
             "cmd",
             effect="read_only", help="a command",
             args=[
-                strictcli.Arg(name="files", help="input files", variadic=True),
-                strictcli.Arg(name="dest", help="destination"),
+                strictcli.Arg(name="files", help="input files", variadic=True, presence="required"),
+                strictcli.Arg(name="dest", help="destination", presence="required"),
             ],
         )
         def cmd(ctx, files, dest):
@@ -166,9 +166,14 @@ def test_variadic_not_last_arg_registration_error():
 
 
 def test_variadic_required_with_default_registration_error():
-    """Variadic + required=True + default -> ValueError (required+default already caught)."""
-    with pytest.raises(ValueError, match="required arg cannot have a default"):
-        strictcli.Arg(name="files", help="input files", required=True, default=["x"], variadic=True)
+    """A variadic arg refuses a default: the empty case is `optional` (§23.3)."""
+    with pytest.raises(ValueError) as exc:
+        strictcli.Arg(name="files", help="input files", default=["x"], variadic=True)
+    assert str(exc.value) == (
+        'Arg "files": a variadic arg cannot declare default=: it always '
+        'delivers a list, so declare presence="required" for at least one '
+        'value or presence="optional" for possibly none'
+    )
 
 
 def test_handler_receives_list_type():
@@ -179,7 +184,7 @@ def test_handler_receives_list_type():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="items", help="items", variadic=True)],
+        args=[strictcli.Arg(name="items", help="items", variadic=True, presence="required")],
     )
     def cmd(ctx, items):
         received["items"] = items

@@ -41,7 +41,7 @@ class TestFrozenCommand:
     def test_command_args_is_tuple(self):
         app = _make_app()
 
-        @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="name", help="a name")])
+        @app.command("cmd", effect="read_only", help="a command", args=[strictcli.Arg(name="name", help="a name", presence="required")])
         def cmd(ctx, name):
             pass
 

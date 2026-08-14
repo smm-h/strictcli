@@ -62,7 +62,7 @@ class TestJsonNameIsReserved:
 
     def test_positional_arg_named_json_is_unaffected(self):
         # The ban covers the flag surface only: an arg has no `--` spelling.
-        strictcli.Arg(name="json", help="a file named json")
+        strictcli.Arg(name="json", help="a file named json", presence="required")
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ class TestJsonDelivery:
         app = _app()
 
         @app.command("run", effect="read_only", help="run", payload_schema={})
-        @strictcli.arg("rest", help="rest", variadic=True)
+        @strictcli.arg("rest", help="rest", variadic=True, presence="required")
         def _run(ctx, rest):
             ctx.payload({"json": ctx.json, "rest": rest})
             return strictcli.outcome()

@@ -358,7 +358,7 @@ class TestDeclaration:
 class TestReservedNames:
     def test_approve_consequential_is_a_reserved_flag_name(self):
         with pytest.raises(ValueError) as exc:
-            sc.Flag(name="approve-consequential", type=bool, help="no")
+            sc.Flag(name="approve-consequential", type=bool, help="no", presence="required")
         assert str(exc.value) == (
             "flag name 'approve-consequential' is reserved by the framework "
             "(dry-run, approve-consequential, quiet, verbose)"
@@ -371,7 +371,7 @@ class TestReservedNames:
         `call()` reserves for consent, so it is refused at registration.
         """
         with pytest.raises(ValueError) as exc:
-            sc.Flag(name="approve_consequential", type=bool, help="no")
+            sc.Flag(name="approve_consequential", type=bool, help="no", presence="required")
         assert str(exc.value) == (
             "flag name 'approve_consequential' is reserved by the framework: "
             "it names the programmatic consent parameter"
@@ -382,7 +382,7 @@ class TestReservedNames:
         consent parameter while MCP still reaches it -- two channels
         disagreeing about the same command. Refused at registration."""
         with pytest.raises(ValueError) as exc:
-            sc.Arg(name="approve_consequential", help="no")
+            sc.Arg(name="approve_consequential", help="no", presence="required")
         assert str(exc.value) == (
             "arg name 'approve_consequential' is reserved by the framework: "
             "it names the programmatic consent parameter"
@@ -391,14 +391,14 @@ class TestReservedNames:
     def test_other_arg_names_are_unaffected(self):
         """Only the consent parameter is reserved on the arg surface: the
         quartet's own names stay legal as positionals."""
-        assert sc.Arg(name="verbose", help="a positional").name == "verbose"
-        assert sc.Arg(name="approve", help="a positional").name == "approve"
+        assert sc.Arg(name="verbose", help="a positional", presence="required").name == "verbose"
+        assert sc.Arg(name="approve", help="a positional", presence="required").name == "approve"
 
     def test_reserved_consent_name_is_rejected_through_the_command_decorator(self):
         app = sc.App(name="app", version="1.0.0", help="app")
         with pytest.raises(ValueError) as exc:
             @app.command("cmd", help="c", effect="read_only",
-                         args=[sc.Arg(name="approve_consequential", help="x")])
+                         args=[sc.Arg(name="approve_consequential", help="x", presence="required")])
             def _c(ctx, approve_consequential):
                 return 0
         assert "reserved by the framework" in str(exc.value)
@@ -407,7 +407,7 @@ class TestReservedNames:
         """`yes` owns no framework flag, but a private --yes would restate
         --approve-consequential in a spelling that IS muscle memory."""
         with pytest.raises(ValueError) as exc:
-            sc.Flag(name="yes", type=bool, help="no")
+            sc.Flag(name="yes", type=bool, help="no", presence="required")
         assert str(exc.value) == (
             "flag name 'yes' is banned by the framework: "
             "the confirmation skip is --approve-consequential"

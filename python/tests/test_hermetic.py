@@ -134,7 +134,7 @@ def test_hermetic_required_flag_missing_env_set(monkeypatch):
     app = strictcli.App(name="myapp", version="1.0.0", help="test app", env_prefix="MYAPP")
 
     @app.command("run", effect="read_only", help="run it")
-    @strictcli.flag(name="name", type=str, help="name", env="MYAPP_NAME")
+    @strictcli.flag(name="name", type=str, help="name", env="MYAPP_NAME", presence="required")
     def run(ctx, name):
         return 0
 
@@ -165,7 +165,7 @@ def test_hermetic_required_bool_missing():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
     @app.command("run", effect="read_only", help="run it")
-    @strictcli.flag(name="loud", type=bool, help="loud mode")
+    @strictcli.flag(name="loud", type=bool, help="loud mode", presence="required")
     def run(ctx, loud):
         return 0
 

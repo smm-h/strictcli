@@ -47,7 +47,7 @@ class TestGuardV2:
 
         @app.command("run", help="run", effect="read_only",
                      forwarding=strictcli.Forwarding(reason="wrapper"))
-        @strictcli.flag("count", type=int, help="count")
+        @strictcli.flag("count", type=int, help="count", presence="required")
         def _run(ctx, **kwargs):
             return 0
 

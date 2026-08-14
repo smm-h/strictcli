@@ -10,7 +10,7 @@ def _make_app():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("msg", type=str, help="message")
+    @strictcli.flag("msg", type=str, help="message", presence="required")
     def cmd(ctx, msg):
         print(f"msg={msg}")
 
@@ -22,8 +22,8 @@ def _make_two_str_flags_app():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("first", type=str, help="first value")
-    @strictcli.flag("second", type=str, help="second value")
+    @strictcli.flag("first", type=str, help="first value", presence="required")
+    @strictcli.flag("second", type=str, help="second value", presence="required")
     def cmd(ctx, first, second):
         print(f"first={first}")
         print(f"second={second}")
@@ -39,7 +39,7 @@ def _make_global_and_cmd_str_app():
     )
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("msg", type=str, help="message")
+    @strictcli.flag("msg", type=str, help="message", presence="required")
     def cmd(ctx, msg, token):
         print(f"msg={msg}")
         print(f"token={token}")
@@ -215,7 +215,7 @@ def test_int_flag_ignores_at_prefix():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("count", type=int, help="count")
+    @strictcli.flag("count", type=int, help="count", presence="required")
     def cmd(ctx, count):
         print(f"count={count}")
 
@@ -229,7 +229,7 @@ def test_float_flag_ignores_at_prefix():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("rate", type=float, help="rate")
+    @strictcli.flag("rate", type=float, help="rate", presence="required")
     def cmd(ctx, rate):
         print(f"rate={rate}")
 
@@ -311,7 +311,7 @@ def test_at_file_short_flag(tmp_path):
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("msg", type=str, short="m", help="message")
+    @strictcli.flag("msg", type=str, short="m", help="message", presence="required")
     def cmd(ctx, msg):
         print(f"msg={msg}")
 

@@ -1023,11 +1023,19 @@ class TestConfigFieldFlagCoexistence:
     it annotates the flag and renders once."""
 
     def _app_field_after_flag(self, tmp_path, config_data=None,
-                              flag_default=None, field_default=strictcli._MISSING):
+                              flag_default=strictcli._MISSING,
+                              field_default=strictcli._MISSING):
         app = _build_config_app(tmp_path, config_data=config_data or {})
+        # A flag declares a default or it declares requiredness; there is no
+        # third spelling for "no default" (contract §23.1).
+        flag_kwargs = (
+            {"presence": "required"}
+            if flag_default is strictcli._MISSING
+            else {"default": flag_default}
+        )
 
         @app.command(name="run", effect="read_only", help="run")
-        @strictcli.flag("target", type=str, help="deploy target", default=flag_default)
+        @strictcli.flag("target", type=str, help="deploy target", **flag_kwargs)
         def run(ctx, target):
             pass
 
@@ -1116,4 +1124,4 @@ class TestConfigFieldFlagCoexistence:
         # Flag has default, config field has none -> OK (flag wins).
         self._app_field_after_flag(tmp_path, flag_default="prod")
         # Field has default, flag has none -> OK.
-        self._app_field_after_flag(tmp_path, flag_default=None, field_default="prod")
+        self._app_field_after_flag(tmp_path, field_default="prod")

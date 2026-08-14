@@ -8,7 +8,7 @@ def _make_app():
     app = strictcli.App(name="myapp", version="1.0.0", help="test app")
 
     @app.command("stream", effect="read_only", help="stream data")
-    @strictcli.flag("target", type=str, help="the target")
+    @strictcli.flag("target", type=str, help="the target", presence="required")
     def stream(ctx, target):
         print(f"target={target}")
 
@@ -21,7 +21,7 @@ def _make_group_app():
     grp = app.group("config", help="manage configuration")
 
     @grp.command("set", effect="read_only", help="set a value")
-    @strictcli.flag("key", type=str, help="config key")
+    @strictcli.flag("key", type=str, help="config key", presence="required")
     def set_(ctx, key):
         print(f"key={key}")
 

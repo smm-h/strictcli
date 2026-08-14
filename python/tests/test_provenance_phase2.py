@@ -22,7 +22,7 @@ def test_env_source_label(monkeypatch):
                         env_prefix="MYAPP")
 
     @app.command("run", effect="read_only", help="run it")
-    @strictcli.flag("level", type=int, env="MYAPP_LEVEL", help="level")
+    @strictcli.flag("level", type=int, env="MYAPP_LEVEL", help="level", presence="required")
     def run(ctx, level):
         return 0
 
@@ -83,7 +83,7 @@ def test_cli_overrides_env(monkeypatch):
                         env_prefix="MYAPP")
 
     @app.command("run", effect="read_only", help="run it")
-    @strictcli.flag("level", type=int, env="MYAPP_LEVEL", help="level")
+    @strictcli.flag("level", type=int, env="MYAPP_LEVEL", help="level", presence="required")
     def run(ctx, level):
         return 0
 

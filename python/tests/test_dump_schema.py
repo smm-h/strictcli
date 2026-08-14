@@ -119,7 +119,7 @@ class TestSchemaCommands:
 
         @app.command("deploy", effect="read_only", help="Deploy the app")
         @strictcli.flag("target", type=str, help="Deploy target", short="t",
-                        choices=["prod", "staging"])
+                        choices=["prod", "staging"], presence="required")
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force deploy")
         def deploy(ctx, target, force_deploy):
             pass
@@ -151,7 +151,7 @@ class TestSchemaCommands:
         app = _make_app()
 
         @app.command("greet", effect="read_only", help="Greet someone",
-                     args=[strictcli.Arg(name="name", help="Who to greet")])
+                     args=[strictcli.Arg(name="name", help="Who to greet", presence="required")])
         def greet(ctx, name):
             pass
 
@@ -207,7 +207,7 @@ class TestSchemaGroups:
             pass
 
         @dns.command("add", effect="read_only", help="Add a DNS record")
-        @strictcli.flag("type", type=str, help="Record type")
+        @strictcli.flag("type", type=str, help="Record type", presence="required")
         def dns_add(ctx, type):
             pass
 
@@ -399,7 +399,7 @@ class TestSchemaFlagTypes:
         app = _make_app()
 
         @app.command("cmd", effect="read_only", help="A command")
-        @strictcli.flag("tag", type=str, help="A tag", repeatable=True, unique=False)
+        @strictcli.flag("tag", type=str, help="A tag", repeatable=True, unique=False, default=[])
         def cmd(ctx, tag):
             pass
 
@@ -414,7 +414,7 @@ class TestSchemaFlagTypes:
         app = _make_app(env_prefix="MYAPP")
 
         @app.command("cmd", effect="read_only", help="A command")
-        @strictcli.flag("token", type=str, help="Auth token", env="MYAPP_TOKEN")
+        @strictcli.flag("token", type=str, help="Auth token", env="MYAPP_TOKEN", presence="required")
         def cmd(ctx, token):
             pass
 
@@ -555,7 +555,7 @@ class TestSchemaOmitsDefaults:
         app = _make_app()
 
         @app.command("cmd", effect="read_only", help="A command")
-        @strictcli.flag("name", type=str, help="A name")
+        @strictcli.flag("name", type=str, help="A name", presence="required")
         def cmd(ctx, name):
             pass
 
@@ -613,7 +613,7 @@ class TestSchemaOmitsDefaults:
         app = _make_app()
 
         @app.command("cmd", effect="read_only", help="A command",
-                     args=[strictcli.Arg(name="target", help="The target")])
+                     args=[strictcli.Arg(name="target", help="The target", presence="required")])
         def cmd(ctx, target):
             pass
 
@@ -629,20 +629,23 @@ class TestSchemaOmitsDefaults:
 class TestSchemaNonDefaultValues:
     """Non-default values are present in the schema output."""
 
-    def test_arg_required_false_present(self, tmp_path, monkeypatch):
+    def test_arg_optional_presence_present(self, tmp_path, monkeypatch):
+        """The arg entry carries `presence`; the old `required` key is gone."""
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
         @app.command("cmd", effect="read_only", help="A command",
                      args=[strictcli.Arg(name="target", help="The target",
-                                         required=False)])
-        def cmd(ctx, target):
+                                         presence="optional")])
+        def cmd(ctx, target=None):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         arg = data["commands"]["cmd"]["args"][0]
-        assert arg["required"] is False
+        assert arg["presence"] == "optional"
+        assert "required" not in arg
+        assert "default" not in arg
 
     def test_arg_variadic_true_present(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -650,7 +653,7 @@ class TestSchemaNonDefaultValues:
 
         @app.command("cmd", effect="read_only", help="A command",
                      args=[strictcli.Arg(name="files", help="Files to process",
-                                         variadic=True)])
+                                         variadic=True, presence="required")])
         def cmd(ctx, files):
             pass
 
@@ -835,8 +838,8 @@ class TestSchemaConstraints:
 
         @app.command("deploy", effect="read_only", help="Deploy",
                      dependencies=[strictcli.CoRequired(flags=["host", "port"])])
-        @strictcli.flag("host", type=str, help="Hostname")
-        @strictcli.flag("port", type=int, help="Port number")
+        @strictcli.flag("host", type=str, help="Hostname", presence="required")
+        @strictcli.flag("port", type=int, help="Port number", presence="required")
         def deploy(ctx, host, port):
             pass
 
@@ -854,8 +857,8 @@ class TestSchemaConstraints:
 
         @app.command("deploy", effect="read_only", help="Deploy",
                      dependencies=[strictcli.Requires(flag="port", depends_on="host")])
-        @strictcli.flag("host", type=str, help="Hostname")
-        @strictcli.flag("port", type=int, help="Port number")
+        @strictcli.flag("host", type=str, help="Hostname", presence="required")
+        @strictcli.flag("port", type=int, help="Port number", presence="required")
         def deploy(ctx, host, port):
             pass
 
@@ -904,8 +907,8 @@ class TestSchemaConstraints:
                          strictcli.CoRequired(flags=["host", "port"]),
                          strictcli.Requires(flag="port", depends_on="host"),
                      ])
-        @strictcli.flag("host", type=str, help="Hostname")
-        @strictcli.flag("port", type=int, help="Port number")
+        @strictcli.flag("host", type=str, help="Hostname", presence="required")
+        @strictcli.flag("port", type=int, help="Port number", presence="required")
         def deploy(ctx, as_json, text, host, port):
             pass
 
@@ -995,7 +998,7 @@ class TestSchemaArgDefaults:
         app = _make_app()
 
         @app.command("cmd", effect="read_only", help="A command",
-                     args=[strictcli.Arg(name="target", help="The target")])
+                     args=[strictcli.Arg(name="target", help="The target", presence="required")])
         def cmd(ctx, target):
             pass
 
@@ -1010,7 +1013,7 @@ class TestSchemaArgDefaults:
 
         @app.command("cmd", effect="read_only", help="A command",
                      args=[strictcli.Arg(name="target", help="The target",
-                                         required=False, default="localhost")])
+                                         default="localhost")])
         def cmd(ctx, target):
             pass
 
@@ -1019,21 +1022,22 @@ class TestSchemaArgDefaults:
         arg = data["commands"]["cmd"]["args"][0]
         assert arg["default"] == "localhost"
 
-    def test_arg_default_none(self, tmp_path, monkeypatch):
-        """An optional arg with default=None should serialize the default."""
+    def test_arg_empty_string_default_is_emitted(self, tmp_path, monkeypatch):
+        """`default` is emitted whenever presence is "default", "" included."""
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
         @app.command("cmd", effect="read_only", help="A command",
                      args=[strictcli.Arg(name="target", help="The target",
-                                         required=False, default=None)])
+                                         default="")])
         def cmd(ctx, target):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         arg = data["commands"]["cmd"]["args"][0]
-        assert arg["default"] is None
+        assert arg["presence"] == "default"
+        assert arg["default"] == ""
 
 
 class TestSchemaProjectIdMismatch:

@@ -5,6 +5,11 @@ import strictcli
 
 def _make_app_with_unique_flag(**flag_kwargs):
     """Helper: app with a single command that has one unique repeatable flag."""
+    # Presence is mandatory (contract §23); a repeatable flag no longer gets a
+    # silent [], so these helpers declare the empty-list default explicitly
+    # unless the caller states its own.
+    if "default" not in flag_kwargs and "presence" not in flag_kwargs:
+        flag_kwargs["default"] = []
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
@@ -36,7 +41,7 @@ def test_unique_int_dedup():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("count", type=int, help="a count", repeatable=True, unique=True)
+    @strictcli.flag("count", type=int, help="a count", repeatable=True, unique=True, default=[])
     def cmd(ctx, count):
         print(f"count={count!r}")
 
@@ -53,7 +58,7 @@ def test_unique_global_flag_duplicate():
         help="test app",
         flags=[
             strictcli.Flag(
-                name="tag", type=str, help="a tag", repeatable=True, unique=True,
+                name="tag", type=str, help="a tag", repeatable=True, unique=True, default=[],
             ),
         ],
     )
@@ -84,7 +89,7 @@ def test_unique_false_not_in_help():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("tag", help="a tag", repeatable=True, unique=False)
+    @strictcli.flag("tag", help="a tag", repeatable=True, unique=False, default=[])
     def cmd(ctx, tag):
         print(f"tag={tag!r}")
 
@@ -107,7 +112,7 @@ def test_unique_float_dedup():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("val", type=float, help="a value", repeatable=True, unique=True)
+    @strictcli.flag("val", type=float, help="a value", repeatable=True, unique=True, default=[])
     def cmd(ctx, val):
         print(f"val={val!r}")
 

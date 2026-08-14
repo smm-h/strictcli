@@ -7,6 +7,10 @@ import strictcli
 
 def _make_app_with_float_flag(**flag_kwargs):
     """Helper: app with a single command that has one float flag."""
+    # Presence is mandatory (contract §23); these helpers declare the plain
+    # required case unless the caller states its own.
+    if "default" not in flag_kwargs and "presence" not in flag_kwargs:
+        flag_kwargs["presence"] = "required"
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
@@ -30,7 +34,7 @@ def test_float_flag_value_is_float():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("rate", type=float, help="the rate")
+    @strictcli.flag("rate", type=float, help="the rate", presence="required")
     def cmd(ctx, rate):
         print(f"type={type(rate).__name__}")
 
@@ -117,7 +121,7 @@ def test_float_flag_negative_value():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("rate", type=float, help="the rate")
+    @strictcli.flag("rate", type=float, help="the rate", presence="required")
     def cmd(ctx, rate):
         print(f"rate={rate}")
 
@@ -229,7 +233,7 @@ def test_float_flag_short_form():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("rate", short="r", type=float, help="the rate")
+    @strictcli.flag("rate", short="r", type=float, help="the rate", presence="required")
     def cmd(ctx, rate):
         print(f"rate={rate}")
 
@@ -251,7 +255,7 @@ def test_float_flag_choices():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("rate", type=float, help="the rate", choices=[0.5, 1.0, 2.0])
+    @strictcli.flag("rate", type=float, help="the rate", choices=[0.5, 1.0, 2.0], presence="required")
     def cmd(ctx, rate):
         print(f"rate={rate}")
 
@@ -271,7 +275,7 @@ def test_float_flag_repeatable():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("weight", type=float, help="a weight", repeatable=True, unique=False)
+    @strictcli.flag("weight", type=float, help="a weight", repeatable=True, unique=False, default=[])
     def cmd(ctx, weight):
         print(f"weight={weight}")
 

@@ -261,8 +261,8 @@ def test_global_flag_with_group_and_command_flags():
     grp = app.group("config", help="manage config")
 
     @grp.command("set", effect="read_only", help="set a value")
-    @strictcli.flag("key", type=str, help="config key")
-    @strictcli.flag("value", type=str, help="config value")
+    @strictcli.flag("key", type=str, help="config key", presence="required")
+    @strictcli.flag("value", type=str, help="config value", presence="required")
     def set_(ctx, key, value, loud):
         if loud:
             print(f"loud: setting {key}={value}")

@@ -21,9 +21,9 @@ def _mutex_choices_app():
         flags=[
             strictcli.Flag(
                 name="format", type=str, help="output format",
-                default=None, choices=["text", "json"],
+                presence="optional", choices=["text", "json"],
             ),
-            strictcli.Flag(name="output", type=str, help="output path", default=None),
+            strictcli.Flag(name="output", type=str, help="output path", presence="optional"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")
@@ -71,7 +71,7 @@ def _arg_choices_app(**arg_kwargs):
         "cmd",
         effect="read_only", help="a command",
         args=[strictcli.Arg(
-            name="env", help="target env", required=False,
+            name="env", help="target env",
             choices=["dev", "staging", "prod"], **arg_kwargs,
         )],
     )
@@ -82,16 +82,16 @@ def _arg_choices_app(**arg_kwargs):
 
 
 def test_arg_none_default_choices_not_passed():
-    """Optional arg with default=None and choices, not passed -> succeeds."""
-    app = _arg_choices_app(default=None)
+    """Optional arg with choices, not passed -> succeeds."""
+    app = _arg_choices_app(presence="optional")
     r = app.test(["cmd"])
     assert r.exit_code == 0
     assert "env=None" in r.stdout
 
 
 def test_arg_optional_no_default_choices_not_passed():
-    """Optional arg with no default and choices, not passed -> succeeds."""
-    app = _arg_choices_app()
+    """The same declaration reached through the keyword, not passed."""
+    app = _arg_choices_app(presence="optional")
     r = app.test(["cmd"])
     assert r.exit_code == 0
     assert "env=None" in r.stdout
@@ -99,7 +99,7 @@ def test_arg_optional_no_default_choices_not_passed():
 
 def test_arg_none_default_choices_passed_valid():
     """A valid choice on the optional arg is still accepted."""
-    app = _arg_choices_app(default=None)
+    app = _arg_choices_app(presence="optional")
     r = app.test(["cmd", "prod"])
     assert r.exit_code == 0
     assert "env=prod" in r.stdout
@@ -107,7 +107,7 @@ def test_arg_none_default_choices_passed_valid():
 
 def test_arg_none_default_choices_passed_invalid():
     """An invalid choice on the optional arg is still rejected."""
-    app = _arg_choices_app(default=None)
+    app = _arg_choices_app(presence="optional")
     r = app.test(["cmd", "local"])
     assert r.exit_code == 1
     assert (
@@ -133,9 +133,9 @@ def _mutex_validate_app():
         flags=[
             strictcli.Flag(
                 name="name", type=str, help="a name",
-                default=None, validate=_name_validator,
+                presence="optional", validate=_name_validator,
             ),
-            strictcli.Flag(name="id", type=str, help="an id", default=None),
+            strictcli.Flag(name="id", type=str, help="an id", presence="optional"),
         ],
     )
     app = strictcli.App(name="test", version="1.0.0", help="test app")

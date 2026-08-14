@@ -246,7 +246,7 @@ def test_connection_url_flag_unbound_raises():
               connection_env={"DATABASE_URL": "conn"})
     with pytest.raises(ValueError, match="must bind to a declared connection env"):
         @app.command("run", effect="read_only", help="run it")
-        @strictcli.flag("dsn", help="dsn", default=None, connection_url=True)
+        @strictcli.flag("dsn", help="dsn", presence="optional", connection_url=True)
         def run(ctx, dsn):
             return 0
 
@@ -256,7 +256,7 @@ def test_connection_url_flag_undeclared_binding_raises():
               connection_env={"DATABASE_URL": "conn"})
     with pytest.raises(ValueError, match="undeclared connection env"):
         @app.command("run", effect="read_only", help="run it")
-        @strictcli.flag("dsn", help="dsn", default=None,
+        @strictcli.flag("dsn", help="dsn", presence="optional",
                         connection_url=True, connection_env="OTHER_URL")
         def run(ctx, dsn):
             return 0
@@ -267,7 +267,7 @@ def test_connection_env_binding_without_url_marker_raises():
               connection_env={"DATABASE_URL": "conn"})
     with pytest.raises(ValueError, match="requires the flag to be marked as a connection-URL flag"):
         @app.command("run", effect="read_only", help="run it")
-        @strictcli.flag("dsn", help="dsn", default=None, connection_env="DATABASE_URL")
+        @strictcli.flag("dsn", help="dsn", presence="optional", connection_env="DATABASE_URL")
         def run(ctx, dsn):
             return 0
 
@@ -277,7 +277,7 @@ def test_connection_env_binding_plus_per_flag_env_raises():
               connection_env={"DATABASE_URL": "conn"})
     with pytest.raises(ValueError, match="cannot be combined with a per-flag env var"):
         @app.command("run", effect="read_only", help="run it")
-        @strictcli.flag("dsn", help="dsn", default=None, env="SOMETHING_ELSE",
+        @strictcli.flag("dsn", help="dsn", presence="optional", env="SOMETHING_ELSE",
                         connection_url=True, connection_env="DATABASE_URL")
         def run(ctx, dsn):
             return 0
