@@ -479,5 +479,72 @@
       "exit_code": 0,
       "stdout_equals": "checkout:-b,feature"
     }
+  },
+  {
+    "name": "passthrough: in group, --help before the separator is command help",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "git",
+          "help": "git operations",
+          "commands": [
+            {
+              "name": "checkout",
+              "help": "checkout a branch",
+              "effect": "read_only",
+              "passthrough": true,
+              "passthrough_handler_prints": "{name}:{args}"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "git",
+      "checkout",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp git checkout -- checkout a branch"
+    }
+  },
+  {
+    "name": "passthrough: in group, args after the separator are forwarded verbatim",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "git",
+          "help": "git operations",
+          "commands": [
+            {
+              "name": "checkout",
+              "help": "checkout a branch",
+              "effect": "read_only",
+              "passthrough": true,
+              "passthrough_handler_prints": "{name}:{args}"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "git",
+      "checkout",
+      "--",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "checkout:--,--help"
+    }
   }
 ]

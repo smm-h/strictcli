@@ -711,5 +711,229 @@
       "exit_code": 0,
       "stdout_equals": "listing remotes"
     }
+  },
+  {
+    "name": "nesting: group help is recognized with a trailing argument (-h)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "db",
+          "help": "database commands",
+          "commands": [
+            {
+              "name": "migrate",
+              "help": "run migrations",
+              "effect": "read_only",
+              "handler_prints": "ok"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "db",
+      "-h",
+      "./m"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp db -- database commands\n\nCommands:\n  migrate    run migrations\n\nUse 'myapp db <command> --help' for more information."
+    }
+  },
+  {
+    "name": "nesting: group help is recognized with a trailing argument (--help)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "db",
+          "help": "database commands",
+          "commands": [
+            {
+              "name": "migrate",
+              "help": "run migrations",
+              "effect": "read_only",
+              "handler_prints": "ok"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "db",
+      "--help",
+      "./m"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp db -- database commands\n\nCommands:\n  migrate    run migrations\n\nUse 'myapp db <command> --help' for more information."
+    }
+  },
+  {
+    "name": "nesting: group help is recognized with a trailing bare separator",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "db",
+          "help": "database commands",
+          "commands": [
+            {
+              "name": "migrate",
+              "help": "run migrations",
+              "effect": "read_only",
+              "handler_prints": "ok"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "db",
+      "--help",
+      "--"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp db -- database commands\n\nCommands:\n  migrate    run migrations\n\nUse 'myapp db <command> --help' for more information."
+    }
+  },
+  {
+    "name": "nesting: group help is recognized with a following subcommand token",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "db",
+          "help": "database commands",
+          "commands": [
+            {
+              "name": "migrate",
+              "help": "run migrations",
+              "effect": "read_only",
+              "handler_prints": "ok"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "db",
+      "--help",
+      "migrate"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp db -- database commands\n\nCommands:\n  migrate    run migrations\n\nUse 'myapp db <command> --help' for more information."
+    }
+  },
+  {
+    "name": "nesting: group help is recognized with a following unknown token",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "db",
+          "help": "database commands",
+          "commands": [
+            {
+              "name": "migrate",
+              "help": "run migrations",
+              "effect": "read_only",
+              "handler_prints": "ok"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "db",
+      "--help",
+      "nope"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp db -- database commands\n\nCommands:\n  migrate    run migrations\n\nUse 'myapp db <command> --help' for more information."
+    }
+  },
+  {
+    "name": "nesting: a bare separator after a group name is not a help request",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "db",
+          "help": "database commands",
+          "commands": [
+            {
+              "name": "migrate",
+              "help": "run migrations",
+              "effect": "read_only",
+              "handler_prints": "ok"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "db",
+      "--",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: unknown command '--' in 'db'\ntry 'myapp db --help'"
+    }
+  },
+  {
+    "name": "nesting: an unknown token before --help is still an unknown command",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [],
+      "groups": [
+        {
+          "name": "db",
+          "help": "database commands",
+          "commands": [
+            {
+              "name": "migrate",
+              "help": "run migrations",
+              "effect": "read_only",
+              "handler_prints": "ok"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "db",
+      "nope",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: unknown command 'nope' in 'db'\ntry 'myapp db --help'"
+    }
   }
 ]
