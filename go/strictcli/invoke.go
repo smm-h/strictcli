@@ -486,12 +486,19 @@ func (a *App) Call(commandPath string, kwargs map[string]interface{}, opts ...Ca
 // parameter as a top-level key.
 func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *suppliedElections, cliByFlag map[*Flag]interface{}, scopedNames map[string]*Flag) string {
 	// Every scoped name, so a top-level scoped parameter is recognized rather
-	// than refused as unknown.
+	// than refused as unknown -- and so a parameter belonging to a scope that
+	// was NOT elected reaches scope validation and is refused with the CLI's own
+	// sentence rather than silently ignored.
 	for _, name := range cmd.index.order {
 		for _, site := range cmd.index.sites[name] {
 			if len(site.path) > 0 {
 				scopedNames[name] = site.flag
 			}
+		}
+	}
+	for key := range kwargs {
+		if _, ok := scopedNames[paramToFlagName(key)]; ok {
+			sup.suppliedNames[paramToFlagName(key)] = true
 		}
 	}
 

@@ -394,7 +394,9 @@ func scopeDescriptionLines(flags []Flag, prefix []string) []string {
 			continue
 		}
 		for _, ch := range f.choiceDecls {
-			key := append(append([]string{}, prefix...), flagParamName(f.Name)+"="+flagParamName(ch.Name))
+			// The selector is the schema PROPERTY name; the choice is the enum
+			// value the schema publishes, carried unchanged.
+			key := append(append([]string{}, prefix...), flagParamName(f.Name)+"="+ch.Name)
 			out = append(out, strings.Join(key, " ")+": "+scopeParameterList(ch))
 			out = append(out, scopeDescriptionLines(ch.Flags, key)...)
 		}

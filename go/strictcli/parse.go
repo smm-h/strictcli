@@ -256,10 +256,13 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 	record := func(name string, raw string, kind occKind) {
 		occs = append(occs, occurrence{name: name, raw: raw, kind: kind})
-		if !suppliedSeen[name] {
-			suppliedSeen[name] = true
-			suppliedOrder = append(suppliedOrder, name)
-		}
+	}
+	// recordShort is record's short-form twin. A short may be claimed by two
+	// MUTUALLY EXCLUSIVE scopes (§24.7), so which flag it names is not knowable
+	// until the election is resolved; the occurrence carries the short and the
+	// value phase resolves it against the live declaration.
+	recordShort := func(short string, f *Flag, raw string, kind occKind) {
+		occs = append(occs, occurrence{name: f.Name, short: short, raw: raw, kind: kind})
 	}
 
 	i := 0
@@ -330,13 +333,13 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		if strings.HasPrefix(tok, "-") && len(tok) == 2 {
 			if f, ok := shortLookup[tok]; ok {
 				if f.Type == TypeBool {
-					record(f.Name, "", occBool)
+					recordShort(tok[1:], f, "", occBool)
 					i++
 				} else {
 					if i+1 >= len(tokens) {
 						return nil, nil, nil, errFlagRequiresValue(tok), nil
 					}
-					record(f.Name, tokens[i+1], occValue)
+					recordShort(tok[1:], f, tokens[i+1], occValue)
 					i += 2
 				}
 				continue
@@ -355,6 +358,10 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	sup := newSuppliedElections()
 	for _, o := range occs {
 		sup.suppliedNames[o.name] = true
+		if !suppliedSeen[o.name] {
+			suppliedSeen[o.name] = true
+			suppliedOrder = append(suppliedOrder, o.name)
+		}
 		if _, isGlobal := globalFlagNames[o.name]; isGlobal {
 			continue
 		}
@@ -377,6 +384,26 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	est, electErr := elect(cmd, sup, amb)
 	if electErr != "" {
 		return nil, nil, nil, electErr, nil
+	}
+
+	// A short claimed by two mutually exclusive scopes names its LIVE
+	// declaration; the provisional name the tokenizer recorded is replaced now
+	// that the election is known.
+	for i := range occs {
+		if occs[i].short == "" {
+			continue
+		}
+		if f := est.liveFlagForShort(cmd, occs[i].short); f != nil {
+			occs[i].name = f.Name
+		}
+	}
+	suppliedOrder = suppliedOrder[:0]
+	suppliedSeen = map[string]bool{}
+	for _, o := range occs {
+		if !suppliedSeen[o.name] {
+			suppliedSeen[o.name] = true
+			suppliedOrder = append(suppliedOrder, o.name)
+		}
 	}
 
 	// --- Phase 3: validate SCOPE membership of every supplied flag.

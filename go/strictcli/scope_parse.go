@@ -488,8 +488,12 @@ const (
 // occurrence is one command-line mention of a flag, in command-line order.
 type occurrence struct {
 	name string
-	raw  string
-	kind occKind
+	// short is set when the token was a short form. A short may be claimed by
+	// two mutually exclusive scopes, so name is provisional until the election
+	// is resolved (§24.7).
+	short string
+	raw   string
+	kind  occKind
 }
 
 // isMemberFlagName reports whether a name is the electing flag of a
@@ -513,6 +517,17 @@ func (st *electionState) liveFlagFor(cmd *Command, globalByName map[string]*Flag
 		}
 	}
 	return globalByName[name]
+}
+
+// liveFlagForShort resolves a short form to the declaration that is live this
+// invocation.
+func (st *electionState) liveFlagForShort(cmd *Command, short string) *Flag {
+	for _, s := range cmd.index.shorts[short] {
+		if st.live[s.flag] {
+			return s.flag
+		}
+	}
+	return nil
 }
 
 // electionSource maps an election's origin onto the framework's source
