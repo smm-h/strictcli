@@ -3116,7 +3116,7 @@ def _resolve_flag_show_source(f: "Flag", config_data: dict) -> tuple[object, str
     if param in config_data:
         return config_data[param], "config"
     # Default
-    if f.presence == PRESENCE_DEFAULT:
+    if f.presence == _PRESENCE_DEFAULT:
         return f.default, "default"
     return None, "default"
 
@@ -3376,7 +3376,7 @@ def _generate_config_template_toml(
         if cf_collide is not None:
             comment += f" -- {cf_collide.help}"
         lines.append(comment)
-        if f.presence == PRESENCE_DEFAULT:
+        if f.presence == _PRESENCE_DEFAULT:
             lines.append(f"{param} = {_toml_format_scalar(f.default)}")
         else:
             lines.append(f"# {param} =")
@@ -3452,7 +3452,7 @@ def _generate_config_template_json(
     # Flag-backed keys
     for f in flags:
         param = _flag_param_name(f.name)
-        if f.presence == PRESENCE_DEFAULT:
+        if f.presence == _PRESENCE_DEFAULT:
             data[param] = f.default
         else:
             data[param] = None
@@ -3537,7 +3537,7 @@ def _check_flag_configfield_default(
     flag's default wins for rendering). A flag has a default exactly when its
     declared presence is "default"; a ConfigField default of _MISSING is absent.
     """
-    flag_has_default = flag_presence == PRESENCE_DEFAULT
+    flag_has_default = flag_presence == _PRESENCE_DEFAULT
     cf_has_default = not isinstance(cf.default, _MissingSentinel)
     if flag_has_default and cf_has_default and flag_default != cf.default:
         raise ValueError(
@@ -4232,29 +4232,21 @@ def _raise_arg_name_consent_reserved():
 # These are the RESOLVED values carried on Flag.presence / Arg.presence and
 # published by --dump-schema; the declaration surface is `presence="required"`,
 # `presence="optional"` and `default=<value>` (contract §23.2, §23.3).
-PRESENCE_REQUIRED = "required"
-PRESENCE_OPTIONAL = "optional"
-PRESENCE_DEFAULT = "default"
+_PRESENCE_REQUIRED = "required"
+_PRESENCE_OPTIONAL = "optional"
+_PRESENCE_DEFAULT = "default"
 
 # The two facts spellable through the `presence=` keyword. The third is spelled
 # by `default=` itself: one spelling per fact, which is why `presence="default"`
 # is not accepted and `default=None` is refused (contract §23.1).
-_PRESENCE_DECLARABLE = (PRESENCE_REQUIRED, PRESENCE_OPTIONAL)
+_PRESENCE_DECLARABLE = (_PRESENCE_REQUIRED, _PRESENCE_OPTIONAL)
 
 # The per-language noun phrases §12.12 pins for Python. The sentences that carry
 # them are byte-identical across the three implementations; only these vary.
 _PRESENCE_SPELLING = {
-    PRESENCE_REQUIRED: 'presence="required"',
-    PRESENCE_OPTIONAL: 'presence="optional"',
+    _PRESENCE_REQUIRED: 'presence="required"',
+    _PRESENCE_OPTIONAL: 'presence="optional"',
 }
-
-# The `default=` spelling without its value clause, used where the message is
-# about the spelling being inapplicable rather than about a value (§12.12).
-_DEFAULT_SPELLING_BARE = "default="
-
-# The `default=` spelling in a message that has no concrete value to render.
-_DEFAULT_SPELLING_ABSTRACT = "default=<value>"
-
 
 def _default_spelling(value: object) -> str:
     """The `default=<value>` spelling with a concrete value, rendered by the
@@ -4378,7 +4370,7 @@ def _resolve_presence(
     if has_presence:
         return presence
     if has_default:
-        return PRESENCE_DEFAULT
+        return _PRESENCE_DEFAULT
     if is_flag:
         _raise_flag_presence_undeclared(name)
     _raise_arg_presence_undeclared(name)
@@ -4668,7 +4660,7 @@ class Flag:
         # default is redundant" refusals died with the silent forced-{} it used
         # to be redundant against.
         if self.compound == "dict":
-            if self.presence == PRESENCE_DEFAULT:
+            if self.presence == _PRESENCE_DEFAULT:
                 if not isinstance(self.default, dict):
                     raise ValueError(
                         f'Flag "{self.name}": dict flag default must be a dict'
@@ -4684,7 +4676,7 @@ class Flag:
                         f"dict default value for key {k!r}",
                     )
         # Validate repeatable flag defaults (`default=[]` likewise legal)
-        elif self.repeatable and self.presence == PRESENCE_DEFAULT:
+        elif self.repeatable and self.presence == _PRESENCE_DEFAULT:
             if not isinstance(self.default, list):
                 raise ValueError(
                     f'Flag "{self.name}": repeatable flag default must be a list'
@@ -4710,14 +4702,14 @@ class Flag:
                     if isinstance(elem, int):
                         self.default[i] = float(elem)
         # Validate default type for int flags
-        if self.type is int and self.presence == PRESENCE_DEFAULT:
+        if self.type is int and self.presence == _PRESENCE_DEFAULT:
             if not self.repeatable and self.compound != "dict" and not isinstance(self.default, int):
                 raise ValueError(
                     f'Flag "{self.name}": type=int requires an int default, '
                     f"got {type(self.default).__name__!r}"
                 )
         # Validate default type for float flags
-        if self.type is float and self.presence == PRESENCE_DEFAULT:
+        if self.type is float and self.presence == _PRESENCE_DEFAULT:
             if not self.repeatable and self.compound != "dict" and not isinstance(self.default, (int, float)):
                 raise ValueError(
                     f'Flag "{self.name}": type=float requires a float default, '
@@ -4726,7 +4718,7 @@ class Flag:
         # Validate default is in choices. The check applies to declared VALUES
         # only: a required or optional flag has no value to check, and absence
         # is never matched against choices (§23.5).
-        if self.choices is not None and self.presence == PRESENCE_DEFAULT:
+        if self.choices is not None and self.presence == _PRESENCE_DEFAULT:
             if not self.repeatable and self.default not in self.choices:
                 raise ValueError(
                     f'Flag "{self.name}": default {self.default!r} is not in choices '
@@ -4767,7 +4759,7 @@ class Arg:
         )
         # A variadic arg always delivers a list, so the empty case is spelled
         # `optional` and a default has nothing to mean (§23.3).
-        if self.variadic and self.presence == PRESENCE_DEFAULT:
+        if self.variadic and self.presence == _PRESENCE_DEFAULT:
             _raise_arg_variadic_default(self.name)
 
         # Parse compound types for args (only list[T] is supported)
@@ -4826,7 +4818,7 @@ class Arg:
         # Validate default type matches declared type. A list arg is always
         # variadic, and a variadic arg cannot declare a default at all, so no
         # list branch exists here any more (§23.3).
-        if self.presence == PRESENCE_DEFAULT:
+        if self.presence == _PRESENCE_DEFAULT:
             if self.type is int:
                 if not isinstance(self.default, int) or isinstance(self.default, bool):
                     raise ValueError(
@@ -4852,7 +4844,7 @@ class Arg:
                         f"got {type(self.default).__name__!r}"
                     )
         # Validate default is in choices -- declared VALUES only (§23.5)
-        if self.choices is not None and self.presence == PRESENCE_DEFAULT:
+        if self.choices is not None and self.presence == _PRESENCE_DEFAULT:
             if self.default not in self.choices:
                 raise ValueError(
                     f'Arg "{self.name}": default {self.default!r} is not in choices '
@@ -8529,7 +8521,7 @@ class App:
             if f.name in cli_set:
                 continue
             src_label = "default"
-            if f.presence == PRESENCE_DEFAULT:
+            if f.presence == _PRESENCE_DEFAULT:
                 if isinstance(f.default, RelativeToRoot):
                     cli_set[f.name] = _resolve_infra_root_path(
                         f.default, self._infra_roots,
@@ -8541,7 +8533,7 @@ class App:
                     cli_set[f.name] = list(f.default)
                 else:
                     cli_set[f.name] = f.default
-            elif f.presence == PRESENCE_OPTIONAL:
+            elif f.presence == _PRESENCE_OPTIONAL:
                 cli_set[f.name] = None
             else:
                 if f.type is bool and f.negatable:
@@ -8947,14 +8939,14 @@ class App:
                 param_name = _flag_param_name(gf.name)
                 if param_name in kwargs:
                     global_values[param_name] = kwargs[param_name]
-                elif gf.presence == PRESENCE_DEFAULT:
+                elif gf.presence == _PRESENCE_DEFAULT:
                     if isinstance(gf.default, RelativeToRoot):
                         global_values[param_name] = _resolve_infra_root_path(
                             gf.default, self._infra_roots,
                         )
                     else:
                         global_values[param_name] = gf.default
-                elif gf.presence == PRESENCE_OPTIONAL:
+                elif gf.presence == _PRESENCE_OPTIONAL:
                     global_values[param_name] = None
                 else:
                     raise _ParseError(
@@ -9043,13 +9035,13 @@ class App:
                 final_kwargs[_flag_param_name(gf.name)] = _global_cli_set[gf.name]
             elif _flag_param_name(gf.name) not in final_kwargs:
                 # Global flag not provided -- apply its declared presence
-                if gf.presence == PRESENCE_DEFAULT:
+                if gf.presence == _PRESENCE_DEFAULT:
                     if isinstance(gf.default, RelativeToRoot):
                         final_kwargs[_flag_param_name(gf.name)] = _resolve_infra_root_path(gf.default, self._infra_roots)
                         invoke_sources[_flag_param_name(gf.name)] = "infra"
                     else:
                         final_kwargs[_flag_param_name(gf.name)] = gf.default
-                elif gf.presence == PRESENCE_OPTIONAL:
+                elif gf.presence == _PRESENCE_OPTIONAL:
                     final_kwargs[_flag_param_name(gf.name)] = None
 
         # Store sources for function handlers that need provenance info
@@ -9361,7 +9353,7 @@ def _build_json_schema(cmd: Command) -> dict:
         # Requiredness is read straight off the declaration (contract §13's
         # presence-round amendment): a parameter is in `required` iff its
         # declared presence is `required`, flags and args alike, bools included.
-        if f.presence == PRESENCE_REQUIRED:
+        if f.presence == _PRESENCE_REQUIRED:
             required.append(param_name)
 
     for a in cmd.args:
@@ -9380,7 +9372,7 @@ def _build_json_schema(cmd: Command) -> dict:
 
         properties[a.name] = prop
 
-        if a.presence == PRESENCE_REQUIRED:
+        if a.presence == _PRESENCE_REQUIRED:
             required.append(a.name)
 
     schema: dict = {
@@ -9532,7 +9524,7 @@ def _validate_and_build_kwargs(
     for f in cmd.flags:
         if store.has(f.name):
             continue
-        if f.presence == PRESENCE_DEFAULT:
+        if f.presence == _PRESENCE_DEFAULT:
             if isinstance(f.default, RelativeToRoot):
                 # A RelativeToRoot marker resolves through the declared infra
                 # roots and reports source "infra" (a declared default whose
@@ -9545,7 +9537,7 @@ def _validate_and_build_kwargs(
                 store.set(f.name, list(f.default), _Source.DEFAULT)
             else:
                 store.set(f.name, f.default, _Source.DEFAULT)
-        elif f.presence == PRESENCE_OPTIONAL:
+        elif f.presence == _PRESENCE_OPTIONAL:
             # Absence is delivered as absence, for every type: a compound flag
             # that wants an empty collection declares one.
             store.set(f.name, None, _Source.DEFAULT)
@@ -9594,9 +9586,9 @@ def _validate_and_build_kwargs(
     for idx, a in enumerate(fixed_args):
         if idx < len(positionals):
             arg_values[a.name] = _coerce_arg_value(a, positionals[idx])
-        elif a.presence == PRESENCE_REQUIRED:
+        elif a.presence == _PRESENCE_REQUIRED:
             raise _ParseError(f"missing required argument '{a.name}'")
-        elif a.presence == PRESENCE_DEFAULT:
+        elif a.presence == _PRESENCE_DEFAULT:
             arg_values[a.name] = a.default
         else:
             # An optional arg delivers absence as a PRESENT key, never as a
@@ -9605,7 +9597,7 @@ def _validate_and_build_kwargs(
     if has_variadic:
         va = cmd.args[-1]
         remaining_positionals = positionals[len(fixed_args):]
-        if va.presence == PRESENCE_REQUIRED and len(remaining_positionals) == 0:
+        if va.presence == _PRESENCE_REQUIRED and len(remaining_positionals) == 0:
             raise _ParseError(f"missing required argument '{va.name}'")
         arg_values[va.name] = [
             _coerce_arg_value(va, p) for p in remaining_positionals
@@ -10246,7 +10238,7 @@ def _build_and_validate_command(
         for mf in mg.flags:
             # A member declares `optional` or a default; requiredness would
             # contradict a group that permits exactly one (§23.5, §12.12).
-            if mf.presence == PRESENCE_REQUIRED:
+            if mf.presence == _PRESENCE_REQUIRED:
                 _raise_flag_mutex_member_required(mf.name)
         mutex_flags.extend(mg.flags)
 
@@ -10389,14 +10381,14 @@ def _build_and_validate_command(
     # implementation with per-parameter defaults to check.
     declared_optional: list[tuple[str, Flag | Arg]] = []
     for f in all_flags:
-        if f.presence == PRESENCE_OPTIONAL:
+        if f.presence == _PRESENCE_OPTIONAL:
             declared_optional.append((_flag_param_name(f.name), f))
     if global_flags:
         for gf in global_flags:
-            if gf.presence == PRESENCE_OPTIONAL:
+            if gf.presence == _PRESENCE_OPTIONAL:
                 declared_optional.append((_flag_param_name(gf.name), gf))
     for a in all_args:
-        if a.presence == PRESENCE_OPTIONAL:
+        if a.presence == _PRESENCE_OPTIONAL:
             declared_optional.append((a.name, a))
     for pname, decl in declared_optional:
         param = sig.parameters.get(pname)
@@ -10815,9 +10807,9 @@ def _format_presence_for_help(presence: str, decl: "Flag | Arg") -> str:
     than nothing: it is a declaration now, and a declaration that rendered as
     blank would leave one line in the help output with no presence part.
     """
-    if presence == PRESENCE_REQUIRED:
+    if presence == _PRESENCE_REQUIRED:
         return "required"
-    if presence == PRESENCE_OPTIONAL:
+    if presence == _PRESENCE_OPTIONAL:
         return "optional"
     value = decl.default
     compound = getattr(decl, "compound", "scalar")
@@ -11571,7 +11563,7 @@ def _serialize_flag(f: Flag) -> dict:
     # `default` is emitted exactly when presence is "default", and then always,
     # whatever the value: [], {}, "", false and 0 are declarations rather than
     # the absence of one, so the omit-when-empty rules are gone.
-    if f.presence == PRESENCE_DEFAULT:
+    if f.presence == _PRESENCE_DEFAULT:
         # A RelativeToRoot marker default is serialized machine-stably: only the
         # declared env var and path parts (no resolved, machine-specific path).
         # This shape is identical across the Python and Go implementations.
@@ -11624,7 +11616,7 @@ def _serialize_arg(a: Arg) -> dict:
     # Same always-emitted presence key as a flag entry; the old `required` key
     # is deleted rather than kept beside it (contract §13's amendment).
     d["presence"] = a.presence
-    if a.presence == PRESENCE_DEFAULT:
+    if a.presence == _PRESENCE_DEFAULT:
         d["default"] = a.default
     if a.variadic:
         d["variadic"] = a.variadic
