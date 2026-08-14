@@ -6,8 +6,16 @@ on:
     - main
   pull_request:
   workflow_dispatch:
+    inputs:
+      run_all:
+        description: Run every project's CI jobs, ignoring the paths filter. Use
+          this to make a release candidate's members run their own CI on a 
+          commit whose push window does not touch their paths.
+        type: boolean
+        required: false
+        default: false
 concurrency:
-  group: ${{ github.workflow_ref }}-${{ github.sha }}
+  group: ${{ github.workflow_ref }}-${{ github.sha }}-${{ inputs.run_all }}
   cancel-in-progress: true
 jobs:
   detect:
@@ -62,7 +70,7 @@ jobs:
     name: strictcli-ci / test
     needs:
     - detect
-    if: needs.detect.outputs.strictcli == 'true'
+    if: (needs.detect.outputs.strictcli == 'true' || inputs.run_all)
   go-strictcli-ci-test:
     runs-on: ubuntu-latest
     steps:
@@ -79,7 +87,7 @@ jobs:
     name: go-strictcli-ci / test
     needs:
     - detect
-    if: needs.detect.outputs.go-strictcli == 'true'
+    if: (needs.detect.outputs.go-strictcli == 'true' || inputs.run_all)
   ts-strictcli-ci-test:
     runs-on: ubuntu-latest
     strategy:
@@ -102,7 +110,7 @@ jobs:
     name: ts-strictcli-ci / test
     needs:
     - detect
-    if: needs.detect.outputs.ts-strictcli == 'true'
+    if: (needs.detect.outputs.ts-strictcli == 'true' || inputs.run_all)
   conformance-ci-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -135,4 +143,4 @@ jobs:
     name: conformance-ci / test
     needs:
     - detect
-    if: needs.detect.outputs.conformance == 'true'
+    if: (needs.detect.outputs.conformance == 'true' || inputs.run_all)
