@@ -484,7 +484,7 @@ func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
 		return 0
 	}, WithEffect(EffectReadOnly))
 
-	// Don't provide "token" -- it's a required string global flag (no default)
+	// Don't provide "token" -- the global string flag declares Required()
 	ir := app.invoke("exec", map[string]interface{}{
 		"_args": []string{"ls"},
 		"loud":  true,
@@ -502,13 +502,13 @@ func TestInvokePassthroughMissingRequiredGlobalFlag(t *testing.T) {
 
 func TestInvokePassthroughMissingRequiredBoolGlobalFlag(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
-	// A required bool global flag: no Default, so it must be provided explicitly.
+	// A bool global flag declaring Required(): it must be provided explicitly.
 	app.GlobalFlag(BoolFlag("force-run", "force operation", Required()))
 	app.Passthrough("exec", "execute command", func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
 		return 0
 	}, WithEffect(EffectReadOnly))
 
-	// Don't provide "force-run" -- it's a required bool global flag (no default)
+	// Don't provide "force-run" -- the global bool flag declares Required()
 	ir := app.invoke("exec", map[string]interface{}{
 		"_args": []string{"ls"},
 	})

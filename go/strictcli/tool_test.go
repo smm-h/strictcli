@@ -54,8 +54,8 @@ func TestJsonSchemaAllScalarTypes(t *testing.T) {
 func TestJsonSchemaRequiredFlags(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("deploy", "deploy something", nopHandler, WithFlags(
-		StringFlag("target", "deploy target", Required()),    // required (no default)
-		IntFlag("replicas", "replica count", Required()),     // required (no default)
+		StringFlag("target", "deploy target", Required()),    // declared required
+		IntFlag("replicas", "replica count", Required()),     // declared required
 		StringFlag("region", "region", Default("us-east-1")), // optional (has default)
 		BoolFlag("sim-run", "dry run mode", Default(false)),  // optional (has default)
 		FloatFlag("threshold", "threshold", Default(0.5)),    // optional (has default)
@@ -90,7 +90,8 @@ func TestJsonSchemaOptionalFlagNotInRequired(t *testing.T) {
 
 	schema := app.JsonSchema("run")
 
-	// No required flags (both have defaults / are bool)
+	// No required flags: both declare a default. (A bool is required when it
+	// DECLARES required -- being a bool is not a reason to exclude it.)
 	required := schema["required"]
 	if required != nil {
 		if reqSlice, ok := required.([]interface{}); ok && len(reqSlice) > 0 {
@@ -771,7 +772,7 @@ func TestAsToolsRepeatableFlagNotRequired(t *testing.T) {
 
 	schema := app.JsonSchema("run")
 
-	// Repeatable flags should not be required (they default to empty)
+	// A repeatable flag declaring an empty default is not required
 	required := schema["required"]
 	if required != nil {
 		if reqSlice, ok := required.([]interface{}); ok {
@@ -851,7 +852,7 @@ func TestAsToolsParametersRequiredIsEmptyList(t *testing.T) {
 	}
 }
 
-func TestJsonSchemaDefaultNilOptional(t *testing.T) {
+func TestJsonSchemaOptionalNotRequired(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("run", "run", nopHandler, WithFlags(
 		StringFlag("config", "config path", Optional()),
