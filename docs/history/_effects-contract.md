@@ -91,6 +91,18 @@ the same confirmation is delivered as a server-initiated `elicitation/create` re
 by the very continuation blob the modern era puts in `requestState` -- one mint-and-verify path,
 two delivery vehicles. §22.1, §22.3 and §22.6 are amended in place and §22.7 is added.
 
+Amended a thirteenth time 2026-08-14 at the **presence round** (§18.14), which adds §23. Every
+flag and every positional argument now declares **exactly one** of required, optional, or a default
+value, and every derivation of that fact is deleted: Python's collapse of `default=None` into
+"required", Go's `hasDefault`-only inference, TypeScript's `default === undefined`, the framework's
+silent empty-collection default for compound flags, and the parse-time exemption that handed mutex
+members an absent value the declaration never asked for. §21.3 is amended in place, §13 gains the
+one canonical `presence` key that ends the schema's requiredness erasure, and §12 gains the round's
+registration-error family. The round is a **breaking** change to registration in all three
+languages: a declaration that does not state its presence does not register. It is the first phase
+of the declaration-regime campaign, and it deliberately stops there -- the constraint system and
+the update-command construct are separate rounds with their own amendments.
+
 The ordinal above counts amendment **rounds**, not the paragraphs of this header: the fifth round
 (the adoption round, §18.6) and the eighth (the non-CLI consent round, §18.8) recorded their
 rulings in §18 without adding a paragraph here, which is why the header reads first, second,
@@ -139,6 +151,8 @@ as a page.
 | **Guard v2** | The tightened handler-signature validation that no longer exempts `**kwargs` handlers. |
 | **Declared forwarding** | The registration-time declaration that a handler deliberately accepts and forwards `**kwargs`. |
 | **Framework-internal command** | A command strictcli auto-registers itself (`check`, the five `config` subcommands). Subject to every rule in this document, plus §10.4. |
+| **Presence** | *(added 2026-08-14, presence round)* The mandatory per-flag and per-arg declaration of what absence means: `required`, `optional`, or a `default` value. Exactly one, always declared, never derived (§23). |
+| **Provided** | *(added 2026-08-14, presence round)* A resolved value whose source is `cli`, `env`, `config` or `implied` -- i.e. the invocation supplied it. A value whose source is `default` or `infra` is not provided: the declaration supplied it (§23.6). |
 
 Two rules govern the whole regime and override any local convenience:
 
@@ -2477,6 +2491,116 @@ exception type or repeat its message -- the language's own crash report already 
 naming them here would put three different type vocabularies into a template that must be
 byte-identical across three languages.
 
+### 12.12 The presence declaration
+
+Added 2026-08-14 (presence round, §18.14). Every template here is **registration-time** in the
+parity taxonomy: stderr, `error: ` prefix, exit code 1, exactly like §12.10's declaration guards
+and the existing `Flag "<name>": ...` family.
+
+Every template here except the last carries a per-language noun phrase, because the thing it names
+is a **spelling** and the three languages spell it differently. This is §12.10's handle-availability
+precedent, applied to a larger triple: **the sentence is byte-identical and the spellings inside it
+are each language's own**, and a conformance case asserts the whole line per target rather than a
+shared one. Nothing else in the texts varies.
+
+**The spellings**, referred to below as `<required-spelling>`, `<optional-spelling>` and
+`<default-spelling>` -- three per surface, and the surface is whichever of `Flag` / `Arg` the
+message names:
+
+| | Python | Go | TypeScript |
+|---|---|---|---|
+| flag, required | `presence="required"` | `Required()` | `presence: "required"` |
+| flag, optional | `presence="optional"` | `Optional()` | `presence: "optional"` |
+| flag, default | `default=<value>` | `Default(<value>)` | `presence: "default" with default: <value>` |
+| arg, required | `presence="required"` | `ArgRequired()` | `presence: "required"` |
+| arg, optional | `presence="optional"` | `ArgOptional()` | `presence: "optional"` |
+| arg, default | `default=<value>` | `ArgDefault(<value>)` | `presence: "default" with default: <value>` |
+
+**Nothing declared** -- the zero case, which is also the `_MISSING`-sentinel path in Python and the
+bare struct literal in Go:
+
+```
+Flag "<name>": presence is undeclared: declare exactly one of <required-spelling>, <optional-spelling>, or <default-spelling>
+```
+
+```
+Arg "<name>": presence is undeclared: declare exactly one of <required-spelling>, <optional-spelling>, or <default-spelling>
+```
+
+`errFlagPresenceUndeclared(name)` / `errArgPresenceUndeclared(name)`. All three.
+
+**Two declared** -- the message names the two that were supplied, rendered in the canonical order
+`required`, `optional`, `default` regardless of the order they were written in, so the line is
+deterministic:
+
+```
+Flag "<name>": presence is declared twice: <first> and <second> cannot be combined; declare exactly one
+```
+
+```
+Arg "<name>": presence is declared twice: <first> and <second> cannot be combined; declare exactly one
+```
+
+`errFlagPresenceDeclaredTwice(name, first, second)` / `errArgPresenceDeclaredTwice(name, first,
+second)`. All three. `<first>` and `<second>` are drawn from the table above; the `<value>` of a
+default spelling is rendered by the same value formatter the other declaration guards use
+(`formatValueForError` / `_format_value_for_error`).
+
+**The null-valued default** -- one spelling per fact, so the value-shaped spelling of optionality is
+refused and redirected rather than accepted as a second synonym:
+
+| Impl | Text |
+|------|------|
+| Python | `Flag "<name>": default=None does not declare optionality: use presence="optional" (it delivers None when the flag is absent)` |
+| Go | `Flag "<name>": Default(nil) does not declare optionality: use Optional() (it delivers nil when the flag is absent)` |
+| TypeScript | `Flag "<name>": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the flag is absent)` |
+
+`errFlagDefaultNullNotOptional(name)`, and the `Arg "<name>": ...` twin
+`errArgDefaultNullNotOptional(name)` with `ArgDefault(nil)` / `ArgOptional()` in Go. All three. The
+parenthetical is not decoration: the value the reader wanted is exactly what the redirected
+spelling delivers, and saying so is what stops the redirect reading like a prohibition.
+
+**A mutex member declaring requiredness** (§21, §23.5's mutex row):
+
+```
+Flag "<name>": a mutex member cannot declare <required-spelling>: the group's own requirement is what makes the choice mandatory
+```
+
+`errFlagMutexMemberRequired(name)`. All three.
+
+**A variadic arg declaring a default** (§23.3):
+
+```
+Arg "<name>": a variadic arg cannot declare <default-spelling>: it always delivers a list, so declare <required-spelling> for at least one value or <optional-spelling> for possibly none
+```
+
+`errArgVariadicDefault(name)`. All three. The `<default-spelling>` here renders without its
+`<value>` clause -- `default=`, `ArgDefault()`, `presence: "default"` -- because the message is
+about the spelling being inapplicable, not about the value that was written.
+
+**The handler-parameter check** (§23.3's re-sentinelization block, L1.6):
+
+```
+command "<name>": handler parameter '<param>' is bound to optional flag '--<flag>' and must default to None
+```
+
+`_msg_handler_param_optional_default(name, param, flag)`. **Python only.** Go- and
+TypeScript-excluded, and not because the hazard is smaller there: their handlers receive one
+`map[string]interface{}` / one args object, so there is no per-parameter default for a handler
+author to re-sentinelize with. There is no site to check, not a check that was skipped. The arg
+twin substitutes `optional arg '<arg>'` for `optional flag '--<flag>'`
+(`_msg_handler_param_optional_arg_default`).
+
+**Deleted at this round.** Four registration templates lose their reason to exist and are removed
+from all three catalogs, not left dormant:
+
+| Template | Text | Why it goes |
+|---|---|---|
+| `errFlagExplicitEmptyDefaultRedundantList` | `Flag "<name>": explicit empty default is redundant for list flags, omit the default` | An explicit `[]` is now a declaration, and omitting it is now an error (§23.5's compound row) |
+| `errFlagExplicitEmptyDefaultRedundantDict` | `Flag "<name>": explicit empty default is redundant for dict flags, omit the default` | as above, with `{}` |
+| `errFlagExplicitEmptyDefaultRedundantRepeatable` | `Flag "<name>": explicit empty default is redundant for repeatable flags, omit the default` | as above |
+| `errRequiredArgCannotHaveDefault` | `required arg cannot have a default` | Subsumed by the two-declared error, which says the same thing for every pair and names both spellings. It is also the one message in the family with no `Arg "<name>": ` prefix, so nothing is lost twice |
+
 ---
 
 ## 13. Schema fields
@@ -2583,6 +2707,56 @@ exclusion rationale.
 > `EntityDescriptor`, mirroring the existing `"command.grants": "grants"` entry
 > (`"command.payload_schema"` -> `payloadSchema`, `"command.owns_stdout"` -> `ownsStdout`).
 > `check_schema_parity.py` again needs no shape change: both are ordinary fields.
+
+> **Amendment (2026-08-14, presence round): every flag entry and every arg entry carries
+> `presence`, and the requiredness erasure ends.** Until this round the dumped schema described a
+> flag's presence **nowhere**: a required flag and an explicitly-optional one serialized
+> identically, because the only evidence was a `default` key that both of them omit. Schema parity
+> across the three implementations therefore passed *by erasure* -- three implementations agreeing
+> about a fact none of them emitted. §23 makes presence a declaration, and a declaration this
+> document pins is published.
+>
+> **On every flag entry and every arg entry:**
+>
+> | Key | Type | Emission |
+> |-----|------|----------|
+> | `presence` | `"required"` \| `"optional"` \| `"default"` | **always** -- presence is mandatory, so there is no default to omit against. `effect`'s always-emitted shape, not `consequential`'s omit-when-baseline one |
+> | `default` | the declared value | Emitted **exactly when** `presence` is `"default"`, and then **always**, whatever the value: `[]`, `{}`, `""`, `false` and `0` are emitted, because under §23 they are declarations rather than the absence of one. The omit-when-empty rules for compound defaults (Python's `if f.default:`, Go's `dflt != nil`, TypeScript's `length > 0` / `size > 0`) are deleted |
+>
+> The arg entry's **`required` key is deleted** from the dumped schema. It was the arg-side
+> spelling of the same fact, emitted only when false, and keeping it beside `presence` would put
+> two keys on one fact -- the very thing §23.3 removes from the registration surface.
+>
+> A `RelativeToRoot` marker default is unchanged in shape (`§13`'s machine-stable env-var-plus-parts
+> form) and reports `presence: "default"`, because that is what it is: a declared default whose
+> resolution is deferred to parse time and labelled `infra` (§23.5's infra row).
+>
+> **The conformance case schema** (`conformance/schema.json`) mirrors the key on the **input** side,
+> where it is what a case *declares* rather than what a dump *reports*:
+>
+> - add `presence` (`{"enum": ["required", "optional", "default"]}`) to `$defs/flag`'s and
+>   `$defs/arg`'s `properties`, and to **both** `required` lists -- every declared flag and arg in
+>   every case states its presence, which is the case-schema encoding of §23.1's zero-declaration
+>   error;
+> - delete `required` from `$defs/arg`'s `properties`, following the dumped schema;
+> - **keep `null` in `$defs/flag`'s `default` `oneOf`.** It stops being a legal declaration and
+>   becomes the input the redirect error (§12.12) is asserted against, so a case must still be able
+>   to express it. A schema that could not spell the refused declaration could not test the refusal.
+>
+> `conformance/check_schema_parity.py` **does** need a shape change here, and it is the point of the
+> item rather than an afterthought: the erasure is what let three implementations certify agreement
+> about a fact none of them emitted, so the parity check gains an assertion that `presence` is
+> present on every flag and arg entry of every dump it compares. A missing key is a failure, never a
+> silently-equal pair of absences.
+>
+> **The MCP projection collapses onto the same field.** A parameter appears in a tool schema's
+> `required` array **iff its declared presence is `required`** -- flags and args alike. The three
+> hand-written derivations are deleted (Python's `compound == "scalar" and default is None`, Go's
+> four-clause `isRequired`, TypeScript's `kind === "scalar" && schema !== "bool" && default ===
+> undefined`), and with them the three-way disagreement about **required bools**: they were required
+> in Python's projection and excluded from Go's and TypeScript's on the reasoning that "bool flags
+> always have a default", which §23 makes false by construction. Required bools now appear in all
+> three, which is what Python already did.
 
 ---
 
@@ -4124,6 +4298,159 @@ the correction that made the promise true.
      units, which orders an astral character before a BMP one and would have reintroduced the
      same divergence in a narrower corner.
 
+### 18.14 Amendments made at the presence round (2026-08-14)
+
+This round is the first phase of the declaration-regime campaign. It adds §23, adds §12.12, amends
+§0 and §13, and amends §21.3 in place. Items 137, 138, 143 and 147 are **ruled upstream**; the rest
+are authored spellings in the §18.3 class -- the mechanical remainder the rulings left open, decided
+here so implementors have nothing left to decide, and written **before** any implementation, which
+is the §19 discipline this campaign adopted explicitly.
+
+**Origin tags.** This section is the first in §18 to carry them, because the campaign's own decision
+record distinguishes two kinds of upstream ruling and the distinction should survive into this
+document. `[%%]` marks a ruling adopted from a **recommendation** -- the user picked a recommended
+option, which is trust rather than a deliberate directive, and such a ruling is **freely
+reversible**: a later session finding it wrong should walk it back without treating it as settled
+intent. `(D)` would mark the user's own proposal or an explicit directive. **Every ruled item in
+this round is `[%%]`.** None of them is a deliberate directive, and nothing here should ever be
+cited back as one.
+
+The evidence behind the round, measured across the fleet: 140-182 Python flags written for a
+"not provided" meaning Python did not have and silently required instead, three dead
+"no fields specified" guards behind them, 214-375 flags using `default=""` as an absence sentinel,
+9 sites writing a tool-picked value on absence, 2 shipped commands writing the wrong value on
+every edit because absence forced a restatement, a schema that erased requiredness so parity passed
+by erasure, three MCP projections disagreeing about required bools, and zero conformance coverage
+of optional-flag absence in any language.
+
+137. **[%%] Every flag declares exactly one of required, optional, or a value default (§23.1).**
+     Omitting all three is a registration-time hard error; supplying two is a registration-time
+     hard error. The rejected alternatives are on the record: a silent fleet-wide flip of the
+     177 affected sites (a no-silent-degradation violation), and keeping both `presence=` and a
+     null-valued default as synonyms (two spellings for one fact). What was ruled is the rule and
+     the shape; the per-language spellings are item 139's.
+
+138. **[%%] A null-valued default is a registration error that redirects to the optional spelling
+     (§23.1, §12.12).** `default=None`, `Default(nil)` and `default: null` stop being declarations.
+     Go and TypeScript **lose a working spelling** here, which is the cost of the ruling and is
+     paid deliberately: their `Default(nil)` / `default: null` delivered exactly the right
+     behaviour, and letting it stand beside `presence="optional"` would leave optionality with two
+     spellings in two languages and one in the third. The redirect names what to write instead and
+     says what it delivers, so the error teaches rather than forbids.
+
+139. **The authored spellings, per language (§23.2, §23.3).** Python `presence="required"` /
+     `presence="optional"` / `default=<value>`; Go the three sibling `FlagOption`s `Required()` /
+     `Optional()` / `Default(v)`; TypeScript a discriminated union on `presence` with members
+     `{presence:"required"}`, `{presence:"optional"}` and `{presence:"default", default: Out}`.
+     Each follows its own framework's existing conventions rather than a shared invented one:
+     Python already declares with keywords, Go already declares with functional options, and
+     TypeScript's `ArgOpts` has been a three-shape union since the port -- the flag surface adopts
+     the precedent that already existed one factory over. The Go struct-literal path is pinned as
+     part of the same item: a `Flag` literal that never passes through the constructors declares no
+     presence and does not register, which incidentally closes the trap where an exported `Default`
+     field set on a literal was silently ignored because the unexported `hasDefault` stayed false.
+
+140. **The arg surface takes the same three-way declaration, and `required=` is deleted
+     (§23.3).** Ruled: the model is the same for args. Authored: that `required=` /
+     `ArgRequired(bool)` / `required?: boolean` are **removed** rather than kept beside it.
+     `required=True` was an implicit default -- the same derivation the round removes from flags --
+     and `required=False` plus `default=` spelled one fact across two fields with a guard holding
+     the illegal corner shut. Authored with it: `default` on a variadic arg is a registration error
+     (a variadic always delivers a list, so the empty case is `optional`), and an optional arg
+     delivers a **present key** holding absence rather than omitting the kwarg, which is the same
+     rejection of key-absence delivery the round applies to flags.
+
+141. **All five derivations are deleted, including the mutex-member exemption (§23.4).** Python's
+     `default=None` collapse, Go's `hasDefault`-only inference, TypeScript's `default === undefined`,
+     the silent empty-collection default for compound flags, and the parse-time exemption that
+     handed mutex members an absent value their declaration never asked for. The last one is a
+     prerequisite for the constraint round, and it is also what makes §21 read correctly: a group
+     decides which member is chosen, a member decides what its own absence means.
+
+142. **The composition matrix (§23.5).** Fifteen rows, each with an answer per presence, because a
+     three-way declaration multiplied by every other declaration in the framework is exactly where
+     an unstated cell becomes an implementation divergence. The two whole-table rules decide the
+     most cells: the default-in-choices check applies to declared **values** and never to
+     absence (which is what lets `choices` compose with `optional` in both directions), and
+     requiredness is satisfied by **any** source that provides a value -- CLI, env, config or an
+     implication -- rather than by a command-line token specifically. Three cells are authored
+     decisions rather than descriptions of today: a mutex member declaring requiredness is a
+     registration error (the group's own requirement is what makes the choice mandatory); a
+     `CoRequired` group containing a required member is legal and forces every other member in
+     every invocation; and an `Implies` trigger never fires from its own default.
+
+143. **[%%] `ctx.provided(name)` is the idiomatic "was this supplied?" accessor (§23.6).** Ruled:
+     the accessor exists in all three languages and `ctx.source()` stays for its narrower
+     origin-distinguishing uses. Authored: the per-language spellings (`ctx.provided` /
+     `ctx.Provided` / `ctx.provided`) and the semantics -- `cli`, `env`, `config` and `implied`
+     count as provided, `default` and `infra` do not. The dividing line is *what caused the value*:
+     the invocation, or the declaration. `implied` is on the provided side because an implied value
+     exists only when the invocation contained the trigger; `infra` is on the other side because a
+     `RelativeToRoot` default is a declared default whose label merely says which default it was.
+     An optional flag that received nothing carries source `default` rather than a seventh label:
+     an optional declaration deciding on absence **is** the declaration deciding. Unknown names
+     reuse `ctx.source`'s existing behaviour and its existing message.
+
+144. **The dumped schema gains one canonical `presence` key, and the arg-side `required` key is
+     deleted (§13's amendment box).** Always emitted, `effect`'s shape rather than
+     `consequential`'s, on flag entries and arg entries alike; `default` emitted exactly when
+     `presence` is `"default"` and then **always**, including for `[]`, `{}`, `""`, `false` and
+     `0`, since under §23 those are declarations rather than the absence of one. The
+     omit-when-empty compound rules die with it. `check_schema_parity.py` gains an assertion that
+     the key is present on every entry: the erasure is precisely what let three implementations
+     certify agreement about a fact none of them emitted, and a parity check that cannot fail on a
+     missing field would let it happen again. The conformance **case** schema keeps `null` in its
+     `default` union so a case can still spell the declaration item 138 refuses.
+
+145. **The three MCP requiredness derivations collapse onto the declared field (§13's amendment
+     box).** A parameter is in a tool schema's `required` array iff its declared presence is
+     `required` -- flags and args alike. The three-way disagreement about **required bools** goes
+     with them: Go and TypeScript excluded bools on the reasoning that "bool flags always have a
+     default", which this round makes false by construction, so they now match what Python already
+     emitted.
+
+146. **The help markers converge, and two renderings change bytes (§23.8).** Every flag and every
+     arg renders exactly one presence part, last on the line: `[required]`, `[optional]`, or
+     `[default: <value>]`. `[optional]` was Go-and-TypeScript-only and Python gains it, which is
+     the majority rendering and the only one that can express the new declaration. The two authored
+     changes are the ones the invariant forces: a declared empty collection renders
+     `[default: []]` / `[default: {}]` where all three rendered nothing before (the empty
+     collection used to be the framework's own silent default, so there was nothing to announce),
+     and a **required positional arg** renders `[required]` where all three rendered no marker --
+     there is no usage line in this framework's help output, so a required positional was the one
+     declaration whose presence a reader could not see. The literal empty-collection spellings are
+     used rather than a new word, so the help vocabulary does not grow.
+
+147. **[%%] A Python handler parameter bound to an optional flag must default to `None`
+     (§23.3, §12.12).** The cheap half of a rung the campaign otherwise rejected: it blocks
+     re-sentinelization at the handler boundary, which is where the declaration's honesty would
+     otherwise be undone one line later. Authored: the message text, the extension of the same rule
+     to optional **args**, and the exclusion of Go and TypeScript -- their handlers receive one
+     kwargs map / one args object, so there is no per-parameter default to check. That is an absent
+     site, not a skipped check.
+
+148. **§21.3 is amended in place rather than contradicted (§21.3, §23.4).** Its sentence "an
+     unelected member delivers its declared default, or nothing when it **declares none**" was
+     written when declaring nothing was a legal state. After this round the same behaviour is
+     reached by declaring `optional`, so the clause is struck and restated with the new spelling
+     and everything else about §21 stands: election is still CLI-only, env and config are still not
+     consulted for a member, a declared default still applies to an unelected member, and the
+     `config_conflict_mode` carve-out of item 119 is untouched.
+
+149. **Four registration templates are deleted (§12.12).** The three
+     `explicit empty default is redundant for <kind> flags, omit the default` errors, because an
+     explicit `[]` or `{}` is now a declaration and omitting it is now the error; and
+     `required arg cannot have a default`, because the two-declared error says the same thing for
+     every pair and names both spellings. They are removed from all three catalogs rather than left
+     dormant: a template no code path can reach is a claim about behaviour that no longer exists.
+
+150. **The round's boundary is declared, not left to inference (§23.9).** `ConfigField`
+     requiredness keeps its derivation -- a config field has no command-line presence, no help
+     marker, no MCP projection and no `provided` question, so the failure this round removes cannot
+     arise for it. The constraint system, the update-command construct and the consumer-side
+     retirement of the `default=""` idiom are separate work with their own amendments. Stating the
+     boundary is what stops a later reader treating an untouched surface as an oversight.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -4633,8 +4960,10 @@ is not.
 variable or a config file elects nothing, and it does not satisfy the group.
 
 Env and config are, further, **not consulted at all** for a mutex member's value: an unelected
-member delivers its declared default, or nothing (`None` / `nil` / `undefined`) when it declares
-none, regardless of what the environment or the config file holds for it. The suppression is
+member delivers its declared default, or ~~nothing (`None` / `nil` / `undefined`) when it declares
+none~~ *(amended 2026-08-14, presence round, §18.14 item 148)* nothing (`None` / `nil` /
+`undefined`) when it declares `optional`, regardless of what the environment or the config file
+holds for it. The suppression is
 applied before dependency validation, so `Requires`, `CoRequired` and `Implies` observe the same
 state the group does, and the resulting source label is `default`, never `env` or `config`.
 
@@ -4980,3 +5309,286 @@ carries the modern `_meta` is served statelessly whatever the latch says; a requ
 is refused. One process therefore serves a legacy handshake, a legacy confirmation and a modern
 confirmation in any order, and the continuation minted in either era is worthless in the other
 request that did not mint it, because the binding is the same one either way.
+
+---
+
+## 23. The presence declaration
+
+Added 2026-08-14 at the **presence round** (§18.14). Sections in this document are never
+renumbered, so §23 sits physically after §22. It is normative exactly as §§1-17 are.
+
+Every flag and every positional argument declares, at registration, **exactly one** of three facts
+about itself: that a value must be supplied (**required**), that absence is legal and is delivered
+as absence (**optional**), or a **default** value the framework supplies when nothing else does.
+Declaring none of the three does not register. Declaring two does not register. Nothing about
+presence is ever inferred from the shape of another declaration.
+
+Nothing here is conditional on the effects regime. It is pinned in this document for the reason
+§21 is: this is where cross-language spellings, registration-error texts and schema fields are
+pinned, and the presence declaration joins `effect`, `consequential` and `dry_run_supported` as a
+registration-level declaration the framework refuses to guess at.
+
+**The evidence, measured across the fleet before the round.** Python collapsed `default=None` into
+"required" while Go's `Default(nil)` and TypeScript's `default: null` delivered a real
+not-provided, so between 140 and 182 Python flags were written expecting the Go/TS meaning and were
+silently required instead -- with correct fetch-then-merge handler code sitting unreachable behind
+them, and three "no fields specified" guards that could never fire. Between 214 and 375 flags used
+`default=""` as an absence sentinel, which destroys `""` as a value. Nine sites wrote a tool-picked
+value on absence. The dumped schema erased requiredness entirely, so schema parity passed by
+erasure; the three MCP projections disagreed three ways about required bools; and optional-flag
+absence had zero conformance coverage in any language. Every one of those is a consequence of the
+same missing declaration.
+
+### 23.1 The rule
+
+- **Exactly one of the three**, on every flag at every level (command flags, flag-set flags,
+  mutex-group members, app global flags) and on every positional arg.
+- **Zero** is a registration-time hard error naming all three choices (§12.12).
+- **Two or more** is a registration-time hard error naming the two that were supplied (§12.12).
+- **A null-valued default is not a spelling of optionality.** `default=None` / `Default(nil)` /
+  `default: null` is a registration error that redirects to the optional spelling. This is the
+  one-spelling-per-fact rule: optionality has exactly one way to be written, and the value-shaped
+  way is refused rather than accepted as a synonym. `presence="optional"` is what delivers `None`.
+- All of it is **registration-time**, in all three implementations, with the texts §12.12 pins.
+
+The rule is stated as a positive requirement rather than as a lint over the old surface on purpose:
+after this round there is no such thing as a flag whose presence is unstated, so nothing downstream
+-- parse, help, schema, MCP, `ctx.provided` -- has an absence case to handle.
+
+### 23.2 The spellings, per language
+
+| Fact | Python | Go | TypeScript |
+|------|--------|-----|-----------|
+| required | `presence="required"` | `Required()` | `{ presence: "required" }` |
+| optional | `presence="optional"` | `Optional()` | `{ presence: "optional" }` |
+| default | `default=<value>` | `Default(<value>)` | `{ presence: "default", default: <value> }` |
+
+**Python.** `presence=` joins `default=` on the `flag()` decorator and the `Flag` dataclass.
+Supplying both is the two-declared error; supplying neither is the zero error, which is exactly the
+`_MISSING`-sentinel path -- the sentinel stops resolving to `None` and starts refusing to register.
+
+**Go.** Three sibling `FlagOption`s. `Default(v)` keeps its current shape and its unexported
+`hasDefault`; `Required()` and `Optional()` set the same presence field it does. A `Flag` **struct
+literal** that never passes through the option constructors declares no presence and therefore does
+not register -- which closes a pre-existing trap as a side effect: an exported `Default` field set
+directly on a struct literal left `hasDefault` false and was silently ignored at parse time. After
+this round that flag does not register at all, so the value cannot be silently dropped.
+
+**TypeScript.** `FlagOpts` becomes a **discriminated union on `presence`**, mirroring the
+three-shape union `ArgOpts` has carried since the port:
+
+```ts
+| { presence: "required";  /* ...the common options... */ }
+| { presence: "optional";  /* ... */ }
+| { presence: "default"; default: Out; /* ... */ }
+```
+
+A `default` outside the `"default"` member does not type-check, and the `"default"` member's
+`default` is not optional. `default: null` is still refused at **registration** rather than only by
+the type system, because a widened option object can reach the factory at runtime with a `null` the
+compiler never saw.
+
+**The type-level consequence is part of the promise, not a side effect.** `infer.ts`'s
+`FlagKeyIsOptional` reads `presence` instead of `opts extends { default: null }`, which fixes the
+known unsoundness it had: a mutex member declared without a default was typed as an
+always-present, non-nullable key, while the parser handed it `undefined` through the exemption
+§23.4 deletes. After this round the member declares `presence: "optional"` like anything else, and
+the handler-args type follows the declaration by construction.
+
+### 23.3 Positional args
+
+Args take the **same three facts and the same one-spelling rule**. The old arg surface --
+Python's `required: bool = True`, Go's `ArgRequired(b bool)`, TypeScript's `required?: boolean` --
+is **deleted**, not retained beside the new spellings.
+
+| Fact | Python | Go | TypeScript |
+|------|--------|-----|-----------|
+| required | `presence="required"` | `ArgRequired()` | `{ presence: "required" }` |
+| optional | `presence="optional"` | `ArgOptional()` | `{ presence: "optional" }` |
+| default | `default=<value>` | `ArgDefault(<value>)` | `{ presence: "default", default: <value> }` |
+
+Three reasons, each of which independently forces the deletion:
+
+- `required=True` was an **implicit default** -- an arg that declared nothing was required by
+  omission, which is the same derivation §23.1 removes from flags, one surface over.
+- `required=False` **plus** `default=` spelled a defaulted arg, and `required=False` alone spelled
+  an optional one, so the fact lived across two fields with a guard (`required arg cannot have a
+  default`) holding the illegal corner shut. One field with three values needs no guard.
+- Keeping `required=` beside `presence=` would be two spellings for one fact -- the exact thing the
+  `default=None` redirect exists to prevent.
+
+**Delivery.** An optional arg delivers **absence as a present key** (`None` / `nil` /
+`undefined`), the same as an optional flag. It does **not** omit the kwarg, which is what all three
+implementations did before. Key-absence delivery was considered and rejected for the whole round:
+it fails at runtime, on the least-tested path, in the handler rather than at registration.
+TypeScript's inferred args type keeps `?:` for an optional arg -- an optional property whose value
+is `undefined` is what a reader of that type expects -- and the runtime object carries the property.
+
+**Variadic args.** A variadic arg always delivers a list, so `required` means *at least one value*
+and `optional` means *possibly none*, and a `default` on a variadic arg is a registration error
+(§12.12). The empty case is `optional`, spelled once.
+
+**The handler-parameter check (Python only).** A Python handler parameter bound to an optional flag
+or an optional arg must itself default to `None`. Anything else -- `def h(ctx, target="")` bound to
+an optional `--target` -- re-introduces at the handler boundary the sentinel the declaration just
+removed, and the framework can see it at registration because Python handlers name their
+parameters. It is a registration-time hard error (§12.12). Go and TypeScript have no such site:
+their handlers receive one kwargs map / one args object and no per-parameter defaults exist to
+check.
+
+### 23.4 What is deleted
+
+Five mechanisms, all of them inferences, all of them removed rather than left unreachable:
+
+| Deleted | Where | What replaces it |
+|---------|-------|------------------|
+| `default=None` collapses to required | Python's `_MISSING` resolution and its parse-time "no default and no value: required" branch | the declared presence |
+| `hasDefault`-only inference | Go's `hasDefault` read as "optional iff a default was set" | the declared presence; `hasDefault` survives only as the storage for `Default(v)` |
+| `default === undefined` means required | TypeScript's parse and help paths | the declared presence |
+| the silent empty-collection default | all three: a repeatable/list flag with no declared default became `[]`, a dict flag `{}`, "never required" | `default=[]` / `default={}` declared explicitly, or `optional`, or `required` (§23.5) |
+| the mutex-member presence exemption | Python's `mutex_flag_names` branch in the defaults step, Go's `parse.go` equivalent, TypeScript's `parse.ts` equivalent | the member's own `optional` declaration; the group enforces cardinality **on top of** presence, never instead of it |
+
+The last one is the one with a second-order effect worth stating: the exemption existed because a
+mutex member could not say "I may be absent", and its removal is a prerequisite for the constraint
+system's by-name model. It also makes §21 read as it always should have -- a group decides *which*
+member is chosen, and a member decides what its own absence means.
+
+### 23.5 Composition
+
+Presence composes with every other declaration in the framework. Each cell below is pinned, and
+none of them is new behaviour left implicit: where a row states today's behaviour, it is stated
+because it was never written down and the round is what makes it a promise.
+
+| Composed with | `required` | `default` | `optional` |
+|---|---|---|---|
+| **`choices`** | a supplied value must be in `choices` (unchanged) | the declared default **value** must be in `choices` at registration (unchanged text) | legal, and **nothing is checked at registration**: there is no value. Absence is never matched against `choices` at parse time; a supplied value is |
+| **`bool`** | must be passed: `--x` or `--no-x` when negatable, `--x` when not (existing parse errors, unchanged) | `default=True` / `default=False` | **real tri-state**: `--x` is true, `--no-x` is false, absent is absent. This is what retires the string-pseudo-bool idiom |
+| **repeatable / `list[T]`** | at least one occurrence must arrive from some source, else `flag '--x' is required` | `default=[]` is an explicit, legal declaration, as is a non-empty list | absent delivers **absence**, not `[]`. A handler that wants an empty list declares one |
+| **`dict[K,V]`** | at least one key must arrive, else the same error | `default={}` legal, as is a non-empty map | absent delivers absence, not `{}` |
+| **`env`** | an env-supplied value **satisfies requiredness**; there is no separate "must be typed" rule | env wins over the default (CLI > env > config > default, unchanged) | an env value makes the flag **provided** (§23.6), source `env`. Neither present leaves it absent |
+| **`config`** | a config value satisfies requiredness | config wins over the default, loses to env and CLI | a config value makes the flag provided, source `config` |
+| **`Implies` target** | the injected value **satisfies requiredness**, because implication resolves before defaults and before the required check. With the trigger absent, the required error fires normally | the injection is applied before defaults, so the default never applies; source `implied` | the injection makes it provided, source `implied`; without the trigger it stays absent |
+| **`Implies` trigger** | fires whenever the flag is **provided** (§23.6) | **never fires from its own default** -- a defaulted trigger fires only when something actually supplies it | fires when provided |
+| **`CoRequired`** | a required member is always provided, so the group then forces every other member to be provided in every invocation. Legal, and stated because it is a surprising shape to write by accident | a `default` member is **not** provided by its default, so it never counts as present for the group | the ordinary case: present iff provided |
+| **`Requires`** | same predicate on both sides | a default on the depended-on flag does **not** satisfy the dependency | present iff provided |
+| **mutex member** | **registration error** -- the group's own requirement is what makes the choice mandatory, and a member that must always be typed contradicts a group that permits exactly one (§12.12) | legal and unchanged: §21.3's unelected member delivers its declared default | the ordinary declaration for a member; election stays CLI-only (§21.3) |
+| **`validate`** | runs on the supplied value | runs on a supplied value, never on the default | **never runs on absence**; runs on a supplied value |
+| **`RelativeToRoot`** | n/a | the marker **is** a `default=` declaration: `presence` is `default`, the value resolves at parse time, the source label is `infra` | n/a |
+| **URL-class flag (`connection_url`)** | requiredness is satisfied by the bound connection env's value, which is the `env` row; no extra guard | legal | legal |
+
+Two whole-table notes:
+
+- **The default-in-choices check applies to declared VALUES only, never to absence.** That single
+  sentence is what makes `choices` compose with `optional` in both directions, and it is the reason
+  the check's existing text is unchanged: it never had anything to say about a flag that declares
+  no value.
+- **Requiredness is satisfied by any source that provides a value** -- CLI, env, config or an
+  implication. It is not a "must be typed on the command line" rule. The one exception is the
+  mutex row, and it is §21.3's exception rather than this round's: env and config are not consulted
+  for a mutex member at all.
+
+### 23.6 `ctx.provided`
+
+A dedicated boolean accessor, in all three languages, for the question the fleet was asking with
+sentinels:
+
+| Impl | Spelling |
+|------|----------|
+| Python | `ctx.provided(name) -> bool` |
+| Go | `ctx.Provided(name) bool` |
+| TypeScript | `ctx.provided(name): boolean` |
+
+It accepts dashed or underscored names, underscore form tried first, exactly as `ctx.source` does.
+
+**Semantics, defined over the existing source vocabulary** (`cli` | `env` | `config` | `default` |
+`implied` | `infra` -- the framework's existing per-value source labels):
+
+| Source | `provided` | Why |
+|--------|-----------|-----|
+| `cli` | **true** | the invocation supplied it |
+| `env` | **true** | the invocation's environment supplied it; the framework did not invent it |
+| `config` | **true** | the operator's own file supplied it; likewise not invented |
+| `implied` | **true** | it exists **only** because the invocation contained the trigger. An implication is a consequence of what was typed, not a fallback |
+| `default` | **false** | the declaration supplied it |
+| `infra` | **false** | a `RelativeToRoot` default resolved through a declared root: still a declared default, with a distinct label so the operator can see *which* default it was |
+
+One sentence covers it: **`provided` is true when the invocation caused the value and false when
+the declaration did.** The same predicate is what `CoRequired`, `Requires` and `Implies` already
+use to decide presence, so the framework has one definition of "was this supplied", not two.
+
+**An optional flag that received nothing** carries source `default` and `provided() == false`. It
+has no declared default value; `default` is the label for "the declaration decided", and an
+optional declaration deciding on absence is that. No new source label is minted for it -- adding a
+seventh label would change `ctx.source`'s vocabulary for every existing consumer to express
+something the sixth already covers.
+
+**An unknown flag name behaves exactly as `ctx.source`'s does**, with the same message
+(`errNoSourceInfo` / `no source info for flag "<name>"`): Python raises `KeyError`, Go panics,
+TypeScript throws. `provided` reads the same per-parse store `source` reads, so a name that has no
+source has no provision either, and giving the two accessors two texts for one condition would be
+the two-spellings mistake again.
+
+`ctx.source` is **not** superseded and is not deprecated. It answers a narrower question -- *which*
+origin -- and remains the accessor for a handler that needs to distinguish env from config. What
+changes is that no handler should be reconstructing a boolean out of it.
+
+### 23.7 Schema and MCP
+
+Both live in §13, where command-entry and flag-entry facts are pinned; see the presence-round
+amendment box there. In summary: one canonical `presence` key on every flag and arg entry, always
+emitted; `default` emitted exactly when `presence` is `"default"` and then always, including for
+`[]`, `{}`, `""`, `false` and `0`; the arg entry's `required` key deleted; the three hand-written
+MCP requiredness derivations collapsed onto the declared field, which puts required bools into the
+Go and TypeScript tool schemas as they were already in Python's.
+
+### 23.8 Help rendering
+
+**Every flag and every arg renders exactly one presence part**, and it is the **last** bracketed
+part of the line -- the position all three implementations already give it:
+
+| Declared | Rendered |
+|----------|----------|
+| `required` | `[required]` |
+| `optional` | `[optional]` |
+| `default` | `[default: <value>]` |
+
+This converges a live divergence. `[optional]` was **Go and TypeScript only** -- the `Default(nil)`
+rendering -- and Python could not produce it at all, because Python had no way to express the
+declaration behind it. Python gains it. Nothing else about the rendering moves: a bool default
+still renders `[default: true]` / `[default: false]`, and the presence part still follows
+`[list]` / `[dict]` / `[repeatable]` / `[unique]` / `[choices: ...]` / `[env: ...]`.
+
+Two consequences of the invariant, both of which change bytes:
+
+- **A declared empty collection default renders `[default: []]` or `[default: {}]`.** All three
+  implementations previously rendered *nothing at all* for it, because the empty collection was the
+  framework's own silent default and there was nothing to announce. It is now a declaration, and a
+  declaration that renders as blank would leave the flag as the one line in the help output with no
+  presence part. The literal empty-collection spellings are used rather than a new word, so the
+  vocabulary does not grow.
+- **A required positional arg renders `[required]`.** All three previously rendered no marker for
+  it, and there is no usage line anywhere in the help output that showed requiredness some other
+  way -- so a required positional was the one declaration in the framework whose presence was
+  invisible to a reader. It is now rendered exactly as a required flag's is.
+
+### 23.9 What this round does not touch
+
+Stated so the boundary is a decision rather than an omission:
+
+- **`ConfigField` requiredness.** A standalone config field still derives its requiredness from
+  whether it declares a default. A config field is not a CLI declaration: it has no presence on a
+  command line, no help marker, no MCP projection and no `ctx.provided` question, and the failure
+  mode this round exists to remove -- a handler unable to tell absence from a value -- does not
+  arise for it. A field that collides with a flag inherits the flag's handling, which is the
+  declared one.
+- **The constraint system.** By-name constraint members, the at-least-one and all-or-none
+  constructors, declared election selectors and the collapse of bool-only groups into required
+  `choices` flags are a separate round with its own amendment. §23.4's deletion of the mutex-member
+  exemption is the prerequisite that round needs, and it is all this one does about groups.
+- **The update-command construct.** The mutating-default ban, `update_of=`, `write_mode=` and the
+  `--unset-<prop>` vocabulary are a third round. This round makes the distinction they rest on --
+  absent versus defaulted versus required -- expressible; it does not use it.
+- **Consumer migration.** Retiring the `default=""` sentinel idiom is a per-repository judgement
+  about which sites meant "absent" and which meant `""`, and no framework rule can make it. What
+  the framework provides is that after this round both are sayable and they are not the same
+  declaration.
