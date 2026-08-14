@@ -82,6 +82,15 @@ round-trip, so the one channel that can reach a human now asks one instead of ta
 word for it. §8.3, §8.4, §8.5, §12.6 and §18.8's item 93 are amended in place rather than
 contradicted, and the two refusal messages stop printing the token that lifts them.
 
+Amended a twelfth time 2026-08-14 at the **confirmation round** (§18.12), which finishes what the
+protocol round deferred in §22.6. A modern client that did not declare it can render a form
+elicitation no longer gets §8.5's refusal: it gets the revision's own `-32021`
+`MissingRequiredClientCapability`, carrying what it would have to declare. The legacy era stops
+being the protocol's first revision and becomes `2025-11-25`, the last handshake-based one, where
+the same confirmation is delivered as a server-initiated `elicitation/create` request correlated
+by the very continuation blob the modern era puts in `requestState` -- one mint-and-verify path,
+two delivery vehicles. §22.1, §22.3 and §22.6 are amended in place and §22.7 is added.
+
 The ordinal above counts amendment **rounds**, not the paragraphs of this header: the fifth round
 (the adoption round, §18.6) and the eighth (the non-CLI consent round, §18.8) recorded their
 rulings in §18 without adding a paragraph here, which is why the header reads first, second,
@@ -4012,6 +4021,64 @@ the rulings left open, decided here so implementors had nothing left to decide.
      the whole reason it exists: an integrity-protected value that no case ever corrupts is an
      unchecked value.
 
+### 18.12 Amendments made at the confirmation round (2026-08-14)
+
+This round finishes §22.6's deferrals: the client-declaration error, the legacy era's branch, and
+the published page that campaign decision 26 requires. It amends §22.1, §22.3 and §22.6 in place
+and adds §22.7. Nothing here is a new ruling -- the rulings are decisions 5, 9 and 26, already
+recorded at §18.11 -- so every item below is an authored spelling in the §18.3 class: the
+mechanical remainder those rulings left open, decided here so implementors had nothing left to
+decide.
+
+127. **The undeclared-capability answer is `-32021`, and it names FORM mode (§22.3).** The
+     revision forbids sending an input request the client never declared it could fulfil and
+     assigns the code for saying so; the message is the revision's own example text, and
+     `data.requiredCapabilities` is a client-capabilities object. Naming `{"elicitation":{}}`
+     there would have been the shorter spelling and the wrong one: it reads as "any elicitation
+     mode", and a client that came back declaring URL mode only would be refused a second time.
+     The refusal names what is required and never how to proceed without confirming, which is
+     item 121's rule applied to a machine reader.
+
+128. **The legacy era advances to `2025-11-25` (§22.1, §22.7).** The alternatives were to stay on
+     the protocol's first revision (`2024-11-05`, which has no elicitation at all, so the legacy
+     branch could not exist) or to pick `2025-06-18` (which introduced elicitation, but before the
+     `mode` field). `2025-11-25` is the newest handshake-based revision -- the era's own boundary
+     as the modern revision draws it -- and it is the one whose `elicitation/create` params are
+     spelled exactly as §22.5's are, so the same request object serves both vehicles. The legacy
+     negotiation rule tells a server to answer with the latest version it supports, which this is.
+
+129. **The continuation blob IS the legacy correlation id (§22.7).** A server-initiated request
+     needs its response matched to it, and the obvious spellings -- a counter, a random token, a
+     map from id to pending call -- would have been a second correlation mechanism beside the one
+     §22.4 already built. JSON-RPC obliges a client to echo the id verbatim, which is the same
+     obligation the modern era puts on `requestState`, so the blob rides as the id and is verified
+     on return through the one mint-and-verify path. A matching id that fails the MAC, the expiry,
+     the principal, the digest or the single-use check confirms nothing.
+
+130. **In the legacy era everything that is not an explicit acceptance aborts, and there is no
+     re-ask (§22.7).** The modern era re-asks a client that came back without an answer because
+     the client is free to return whenever it likes; here the server is holding the request open
+     and a non-answer -- a decline, a cancel, an unreadable result, a JSON-RPC error, or the
+     stream ending -- is a decision. Fail-closed is the only reading consistent with §8: an
+     unconfirmed consequential command does not run.
+
+131. **Client traffic that arrives while the server is waiting is held, not dropped (§22.7).** A
+     response whose id is not the awaited one is discarded, because this server sent no such
+     request; a request or a notification is queued and served after the interrupted call
+     completes. Dropping it would silently lose a client's work, and answering it mid-exchange
+     would make the loop reentrant for no gain.
+
+132. **The declared feature is advertised in both eras (§22.7).** `server/discover` advertises it
+     under `capabilities.extensions`; the handshake result advertises the same name under
+     `capabilities.experimental`, which is where the legacy revision puts a non-standard server
+     capability. One name, two advertisements -- a legacy client can learn this server asks
+     without inferring it from a revision date, which is the whole of decision 26.
+
+133. **The published page is `docs/mcp-confirmation.md`.** Decision 26's third surface. It is a
+     hand-written page on the published docs site (not under `docs/history/_*`, which is
+     deliberately unpublished), and it carries the dialogue in both eras, the feature name, and
+     what a client must declare. The quickstarts link to it rather than restating it.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -4579,15 +4646,21 @@ so the one channel that could have asked a human had no way to ask.
 | Era | Revision | Selected by | Shape |
 |-----|----------|-------------|-------|
 | **Modern** | `2026-07-28` | a request carrying `_meta['io.modelcontextprotocol/protocolVersion']` | stateless: every request declares its version and the client's capabilities; every result carries a `resultType`; `server/discover` replaces the handshake |
-| **Legacy** | `2024-11-05` | an `initialize` request, scoped to the process | the handshake revision, byte-unchanged from what this server has always spoken |
+| **Legacy** | `2025-11-25` | an `initialize` request, scoped to the process | the last handshake-based revision: a session, and server-to-client requests sent as requests (§22.7) |
 
 A request that carries neither the modern metadata nor a preceding `initialize` is **malformed**
 and is refused with `-32602`; nothing is inferred from its shape. The legacy latch is the only
 piece of connection state the server keeps, and the modern era never consults it -- which is what
 the modern revision's own dual-era rule requires of a server serving both.
 
-The legacy era is untouched by this round on purpose. It is where §11.6's server-initiated
-delivery will live; moving it now would have meant designing that branch here.
+~~The legacy era is untouched by this round on purpose. It is where §11.6's server-initiated
+delivery will live; moving it now would have meant designing that branch here.~~
+**Amended 2026-08-14 (confirmation round, §18.12 item 128).** That branch was designed and built,
+and the legacy era moved with it: the advertised revision is now `2025-11-25`, the newest
+handshake-based one, which is the version the legacy negotiation rule tells a server to answer
+with and the first that supports the mechanism this document is about. What the era *is* --
+selected by `initialize`, scoped to the process, never consulted by a modern request -- is
+unchanged. §22.7 has the delivery.
 
 ### 22.2 Per-request metadata
 
@@ -4649,8 +4722,22 @@ than by map-iteration order.
   asks before running a consequential tool without inferring it from a revision date.
 - **Error codes.** `-32022` (unsupported protocol version) is emitted with
   `data: {"supported": ["2026-07-28"], "requested": "<what was asked for>"}`. `-32020`
-  (header mismatch) is HTTP-transport-only and unreachable here. `-32021` (missing required
-  client capability) is not emitted at this round -- see §22.6.
+  (header mismatch) is HTTP-transport-only and unreachable here. ~~`-32021` (missing required
+  client capability) is not emitted at this round -- see §22.6.~~
+  **Amended 2026-08-14 (confirmation round, §18.12 item 127): `-32021` is emitted**, and it is the
+  whole answer to an unconsented consequential `tools/call` from a client whose declaration does
+  not cover a form elicitation:
+
+  ```json
+  {"code":-32021,
+   "message":"Server requires the elicitation capability for this request",
+   "data":{"requiredCapabilities":{"elicitation":{"form":{}}}}}
+  ```
+
+  `data.requiredCapabilities` is a client-capabilities object, as the revision specifies, and it
+  names **form** mode: a client that declared only URL-mode elicitation cannot render this
+  question either, and answering it `{"elicitation":{}}` would send it back with a declaration
+  this server would refuse a second time.
 
 ### 22.4 The continuation primitive
 
@@ -4751,13 +4838,82 @@ Two things do **not** change. A `read_only` or plain `mutating` command is never
 call that states consent (`approve_consequential: true`) proceeds without the round-trip -- it is
 a caller declaring it is proceeding without a human, which is what §8.5 made it.
 
-### 22.6 What this round deliberately leaves to the next
+### 22.6 What the protocol round deliberately left to the next
 
-- **A client that did not declare elicitation** gets §8.5's refusal, unchanged. The modern
+**Amended 2026-08-14 (confirmation round, §18.12).** The first two deferrals are discharged; the
+third stands. Each is marked below rather than deleted, so a reader of the protocol round's text
+can see where its remainder went.
+
+- ~~**A client that did not declare elicitation** gets §8.5's refusal, unchanged. The modern
   revision's answer is `-32021` with `data.requiredCapabilities`, and that is the next round's,
-  together with the published protocol page that shows the dialogue.
-- **The legacy era** keeps the static consent param and no confirmation mechanism at all.
+  together with the published protocol page that shows the dialogue.~~ **Discharged.** `-32021`
+  is emitted with the shape §22.3 now pins, and the dialogue is published at
+  `docs/mcp-confirmation.md` -- the third of campaign decision 26's three surfaces, the other two
+  being the declared feature name and the conformance cases that assert the declaration matches
+  the behaviour. §8.5's refusal is now reachable only from the legacy era, and only from a legacy
+  client that cannot be asked (§22.7).
+- ~~**The legacy era** keeps the static consent param and no confirmation mechanism at all.~~
+  **Discharged: §22.7.**
 - **Expiry has no conformance case.** Tampering, forgery, the two bindings and reuse are all
   expressible over the wire; expiry is not, because reaching it would need either a five-minute
   test or an injectable clock, and the clock was rejected (decision 7). It is covered by unit
   tests in all three implementations, which drive the mint directly.
+
+### 22.7 The legacy era's confirmation
+
+Added 2026-08-14 at the **confirmation round** (§18.12). The modern era answers a question it
+cannot ask synchronously by *ending the request* and letting the client come back (§22.5). The
+legacy revision has no such pattern: a server that needs input **sends a request of its own** on
+the same connection and waits for the client's response. The confirmation is therefore delivered
+twice over, in the two shapes the two revisions define -- and decided once, by one piece of code.
+
+**The handshake.** `initialize` answers with `protocolVersion: "2025-11-25"`, `capabilities`
+carrying `tools` and an `experimental` entry naming the declared feature
+(`dev.smmh.strictcli/consequential-confirmation`, the same name `server/discover` advertises), and
+`serverInfo`. The client's own `params.capabilities` and `params.clientInfo` are kept for the
+lifetime of the process: in this era they are the session, exactly as the per-request `_meta` is
+in the modern one. This server speaks one legacy revision, so it always answers with it; a client
+that cannot speak it disconnects, which is what the legacy negotiation rule says to do.
+
+**The exchange.** An unconsented `tools/call` on a `consequential` command, from a legacy client
+whose handshake declared a form elicitation:
+
+1. The server mints a continuation (§22.4) over the same principal and the same request digest
+   the modern era would use.
+2. It writes a server-to-client request whose `method` is `elicitation/create` and whose `params`
+   are **byte-identical to §22.5's** -- one vocabulary for one question, however it is delivered:
+
+   ```json
+   {"jsonrpc":"2.0","id":"<the continuation blob>","method":"elicitation/create",
+    "params":{"mode":"form","message":"about to run consequential command '<path>'. Proceed?",
+              "requestedSchema":{...}}}
+   ```
+
+3. **The continuation blob is the request id.** JSON-RPC obliges the client to echo an id back
+   verbatim, which is exactly what the modern era obliges it to do with `requestState`, so the
+   correlation needs no second mechanism and no counter. The server then verifies the echoed id
+   through the same path -- MAC, expiry, principal, request digest, single use -- and a matching
+   id that fails any of those checks confirms nothing.
+4. The client's response is read as one `ElicitResult`: `{"action":"accept","content":{"proceed":
+   true}}` consents, and **everything else aborts** -- `decline`, `cancel`, an acceptance that
+   says no, an unreadable result, a JSON-RPC error response, or the stream ending before an
+   answer arrives. The abort is the same tool-result content as everywhere else: `isError: true`
+   with the text `aborted`. There is no re-ask in this era: the modern one re-asks because the
+   client is free to come back without an answer, while here the server is holding the request
+   open and a non-answer is a decision.
+5. Anything else the client sends while the server is waiting is **held, not dropped**: a
+   response whose id is not the awaited one is discarded (this server sent no such request), and
+   a request or notification is queued and served after the call it interrupted completes. The
+   loop is still one-request-at-a-time; the queue only records that the client spoke early.
+
+**A legacy client that cannot be asked** -- one whose handshake declared no elicitation, or only
+URL mode -- reaches §8.5's seam unconsented and gets its refusal (`command '<path>' is
+consequential: the call must carry confirmation`) as ordinary tool-result error content. It does
+**not** get `-32021`: that code belongs to a revision this client is not speaking, and the
+revision it *is* speaking reserves the range it sits in.
+
+**The era boundary is unchanged.** `initialize` latches legacy for the process; a request that
+carries the modern `_meta` is served statelessly whatever the latch says; a request with neither
+is refused. One process therefore serves a legacy handshake, a legacy confirmation and a modern
+confirmation in any order, and the continuation minted in either era is worthless in the other
+request that did not mint it, because the binding is the same one either way.
