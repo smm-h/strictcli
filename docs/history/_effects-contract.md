@@ -4418,9 +4418,10 @@ are authored spellings in the §18.3 class -- the mechanical remainder the rulin
 here so implementors have nothing left to decide, and ~~written **before** any implementation, which
 is the §19 discipline this campaign adopted explicitly.~~ *(amended 2026-08-14, implementation
 sweep)* written **before** any implementation, which is the §19 discipline this campaign adopted
-explicitly. **Items 137-150 are that pre-implementation record and are unchanged. Items 151-158
-were added after the three implementations shipped**, and each of them records something the
-implementations surfaced that the pre-implementation text had left open, under-specified, or
+explicitly. **Items 137-150 are that pre-implementation record and are unchanged. Items 151-~~158~~
+159 *(extended 2026-08-14, conformance sweep)* were added after the three implementations
+shipped**, and each of them records something the implementations surfaced -- or, for item 159, the
+cross-language sweep did -- that the pre-implementation text had left open, under-specified, or
 described as settled when it was not. They are all in the §18.3 authored class -- implementation-
 forced spellings and convergence picks -- and carry no origin tag, because none of them is an
 upstream ruling of either kind.
@@ -4654,6 +4655,16 @@ Three are convergence picks -- one implementation was right and the other two ch
      bracketed metadata and deliberately keeps none**: it is an index of what exists, the flag's
      full line is rendered at command level where it is used, and putting a presence part in both
      places would state one fact twice in a single help run.
+
+159. **An infra-rooted default renders as its declaration, and Go stops leaking its struct
+     formatting (§23.8).** A `RelativeToRoot` default's presence part is
+     `[default: RelativeToRoot('<VAR>', '<part>', ...)]` in all three implementations, quoted as
+     Python's `repr` quotes a string and never carrying the resolved, machine-specific path. Python
+     and TypeScript already produced exactly this; **Go rendered `[default: {MYAPP_ROOT [store]}]`**
+     -- `fmt`'s `%v` on a marker that had no display form, which put Go's internal struct shape in
+     the help output of a declaration a reader wrote by name. This is the third rendering the
+     invariant reached that item 158 did not enumerate, found by the cross-language sweep rather
+     than by the implementations themselves, and it converges onto the majority form.
 
 ---
 
@@ -5853,6 +5864,25 @@ Two consequences of the invariant, both of which change bytes:
 >   it a presence part would put the same fact on two lines of one help run. This is pinned
 >   because "every flag and every arg renders exactly one presence part" would otherwise read as
 >   reaching it, and a later reader would take the absent brackets for an omission.
+
+> **Amendment (2026-08-14, presence round -- conformance sweep): an infra-rooted default renders as
+> the declaration that produced it.**
+>
+> A flag or arg whose default is a `RelativeToRoot` marker renders
+> **`[default: RelativeToRoot('<VAR>', '<part>', ...)]`** -- the marker's declaration, quoted the
+> way Python's `repr` quotes a string: single quotes, switching to double quotes only when the
+> value contains a single quote and no double quote, backslashes escaped, and the separator after
+> the env var kept even when there are no parts at all (`RelativeToRoot('E', )`). The **resolved**
+> path is deliberately never rendered: it is machine-specific, so printing it would make one
+> declaration's help output differ between two machines running the same version.
+>
+> This closes a live divergence found by the cross-language sweep. Python and TypeScript already
+> produced this form -- Python because the marker's `repr` is what its help formatter reaches, and
+> TypeScript because its marker mirrors that `repr` deliberately. **Go leaked its own struct
+> formatting** instead: the marker had no display form, so `fmt`'s `%v` rendered the fields, and
+> Go's help line read `[default: {MYAPP_ROOT [store]}]` -- Go's internal shape, in a form no reader
+> could type back and no other implementation produced. Go converges onto the majority form, which
+> is also the only one of the three that names the declaration a reader wrote.
 
 ### 23.9 What this round does not touch
 
