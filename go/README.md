@@ -4,6 +4,16 @@ A strict CLI framework for Go.
 
 strictcli makes you declare everything -- every command, flag, argument, and environment variable must have help text or the framework panics at registration time. Four types only: `str`, `bool`, `int`, `float`. No magic type inference, no implicit defaults.
 
+There are Python and TypeScript implementations too, and this one is not a port
+of either. The surface here is Go's own -- functional options, typed constants,
+generics for typed kwargs access, and a panic at registration -- and some of the
+enforcement exists only in Go, because only Go's shape provides it: the presence
+options write an unexported field, so a `Flag` struct literal that bypasses them
+declares nothing and fails to register rather than silently dropping its value
+at parse time. What the three implementations hold identical is behavior: the
+same semantics, the same help bytes, the same schema, and the same error
+sentence with Go's spellings inside it.
+
 ## Installation
 
 ```
