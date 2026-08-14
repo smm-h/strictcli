@@ -216,7 +216,7 @@ func (a *App) ConfigField(name string, opts ...ConfigFieldOption) {
 	// registration side instead.
 	for _, f := range a.collectAllFlags() {
 		if flagParamName(f.Name) == name {
-			checkFlagConfigFieldDefault(f.Name, f.Default, cf)
+			checkFlagConfigFieldDefault(f.Name, f.presence, f.Default, cf)
 		}
 	}
 

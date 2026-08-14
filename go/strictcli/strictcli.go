@@ -2070,9 +2070,12 @@ func checkGroupTagContracts(g *Group, contracts map[string]string, globalFlags [
 // A ConfigField whose name equals a flag's param name is a validation-only
 // declaration that annotates the flag. Their defaults must agree. The matrix:
 // both absent OK; equal OK; both present unequal = error; one absent OK (the
-// flag's default wins for rendering). A nil flag default means "no default".
-func checkFlagConfigFieldDefault(flagName string, flagDefault interface{}, cf *ConfigField) {
-	flagHasDefault := flagDefault != nil
+// flag's default wins for rendering). A flag has a default exactly when its
+// DECLARED presence is "default" (contract §23.1) -- never when its default
+// value happens to be non-nil, which would stand the value's shape in for the
+// declaration.
+func checkFlagConfigFieldDefault(flagName string, flagPresence presenceKind, flagDefault interface{}, cf *ConfigField) {
+	flagHasDefault := flagPresence == presenceDefault
 	cfHasDefault := cf.HasDefault && cf.Default != nil
 	if flagHasDefault && cfHasDefault && !reflect.DeepEqual(flagDefault, cf.Default) {
 		panic(errConfigFieldFlagDefaultDisagree(cf.Name, flagName, cf.Default, flagDefault))
@@ -2089,7 +2092,7 @@ func (a *App) checkCmdFieldCollisions(cmd *Command) {
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
 		if cf, ok := a.configFields[flagParamName(f.Name)]; ok {
-			checkFlagConfigFieldDefault(f.Name, f.Default, cf)
+			checkFlagConfigFieldDefault(f.Name, f.presence, f.Default, cf)
 		}
 	}
 }
