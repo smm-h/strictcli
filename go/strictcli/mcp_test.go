@@ -1880,6 +1880,77 @@ func TestMCPLegacyTrafficArrivingMidExchangeIsHeldNotDropped(t *testing.T) {
 	}
 }
 
+// TestMCPLegacyAbortedExchangeConsumesItsState pins that every legacy exit
+// spends the blob: an abort is not a free replay.
+//
+// The blob binds the same principal and the same request digest the modern era
+// mints, and stays live for five minutes. An exchange that ended without
+// consuming it therefore hands the client a `requestState` it can answer
+// itself, on the modern path, for the very call it just aborted.
+func TestMCPLegacyAbortedExchangeConsumesItsState(t *testing.T) {
+	replay := func(seen []map[string]interface{}) map[string]interface{} {
+		var blob interface{}
+		for _, resp := range seen {
+			if resp["method"] == "elicitation/create" {
+				blob = resp["id"]
+			}
+		}
+		return callRequest(3, map[string]interface{}{
+			"name": "release", "arguments": map[string]interface{}{},
+			"requestState": blob, "inputResponses": acceptance(true),
+		})
+	}
+	t.Run("errorResponse", func(t *testing.T) {
+		session := &mcpSession{app: confirmingApp()}
+		responses := session.run(t,
+			func(seen []map[string]interface{}) map[string]interface{} {
+				return handshakeRequest(true)
+			},
+			func(seen []map[string]interface{}) map[string]interface{} {
+				return legacyCall(2, "release", nil)
+			},
+			// A JSON-RPC error answers the elicitation: the exchange aborts.
+			func(seen []map[string]interface{}) map[string]interface{} {
+				ask := seen[len(seen)-1]
+				return map[string]interface{}{
+					"jsonrpc": "2.0", "id": ask["id"],
+					"error": map[string]interface{}{"code": -32601, "message": "Method not found"},
+				}
+			},
+			replay,
+		)
+		assertReplayRefused(t, responses[3])
+	})
+	t.Run("streamEndsUnanswered", func(t *testing.T) {
+		session := &mcpSession{app: confirmingApp()}
+		responses := session.runScript(t,
+			scriptStep{reply: true, build: func(seen []map[string]interface{}) map[string]interface{} {
+				return handshakeRequest(true)
+			}},
+			scriptStep{reply: true, build: func(seen []map[string]interface{}) map[string]interface{} {
+				return legacyCall(2, "release", nil)
+			}},
+			// Held while the server waits; the stream then ends without an
+			// answer, which aborts, and the held request is served afterwards.
+			sends(replay),
+		)
+		assertReplayRefused(t, responses[3])
+	})
+}
+
+// assertReplayRefused fails unless the modern replay of a spent blob was
+// refused as already used rather than running the command.
+func assertReplayRefused(t *testing.T, resp map[string]interface{}) {
+	t.Helper()
+	errBody, ok := resp["error"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("the aborted blob was replayed and ran the command: %v", resp)
+	}
+	if errBody["message"] != mcpErrStateReused {
+		t.Errorf("message: got %v, want %q", errBody["message"], mcpErrStateReused)
+	}
+}
+
 func TestMCPModernCallIsStillAskedTheModernWayAfterAHandshake(t *testing.T) {
 	session := &mcpSession{app: confirmingApp()}
 	responses := session.run(t,

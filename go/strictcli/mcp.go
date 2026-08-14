@@ -1197,6 +1197,13 @@ func (a *App) mcpLegacyConfirmation(
 	channel.write(ask)
 
 	answer := channel.awaitResponse(state)
+	// Consumption is unconditional once the blob is on the wire: EVERY exit
+	// below spends it, not just the one that reads a well-formed result. A blob
+	// an aborted exchange left live is still bound to this principal and this
+	// request digest for its whole five minutes, which is a `requestState` the
+	// client can present on the modern path with an acceptance it wrote itself
+	// -- for the very call the abort refused.
+	verified := continuation.verify(state, principal, digest, time.Now().Unix()) == ""
 	if answer == nil {
 		// A stream that ended before an answer arrived. There is no re-ask in
 		// this era: the server is holding the request open, so a non-answer is
@@ -1208,7 +1215,7 @@ func (a *App) mcpLegacyConfirmation(
 		// A JSON-RPC error response answers the question with a failure.
 		return true, false
 	}
-	if refusal := continuation.verify(state, principal, digest, time.Now().Unix()); refusal != "" {
+	if !verified {
 		return true, false
 	}
 	return true, mcpConfirmationVerdict(result) == "accept"
