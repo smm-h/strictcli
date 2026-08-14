@@ -615,6 +615,216 @@
     ]
   },
   {
+    "name": "presence registration: a null flag default beside a presence declaration is two declarations (python)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "level",
+              "help": "the level",
+              "presence": "required",
+              "default": null
+            }
+          ],
+          "handler_prints": "level={level}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: Flag \"level\": presence is declared twice: presence=\"required\" and default=None cannot be combined; declare exactly one"
+    },
+    "skip_schema_validation": true,
+    "targets": [
+      "python"
+    ]
+  },
+  {
+    "name": "presence registration: a null flag default beside a presence declaration is two declarations (go)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "level",
+              "help": "the level",
+              "presence": "required",
+              "default": null
+            }
+          ],
+          "handler_prints": "level={level}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: Flag \"level\": presence is declared twice: Required() and Default(nil) cannot be combined; declare exactly one"
+    },
+    "skip_schema_validation": true,
+    "targets": [
+      "go"
+    ]
+  },
+  {
+    "name": "presence registration: a null flag default beside a presence declaration is two declarations (typescript)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "level",
+              "help": "the level",
+              "presence": "required",
+              "default": null
+            }
+          ],
+          "handler_prints": "level={level}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: Flag \"level\": presence is declared twice: presence: \"required\" and presence: \"default\" with default: null cannot be combined; declare exactly one"
+    },
+    "skip_schema_validation": true,
+    "targets": [
+      "typescript"
+    ]
+  },
+  {
+    "name": "presence registration: a null arg default beside a presence declaration is two declarations (python)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "file",
+              "help": "the file",
+              "presence": "optional",
+              "default": null
+            }
+          ],
+          "handler_prints": "file={file}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: Arg \"file\": presence is declared twice: presence=\"optional\" and default=None cannot be combined; declare exactly one"
+    },
+    "skip_schema_validation": true,
+    "targets": [
+      "python"
+    ]
+  },
+  {
+    "name": "presence registration: a null arg default beside a presence declaration is two declarations (go)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "file",
+              "help": "the file",
+              "presence": "optional",
+              "default": null
+            }
+          ],
+          "handler_prints": "file={file}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: Arg \"file\": presence is declared twice: ArgOptional() and ArgDefault(nil) cannot be combined; declare exactly one"
+    },
+    "skip_schema_validation": true,
+    "targets": [
+      "go"
+    ]
+  },
+  {
+    "name": "presence registration: a null arg default beside a presence declaration is two declarations (typescript)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "file",
+              "help": "the file",
+              "presence": "optional",
+              "default": null
+            }
+          ],
+          "handler_prints": "file={file}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: Arg \"file\": presence is declared twice: presence: \"optional\" and presence: \"default\" with default: null cannot be combined; declare exactly one"
+    },
+    "skip_schema_validation": true,
+    "targets": [
+      "typescript"
+    ]
+  },
+  {
     "name": "presence registration: a mutex member cannot declare requiredness (python)",
     "app": {
       "name": "myapp",
