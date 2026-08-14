@@ -93,6 +93,12 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
     if "short" in flag_def:
         parts.append(f"short={flag_def['short']!r}")
 
+    # The presence declaration (contract §23). A case states exactly one of
+    # presence and default; `default: null` is the input the redirect error is
+    # asserted against, so it is still emitted verbatim.
+    if "presence" in flag_def:
+        parts.append(f"presence={flag_def['presence']!r}")
+
     if "default_relative_to_root" in flag_def:
         rtr = flag_def["default_relative_to_root"]
         rtr_args = ", ".join([repr(rtr["env_var"])] + [repr(p) for p in rtr.get("parts", [])])
@@ -504,8 +510,8 @@ def _emit_command_registration(
                 if atype != "str":
                     type_map = {"bool": "bool", "int": "int", "float": "float"}
                     aparts.append(f"type={type_map[atype]}")
-                if "required" in a:
-                    aparts.append(f"required={a['required']!r}")
+                if "presence" in a:
+                    aparts.append(f"presence={a['presence']!r}")
                 if "default" in a:
                     aparts.append(f"default={a['default']!r}")
                 if a.get("variadic", False):
@@ -597,8 +603,8 @@ def _emit_command_registration(
             if atype != "str":
                 type_map = {"bool": "bool", "int": "int", "float": "float"}
                 aparts.append(f"type={type_map[atype]}")
-            if "required" in a:
-                aparts.append(f"required={a['required']!r}")
+            if "presence" in a:
+                aparts.append(f"presence={a['presence']!r}")
             if "default" in a:
                 aparts.append(f"default={a['default']!r}")
             if a.get("variadic", False):
@@ -688,6 +694,8 @@ def _emit_command_registration(
         fd_parts.append(f"help={f['help']!r}")
         if "short" in f:
             fd_parts.append(f"short={f['short']!r}")
+        if "presence" in f:
+            fd_parts.append(f"presence={f['presence']!r}")
         if "default_relative_to_root" in f:
             rtr = f["default_relative_to_root"]
             rtr_args = ", ".join([repr(rtr["env_var"])] + [repr(p) for p in rtr.get("parts", [])])
@@ -739,20 +747,20 @@ def _emit_command_registration(
     params = unique_params
 
     param_strs = []
+    # A handler parameter bound to an OPTIONAL flag or arg must default to None
+    # (contract §23.3): the framework refuses any other default at registration.
+    optional_names = {
+        d["name"]
+        for d in list(cmd_def.get("args", [])) + list(cmd_def.get("flags", []))
+        if d.get("presence") == "optional"
+    }
+    optional_names |= {
+        f["name"].replace("-", "_")
+        for f in cmd_def.get("flags", [])
+        if f.get("presence") == "optional"
+    }
     for p in params:
-        # Check if this param corresponds to an optional arg without a default
-        is_optional_no_default = False
-        is_variadic_optional = False
-        for a in cmd_def.get("args", []):
-            if a["name"] == p and a.get("variadic", False) and not a.get("required", True):
-                is_variadic_optional = True
-                break
-            if a["name"] == p and not a.get("required", True) and "default" not in a:
-                is_optional_no_default = True
-                break
-        if is_variadic_optional:
-            param_strs.append(p)
-        elif is_optional_no_default:
+        if p in optional_names:
             param_strs.append(f"{p}=None")
         else:
             param_strs.append(p)
