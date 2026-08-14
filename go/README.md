@@ -418,7 +418,11 @@ without either flag is a hard error rather than a hang. Declaring
 
 ### Schema dump
 
-`--dump-schema` is auto-injected on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups, checks). Every command entry carries its `effect`; `consequential`, `dry_run_supported` and `dry_run_unsupported_reason` are emitted only when declared.
+`--dump-schema` is auto-injected on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups, checks) at `schema_version: 2`. Every command entry carries its `effect`; `consequential`, `dry_run_supported` and `dry_run_unsupported_reason` are emitted only when declared.
+
+Every flag and arg entry carries a `value_schema`: a real JSON Schema fragment from a closed subset of `type`, `items`, `additionalProperties` and `enum`, using JSON Schema's own type names. Arity is part of the value's shape, so a repeatable scalar flag and a `ListFlag` publish the identical array fragment. A choice flag carries no fragment -- its value is a variant the subset cannot express -- and publishes its nested `choices` and scopes instead, each scoped entry a full flag entry, with `elect_by` marking the spelling. A value flag's `Choices(...)` splits in two: the values as an `enum` inside the fragment, and the value-plus-help records beside it under `choices`.
+
+Keys are emitted in a declared order at every depth, and the document is written by a canonical writer rather than `encoding/json`: canonical floats, raw UTF-8, no HTML escaping, two-space indent, exactly one trailing newline. A schema file written by this implementation and one written by the Python or TypeScript implementation for the same declaration are byte-identical. The `defaults` block is the complete map of what an omitted key means, and `config_format`, `config_path`, `config_conflict_mode`, per-flag `prefixed` and per-command `flag_sets` appear exactly when a declaration departs from the framework's own behavior.
 
 ### Check system
 
