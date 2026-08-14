@@ -35,12 +35,15 @@ jobs:
             - 'python/**'
             - 'python/**'
             - 'LICENSE'
+            - '.github/workflows/**'
             - '.rlsbl-monorepo/releasables/py-strictcli/CHANGELOG.md'
           go-strictcli:
             - 'go/**'
+            - '.github/workflows/**'
             - '.rlsbl-monorepo/releasables/go-strictcli/CHANGELOG.md'
           ts-strictcli:
             - 'typescript/**'
+            - '.github/workflows/**'
             - '.rlsbl-monorepo/releasables/ts-strictcli/CHANGELOG.md'
           conformance:
             - 'conformance/**'
