@@ -96,6 +96,66 @@ def test_connection_env_hermetic_suppresses_flag(monkeypatch):
     assert app._last_sources["dsn"] != "env"
 
 
+# --- Presence: a REQUIRED connection-URL flag (contract §23.5's env row) ---
+
+
+def _make_required_conn_app():
+    app = App(name="myapp", version="1.0.0", help="t",
+              connection_env={"DATABASE_URL": "conn"})
+    captured = {}
+
+    @app.command("run", effect="read_only", help="run it")
+    @strictcli.flag("dsn", help="connection string", presence="required",
+                    connection_url=True, connection_env="DATABASE_URL")
+    def run(ctx, dsn):
+        captured["dsn"] = dsn
+        captured["source"] = ctx.source("dsn")
+        captured["provided"] = ctx.provided("dsn")
+        return 0
+
+    return app, captured
+
+
+def test_required_connection_flag_satisfied_by_env(monkeypatch):
+    """The bound connection env satisfies requiredness -- it is §23.5's env row,
+    with no extra guard for the URL class."""
+    monkeypatch.setenv("DATABASE_URL", "postgres://from-env/db")
+    app, captured = _make_required_conn_app()
+    r = app.test(["run"])
+    assert r.exit_code == 0, r.stderr
+    assert captured["dsn"] == "postgres://from-env/db"
+    assert captured["source"] == "env"
+    assert captured["provided"] is True
+
+
+def test_required_connection_flag_env_unset_is_the_required_error(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    app, _ = _make_required_conn_app()
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert r.stderr == "error: flag '--dsn' is required\ntry 'myapp run --help'\n"
+
+
+def test_required_connection_flag_cli_beats_env(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgres://from-env/db")
+    app, captured = _make_required_conn_app()
+    r = app.test(["run", "--dsn", "postgres://from-cli/db"])
+    assert r.exit_code == 0, r.stderr
+    assert captured["dsn"] == "postgres://from-cli/db"
+    assert captured["source"] == "cli"
+    assert captured["provided"] is True
+
+
+def test_required_connection_flag_hermetic_suppresses_env(monkeypatch):
+    """--hermetic suppresses the connection env, so requiredness is unsatisfied
+    and the required error fires even though the variable is set."""
+    monkeypatch.setenv("DATABASE_URL", "postgres://from-env/db")
+    app, _ = _make_required_conn_app()
+    r = app.test(["--hermetic", "run"])
+    assert r.exit_code == 1
+    assert r.stderr == "error: flag '--dsn' is required\ntry 'myapp run --help'\n"
+
+
 # --- Handler-side infra_value / connection_env_value ---
 
 
