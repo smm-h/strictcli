@@ -117,6 +117,60 @@ The TypeScript implementation shipped as npm `strictcli` 0.31.0. These are the a
 - **TOML stack.** `smol-toml` (with `integersAsBigInt` so TOML integers round-trip as `bigint`) for parsing; a `toml-eslint-parser`-based single-key splicer for comment-preserving, byte-exact `config set` edits.
 - **SCF float canon.** One canonical decimal form for floats, byte-identical across Python/Go/TS; the exhaustive bit-pattern to expected-string vectors are committed at `conformance/float_vectors.json` and enforced by the `float-fuzz` check.
 
+## Idiomatic divergence is the design, not a defect
+
+**Read this before proposing that two implementations be made to look alike.**
+The three declaration surfaces are deliberately different, each in the direction
+its own language pulls. strictcli exists so a developer can build in whichever of
+the three languages they prefer, using that language's full idiom -- not so that
+three languages can be deformed into one shape. Convergence of declaration
+surfaces is never a goal in itself, and a lowest-common-denominator API is a
+regression in all three languages at once.
+
+- **Parity binds semantics and pinned sentences. It does not bind spellings.**
+  Identical across implementations: what a declaration means, the bytes of help
+  output, the fields of `--dump-schema`, exit codes, parse-time behavior, and the
+  **sentence** of every error template (§12), with each language's own spellings
+  substituted inside it. Free to differ: keyword argument vs functional option vs
+  discriminated union, constructor shape, naming style, and how much of the rule
+  the type system carries.
+- **When adding new surface, design THREE idiomatic forms for one pinned
+  semantic.** Ask what a Python, a Go, and a TypeScript developer would each
+  expect to write, and write those three. Never pick one language's shape and
+  transliterate it into the other two. The presence declaration is the reference
+  case: Python `presence="required"` / `default=<value>` keywords, Go
+  `Required()` / `Optional()` / `Default(v)` functional options, TypeScript a
+  discriminated union on `presence` mirroring the shape `ArgOpts` already had.
+- **A payoff that reaches only one language is a PRO, not a con.** Go's
+  unexported `presenceBits` makes a `Flag` struct literal fail to register, which
+  closed the pre-existing trap where an exported `Default` field on a literal was
+  silently ignored at parse time. TypeScript's `default?: never` union members,
+  const type parameters and `infer.ts` reading `presence` move the declaration
+  into the type system and fixed `FlagKeyIsOptional`'s unsoundness. Python's
+  named handler parameters make the handler-parameter default rule checkable at
+  all (`def h(ctx, target="")` bound to an optional flag is a registration
+  error). Never propose deleting or weakening one of these for symmetry.
+- **A language-specific error template is EXPECTED when a mis-declaration is only
+  expressible in one language.** Python alone can write `presence="defualt"`
+  (a keyword taking a string); TypeScript alone can write `presence: "default"`
+  with no `default` (the only two-part spelling). The siblings have no input that
+  could produce those messages. Record them in `conformance/check_error_parity.py`
+  as `excluded:` entries with the rationale, and assert them **per target** in a
+  conformance case (`conformance/cases/presence_registration.json` is the model),
+  never by forcing one shared spelling.
+- **Before proposing "make X the same in all three", name the SEMANTIC that
+  differs.** If none differs, the difference is idiom and it stays. "The Go
+  version doesn't look like the Python version" is not a finding.
+- **Strictness is what makes the idiom worth having.** Mandatory presence with no
+  implicit default, mandatory help, mandatory effect classification, four types
+  only, closed enums, registration-time hard errors, the banned `--yes` and bare
+  `--force` names, and no escape hatches -- each implementation enforces the best
+  way as the only way in its own language's terms. Never relax a rule to make the
+  three easier to keep in step.
+
+The published narrative version of this is `docs/language-idioms.md`; keep the two
+consistent when the design moves.
+
 ## Cross-language parity rules
 
 All implementations must:
@@ -124,8 +178,8 @@ All implementations must:
 - Support exactly four types: `str`, `bool`, `int`, `float`.
 - Use strict integer parsing (no leading/trailing whitespace, 64-bit signed bounds, no leading zeros in Go). Float parsing rejects NaN and Inf.
 - Accept the same boolean env var strings: `1|true|yes` / `0|false|no` (case-insensitive).
-- Produce identical error messages for identical inputs (checked by `check_error_parity.py`).
-- Export the same API surface (checked by `check_api_surface.py`).
+- Produce identical error messages for identical inputs (checked by `check_error_parity.py`) -- one sentence per rule, byte-identical, with each language's own spellings substituted inside it where the message names a spelling (§12.10, §12.12).
+- Export the same API surface (checked by `check_api_surface.py`) -- the same capabilities under each language's own declaration shape, not the same literal spellings.
 - Produce identical error messages for dependency violations (checked by `check_error_parity.py`).
 - Pass all conformance cases for every target before release.
 

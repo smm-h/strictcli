@@ -2099,6 +2099,73 @@
       ]
     },
     {
+      "path": "language-idioms.md",
+      "title": "Language Idioms",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Language Idioms",
+          "anchor": "language-idioms"
+        },
+        {
+          "level": 2,
+          "text": "One semantic, three surfaces",
+          "anchor": "one-semantic-three-surfaces"
+        },
+        {
+          "level": 2,
+          "text": "What each surface bought",
+          "anchor": "what-each-surface-bought"
+        },
+        {
+          "level": 3,
+          "text": "Go: an unexported field closes a trap the exported one left open",
+          "anchor": "go-an-unexported-field-closes-a-trap-the-exported-one-left-open"
+        },
+        {
+          "level": 3,
+          "text": "TypeScript: the type system carries the declaration",
+          "anchor": "typescript-the-type-system-carries-the-declaration"
+        },
+        {
+          "level": 3,
+          "text": "Python: the framework can see the handler's parameters",
+          "anchor": "python-the-framework-can-see-the-handlers-parameters"
+        },
+        {
+          "level": 2,
+          "text": "What parity actually binds",
+          "anchor": "what-parity-actually-binds"
+        },
+        {
+          "level": 2,
+          "text": "One sentence, each language's spellings inside",
+          "anchor": "one-sentence-each-languages-spellings-inside"
+        },
+        {
+          "level": 2,
+          "text": "Errors only one language can produce",
+          "anchor": "errors-only-one-language-can-produce"
+        },
+        {
+          "level": 2,
+          "text": "The same shape, elsewhere in the framework",
+          "anchor": "the-same-shape-elsewhere-in-the-framework"
+        },
+        {
+          "level": 2,
+          "text": "The best way, the only way",
+          "anchor": "the-best-way-the-only-way"
+        },
+        {
+          "level": 2,
+          "text": "If you are extending strictcli",
+          "anchor": "if-you-are-extending-strictcli"
+        }
+      ]
+    },
+    {
       "path": "mcp-confirmation.md",
       "title": "Consequential Confirmation over MCP",
       "type": "doc",
@@ -8839,5 +8906,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-14T15:38:41.555771+00:00"
+  "last_gen": "2026-08-14T17:32:56.265596+00:00"
 }
