@@ -69,17 +69,44 @@ func TestStructuralProblemBeatsCoercionWhateverTheArgvOrder(t *testing.T) {
 }
 
 // An election and a scope violation are structural too, and both are decided
-// before any token's text is interpreted.
-func TestElectionAndScopeBeatCoercion(t *testing.T) {
-	app := simpleApp("send", "send it", "ok",
-		WithFlags(ChoiceFlag("via", "delivery channel", Required(),
-			Choice("email", "by email", StringFlag("subject", "the subject", Required())),
-			Choice("sms", "by text", IntFlag("retries", "how many retries", Optional())),
-		)))
-	r := app.Test([]string{"send", "--via", "sms", "--retries", "abc", "--subject", "hi"})
+// before any token's text is interpreted -- including a ROOT-scope value that
+// will not coerce, which is the full reading of the phase order.
+func precedenceApp() *App {
+	return simpleApp("send", "send it", "ok",
+		WithFlags(
+			IntFlag("count", "how many", Optional()),
+			ChoiceFlag("via", "delivery channel", Required(),
+				Choice("email", "by email", StringFlag("subject", "the subject", Required())),
+				Choice("sms", "by text", IntFlag("retries", "how many retries", Optional())),
+			)))
+}
+
+func TestScopeValidationBeatsRootValueCoercion(t *testing.T) {
+	r := precedenceApp().Test([]string{"send", "--count", "abc", "--via", "sms", "--subject", "hi"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
+	want := "error: flag '--subject' is only valid under '--via email', but '--via sms' was elected\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want %q", r.Stderr, want)
+	}
+}
+
+func TestAnUnknownChoiceBeatsRootValueCoercion(t *testing.T) {
+	r := precedenceApp().Test([]string{"send", "--count", "abc", "--via", "carrier-pigeon"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	if !strings.Contains(r.Stderr, "--via: invalid value 'carrier-pigeon'") {
+		t.Fatalf("stderr = %q, want the unknown-choice refusal", r.Stderr)
+	}
+	if strings.Contains(r.Stderr, "expected integer") {
+		t.Fatalf("the value error beat the election: %q", r.Stderr)
+	}
+}
+
+func TestScopeValidationBeatsScopedValueCoercion(t *testing.T) {
+	r := precedenceApp().Test([]string{"send", "--via", "sms", "--retries", "abc", "--subject", "hi"})
 	want := "error: flag '--subject' is only valid under '--via email', but '--via sms' was elected\n"
 	if !strings.Contains(r.Stderr, want) {
 		t.Fatalf("stderr = %q, want %q", r.Stderr, want)
