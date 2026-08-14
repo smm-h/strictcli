@@ -13096,10 +13096,14 @@ def _format_declared_default_for_help(decl: "Flag | Arg") -> str:
     return _format_default_for_help(value)
 
 
-def _renders_as_block(f: Flag) -> bool:
-    """A choice-carrying flag renders as an indented block iff any of its
-    choices carries help or a scope; otherwise it keeps today's one-line
-    ``[choices: a, b, c]`` form (§24.10)."""
+def _renders_as_block(f: "Flag | Arg") -> bool:
+    """A choice-carrying declaration renders as an indented block iff any of
+    its choices carries help or a scope; otherwise it keeps today's one-line
+    ``[choices: a, b, c]`` form (§24.10).
+
+    The rule is content-keyed, never surface-keyed: a positional arg whose
+    entries carry help renders the same block a flag's do.
+    """
     if f.choice_records is None:
         return False
     return any(r.help for r in f.choice_records)
@@ -13228,23 +13232,41 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
     if cmd.args:
         lines.append("")
         lines.append("Arguments:")
-        display_names = [f"{a.name}..." if a.variadic else a.name for a in cmd.args]
-        max_len = max(len(dn) for dn in display_names)
-        for a, dn in zip(cmd.args, display_names):
-            padding = max_len - len(dn) + 4
-            help_text = a.help
+        # The content-keyed block rule reaches positional args too: an arg
+        # whose choices entries carry help renders the indented block, exactly
+        # as a flag's do (§24.10). ONE alignment column across the whole
+        # Arguments section, deepest entry included.
+        arg_rows: list[tuple[int, str, str, str]] = []
+        for a in cmd.args:
+            dn = f"{a.name}..." if a.variadic else a.name
+            block = _renders_as_block(a)
             meta_parts: list[str] = []
             if a.type is not str:
                 meta_parts.append(f"type: {a.type.__name__}")
-            if a.choices is not None:
+            if a.choices is not None and not block:
                 choices_str = ", ".join(str(c) for c in a.choices)
                 meta_parts.append(f"choices: {choices_str}")
             # Exactly one presence part, last on the line. A required
             # positional now renders `[required]` -- it was previously the one
             # declaration in the framework whose presence was invisible.
             meta_parts.append(_format_presence_for_help(a.presence, a))
-            meta = " [" + "] [".join(meta_parts) + "]"
-            lines.append(f"  {dn}{' ' * padding}{help_text}{meta}")
+            arg_rows.append((
+                2, dn, a.help, " [" + "] [".join(meta_parts) + "]",
+            ))
+            if block:
+                for record in a.choice_records or ():
+                    arg_rows.append((
+                        4,
+                        _format_default_for_help(record.value),
+                        record.help or "",
+                        "",
+                    ))
+        column = max(indent + len(spec) for indent, spec, _, _ in arg_rows) + 4
+        for indent, spec, help_text, meta in arg_rows:
+            padding = column - indent - len(spec)
+            lines.append(
+                f"{' ' * indent}{spec}{' ' * padding}{help_text}{meta}".rstrip()
+            )
 
     # The command's own flag block. ONE alignment column is computed across the
     # whole block, deepest entry included, so help text starts in the same

@@ -271,3 +271,90 @@ def test_a_block_flags_presence_part_is_still_last_on_its_own_line():
     line = next(ln for ln in r.stdout.splitlines() if "--format" in ln)
     assert line.endswith("[default: text]")
     assert line.count("[default: text]") == 1
+
+
+# ---------------------------------------------------------------------------
+# The block rule is content-keyed, so it reaches positional args too
+# ---------------------------------------------------------------------------
+
+
+def _arg_choices_app(entries, **arg_kwargs):
+    kwargs = {"help": "what to push", "presence": "required"}
+    kwargs.update(arg_kwargs)
+    app = _app()
+
+    @app.command("push", effect="mutating", help="push something")
+    @strictcli.arg("scope", choices=entries, **kwargs)
+    def push(ctx, scope):
+        print(f"scope={scope}")
+
+    return app
+
+
+def test_an_arg_whose_entries_carry_no_help_keeps_the_one_line_form():
+    r = _arg_choices_app([Choice("head"), Choice("tags")]).test(["push", "--help"])
+    assert r.exit_code == 0
+    assert r.stdout == (
+        "myapp push -- push something\n"
+        "\n"
+        "Arguments:\n"
+        "  scope    what to push [choices: head, tags] [required]\n"
+    )
+
+
+def test_one_arg_entry_with_help_makes_the_whole_arg_a_block():
+    r = _arg_choices_app(
+        [Choice("head", help="the current commit only"), Choice("tags")],
+    ).test(["push", "--help"])
+    assert r.exit_code == 0
+    assert r.stdout == (
+        "myapp push -- push something\n"
+        "\n"
+        "Arguments:\n"
+        "  scope     what to push [required]\n"
+        "    head    the current commit only\n"
+        "    tags\n"
+    )
+
+
+def test_the_one_line_choices_part_is_not_repeated_on_a_block_arg():
+    r = _arg_choices_app(
+        [Choice("head", help="the current commit only"), Choice("tags")],
+    ).test(["push", "--help"])
+    assert "[choices:" not in r.stdout
+
+
+def test_a_block_args_presence_part_is_still_last_on_its_own_line():
+    r = _arg_choices_app(
+        [Choice("head", help="the current commit only"), Choice("tags")],
+        presence=strictcli._MISSING, default="head",
+    ).test(["push", "--help"])
+    line = next(ln for ln in r.stdout.splitlines() if "what to push" in ln)
+    assert line.endswith("[default: head]")
+
+
+def test_one_alignment_column_spans_the_whole_arguments_section():
+    """The deepest entry participates in the column, exactly as it does in the
+    flag block: an entry line longer than every arg name widens the section."""
+    app = _app()
+
+    @app.command("push", effect="mutating", help="push something")
+    @strictcli.arg(
+        "scope", help="what to push", presence="required",
+        choices=[
+            Choice("everything-including-tags", help="the whole repository"),
+            Choice("head"),
+        ],
+    )
+    def push(ctx, scope):
+        pass
+
+    r = app.test(["push", "--help"])
+    assert r.stdout == (
+        "myapp push -- push something\n"
+        "\n"
+        "Arguments:\n"
+        "  scope                          what to push [required]\n"
+        "    everything-including-tags    the whole repository\n"
+        "    head\n"
+    )
