@@ -1079,6 +1079,37 @@ test("mcp: the request metadata is validated key by key", async () => {
 	}
 });
 
+/*
+ * The same request names the same key in every implementation.
+ *
+ * Go sorts the key set before validating because its map iteration is
+ * randomized (§22.2); Python and TypeScript read a document's own order, which
+ * is a different key whenever a request carries more than one offending key.
+ * Sorted is what §22.2 documents, so all three sort.
+ */
+test("mcp: more than one offending _meta key names the first in sorted order", async () => {
+	const cases: [Record<string, unknown>, string][] = [
+		[
+			{ "z!bad": 1, "a!bad": 1 },
+			"invalid _meta key name: 'a!bad'",
+		],
+		// The lexically first offender is named whichever rule it breaks.
+		[
+			{ "z!bad": 1, "io.mcp/whatever": 1 },
+			"unrecognized reserved _meta key: 'io.mcp/whatever'",
+		],
+	];
+	for (const [extra, message] of cases) {
+		const resp = await sendOneRaw(modernApp(), {
+			jsonrpc: "2.0",
+			id: 1,
+			method: "tools/list",
+			params: { _meta: metaWith(extra) },
+		});
+		assert.equal(errorOf(resp).message, message);
+	}
+});
+
 test("mcp: vendor and optional metadata keys are accepted", async () => {
 	const resp = await sendOneRaw(modernApp(), {
 		jsonrpc: "2.0",

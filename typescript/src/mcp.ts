@@ -164,8 +164,21 @@ function metaKeyReserved(key: string): boolean {
  * Called only once the block is known to carry the protocol version, which is
  * what selects the modern era in the first place.
  */
+/** Sorts strings by their UTF-8 bytes, the order the siblings sort in. */
+function sortedByUtf8(keys: string[]): string[] {
+	return [...keys].sort((left, right) =>
+		Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8")),
+	);
+}
+
 function validateMeta(meta: JsonObject): string | undefined {
-	for (const key of Object.keys(meta)) {
+	// Sorted, not in the document's own order: a request carrying more than one
+	// offending key must be refused by naming the SAME key in all three
+	// implementations (§22.2), and Go has to sort because its map iteration is
+	// randomized. The comparison is over UTF-8 bytes, which is what Go's
+	// sort.Strings and Python's code-point sort both give -- JavaScript's
+	// default sort compares UTF-16 code units, which differs above the BMP.
+	for (const key of sortedByUtf8(Object.keys(meta))) {
 		if (!metaKeyValid(key)) {
 			return `invalid _meta key name: '${key}'`;
 		}
