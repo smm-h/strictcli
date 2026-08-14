@@ -1,6 +1,10 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { SourcedStore, type SourceLabel } from "../src/sources.js";
+import {
+	PROVIDED_SOURCES,
+	SourcedStore,
+	type SourceLabel,
+} from "../src/sources.js";
 
 const ALL_LABELS: readonly SourceLabel[] = [
 	"cli",
@@ -50,7 +54,11 @@ test("sources: mutex election counts only cli (contract §21.3)", () => {
 	assert.equal(s.has("env"), false);
 });
 
-test("sources: deps presence counts everything except default", () => {
+// The dependency predicate is the ONE definition of "was this supplied"
+// (contract §23.6): the four invocation-caused sources count, and both
+// declaration-caused ones -- `default` and `infra` -- do not. `infra` is a
+// RelativeToRoot default whose label only says which default it was.
+test("sources: deps presence counts exactly the provided sources", () => {
 	const s = new SourcedStore();
 	for (const label of ALL_LABELS) {
 		s.set(label, true, label);
@@ -58,10 +66,26 @@ test("sources: deps presence counts everything except default", () => {
 	assert.equal(s.isPresentForDeps("cli"), true);
 	assert.equal(s.isPresentForDeps("env"), true);
 	assert.equal(s.isPresentForDeps("config"), true);
-	assert.equal(s.isPresentForDeps("default"), false);
 	assert.equal(s.isPresentForDeps("implied"), true);
-	assert.equal(s.isPresentForDeps("infra"), true);
+	assert.equal(s.isPresentForDeps("default"), false);
+	assert.equal(s.isPresentForDeps("infra"), false);
 	assert.equal(s.isPresentForDeps("missing"), false);
+});
+
+// ctx.provided and the dependency predicate must not be two definitions:
+// PROVIDED_SOURCES is the single set both read.
+test("sources: PROVIDED_SOURCES is the set the predicate answers off", () => {
+	const s = new SourcedStore();
+	for (const label of ALL_LABELS) {
+		s.set(label, true, label);
+		assert.equal(s.isPresentForDeps(label), PROVIDED_SOURCES.has(label), label);
+	}
+	assert.deepEqual([...PROVIDED_SOURCES].sort(), [
+		"cli",
+		"config",
+		"env",
+		"implied",
+	]);
 });
 
 test("sources: sourceMap exposes the exact label strings", () => {

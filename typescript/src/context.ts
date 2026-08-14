@@ -18,6 +18,7 @@ import {
 	errPayloadNoSchema,
 } from "./errors.js";
 import { validatePayloadValue } from "./payload_schema.js";
+import { PROVIDED_SOURCES } from "./sources.js";
 
 /** Minimal sink for output streams (process.stdout/stderr or test captures). */
 export interface Writer {
@@ -100,19 +101,6 @@ export const NO_RESERVED_FLAGS: ReservedFlags = {
 	verbose: false,
 	json: false,
 };
-
-/**
- * The source labels that mean the INVOCATION caused the value (contract
- * §23.6). "default" and "infra" are the declaration deciding, so they are not
- * provided -- "infra" is a RelativeToRoot default whose label merely says
- * which default it was.
- */
-const PROVIDED_SOURCES: ReadonlySet<string> = new Set([
-	"cli",
-	"env",
-	"config",
-	"implied",
-]);
 
 /**
  * Everything a handler's context carries except the effects handle. The two

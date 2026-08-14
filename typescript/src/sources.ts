@@ -16,6 +16,23 @@ export type SourceLabel =
 	| "implied"
 	| "infra";
 
+/**
+ * The source labels that mean the INVOCATION caused the value, i.e. the ONE
+ * definition of "was this supplied" (contract §23.6). `default` and `infra`
+ * are the declaration deciding -- `infra` is a RelativeToRoot default whose
+ * label merely says WHICH default it was -- so neither counts.
+ *
+ * Both consumers read this set: the dependency predicate below
+ * (CoRequired/Requires/Implies presence, plus the custom-validation step,
+ * which never runs on a declared default) and `ctx.provided`.
+ */
+export const PROVIDED_SOURCES: ReadonlySet<string> = new Set<SourceLabel>([
+	"cli",
+	"env",
+	"config",
+	"implied",
+]);
+
 export interface SourcedEntry {
 	/** `undefined` is the TS analog of the siblings' nil/None flag value. */
 	readonly value: unknown;
@@ -67,15 +84,18 @@ export class SourcedStore {
 	}
 
 	/**
-	 * "Present" for dependency checks (coRequired, requires): cli, env,
-	 * config, and implied sources count. Default values do NOT.
+	 * "Present" for dependency checks (coRequired, requires, implies): the
+	 * invocation caused the value. This is the one shared definition
+	 * (contract §23.6) -- cli, env, config and implied count; `default` and
+	 * `infra` do not, both being the declaration deciding. `ctx.provided`
+	 * answers off the same set.
 	 */
 	isPresentForDeps(name: string): boolean {
 		const e = this.entries.get(name);
 		if (e === undefined) {
 			return false;
 		}
-		return e.source !== "default";
+		return PROVIDED_SOURCES.has(e.source);
 	}
 
 	/** Flag name -> source label for every stored entry. */
