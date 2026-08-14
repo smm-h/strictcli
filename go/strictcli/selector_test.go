@@ -842,11 +842,14 @@ func TestValueFlagHelpRendersTheBlockOnceAnEntryCarriesHelp(t *testing.T) {
 func TestMemberSelectorHelpRendersTheHeading(t *testing.T) {
 	app := electionApp()
 	r := app.Test([]string{"run", "--help"})
-	if !strings.Contains(r.Stdout, "  (exactly one of the following)") {
+	// The clause rides the RIGHT column, after the selector's help and before
+	// its presence part (§24.10); the left column carries the selector's own
+	// name, which is never a token.
+	if !strings.Contains(r.Stdout, "(exactly one of the following) [required]") {
 		t.Fatalf("help missing the member heading:\n%s", r.Stdout)
 	}
-	if !strings.Contains(r.Stdout, "    --profile <str>") {
-		t.Fatalf("help missing the member flag line:\n%s", r.Stdout)
+	if !strings.Contains(r.Stdout, "\n    --profile <str>") {
+		t.Fatalf("help missing the member flag line two columns beneath:\n%s", r.Stdout)
 	}
 }
 

@@ -251,28 +251,24 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 	if len(cmd.args) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "Arguments:")
-		maxLen := 0
+		// The content-keyed block rule reaches positional args too: an arg whose
+		// choices entries carry help drops the one-line `[choices: ...]` meta
+		// and renders its entries two columns beneath its own line (contract
+		// §24.10, §18.19 item 218). ONE alignment column across the whole
+		// section, deepest entry included -- the `Arguments:` section has its
+		// own column and never shares the flag block's.
+		var rows []flagHelpEntry
 		for _, a := range cmd.args {
 			displayName := a.Name
 			if a.IsVariadic {
 				displayName = a.Name + "..."
 			}
-			if len(displayName) > maxLen {
-				maxLen = len(displayName)
-			}
-		}
-		for _, a := range cmd.args {
-			displayName := a.Name
-			if a.IsVariadic {
-				displayName = a.Name + "..."
-			}
-			padding := maxLen - len(displayName) + 4
-			helpText := a.Help
+			block := choiceRecordsCarryHelp(a.choiceRecords)
 			var metaParts []string
 			if a.Type != TypeStr {
 				metaParts = append(metaParts, fmt.Sprintf("type: %s", flagTypeName[a.Type]))
 			}
-			if a.Choices != nil {
+			if a.Choices != nil && !block {
 				metaParts = append(metaParts, fmt.Sprintf("choices: %s", formatChoices(a.Choices)))
 			}
 			// Exactly one presence part, last on the line (contract §23.8).
@@ -287,20 +283,36 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 			default:
 				metaParts = append(metaParts, fmt.Sprintf("default: %s", formatDefaultValue(a.Default)))
 			}
-			meta := ""
-			if len(metaParts) > 0 {
-				var sb strings.Builder
-				for i, part := range metaParts {
-					if i > 0 {
-						sb.WriteString(" ")
-					}
-					sb.WriteString("[")
-					sb.WriteString(part)
-					sb.WriteString("]")
+			var sb strings.Builder
+			for i, part := range metaParts {
+				if i > 0 {
+					sb.WriteString(" ")
 				}
-				meta = " " + sb.String()
+				sb.WriteString("[")
+				sb.WriteString(part)
+				sb.WriteString("]")
 			}
-			lines = append(lines, fmt.Sprintf("  %s%s%s%s", displayName, strings.Repeat(" ", padding), helpText, meta))
+			rows = append(rows, flagHelpEntry{spec: "  " + displayName, right: a.Help + " " + sb.String()})
+			if !block {
+				continue
+			}
+			for _, cv := range a.choiceRecords {
+				rows = append(rows, flagHelpEntry{
+					spec:  "    " + formatValueForError(cv.Value),
+					right: cv.Help,
+				})
+			}
+		}
+		maxSpec := 0
+		for _, row := range rows {
+			if len(row.spec) > maxSpec {
+				maxSpec = len(row.spec)
+			}
+		}
+		for _, row := range rows {
+			padding := maxSpec - len(row.spec) + 4
+			line := row.spec + strings.Repeat(" ", padding) + row.right
+			lines = append(lines, strings.TrimRight(line, " "))
 		}
 	}
 
@@ -362,31 +374,38 @@ type flagHelpEntry struct {
 //
 // The layout (contract §24.10): a choice line indents TWO columns past its
 // selector's line, and a choice's scoped flags indent TWO columns past their
-// choice, so a flag at scope depth d carries 4*d extra columns and a choice line
-// of a selector at that depth carries 4*d+2.
+// choice, so recursion adds four columns per level. indent is that column
+// count, counted from the flag block's own left edge.
 //
 // A choice-carrying flag renders as an indented block IFF any of its choices
 // carries help or a scope; otherwise it keeps the one-line `[choices: a, b, c]`
 // form. A selector is therefore always a block (its choices carry mandatory
 // help) and a value flag is a block exactly when its entries were given help.
-func collectFlagHelpEntries(flags []Flag, depth int) []flagHelpEntry {
+func collectFlagHelpEntries(flags []Flag, indent int) []flagHelpEntry {
 	var out []flagHelpEntry
-	pad := strings.Repeat(" ", 4*depth)
-	choicePad := strings.Repeat(" ", 4*depth+2)
+	pad := strings.Repeat(" ", indent)
+	choicePad := strings.Repeat(" ", indent+2)
 	for i := range flags {
 		f := &flags[i]
 		if f.Type == TypeChoice && f.memberSpelled {
 			// A member-spelled selector has no token to render, so its own line
-			// carries its help, the clause and its presence part, with the
-			// member flags rendered as ordinary flag lines two columns beneath.
+			// carries its NAME in the left column -- the handler's key and the
+			// noun help and errors use, never something a user types -- and in
+			// the right column its help, the clause and its presence part, in
+			// that order (contract §24.10). The member flags render as ordinary
+			// flag lines two columns beneath it, exactly where a choice line
+			// renders under a token-spelled selector.
 			out = append(out, flagHelpEntry{
-				spec:  pad + memberSelectorHeading,
-				right: f.Help + buildFlagMeta(*f),
+				spec:  pad + f.Name,
+				right: f.Help + " " + memberSelectorHeading + buildFlagMeta(*f),
 			})
 			for _, ch := range f.choiceDecls {
-				out = append(out, collectFlagHelpEntries(ch.Flags[:1], depth+1)...)
-				out[len(out)-1].right = ch.Help + buildFlagMeta(ch.Flags[0])
-				out = append(out, collectFlagHelpEntries(ch.Flags[1:], depth+1)...)
+				member := collectFlagHelpEntries(ch.Flags[:1], indent+2)
+				// The CHOICE's help is what the member's line carries: the
+				// member flag is the token, the choice is what electing it says.
+				member[0].right = ch.Help + buildFlagMeta(ch.Flags[0])
+				out = append(out, member...)
+				out = append(out, collectFlagHelpEntries(ch.Flags[1:], indent+4)...)
 			}
 			continue
 		}
@@ -399,7 +418,7 @@ func collectFlagHelpEntries(flags []Flag, depth int) []flagHelpEntry {
 		if f.Type == TypeChoice {
 			for _, ch := range f.choiceDecls {
 				out = append(out, flagHelpEntry{spec: choicePad + ch.Name, right: ch.Help})
-				out = append(out, collectFlagHelpEntries(ch.Flags, depth+1)...)
+				out = append(out, collectFlagHelpEntries(ch.Flags, indent+4)...)
 			}
 			continue
 		}
@@ -420,6 +439,50 @@ func collectFlagHelpEntries(flags []Flag, depth int) []flagHelpEntry {
 // memberSelectorHeading is the clause a member-spelled selector's own line
 // carries in place of a token it never has (contract §24.10).
 const memberSelectorHeading = "(exactly one of the following)"
+
+// formatSelectorDefaultForHelp renders a defaulted selector's presence part as
+// the COMPLETE elected value, because that is what a default is (§24.5, §24.10):
+//
+//	[default: <choice> (<field>=<value>, ...)]
+//
+// The elected choice's own scalar fields in declaration order, each rendered by
+// the value formatter every other presence part uses, joined by ", ". A choice
+// whose scope is empty -- or whose only fields are nested selectors -- renders
+// `[default: <choice>]` with no parenthesized part at all, never an empty `()`.
+//
+// A NESTED selector inside the defaulted scope is not expanded inline: it opens
+// its own line in the block, where its own presence part states its own default
+// by this same rule. A field that carries no value (an optional one) is omitted
+// for the same reason the dumped flat map omits it -- there is no value to
+// render, and completeness is what a required one is guaranteed by.
+func formatSelectorDefaultForHelp(sel *Flag) string {
+	name, ok := sel.Default.(string)
+	if !ok {
+		return formatDefaultValue(sel.Default)
+	}
+	ch := findChoice(sel, name)
+	if ch == nil {
+		return formatDefaultValue(sel.Default)
+	}
+	start := 0
+	if ch.member {
+		// The member flag itself elects; a defaulted member is payload-less, so
+		// it contributes no field.
+		start = 1
+	}
+	var parts []string
+	for j := start; j < len(ch.Flags); j++ {
+		f := ch.Flags[j]
+		if f.Type == TypeChoice || f.presence != presenceDefault {
+			continue
+		}
+		parts = append(parts, f.Name+"="+formatFlagDefaultForHelp(f))
+	}
+	if len(parts) == 0 {
+		return ch.Name
+	}
+	return ch.Name + " (" + strings.Join(parts, ", ") + ")"
+}
 
 // choiceRecordsCarryHelp reports whether any entry of a value flag's choices
 // list was given help, which is what promotes the flag to block rendering.
@@ -520,6 +583,9 @@ func buildFlagMeta(f Flag) string {
 // and a declaration that rendered blank would leave the flag as the one line
 // with no presence part (contract §23.8).
 func formatFlagDefaultForHelp(f Flag) string {
+	if f.Type == TypeChoice {
+		return formatSelectorDefaultForHelp(&f)
+	}
 	if f.Type == TypeBool && !f.Repeatable {
 		if def, ok := f.Default.(bool); ok && def {
 			return "true"
