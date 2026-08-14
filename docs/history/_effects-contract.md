@@ -4079,6 +4079,27 @@ decide.
      deliberately unpublished), and it carries the dialogue in both eras, the feature name, and
      what a client must declare. The quickstarts link to it rather than restating it.
 
+### 18.13 Corrections made after the confirmation round's audit (2026-08-14)
+
+An independent audit of §22's seam found three defects between what this document says and what
+the three implementations did. Nothing below is a new ruling or a changed guarantee: each item
+records the mechanics that were missing where the document already promised the behaviour, and
+the correction that made the promise true.
+
+134. **The legacy abort was not consuming its continuation (§22.7 item 4, §22.4).** Item 130 says
+     everything that is not an explicit acceptance aborts, and §22.4 says verification is
+     consumption -- but the legacy loop only reached the verify (and therefore the spent-id set)
+     when a well-formed `result` came back. A stream that ended, a JSON-RPC error response, and an
+     answer under an id the server never minted all aborted **without spending the blob**, which
+     left it valid for the rest of its five minutes, bound to the same principal and the same
+     request digest the modern era mints. The client could then present it as `requestState` on
+     the modern path with an acceptance of its own writing, and the consequential command it had
+     just aborted **ran**. Fail-closed was a promise the code did not keep. The correction is one
+     line of position, in all three implementations: consumption happens as soon as the awaited
+     answer resolves, before any exit is chosen, so writing the elicitation is what commits the
+     blob. A blob whose exchange never started (a non-consequential command, a client that
+     declared no elicitation) is never minted and so has nothing to spend.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -4901,6 +4922,12 @@ whose handshake declared a form elicitation:
    with the text `aborted`. There is no re-ask in this era: the modern one re-asks because the
    client is free to come back without an answer, while here the server is holding the request
    open and a non-answer is a decision.
+   **Every one of those exits consumes the blob** (corrected 2026-08-14, §18.13 item 134). Once
+   the elicitation has been written the blob is on the wire, and §22.4's consumption is
+   unconditional from that point: the abort spends it just as an acceptance does. An abort that
+   left it live would be handing the client a still-valid `requestState` -- same principal, same
+   request digest, five minutes of life -- to present on the modern path with an acceptance the
+   client wrote itself, for the very call the abort refused.
 5. Anything else the client sends while the server is waiting is **held, not dropped**: a
    response whose id is not the awaited one is discarded (this server sent no such request), and
    a request or notification is queued and served after the call it interrupted completes. The

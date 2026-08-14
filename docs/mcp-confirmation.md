@@ -235,6 +235,10 @@ Two differences a client should know about:
 - **Everything that is not an explicit acceptance aborts** -- a decline, a cancel, an acceptance
   that says no, an unreadable result, an error response, or the connection ending. There is no
   re-ask in this era: the server is holding the request open, so a non-answer is a decision.
+  Every one of those exits **spends the continuation**, exactly as an acceptance does: once the
+  elicitation has been written, the blob is single-use whatever happens next. An aborted question
+  therefore cannot be re-answered -- presenting its id as `requestState` on the modern path is
+  refused with `requestState has already been used`.
 - **A legacy client that declared no elicitation is refused, not asked**, with ordinary
   tool-result error content: `command 'release' is consequential: the call must carry
   confirmation`. It does not get `-32021`, which belongs to a revision that client is not
