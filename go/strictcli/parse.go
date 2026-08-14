@@ -759,15 +759,9 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 		}
 	}
 
-	// Build set of flag names belonging to mutex groups
-	mutexFlagNames := make(map[string]bool)
-	for _, mg := range cmd.mutex {
-		for _, f := range mg.Flags {
-			mutexFlagNames[f.Name] = true
-		}
-	}
-
-	// Apply defaults (SourceDefault)
+	// Apply defaults (SourceDefault). A mutex member is not special here any
+	// more: the presence exemption is deleted, and a member's own declaration
+	// says what its absence means (contract §23.4).
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
 		if store.has(f.Name) {
