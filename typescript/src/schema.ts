@@ -1,27 +1,30 @@
 /**
  * Schema dump (--dump-schema): builds the machine-readable schema dict and
  * writes .strictcli/schema.json describing every command, group, flag, and
- * arg. Parity sources: go/strictcli/schema.go (all)
- * and Python _serialize_flag/_dump_schema_core/_write_schema. Key order and
- * omission rules follow Python (the divergence ground truth); Go sorts JSON
- * map keys on marshal, so it pins content, not order.
+ * arg, at SCHEMA VERSION 2 (contract §25).
  *
- * TS model deltas (documented divergences):
- * - Flag/arg types are the exact ten TS carrier schema strings (str, bool,
- *   int, float, list[str|int|float], dict[str,str|int|float]). Go spells
- *   compounds list[str]/dict[str]; Python emits JSON-schema-ish objects for
- *   compounds. The TS schema string IS the declaration surface.
- * - "repeatable" is never emitted: list carriers are the only repeatable
- *   flags, and the list[...] type string already conveys it (Python's
- *   compound-list rule -- it omits repeatable for list[T] flags too).
- * - Empty list/dict defaults are omitted (Python's compound rule); explicit
- *   empty defaults are banned at registration anyway.
- * - project_id comes from package.json "name" (the ecosystem analog of
- *   Python's pyproject.toml [project].name and Go's go.mod module path).
+ * Everything about the format is cross-language and pinned: the closed
+ * four-keyword `value_schema` fragment and its key order (§25.2), arity as
+ * value shape (§25.3), the choices split (§25.5), the selector encoding
+ * (§25.6), the declared key order at every depth (§25.9), the rewritten
+ * `defaults` block (§25.10), the behavioral-completeness keys (§25.11) and the
+ * byte canon (§25.8). No implementation sorts keys at serialization time; the
+ * three keyed blocks that ARE sorted (`deprecated`, `tag_contracts`, `checks`)
+ * are sorted because no implementation retains a declaration order for them.
  *
- * Machine-channel number convention: bigint values are bare integer tokens;
- * float values are SCF tokens (SCF strings are valid JSON numbers, and Python
- * json.dumps floats via repr == SCF, so the bytes match the Python sibling).
+ * The byte canon makes the committed file dumper-independent: a repository
+ * whose `.strictcli/schema.json` is written sometimes by this implementation
+ * and sometimes by the Python or Go one must see a diff exactly when something
+ * changed. Numbers are the one place TypeScript needs its own writer -- bigint
+ * values are bare integer tokens and floats are SCF tokens, neither of which
+ * JSON.stringify can emit -- and its string escaping is JSON.stringify's,
+ * which already IS the canon (raw non-ASCII, literal `<`, `>`, `&` and `/`,
+ * and a lone surrogate escaped).
+ *
+ * The one remaining TS-side delta is not a format rule: dict defaults are
+ * emitted with sorted keys (the TS Map display convention). project_id comes
+ * from package.json "name" (the ecosystem analog of Python's pyproject.toml
+ * [project].name and Go's go.mod module path).
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -530,8 +533,12 @@ function serializeGroup(grp: GroupImpl): Record<string, unknown> {
 		}
 		d.groups = groups;
 	}
+	// Sorted ascending by key, exactly as the app-level block is: no
+	// implementation retains a declaration order for `deprecated`, and a canon
+	// that cannot be produced from what an implementation holds is not a canon
+	// (§25.9).
 	if (grp.deprecated.size > 0) {
-		d.deprecated = Object.fromEntries(grp.deprecated);
+		d.deprecated = sortedRecord(grp.deprecated);
 	}
 	if (grp.tags.length > 0) {
 		d.tags = [...grp.tags].sort();
