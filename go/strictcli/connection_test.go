@@ -124,6 +124,92 @@ func TestConnectionEnv_HermeticSuppressesFlagResolution(t *testing.T) {
 	}
 }
 
+// --- Presence: a REQUIRED connection-URL flag (contract §23.5's env row) ---
+
+// newRequiredConnApp builds an app whose single connection-URL flag declares
+// Required(), so requiredness must be satisfiable by the bound connection env
+// alone -- §23.5's env row, with no extra guard for the URL class.
+func newRequiredConnApp() (*App, *map[string]interface{}, *map[string]string, *map[string]bool) {
+	kw := map[string]interface{}{}
+	src := map[string]string{}
+	prov := map[string]bool{}
+	app := NewApp("myapp", "1.0.0", "test app",
+		WithConnectionEnv("DATABASE_URL", "Postgres connection string"))
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		kw = kwargs
+		src = map[string]string{"dsn": ctx.Source("dsn")}
+		prov = map[string]bool{"dsn": ctx.Provided("dsn")}
+		return Exit(0)
+	}, WithFlags(
+		StringFlag("dsn", "connection string", Required(), ConnectionURLFlag("DATABASE_URL")),
+	), WithEffect(EffectReadOnly))
+	return app, &kw, &src, &prov
+}
+
+func TestConnectionEnv_RequiredSatisfiedByEnv(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://from-env/db")
+	defer os.Unsetenv("DATABASE_URL")
+	app, kwP, srcP, provP := newRequiredConnApp()
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", r.ExitCode, r.Stderr)
+	}
+	if (*kwP)["dsn"] != "postgres://from-env/db" {
+		t.Fatalf("dsn = %v, want from-env", (*kwP)["dsn"])
+	}
+	if (*srcP)["dsn"] != "env" {
+		t.Fatalf("source = %q, want env", (*srcP)["dsn"])
+	}
+	if !(*provP)["dsn"] {
+		t.Fatalf("Provided(dsn) = false, want true")
+	}
+}
+
+func TestConnectionEnv_RequiredEnvUnsetIsRequiredError(t *testing.T) {
+	os.Unsetenv("DATABASE_URL")
+	app, _, _, _ := newRequiredConnApp()
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("exit %d, want 1", r.ExitCode)
+	}
+	want := "error: flag '--dsn' is required\ntry 'myapp run --help'\n"
+	if r.Stderr != want {
+		t.Fatalf("stderr = %q, want %q", r.Stderr, want)
+	}
+}
+
+func TestConnectionEnv_RequiredCliBeatsEnv(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://from-env/db")
+	defer os.Unsetenv("DATABASE_URL")
+	app, kwP, srcP, provP := newRequiredConnApp()
+	r := app.Test([]string{"run", "--dsn", "postgres://from-cli/db"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", r.ExitCode, r.Stderr)
+	}
+	if (*kwP)["dsn"] != "postgres://from-cli/db" {
+		t.Fatalf("dsn = %v, want from-cli", (*kwP)["dsn"])
+	}
+	if (*srcP)["dsn"] != "cli" || !(*provP)["dsn"] {
+		t.Fatalf("source = %q provided = %v", (*srcP)["dsn"], (*provP)["dsn"])
+	}
+}
+
+// Under --hermetic the connection env is suppressed, so nothing satisfies
+// requiredness even though the variable is set.
+func TestConnectionEnv_RequiredHermeticSuppressesEnv(t *testing.T) {
+	os.Setenv("DATABASE_URL", "postgres://from-env/db")
+	defer os.Unsetenv("DATABASE_URL")
+	app, _, _, _ := newRequiredConnApp()
+	r := app.Test([]string{"--hermetic", "run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("exit %d, want 1", r.ExitCode)
+	}
+	want := "error: flag '--dsn' is required\ntry 'myapp run --help'\n"
+	if r.Stderr != want {
+		t.Fatalf("stderr = %q, want %q", r.Stderr, want)
+	}
+}
+
 // --- Handler-side InfraValue / ConnectionEnvValue ---
 
 func TestConnectionEnv_InfraValueLive(t *testing.T) {
