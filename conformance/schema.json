@@ -1103,9 +1103,37 @@
       "type": "object",
       "required": [
         "name",
-        "help"
+        "help",
+        "presence"
       ],
       "additionalProperties": false,
+      "allOf": [
+        {
+          "$comment": "Contract §23.1/§23.3: `default` co-occurs exactly with presence=\"default\". A case that spells an illegal combination (to assert a registration error) declares skip_schema_validation.",
+          "if": {
+            "required": [
+              "presence"
+            ],
+            "properties": {
+              "presence": {
+                "const": "default"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "default"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "default"
+              ]
+            }
+          }
+        }
+      ],
       "properties": {
         "name": {
           "type": "string"
@@ -1113,14 +1141,21 @@
         "help": {
           "type": "string"
         },
-        "required": {
-          "type": "boolean",
-          "default": true
+        "presence": {
+          "enum": [
+            "required",
+            "optional",
+            "default"
+          ],
+          "description": "The presence declaration (contract §23.3). Exactly one of the three facts, on every declared arg. `default` is spelled by the `default` key beside presence=\"default\"."
         },
         "default": {
           "oneOf": [
             {
               "type": "string"
+            },
+            {
+              "type": "boolean"
             },
             {
               "type": "number"
@@ -1172,15 +1207,69 @@
       "type": "object",
       "required": [
         "name",
-        "help"
+        "help",
+        "presence"
       ],
       "additionalProperties": false,
+      "allOf": [
+        {
+          "$comment": "Contract §23.1: `default` (or its RelativeToRoot marker form) co-occurs exactly with presence=\"default\". A case that spells an illegal combination (to assert a registration error) declares skip_schema_validation.",
+          "if": {
+            "required": [
+              "presence"
+            ],
+            "properties": {
+              "presence": {
+                "const": "default"
+              }
+            }
+          },
+          "then": {
+            "oneOf": [
+              {
+                "required": [
+                  "default"
+                ]
+              },
+              {
+                "required": [
+                  "default_relative_to_root"
+                ]
+              }
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "default"
+                  ]
+                },
+                {
+                  "required": [
+                    "default_relative_to_root"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
       "properties": {
         "name": {
           "type": "string"
         },
         "help": {
           "type": "string"
+        },
+        "presence": {
+          "enum": [
+            "required",
+            "optional",
+            "default"
+          ],
+          "description": "The presence declaration (contract §23.1, §23.2). Exactly one of the three facts, on every declared flag at every level. `default` is spelled by the `default` key (or `default_relative_to_root`) beside presence=\"default\"."
         },
         "type": {
           "type": "string",
@@ -1218,6 +1307,20 @@
             {
               "type": "array",
               "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "object",
+              "$comment": "A dict flag's declared default (contract §23.5's dict row). Values are scalars matching the flag's value type.",
+              "additionalProperties": {
                 "oneOf": [
                   {
                     "type": "string"
