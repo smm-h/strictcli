@@ -132,3 +132,78 @@ func TestMemberSelectorLineCarriesTheClauseAfterItsHelp(t *testing.T) {
 		t.Fatalf("the selector's own name is missing from the left column:\n%s", r.Stdout)
 	}
 }
+
+// The rendered block, byte for byte, beside the Python implementation's for the
+// same declaration.
+func TestArgChoicesBlockRendersTheSameBytesAsTheSiblingImplementations(t *testing.T) {
+	app := simpleApp("push", "push it", "ok",
+		WithArgs(
+			NewArg("target", "what to push", ArgRequired(),
+				ArgChoices(Ch("head", "push only the current HEAD branch"), Ch("tags", ""))),
+			NewArg("remote", "where to push", ArgOptional()),
+		))
+	r := app.Test([]string{"push", "--help"})
+	want := `myapp push -- push it
+
+Arguments:
+  target    what to push [required]
+    head    push only the current HEAD branch
+    tags
+  remote    where to push [optional]
+`
+	if r.Stdout != want {
+		t.Fatalf("help = %q, want %q", r.Stdout, want)
+	}
+}
+
+// The member-spelled selector's whole block, byte for byte, beside the Python
+// implementation's for the same declaration.
+func TestMemberSelectorBlockRendersTheSameBytesAsTheSiblingImplementations(t *testing.T) {
+	app := simpleApp("run", "run it", "ok",
+		WithFlags(MemberChoiceFlag("mode", "which profiles to run over", Required(),
+			MemberChoice(StringFlag("profile", "a profile", Required()),
+				"run over one named profile",
+				BoolFlag("create-missing", "create it", Default(false))),
+			MemberChoice(BoolFlag("all-profiles", "every profile", Required()),
+				"run over every profile"),
+		)))
+	r := app.Test([]string{"run", "--help"})
+	want := `myapp run -- run it
+
+Flags:
+  mode                                         which profiles to run over (exactly one of the following) [required]
+    --profile <str>                            run over one named profile [required]
+      --create-missing, --no-create-missing    create it [default: false]
+    --all-profiles                             run over every profile [required]
+`
+	if r.Stdout != want {
+		t.Fatalf("help = %q, want %q", r.Stdout, want)
+	}
+}
+
+// The defaulted selector's whole block, byte for byte, beside the Python
+// implementation's for the same declaration.
+func TestDefaultedSelectorBlockRendersTheSameBytesAsTheSiblingImplementations(t *testing.T) {
+	app := simpleApp("send", "send it", "ok",
+		WithFlags(ChoiceFlag("via", "delivery channel", Default("webhook"),
+			Choice("webhook", "post to a URL",
+				StringFlag("url", "the endpoint", Default("https://example.test/hook")),
+				IntFlag("retries", "how many times to retry", Default(5))),
+			Choice("email", "by email",
+				StringFlag("subject", "the subject", Required())),
+		)))
+	r := app.Test([]string{"send", "--help"})
+	want := `myapp send -- send it
+
+Flags:
+  --via <choice>         delivery channel [default: webhook (url=https://example.test/hook, retries=5)]
+    webhook              post to a URL
+      --url <str>        the endpoint [default: https://example.test/hook]
+      --retries <int>    how many times to retry [default: 5]
+    email                by email
+      --subject <str>    the subject [required]
+`
+	if r.Stdout != want {
+		t.Fatalf("help = %q, want %q", r.Stdout, want)
+	}
+}

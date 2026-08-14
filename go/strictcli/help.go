@@ -401,6 +401,7 @@ func collectFlagHelpEntries(flags []Flag, indent int) []flagHelpEntry {
 			})
 			for _, ch := range f.choiceDecls {
 				member := collectFlagHelpEntries(ch.Flags[:1], indent+2)
+				member[0].spec = choicePad + buildMemberSpec(ch)
 				// The CHOICE's help is what the member's line carries: the
 				// member flag is the token, the choice is what electing it says.
 				member[0].right = ch.Help + buildFlagMeta(ch.Flags[0])
@@ -439,6 +440,26 @@ func collectFlagHelpEntries(flags []Flag, indent int) []flagHelpEntry {
 // memberSelectorHeading is the clause a member-spelled selector's own line
 // carries in place of a token it never has (contract §24.10).
 const memberSelectorHeading = "(exactly one of the following)"
+
+// buildMemberSpec is the left-column spec for one member flag under member
+// spelling: the token that elects the choice, its short, and its payload's type
+// when it carries one.
+//
+// It is NOT buildFlagSpec: a payload-less member is a bool flag whose negation
+// DECLINES rather than naming a choice (§21.2), so rendering `--no-<member>`
+// beside it would offer the decline as if it were a way of electing. The line
+// names the one token that elects.
+func buildMemberSpec(ch *ChoiceDecl) string {
+	f := memberFlag(ch)
+	spec := "--" + f.Name
+	if f.Short != "" {
+		spec += ", -" + f.Short
+	}
+	if choiceCarriesPayload(ch) {
+		spec += " <" + flagTypeName[f.Type] + ">"
+	}
+	return spec
+}
 
 // formatSelectorDefaultForHelp renders a defaulted selector's presence part as
 // the COMPLETE elected value, because that is what a default is (§24.5, §24.10):
