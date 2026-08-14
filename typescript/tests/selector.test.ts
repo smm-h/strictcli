@@ -1300,3 +1300,81 @@ test("templates: the scope path, suffix and origin clauses compose as pinned", (
 		'Flag "via": choice "email" is declared twice',
 	);
 });
+
+test("member spelling: an out-of-scope flag under an unelected member names no token", () => {
+	// The member-spelled twin of the "was not provided" clause: it cannot name
+	// a selector token, because none is ever typed (§12.13).
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("launch", {
+			help: "launch",
+			flags: {
+				target: memberChoiceFlag(
+					"target",
+					{
+						profile: choice({
+							help: "one profile",
+							value: t.str,
+							flags: {
+								create_missing: flag("create-missing", t.bool, {
+									help: "create it when absent",
+									presence: "default",
+									default: false,
+								}),
+							},
+						}),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "what to launch", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app.test(["launch", "--create-missing"]).then((r) => {
+		assert.equal(
+			r.stderr,
+			errOut(
+				"flag '--create-missing' is only valid under '--profile', but none of --profile, --all-profiles was elected",
+				"myapp launch",
+			),
+		);
+	});
+});
+
+test("sources: a skipped CONFIG binding is named under --verbose too", async () => {
+	const app = makeApp({ config: false });
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({ help: "email" }),
+						sms: choice({
+							help: "sms",
+							flags: {
+								phone_number: flag("phone-number", t.str, {
+									help: "number",
+									presence: "optional",
+									env: "MYAPP_PHONE",
+								}),
+							},
+						}),
+					},
+					{ help: "channel", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	await withEnv({ MYAPP_PHONE: "+15550100" }, async () => {
+		const r = await app.test(["send", "--verbose", "--via", "email"]);
+		assert.equal(r.exitCode, 0);
+		assert.equal(
+			r.stdout,
+			"not consulted: env var 'MYAPP_PHONE' binds flag '--phone-number' under '--via sms', which was not elected\n",
+		);
+	});
+});
