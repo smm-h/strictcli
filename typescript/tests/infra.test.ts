@@ -525,7 +525,7 @@ test("infra: marker default vs choices renders the Python repr", () => {
 		() =>
 			flag("c", t.str, {
 				help: "c",
-				choices: ["a", "b"],
+				choices: [{ value: "a" }, { value: "b" }],
 				presence: "default",
 				default: relativeToRoot("MYAPP_HOME"),
 			}),

@@ -3,9 +3,11 @@ import { test } from "node:test";
 import type { InferHandler } from "../src/index.js";
 import {
 	arg,
+	assertNever,
+	choice,
 	defineReadOnlyCommand,
 	flag,
-	mutexGroup,
+	memberChoiceFlag,
 	t,
 } from "../src/index.js";
 
@@ -135,41 +137,69 @@ export type _ArgOptionality = Assert<
 	Equals<InferHandler<typeof cp>, { src: string; dest?: string; mode: string }>
 >;
 
-// --- Presence drives optionality, including for mutex members ---
-// Before the presence declaration a mutex member declared no default, was
-// typed as an always-present non-nullable key, and was handed `undefined` by
-// the parser through the exemption contract §23.4 deletes. The member now
-// declares `presence: "optional"` like anything else and the handler-args type
-// follows the declaration by construction.
+// --- A selector delivers ONE tagged value; sub-flags are never top-level ---
+// Before this construct, mutex members were intersected into the top-level
+// args as always-present non-nullable keys while the parser handed them
+// `undefined`. A scope's flags are now reachable ONLY through the tag that
+// proves the scope was elected, so the failure mode is inexpressible
+// (contract §23.2, §24.12).
 
 const pick = defineReadOnlyCommand("pick", {
 	help: "Pick a source",
-	mutex: [
-		mutexGroup({
-			from_file: flag("from-file", t.str, {
-				help: "From a file",
-				presence: "optional",
-			}),
-			from_url: flag("from-url", t.str, {
-				help: "From a URL",
-				presence: "default",
-				default: "https://example.test",
-			}),
-		}),
-	],
-	handler: (args) => (args.from_file === undefined ? args.from_url.length : 0),
+	flags: {
+		source: memberChoiceFlag(
+			"source",
+			{
+				"from-file": choice({ help: "From a file", value: t.str }),
+				"from-url": choice({
+					help: "From a URL",
+					flags: {
+						retries: flag("retries", t.int, {
+							help: "Retry count",
+							presence: "default",
+							default: 3n,
+						}),
+						proxy: flag("proxy", t.str, {
+							help: "Proxy",
+							presence: "optional",
+						}),
+					},
+				}),
+			},
+			{ help: "Where to read from", presence: "required" },
+		),
+	},
+	handler: (args) => {
+		switch (args.source.choice) {
+			case "from-file":
+				return args.source.value.length;
+			case "from-url":
+				return Number(args.source.retries);
+			default:
+				return assertNever(args.source);
+		}
+	},
 });
 
-// A mutex group's flags reach the handler-args type through an intersection
-// that TS keeps deferred, so these are assignability assertions rather than
-// the Equals identity check the plain flag/arg cases use.
 declare const pickArgs: InferHandler<typeof pick>;
 void [
-	// @ts-expect-error an optional mutex member is possibly undefined
-	(): string => pickArgs.from_file,
-	(): string | undefined => pickArgs.from_file,
-	// A member declaring a default is always present and never undefined.
-	(): string => pickArgs.from_url,
+	// The delivered union is exact: the tag narrows to the literal names.
+	(): "from-file" | "from-url" => pickArgs.source.choice,
+	// A sub-flag is NEVER a top-level key.
+	// @ts-expect-error `retries` belongs to the from-url scope, not to args
+	(): unknown => pickArgs.retries,
+	// A scoped optional sub-flag's key is optional in the derived union.
+	(): string | undefined =>
+		pickArgs.source.choice === "from-url" ? pickArgs.source.proxy : undefined,
+	// A scoped defaulted sub-flag is always present.
+	(): bigint | undefined =>
+		pickArgs.source.choice === "from-url" ? pickArgs.source.retries : undefined,
+	// The payload of a value-carrying member reaches its own branch only.
+	(): unknown =>
+		pickArgs.source.choice === "from-url"
+			? // @ts-expect-error `value` exists only on the from-file member
+				pickArgs.source.value
+			: "",
 ];
 
 // --- Optionality reaches compound carriers too ---

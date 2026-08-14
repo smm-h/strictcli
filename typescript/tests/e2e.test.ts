@@ -139,7 +139,7 @@ test("e2e 4: invalid choice", async () => {
 			flags: {
 				format: flag("format", t.str, {
 					help: "output format",
-					choices: ["text", "json"],
+					choices: [{ value: "text" }, { value: "json" }],
 					presence: "required",
 				}),
 			},

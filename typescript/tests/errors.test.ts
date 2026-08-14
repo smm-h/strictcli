@@ -80,7 +80,7 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // errArgDefaultElementTypeMismatch. A list-typed arg must be variadic and a
 // variadic arg refuses a default, so no arg can carry a list default for them
 // to describe; the flag-side counterparts are untouched.
-const EXPECTED_TEMPLATE_COUNT = 324;
+const EXPECTED_TEMPLATE_COUNT = 352;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,
@@ -258,8 +258,8 @@ test("registration templates are byte-identical to sibling output", () => {
 		"flag 'no-commit': names starting with 'no-' are reserved for the negation system; use a positive name instead",
 	);
 	assert.equal(
-		errors.errCommandMutexMinFlags("deploy", 1),
-		'command "deploy": mutex group must have at least 2 flags, got 1',
+		errors.errSelectorNoChoices("via"),
+		'Flag "via": a choice flag must declare at least two choices',
 	);
 	assert.equal(
 		errors.errFlagRepeatableIncompatibleBool("verbose"),

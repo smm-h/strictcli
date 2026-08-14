@@ -238,19 +238,19 @@ test("jsonSchema: choices become enum (bigint for int flags)", () => {
 			flags: {
 				color: flag("color", t.str, {
 					help: "color",
-					choices: ["red", "blue"],
+					choices: [{ value: "red" }, { value: "blue" }],
 					presence: "required",
 				}),
 				level: flag("level", t.int, {
 					help: "level",
-					choices: [1n, 2n],
+					choices: [{ value: 1n }, { value: 2n }],
 					presence: "required",
 				}),
 			},
 			args: [
 				arg("mode", t.str, {
 					help: "mode",
-					choices: ["fast", "slow"],
+					choices: [{ value: "fast" }, { value: "slow" }],
 					presence: "required",
 				}),
 			],

@@ -2,13 +2,14 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
 	arg,
+	choice,
 	coRequired,
 	defineReadOnlyCommand,
 	deprecated,
 	flag,
 	flagSet,
 	implies,
-	mutexGroup,
+	memberChoiceFlag,
 	readOnlyPassthrough,
 	requires,
 	t,
@@ -105,7 +106,7 @@ test("dependency descriptors carry sibling field shapes", () => {
 	});
 });
 
-test("flagSet and mutexGroup hold keyed flag maps", () => {
+test("flagSet and memberChoiceFlag hold keyed maps", () => {
 	const common = flagSet("common", {
 		chatter: flag("chatter", t.bool, {
 			help: "Chatter",
@@ -117,12 +118,17 @@ test("flagSet and mutexGroup hold keyed flag maps", () => {
 	assert.equal(common.name, "common");
 	assert.equal(common.flags.chatter.name, "chatter");
 
-	const mg = mutexGroup({
-		file: flag("file", t.str, { help: "From file", presence: "optional" }),
-		url: flag("url", t.str, { help: "From URL", presence: "optional" }),
-	});
-	assert.equal(mg.kind, "mutex-group");
-	assert.equal(mg.flags.file.schema, "str");
+	const sel = memberChoiceFlag(
+		"source",
+		{
+			file: choice({ help: "From file", value: t.str }),
+			url: choice({ help: "From URL", value: t.str }),
+		},
+		{ help: "Where to read from", presence: "required" },
+	);
+	assert.equal(sel.kind, "choice-flag");
+	assert.equal(sel.electBy, "member-flags");
+	assert.equal(sel.choices.file.value?.schema, "str");
 });
 
 test("defineReadOnlyCommand validates help, tags, and flag-map keys", () => {
@@ -206,7 +212,7 @@ void [
 			presence: "default",
 			default: false,
 			// @ts-expect-error choices are incompatible with bool flags
-			choices: [true],
+			choices: [{ value: true }],
 		}),
 	() =>
 		flag("target", t.str, {
@@ -238,7 +244,7 @@ void [
 		flag("level", t.int, {
 			help: "h",
 			// @ts-expect-error choices elements must match the carrier's value type
-			choices: [1, 2],
+			choices: [{ value: 1 }, { value: 2 }],
 			presence: "required",
 		}),
 ];

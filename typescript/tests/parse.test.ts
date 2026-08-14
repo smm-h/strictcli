@@ -13,19 +13,22 @@ import { Context } from "../src/context.js";
 import type {
 	AnyCommand,
 	AnyFlag,
+	ChoiceRecord,
 	PassthroughArgs,
 	PassthroughDef,
 } from "../src/factories.js";
 import { formatFloatCanonical } from "../src/float.js";
 import {
 	arg,
+	choice,
+	choiceFlag,
 	coRequired,
 	createApp,
 	defineReadOnlyCommand,
 	deprecated,
 	flag,
 	implies,
-	mutexGroup,
+	memberChoiceFlag,
 	readOnlyPassthrough,
 	relativeToRoot,
 	requires,
@@ -1127,34 +1130,31 @@ test("global_flags: global and command flags together (conformance exact)", asyn
 // mutex.json / cross_feature.json
 // =========================================================================
 
-function mutexBoolApp(out: string[]): AppImpl {
+function memberBoolApp(out: string[]): AppImpl {
 	const app = makeApp();
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			mutex: [
-				mutexGroup({
-					chatter: flag("chatter", t.bool, {
-						help: "chatter output",
-						presence: "optional",
-					}),
-					muted: flag("muted", t.bool, {
-						help: "muted output",
-						presence: "optional",
-					}),
-				}),
-			],
+			flags: {
+				volume: memberChoiceFlag(
+					"volume",
+					{
+						chatter: choice({ help: "chatter output" }),
+						muted: choice({ help: "muted output" }),
+					},
+					{ help: "output volume", presence: "required" },
+				),
+			},
 			handler: (a) => {
-				const g = a as unknown as { chatter?: boolean; muted?: boolean };
-				out.push(`chatter=${fmt(g.chatter)} muted=${fmt(g.muted)}`);
+				out.push(`volume=${a.volume.choice}`);
 			},
 		}),
 	);
 	return app;
 }
 
-test("mutex: neither provided is exact one-of-required error", async () => {
-	const r = await run(mutexBoolApp([]), ["cmd"]);
+test("member spelling: nothing elected is exact one-of-required error", async () => {
+	const r = await run(memberBoolApp([]), ["cmd"]);
 	assert.equal(r.exitCode, 1);
 	assert.equal(
 		r.stderr,
@@ -1162,60 +1162,58 @@ test("mutex: neither provided is exact one-of-required error", async () => {
 	);
 });
 
-test("mutex: one provided is ok, unset member is None", async () => {
+test("member spelling: one elected delivers one tagged record", async () => {
 	const out: string[] = [];
 	assert.equal(
-		(await run(mutexBoolApp(out), ["cmd", "--chatter"], out)).stdout,
-		"chatter=true muted=None",
+		(await run(memberBoolApp(out), ["cmd", "--chatter"], out)).stdout,
+		"volume=chatter",
 	);
 	const out2: string[] = [];
 	assert.equal(
-		(await run(mutexBoolApp(out2), ["cmd", "--muted"], out2)).stdout,
-		"chatter=None muted=true",
+		(await run(memberBoolApp(out2), ["cmd", "--muted"], out2)).stdout,
+		"volume=muted",
 	);
 });
 
-test("mutex: both provided is exact mutually-exclusive error", async () => {
-	const r = await run(mutexBoolApp([]), ["cmd", "--chatter", "--muted"]);
+test("member spelling: both elected is exact mutually-exclusive error", async () => {
+	const r = await run(memberBoolApp([]), ["cmd", "--chatter", "--muted"]);
 	assert.equal(
 		r.stderr,
 		errOut("--chatter and --muted are mutually exclusive", "myapp cmd"),
 	);
 });
 
-function mutexStrApp(out: string[]): AppImpl {
+function memberPayloadApp(out: string[]): AppImpl {
 	const app = makeApp();
 	app.command(
 		defineReadOnlyCommand("fetch", {
 			help: "fetch data",
-			mutex: [
-				mutexGroup({
-					file: flag("file", t.str, {
-						help: "read from file",
-						presence: "optional",
-					}),
-					url: flag("url", t.str, {
-						help: "read from URL",
-						presence: "optional",
-					}),
-				}),
-			],
+			flags: {
+				source: memberChoiceFlag(
+					"source",
+					{
+						file: choice({ help: "read from file", value: t.str }),
+						url: choice({ help: "read from URL", value: t.str }),
+					},
+					{ help: "where to read from", presence: "required" },
+				),
+			},
 			handler: (a) => {
-				const g = a as unknown as { file?: string; url?: string };
-				out.push(`file=${fmt(g.file)} url=${fmt(g.url)}`);
+				out.push(`source=${a.source.choice} value=${a.source.value}`);
 			},
 		}),
 	);
 	return app;
 }
 
-test("mutex: str flags with default null", async () => {
+test("member spelling: a member carries its payload in the alternative that owns it", async () => {
 	const out: string[] = [];
 	assert.equal(
-		(await run(mutexStrApp(out), ["fetch", "--file", "data.txt"], out)).stdout,
-		"file=data.txt url=None",
+		(await run(memberPayloadApp(out), ["fetch", "--file", "data.txt"], out))
+			.stdout,
+		"source=file value=data.txt",
 	);
-	const r = await run(mutexStrApp([]), [
+	const r = await run(memberPayloadApp([]), [
 		"fetch",
 		"--file",
 		"data.txt",
@@ -1228,35 +1226,31 @@ test("mutex: str flags with default null", async () => {
 	);
 });
 
-test("mutex: env-set members elect nothing (contract §21.3)", async () => {
+test("member spelling: env elects nothing (contract §21.3, carried over)", async () => {
 	const mk = (out: string[]): AppImpl => {
 		const app = makeApp({ envPrefix: "MYAPP" });
 		app.command(
 			defineReadOnlyCommand("cmd", {
 				help: "a command",
-				mutex: [
-					mutexGroup({
-						file: flag("file", t.str, {
-							help: "read from file",
-							presence: "optional",
-							env: "MYAPP_FILE",
-						}),
-						url: flag("url", t.str, {
-							help: "read from URL",
-							presence: "optional",
-							env: "MYAPP_URL",
-						}),
-					}),
-				],
+				flags: {
+					source: memberChoiceFlag(
+						"source",
+						{
+							file: choice({ help: "read from file", value: t.str }),
+							url: choice({ help: "read from URL", value: t.str }),
+						},
+						{ help: "where to read from", presence: "required" },
+					),
+				},
 				handler: (a) => {
-					const g = a as unknown as { file?: string; url?: string };
-					out.push(`file=${fmt(g.file)} url=${fmt(g.url)}`);
+					out.push(`source=${a.source.choice} value=${a.source.value}`);
 				},
 			}),
 		);
 		return app;
 	};
-	// One member set via env: nothing is elected, so the group is unsatisfied.
+	// Env is not consulted for a member flag at all: the spelling exists to
+	// make the operator choose IN the invocation.
 	await withEnv({ MYAPP_FILE: "data.txt" }, async () => {
 		const r = await run(mk([]), ["cmd"]);
 		assert.equal(
@@ -1264,8 +1258,6 @@ test("mutex: env-set members elect nothing (contract §21.3)", async () => {
 			errOut("one of --file, --url is required", "myapp cmd"),
 		);
 	});
-	// Both set via env: still nothing elected, same error -- never "mutually
-	// exclusive", because neither token was typed.
 	await withEnv(
 		{ MYAPP_FILE: "data.txt", MYAPP_URL: "http://example.com" },
 		async () => {
@@ -1276,18 +1268,18 @@ test("mutex: env-set members elect nothing (contract §21.3)", async () => {
 			);
 		},
 	);
-	// Beside a real election the env value is suppressed, not delivered.
 	await withEnv({ MYAPP_FILE: "data.txt" }, async () => {
 		const out: string[] = [];
 		assert.equal(
 			(await run(mk(out), ["cmd", "--url", "http://example.com"], out)).stdout,
-			"file=None url=http://example.com",
+			"source=url value=http://example.com",
 		);
 	});
 });
 
 // =========================================================================
-// Election semantics (effects contract §21; campaign rulings A1-A5)
+// Election semantics (effects contract §21, carried over to member spelling;
+// campaign rulings A1-A5)
 // =========================================================================
 
 function electionApp(out: string[]): AppImpl {
@@ -1295,31 +1287,22 @@ function electionApp(out: string[]): AppImpl {
 	app.command(
 		defineReadOnlyCommand("run", {
 			help: "run it",
-			mutex: [
-				mutexGroup({
-					profile: flag("profile", t.str, {
-						help: "a profile",
-						presence: "optional",
-					}),
-					all_profiles: flag("all-profiles", t.bool, {
-						help: "every profile",
-						presence: "optional",
-					}),
-					current_profile: flag("current-profile", t.bool, {
-						help: "the current profile",
-						presence: "optional",
-					}),
-				}),
-			],
+			flags: {
+				scope: memberChoiceFlag(
+					"scope",
+					{
+						profile: choice({ help: "a profile", value: t.str }),
+						"all-profiles": choice({ help: "every profile" }),
+						"current-profile": choice({ help: "the current profile" }),
+					},
+					{ help: "which profiles", presence: "required" },
+				),
+			},
 			handler: (a) => {
-				const g = a as unknown as {
-					profile?: string;
-					all_profiles?: boolean;
-					current_profile?: boolean;
-				};
+				const elected = a.scope;
 				out.push(
-					`profile=${fmt(g.profile)} all=${fmt(g.all_profiles)} ` +
-						`current=${fmt(g.current_profile)}`,
+					`scope=${elected.choice}` +
+						("value" in elected ? ` value=${elected.value}` : ""),
 				);
 			},
 		}),
@@ -1327,7 +1310,7 @@ function electionApp(out: string[]): AppImpl {
 	return app;
 }
 
-test("mutex A1: a negated bool member elects nothing", async () => {
+test("election A1: a negated bool member elects nothing", async () => {
 	const r = await run(electionApp([]), ["run", "--no-all-profiles"]);
 	assert.equal(r.exitCode, 1);
 	assert.equal(
@@ -1340,15 +1323,15 @@ test("mutex A1: a negated bool member elects nothing", async () => {
 	);
 });
 
-test("mutex A1: a true bool member still elects", async () => {
+test("election A1: a true bool member still elects", async () => {
 	const out: string[] = [];
 	assert.equal(
 		(await run(electionApp(out), ["run", "--all-profiles"], out)).stdout,
-		"profile=None all=true current=None",
+		"scope=all-profiles",
 	);
 });
 
-test("mutex A1: every member declined is an unsatisfied group", async () => {
+test("election A1: every member declined is an unsatisfied selector", async () => {
 	const r = await run(electionApp([]), [
 		"run",
 		"--no-current-profile",
@@ -1364,15 +1347,15 @@ test("mutex A1: every member declined is an unsatisfied group", async () => {
 	);
 });
 
-test("mutex A2: a string member elects on the empty string", async () => {
+test("election A2: a string member elects on the empty string", async () => {
 	const out: string[] = [];
 	assert.equal(
 		(await run(electionApp(out), ["run", "--profile", ""], out)).stdout,
-		"profile= all=None current=None",
+		"scope=profile value=",
 	);
 });
 
-test("mutex A3: no clause when nothing was declined", async () => {
+test("election A3: no clause when nothing was declined", async () => {
 	const r = await run(electionApp([]), ["run"]);
 	assert.equal(
 		r.stderr,
@@ -1383,7 +1366,7 @@ test("mutex A3: no clause when nothing was declined", async () => {
 	);
 });
 
-test("mutex A4: a redundant negation beside an election is an error", async () => {
+test("election A4: a redundant negation beside an election is an error", async () => {
 	const r = await run(electionApp([]), [
 		"run",
 		"--profile",
@@ -1400,7 +1383,7 @@ test("mutex A4: a redundant negation beside an election is an error", async () =
 	);
 });
 
-test("mutex A4: every declined member is named, in declaration order", async () => {
+test("election A4: every declined member is named, in declaration order", async () => {
 	const r = await run(electionApp([]), [
 		"run",
 		"--profile",
@@ -1419,7 +1402,7 @@ test("mutex A4: every declined member is named, in declaration order", async () 
 	);
 });
 
-test("mutex: two elections are still mutually exclusive", async () => {
+test("election: two elections are still mutually exclusive", async () => {
 	const r = await run(electionApp([]), [
 		"run",
 		"--profile",
@@ -1432,36 +1415,38 @@ test("mutex: two elections are still mutually exclusive", async () => {
 	);
 });
 
-test("mutex: a declared default still applies to an unelected member", async () => {
-	// §18.10 item 118: a default is a property of the flag, not an election.
+test("election: a member-spelled selector may default to a payload-less member", async () => {
+	// §21.3's "an unelected member delivers its declared default" RETIRES: an
+	// unelected choice's scope is not delivered at all. What a member-spelled
+	// selector may carry is a default ELECTION (§24.5).
+	const mk = (out: string[]): AppImpl => {
+		const app = makeApp();
+		app.command(
+			defineReadOnlyCommand("cmd", {
+				help: "a command",
+				flags: {
+					volume: memberChoiceFlag(
+						"volume",
+						{
+							loud: choice({ help: "loud" }),
+							hushed: choice({ help: "hushed" }),
+						},
+						{ help: "output volume", presence: "default", default: "hushed" },
+					),
+				},
+				handler: (a) => {
+					out.push(`volume=${a.volume.choice}`);
+				},
+			}),
+		);
+		return app;
+	};
 	const out: string[] = [];
-	const app = makeApp();
-	app.command(
-		defineReadOnlyCommand("cmd", {
-			help: "a command",
-			mutex: [
-				mutexGroup({
-					loud: flag("loud", t.bool, {
-						help: "loud",
-						presence: "default",
-						default: false,
-					}),
-					hushed: flag("hushed", t.bool, {
-						help: "hushed",
-						presence: "default",
-						default: false,
-					}),
-				}),
-			],
-			handler: (a) => {
-				const g = a as unknown as { loud?: boolean; hushed?: boolean };
-				out.push(`loud=${fmt(g.loud)} hushed=${fmt(g.hushed)}`);
-			},
-		}),
-	);
+	assert.equal((await run(mk(out), ["cmd"], out)).stdout, "volume=hushed");
+	const out2: string[] = [];
 	assert.equal(
-		(await run(app, ["cmd", "--loud"], out)).stdout,
-		"loud=true hushed=false",
+		(await run(mk(out2), ["cmd", "--loud"], out2)).stdout,
+		"volume=loud",
 	);
 });
 
@@ -1707,7 +1692,9 @@ function impliesDefaultedTriggerApp(out: string[]): AppImpl {
 					presence: "optional",
 				}),
 			},
-			dependencies: [implies({ flag: "release", implies: "signed", value: true })],
+			dependencies: [
+				implies({ flag: "release", implies: "signed", value: true }),
+			],
 			handler: (a) => {
 				out.push(`release=${fmt(a.release)} signed=${fmt(a.signed)}`);
 			},
@@ -2030,7 +2017,10 @@ test("env: str flag from env var; CLI overrides env", async () => {
 
 function tagsApp(
 	out: string[],
-	opts?: { choices?: readonly [string, ...string[]]; default?: string[] },
+	opts?: {
+		choices?: readonly [ChoiceRecord<string>, ...ChoiceRecord<string>[]];
+		default?: string[];
+	},
 ): AppImpl {
 	const app = makeApp();
 	app.command(
@@ -2116,20 +2106,17 @@ test("repeatable: choices validated per element", async () => {
 	assert.equal(
 		(
 			await run(
-				tagsApp(out, { choices: ["alpha", "beta"] }),
+				tagsApp(out, { choices: [{ value: "alpha" }, { value: "beta" }] }),
 				["cmd", "--tag", "alpha", "--tag", "beta"],
 				out,
 			)
 		).stdout,
 		"tags=alpha,beta",
 	);
-	const r = await run(tagsApp([], { choices: ["alpha", "beta"] }), [
-		"cmd",
-		"--tag",
-		"alpha",
-		"--tag",
-		"delta",
-	]);
+	const r = await run(
+		tagsApp([], { choices: [{ value: "alpha" }, { value: "beta" }] }),
+		["cmd", "--tag", "alpha", "--tag", "delta"],
+	);
 	assert.equal(
 		r.stderr,
 		errOut(
@@ -2292,7 +2279,7 @@ test("choices: invalid str choice rejected with exact message", async () => {
 			flags: {
 				format: flag("format", t.str, {
 					help: "output format",
-					choices: ["text", "json"],
+					choices: [{ value: "text" }, { value: "json" }],
 					presence: "default",
 					default: "text",
 				}),
@@ -2321,7 +2308,7 @@ test("choices: optional arg with choices -- omitted ok, invalid rejected", async
 					arg("env", t.str, {
 						help: "target env",
 						presence: "optional",
-						choices: ["dev", "prod"],
+						choices: [{ value: "dev" }, { value: "prod" }],
 					}),
 				],
 				handler: (a) => {
@@ -2350,7 +2337,7 @@ test("choices: int arg choices format values without quotes-mismatch", async () 
 			args: [
 				arg("level", t.int, {
 					help: "the level",
-					choices: [0n, 1n, 2n],
+					choices: [{ value: 0n }, { value: 1n }, { value: 2n }],
 					presence: "required",
 				}),
 			],
@@ -2367,33 +2354,54 @@ test("choices: int arg choices format values without quotes-mismatch", async () 
 	);
 });
 
-test("choices: unset mutex flag with choices is not validated", async () => {
+test("choices: a scoped flag's choices are not validated when its scope is not elected", async () => {
 	const out: string[] = [];
 	const app = makeApp();
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			mutex: [
-				mutexGroup({
-					format: flag("format", t.str, {
-						help: "output format",
-						presence: "optional",
-						choices: ["text", "json"],
-					}),
-					output: flag("output", t.str, {
-						help: "output path",
-						presence: "optional",
-					}),
-				}),
-			],
+			flags: {
+				sink: choiceFlag(
+					"sink",
+					{
+						render: choice({
+							help: "render the report",
+							flags: {
+								format: flag("format", t.str, {
+									help: "output format",
+									presence: "optional",
+									choices: [{ value: "text" }, { value: "json" }],
+								}),
+							},
+						}),
+						write: choice({
+							help: "write the report",
+							flags: {
+								output: flag("output", t.str, {
+									help: "output path",
+									presence: "optional",
+								}),
+							},
+						}),
+					},
+					{ help: "where the report goes", presence: "required" },
+				),
+			},
 			handler: (a) => {
-				const g = a as unknown as { format?: string; output?: string };
-				out.push(`format=${fmt(g.format)} output=${fmt(g.output)}`);
+				out.push(
+					a.sink.choice === "write"
+						? `write output=${fmt(a.sink.output)}`
+						: `render format=${fmt(a.sink.format)}`,
+				);
 			},
 		}),
 	);
-	const r = await run(app, ["cmd", "--output", "out.txt"], out);
-	assert.equal(r.stdout, "format=None output=out.txt");
+	const r = await run(
+		app,
+		["cmd", "--sink", "write", "--output", "out.txt"],
+		out,
+	);
+	assert.equal(r.stdout, "write output=out.txt");
 });
 
 // =========================================================================
@@ -3289,37 +3297,52 @@ test("presence: a variadic arg's presence decides whether none is legal", async 
 	);
 });
 
-test("presence: a mutex member's own declaration decides its absence", async () => {
+test("presence: a scoped sub-flag's own declaration decides its absence", async () => {
 	const app = makeApp();
 	app.command(
 		defineReadOnlyCommand("cmd", {
 			help: "a command",
-			mutex: [
-				mutexGroup({
-					from_file: flag("from-file", t.str, {
-						help: "from a file",
-						presence: "optional",
-					}),
-					from_url: flag("from-url", t.str, {
-						help: "from a URL",
-						presence: "default",
-						default: "https://example.test",
-					}),
-				}),
-			],
+			flags: {
+				source: choiceFlag(
+					"source",
+					{
+						local: choice({
+							help: "read locally",
+							flags: {
+								from_file: flag("from-file", t.str, {
+									help: "from a file",
+									presence: "optional",
+								}),
+								from_url: flag("from-url", t.str, {
+									help: "from a URL",
+									presence: "default",
+									default: "https://example.test",
+								}),
+							},
+						}),
+						remote: choice({ help: "read remotely" }),
+					},
+					{ help: "where to read from", presence: "required" },
+				),
+			},
 			handler: () => 0,
 		}),
 	);
-	// The exemption that handed every unelected member an absent value is gone
-	// (§23.4): the optional member delivers absence, the defaulted member its
-	// declared default.
-	assert.deepEqual(await kwargsOf(app, ["cmd", "--from-file", "f"]), {
-		from_file: "f",
-		from_url: "https://example.test",
-	});
-	assert.deepEqual(await kwargsOf(app, ["cmd", "--from-url", "u"]), {
-		from_file: undefined,
-		from_url: "u",
+	// §23 applies again unchanged one level down: an optional sub-flag
+	// delivers absence as a PRESENT field of the record, a defaulted one its
+	// declared default, and a sub-flag is never a top-level handler argument.
+	assert.deepEqual(
+		await kwargsOf(app, ["cmd", "--source", "local", "--from-file", "f"]),
+		{
+			source: {
+				choice: "local",
+				from_file: "f",
+				from_url: "https://example.test",
+			},
+		},
+	);
+	assert.deepEqual(await kwargsOf(app, ["cmd", "--source", "remote"]), {
+		source: { choice: "remote" },
 	});
 });
 

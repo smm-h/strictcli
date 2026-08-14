@@ -97,8 +97,25 @@ export type _ArgDef = Assert<
 export type _FlagSet = Assert<
 	Equals<keyof api.FlagSet<string, api.FlagMap> & string, Listed<"FlagSet">>
 >;
-export type _MutexGroup = Assert<
-	Equals<keyof api.MutexGroup<api.FlagMap> & string, Listed<"MutexGroup">>
+export type _ChoiceFlagDef = Assert<
+	Equals<
+		keyof api.ChoiceFlagDef<
+			string,
+			api.ChoiceMap,
+			api.ChoiceFlagOpts<api.ChoiceMap>
+		> &
+			string,
+		Listed<"ChoiceFlagDef">
+	>
+>;
+export type _ChoiceDef = Assert<
+	Equals<keyof api.ChoiceDef<api.FlagMap> & string, Listed<"ChoiceDef">>
+>;
+export type _ValueChoiceDef = Assert<
+	Equals<
+		keyof api.ValueChoiceDef<string, api.FlagMap> & string,
+		Listed<"ValueChoiceDef">
+	>
 >;
 export type _CoRequired = Assert<
 	Equals<keyof api.CoRequired & string, Listed<"CoRequired">>
@@ -272,7 +289,9 @@ const typeWitness: Record<TypeName, unknown> = {
 	AnyCommand: witnessType<api.AnyCommand>(),
 	AnyFlag: witnessType<api.AnyFlag>(),
 	AnyFlagSet: witnessType<api.AnyFlagSet>(),
-	AnyMutexGroup: witnessType<api.AnyMutexGroup>(),
+	AnyChoice: witnessType<api.AnyChoice>(),
+	AnyChoiceFlag: witnessType<api.AnyChoiceFlag>(),
+	AnyDecl: witnessType<api.AnyDecl>(),
 	App: witnessType<api.App>(),
 	AppSpec: witnessType<api.AppSpec>(),
 	ArgDef:
@@ -326,12 +345,7 @@ const typeWitness: Record<TypeName, unknown> = {
 	Handler: witnessType<api.Handler<api.FlagMap, readonly api.AnyArg[]>>(),
 	HandlerArgs:
 		witnessType<
-			api.HandlerArgs<
-				api.FlagMap,
-				readonly api.AnyArg[],
-				readonly [],
-				readonly []
-			>
+			api.HandlerArgs<api.FlagMap, readonly api.AnyArg[], readonly []>
 		>(),
 	HandlerResult: witnessType<api.HandlerResult>(),
 	HandlerReturn: witnessType<api.HandlerReturn>(),
@@ -343,7 +357,28 @@ const typeWitness: Record<TypeName, unknown> = {
 	InfraRootPath: witnessType<api.InfraRootPath>(),
 	ListSchema: witnessType<api.ListSchema>(),
 	McpIO: witnessType<api.McpIO>(),
-	MutexGroup: witnessType<api.MutexGroup<api.FlagMap>>(),
+	ChoiceDef: witnessType<api.ChoiceDef<api.FlagMap>>(),
+	ChoiceFlagDef:
+		witnessType<
+			api.ChoiceFlagDef<
+				string,
+				api.ChoiceMap,
+				api.ChoiceFlagOpts<api.ChoiceMap>
+			>
+		>(),
+	ChoiceFlagOpts: witnessType<api.ChoiceFlagOpts<api.ChoiceMap>>(),
+	ChoiceMap: witnessType<api.ChoiceMap>(),
+	ChoiceOf:
+		witnessType<
+			api.ChoiceOf<api.AnyChoiceFlag, keyof api.ChoiceMap & string>
+		>(),
+	ChoiceRecord: witnessType<api.ChoiceRecord<string>>(),
+	ElectBy: witnessType<api.ElectBy>(),
+	Elected: witnessType<api.Elected<api.ChoiceMap>>(),
+	ElectedOf: witnessType<api.ElectedOf<api.AnyChoiceFlag>>(),
+	ElectedRecord: witnessType<api.ElectedRecord>(),
+	InferScopeArgs: witnessType<api.InferScopeArgs<api.FlagMap>>(),
+	ValueChoiceDef: witnessType<api.ValueChoiceDef<string, api.FlagMap>>(),
 	Outcome: witnessType<api.Outcome>(),
 	PassthroughArgs: witnessType<api.PassthroughArgs>(),
 	PassthroughDef: witnessType<api.PassthroughDef<string>>(),
@@ -475,19 +510,23 @@ test("registry: runtime keys of factory-built carriers match declaration order",
 	assert.deepEqual(Object.keys(cmd), runtimeMembers("CommandDef"));
 	const fs = api.flagSet("common", { target: f });
 	assert.deepEqual(Object.keys(fs), runtimeMembers("FlagSet"));
-	const mg = api.mutexGroup({
-		as_json: api.flag("as-json", api.t.bool, {
-			help: "h",
-			presence: "default",
-			default: false,
-		}),
-		plain: api.flag("plain", api.t.bool, {
-			help: "h",
-			presence: "default",
-			default: false,
-		}),
-	});
-	assert.deepEqual(Object.keys(mg), runtimeMembers("MutexGroup"));
+	const sel = api.memberChoiceFlag(
+		"format",
+		{
+			"as-json": api.choice({ help: "h" }),
+			plain: api.choice({ help: "h" }),
+		},
+		{ help: "h", presence: "required" },
+	);
+	assert.deepEqual(Object.keys(sel), runtimeMembers("ChoiceFlagDef"));
+	assert.deepEqual(
+		Object.keys(api.choice({ help: "h" })),
+		runtimeMembers("ChoiceDef"),
+	);
+	assert.deepEqual(
+		Object.keys(api.choice({ help: "h", value: api.t.str })),
+		runtimeMembers("ValueChoiceDef"),
+	);
 	assert.deepEqual(
 		Object.keys(api.coRequired(["a", "b"])),
 		runtimeMembers("CoRequired"),

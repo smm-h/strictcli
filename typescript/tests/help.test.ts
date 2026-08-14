@@ -13,12 +13,13 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
 	arg,
+	choice,
 	createApp,
 	defineReadOnlyCommand,
 	deprecated,
 	flag,
 	flagSet,
-	mutexGroup,
+	memberChoiceFlag,
 	readOnlyPassthrough,
 	t,
 } from "../src/index.js";
@@ -237,7 +238,7 @@ test("help: env var and choices metadata (env.json, choices.json)", async () => 
 			flags: {
 				format: flag("format", t.str, {
 					help: "output format",
-					choices: ["text", "json"],
+					choices: [{ value: "text" }, { value: "json" }],
 					presence: "default",
 					default: "text",
 				}),
@@ -384,7 +385,7 @@ test("help: bool defaults render lowercase on flags and on positionals", async (
 	);
 });
 
-test("help: mutex groups render their own section (mutex.json)", async () => {
+test("help: a member-spelled selector renders as one indented block", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
 		defineReadOnlyCommand("cmd", {
@@ -395,25 +396,34 @@ test("help: mutex groups render their own section (mutex.json)", async () => {
 					presence: "default",
 					default: "anon",
 				}),
+				volume: memberChoiceFlag(
+					"volume",
+					{
+						chatter: choice({ help: "chatter output" }),
+						muted: choice({ help: "muted output" }),
+					},
+					{ help: "output volume", presence: "required" },
+				),
 			},
-			mutex: [
-				mutexGroup({
-					chatter: flag("chatter", t.bool, {
-						help: "chatter output",
-						presence: "optional",
-					}),
-					muted: flag("muted", t.bool, {
-						help: "muted output",
-						presence: "optional",
-					}),
-				}),
-			],
 			handler: ok,
 		}),
 	);
+	// A member-spelled selector has no token to render, so its own line
+	// carries its help, the `(exactly one of the following)` clause and its
+	// presence part, with the member flags two columns beneath it. One
+	// alignment column spans the whole block (contract §24.10).
 	assert.equal(
 		(await app.test(["cmd", "--help"])).stdout,
-		"myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [optional]\n  --muted, --no-muted        muted output [optional]\n",
+		[
+			"myapp cmd -- a command",
+			"",
+			"Flags:",
+			"  --name <str>    your name [default: anon]",
+			"  --volume        output volume (exactly one of the following) [required]",
+			"    --chatter     chatter output",
+			"    --muted       muted output",
+			"",
+		].join("\n"),
 	);
 });
 

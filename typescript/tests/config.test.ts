@@ -31,10 +31,11 @@ import {
 import { RegistrationError } from "../src/errors.js";
 import {
 	type App,
+	choice,
 	createApp,
 	defineReadOnlyCommand,
 	flag,
-	mutexGroup,
+	memberChoiceFlag,
 	t,
 } from "../src/index.js";
 import { envelopePayloadText } from "./envelope_helpers.js";
@@ -567,7 +568,7 @@ test("parse-time loading: late-written config is honored", async () => {
 	assert.equal(r.stdout, "port=5555\n");
 });
 
-test("mutex: a config value elects nothing and is never delivered (A5)", async () => {
+test("member spelling: a config value elects nothing and is never delivered (A5)", async () => {
 	// Contract §21.3: election is command-line-only, and env/config are not
 	// consulted for an unelected member's value either.
 	const { dir } = freshXdg();
@@ -582,21 +583,18 @@ test("mutex: a config value elects nothing and is never delivered (A5)", async (
 		app.command(
 			defineReadOnlyCommand("fetch", {
 				help: "fetch data",
-				mutex: [
-					mutexGroup({
-						file: flag("file", t.str, {
-							help: "read from file",
-							presence: "optional",
-						}),
-						url: flag("url", t.str, {
-							help: "read from URL",
-							presence: "optional",
-						}),
-					}),
-				],
+				flags: {
+					source: memberChoiceFlag(
+						"source",
+						{
+							file: choice({ help: "read from file", value: t.str }),
+							url: choice({ help: "read from URL", value: t.str }),
+						},
+						{ help: "where to read from", presence: "required" },
+					),
+				},
 				handler: (args, ctx) => {
-					const g = args as unknown as { file?: string; url?: string };
-					ctx.info(`file=${g.file ?? "None"} url=${g.url ?? "None"}`);
+					ctx.info(`source=${args.source.choice} value=${args.source.value}`);
 					return 0;
 				},
 			}),
@@ -610,7 +608,7 @@ test("mutex: a config value elects nothing and is never delivered (A5)", async (
 	// Beside a real election the config value is suppressed, not delivered.
 	r = await mk().test(["fetch", "--url", "u"]);
 	assert.equal(r.exitCode, 0);
-	assert.equal(r.stdout, "file=None url=u\n");
+	assert.equal(r.stdout, "source=url value=u\n");
 });
 
 // =========================================================================

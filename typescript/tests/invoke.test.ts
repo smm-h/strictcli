@@ -9,13 +9,14 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
 	arg,
+	choice,
 	coRequired,
 	createApp,
 	defineReadOnlyCommand,
 	flag,
 	InvokeError,
 	implies,
-	mutexGroup,
+	memberChoiceFlag,
 	outcome,
 	readOnlyPassthrough,
 	t,
@@ -371,61 +372,69 @@ test("call: missing required flag raises InvokeError", async () => {
 	});
 });
 
-test("call: mutex violations raise InvokeError", async () => {
+test("call: a bad elected record raises InvokeError", async () => {
 	const build = () => {
 		const app = buildApp();
 		app.command(
 			defineReadOnlyCommand("fetch", {
 				help: "fetch",
-				mutex: [
-					mutexGroup({
-						url: flag("url", t.str, { help: "url", presence: "optional" }),
-						file: flag("file", t.str, { help: "file", presence: "optional" }),
-					}),
-				],
+				flags: {
+					source: memberChoiceFlag(
+						"source",
+						{
+							url: choice({ help: "url", value: t.str }),
+							file: choice({ help: "file", value: t.str }),
+						},
+						{ help: "where to read from", presence: "required" },
+					),
+				},
 				handler: () => 0,
 			}),
 		);
 		return app;
 	};
-	await assert.rejects(build().call("fetch", { url: "u", file: "f" }), {
+	// call() takes the ELECTED RECORD, pre-typed (§24.11): there is no flat
+	// combination to be wrong about, so what a bad call gets wrong is the
+	// record itself.
+	await assert.rejects(build().call("fetch", { source: { choice: "both" } }), {
 		name: "InvokeError",
-		message: "--url and --file are mutually exclusive",
+		message: "--source: invalid value 'both', must be one of: 'url', 'file'",
 	});
 	await assert.rejects(build().call("fetch"), {
 		name: "InvokeError",
 		message: "one of --url, --file is required",
 	});
+	assert.equal(
+		await build().call("fetch", { source: { choice: "url", value: "u" } }),
+		0,
+	);
 });
 
-test("call: an explicit false bool declines instead of electing (A1)", async () => {
-	// Election ruling A1 holds on the programmatic path too: all_profiles=false
-	// elects nothing, so the group is unsatisfied and the error teaches.
+test("call: a selector with no kwarg elects from its declaration", async () => {
+	// The programmatic path takes the elected record; a selector nobody named
+	// elects its declared default, or refuses exactly as the argv path does.
 	const app = buildApp();
 	app.command(
 		defineReadOnlyCommand("run", {
 			help: "run it",
-			mutex: [
-				mutexGroup({
-					profile: flag("profile", t.str, {
-						help: "a profile",
-						presence: "optional",
-					}),
-					all_profiles: flag("all-profiles", t.bool, {
-						help: "every profile",
-						presence: "optional",
-					}),
-				}),
-			],
+			flags: {
+				scope: memberChoiceFlag(
+					"scope",
+					{
+						profile: choice({ help: "a profile", value: t.str }),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "which profiles", presence: "required" },
+				),
+			},
 			handler: () => 0,
 		}),
 	);
-	await assert.rejects(app.call("run", { all_profiles: false }), {
+	await assert.rejects(app.call("run", {}), {
 		name: "InvokeError",
-		message:
-			"one of --profile, --all-profiles is required " +
-			"(--no-all-profiles declines an option; it does not choose one)",
+		message: "one of --profile, --all-profiles is required",
 	});
+	assert.equal(await app.call("run", { scope: { choice: "all-profiles" } }), 0);
 });
 
 test("call: dependency violations raise InvokeError", async () => {
@@ -487,7 +496,7 @@ test("call: choices are validated on pre-typed values", async () => {
 			flags: {
 				color: flag("color", t.str, {
 					help: "color",
-					choices: ["red", "blue"],
+					choices: [{ value: "red" }, { value: "blue" }],
 					presence: "required",
 				}),
 			},

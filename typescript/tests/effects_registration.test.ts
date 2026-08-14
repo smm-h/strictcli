@@ -18,13 +18,14 @@ import { RegistrationError } from "../src/errors.js";
 import type { AnyCommand } from "../src/factories.js";
 import {
 	arg,
+	choice,
 	defineMutatingCommand,
 	defineReadOnlyCommand,
 	deprecated,
 	flag,
 	flagSet,
+	memberChoiceFlag,
 	mutatingPassthrough,
-	mutexGroup,
 	readOnlyPassthrough,
 	t,
 } from "../src/index.js";
@@ -100,19 +101,17 @@ test("reserved quartet: the ban applies at every level, not just globals", () =>
 			}),
 		}),
 	);
+	// The bans re-run at every depth, on a member-spelled choice name too: a
+	// member's name IS a flag name (contract §24.7).
 	assert.throws(() =>
-		mutexGroup({
-			yes: flag("yes", t.bool, {
-				help: "h",
-				presence: "default",
-				default: false,
-			}),
-			no_thanks: flag("no-thanks", t.bool, {
-				help: "h",
-				presence: "default",
-				default: false,
-			}),
-		}),
+		memberChoiceFlag(
+			"consent",
+			{
+				yes: choice({ help: "h" }),
+				no_thanks: choice({ help: "h" }),
+			},
+			{ help: "h", presence: "required" },
+		),
 	);
 });
 

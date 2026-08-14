@@ -5,6 +5,8 @@ import { test } from "node:test";
 import type { AppImpl } from "../src/app.js";
 import {
 	arg,
+	choice,
+	choiceFlag,
 	coRequired,
 	createApp,
 	defineReadOnlyCommand,
@@ -12,7 +14,7 @@ import {
 	flag,
 	flagSet,
 	implies,
-	mutexGroup,
+	memberChoiceFlag,
 	readOnlyPassthrough,
 	requires,
 	t,
@@ -88,7 +90,7 @@ test("flag: dict carriers reject repeatable, unique, choices, envSeparator", () 
 				t.dict(t.int),
 				loose({
 					help: "h",
-					choices: [1n],
+					choices: [{ value: 1n }],
 					presence: "default",
 					default: new Map(),
 				}),
@@ -242,7 +244,7 @@ test("flag: choices validation", () => {
 					help: "h",
 					presence: "default",
 					default: false,
-					choices: [true],
+					choices: [{ value: true }],
 				}),
 			),
 		'Flag "chatter": choices is incompatible with type=bool',
@@ -261,7 +263,11 @@ test("flag: choices validation", () => {
 			flag(
 				"fmt",
 				t.str,
-				loose({ help: "h", choices: ["a", 5n], presence: "required" }),
+				loose({
+					help: "h",
+					choices: [{ value: "a" }, { value: 5n }],
+					presence: "required",
+				}),
 			),
 		'Flag "fmt": choice 5 is not of type str',
 	);
@@ -270,7 +276,11 @@ test("flag: choices validation", () => {
 			flag(
 				"lvl",
 				t.int,
-				loose({ help: "h", choices: [1n, "x"], presence: "required" }),
+				loose({
+					help: "h",
+					choices: [{ value: 1n }, { value: "x" }],
+					presence: "required",
+				}),
 			),
 		"Flag \"lvl\": choice 'x' is not of type int",
 	);
@@ -279,7 +289,11 @@ test("flag: choices validation", () => {
 			flag(
 				"ratio",
 				t.float,
-				loose({ help: "h", choices: [1.5, 2n], presence: "required" }),
+				loose({
+					help: "h",
+					choices: [{ value: 1.5 }, { value: 2n }],
+					presence: "required",
+				}),
 			),
 		'Flag "ratio": choice 2 is not of type float',
 	);
@@ -287,11 +301,11 @@ test("flag: choices validation", () => {
 	// against the item type (Go rejects; Python is the divergence oracle).
 	const ok = flag("tag", t.list(t.str), {
 		help: "h",
-		choices: ["a", "b"],
+		choices: [{ value: "a" }, { value: "b" }],
 		presence: "default",
 		default: [],
 	});
-	assert.deepEqual(ok.opts.choices, ["a", "b"]);
+	assert.deepEqual(ok.opts.choices, [{ value: "a" }, { value: "b" }]);
 	rejects(
 		() =>
 			flag(
@@ -299,7 +313,7 @@ test("flag: choices validation", () => {
 				t.list(t.int),
 				loose({
 					help: "h",
-					choices: [1n, "x"],
+					choices: [{ value: 1n }, { value: "x" }],
 					presence: "default",
 					default: [],
 				}),
@@ -450,7 +464,7 @@ test("flag: default must be in choices (Python repr formatting)", () => {
 		() =>
 			flag("fmt", t.str, {
 				help: "h",
-				choices: ["text", "json"],
+				choices: [{ value: "text" }, { value: "json" }],
 				presence: "default",
 				default: "xml",
 			}),
@@ -460,7 +474,7 @@ test("flag: default must be in choices (Python repr formatting)", () => {
 		() =>
 			flag("lvl", t.int, {
 				help: "h",
-				choices: [1n, 2n],
+				choices: [{ value: 1n }, { value: 2n }],
 				presence: "default",
 				default: 5n,
 			}),
@@ -468,7 +482,7 @@ test("flag: default must be in choices (Python repr formatting)", () => {
 	);
 	const ok = flag("fmt", t.str, {
 		help: "h",
-		choices: ["text", "json"],
+		choices: [{ value: "text" }, { value: "json" }],
 		presence: "default",
 		default: "text",
 	});
@@ -511,7 +525,7 @@ test("arg: choices validation", () => {
 			arg(
 				"v",
 				t.bool,
-				loose({ help: "h", choices: [true], presence: "required" }),
+				loose({ help: "h", choices: [{ value: true }], presence: "required" }),
 			),
 		'Arg "v": choices is incompatible with type=bool',
 	);
@@ -525,7 +539,11 @@ test("arg: choices validation", () => {
 			arg(
 				"v",
 				t.str,
-				loose({ help: "h", choices: ["a", 5n], presence: "required" }),
+				loose({
+					help: "h",
+					choices: [{ value: "a" }, { value: 5n }],
+					presence: "required",
+				}),
 			),
 		'Arg "v": choice 5 is not of type str',
 	);
@@ -533,10 +551,10 @@ test("arg: choices validation", () => {
 	const ok = arg("v", t.str, {
 		help: "h",
 		variadic: true,
-		choices: ["a", "b"],
+		choices: [{ value: "a" }, { value: "b" }],
 		presence: "required",
 	});
-	assert.deepEqual(ok.opts.choices, ["a", "b"]);
+	assert.deepEqual(ok.opts.choices, [{ value: "a" }, { value: "b" }]);
 });
 
 test("arg: default type checks for all four types", () => {
@@ -571,7 +589,7 @@ test("arg: default must be in choices (Python repr formatting)", () => {
 		() =>
 			arg("v", t.str, {
 				help: "h",
-				choices: ["a", "b"],
+				choices: [{ value: "a" }, { value: "b" }],
 				presence: "default",
 				default: "c",
 			}),
@@ -581,7 +599,7 @@ test("arg: default must be in choices (Python repr formatting)", () => {
 		() =>
 			arg("v", t.int, {
 				help: "h",
-				choices: [1n, 2n],
+				choices: [{ value: 1n }, { value: 2n }],
 				presence: "default",
 				default: 5n,
 			}),
@@ -635,40 +653,50 @@ test("command: flag-map keys must be underscore forms (flags, flagSets, mutex)",
 			}),
 		"command \"build\": flags key 'wrong' must be the underscore form of flag 'right' ('right')",
 	);
-	rejects(
-		() =>
-			defineReadOnlyCommand("build", {
-				help: "h",
-				mutex: [
-					mutexGroup(loose({ wrong: strFlag("right"), b: strFlag("b") })),
-				],
-				handler: () => 0,
-			}),
-		"command \"build\": flags key 'wrong' must be the underscore form of flag 'right' ('right')",
-	);
 });
 
-test("command: mutex groups need at least 2 flags and no overlap", () => {
+test("selector: at least two choices, and no co-electable name reuse", () => {
 	rejects(
 		() =>
-			defineReadOnlyCommand("cmd", {
+			choiceFlag("via", loose({ email: choice({ help: "email" }) }), {
 				help: "h",
-				mutex: [mutexGroup({ a: strFlag("a") })],
-				handler: () => 0,
+				presence: "required",
 			}),
-		'command "cmd": mutex group must have at least 2 flags, got 1',
+		'Flag "via": a choice flag must declare at least two choices',
 	);
+	// Two selectors on one command can be elected at the same time, so they
+	// may not reuse a flag name (contract §24.7).
 	rejects(
 		() =>
 			defineReadOnlyCommand("cmd", {
 				help: "h",
-				mutex: [
-					mutexGroup({ a: optStrFlag("a"), b: optStrFlag("b") }),
-					mutexGroup({ a: optStrFlag("a"), c: optStrFlag("c") }),
-				],
+				flags: {
+					via: choiceFlag(
+						"via",
+						{
+							email: choice({
+								help: "email",
+								flags: { subject: optStrFlag("subject") },
+							}),
+							sms: choice({ help: "sms" }),
+						},
+						{ help: "h", presence: "required" },
+					),
+					mode: choiceFlag(
+						"mode",
+						{
+							quick: choice({
+								help: "quick",
+								flags: { subject: optStrFlag("subject") },
+							}),
+							slow: choice({ help: "slow" }),
+						},
+						{ help: "h", presence: "required" },
+					),
+				},
 				handler: () => 0,
 			}),
-		'command "cmd": flag "a" appears in multiple mutex groups',
+		"command \"cmd\": flag '--subject' is declared under '--via email' and under '--mode quick', which can be elected at the same time: simultaneously electable scopes may not reuse a flag name",
 	);
 });
 
@@ -1071,33 +1099,39 @@ test("app: top-level re-registration overwrites in place (sibling parity)", () =
 	assert.equal(app.commands.get("cmd")?.help, "second");
 });
 
-test("app.command: merged flag order is flags, then flag sets, then mutex", () => {
+test("app.command: merged declaration order is flags, then flag sets", () => {
 	const app = makeApp();
 	app.command(
 		defineReadOnlyCommand("deploy", {
 			help: "h",
-			flags: { region: strFlag("region") },
+			flags: {
+				region: strFlag("region"),
+				source: memberChoiceFlag(
+					"source",
+					{
+						"from-file": choice({ help: "h", value: t.str }),
+						"from-url": choice({ help: "h", value: t.str }),
+					},
+					{ help: "h", presence: "required" },
+				),
+			},
 			flagSets: [flagSet("common", { chatter: boolFlag("chatter") })],
-			mutex: [
-				mutexGroup({
-					from_file: flag("from-file", t.str, {
-						help: "h",
-						presence: "optional",
-					}),
-					from_url: flag("from-url", t.str, {
-						help: "h",
-						presence: "optional",
-					}),
-				}),
-			],
 			handler: () => 0,
 		}),
 	);
 	const reg = app.commands.get("deploy");
 	assert.ok(reg);
+	// A selector contributes ONE entry, its own: its choices' flags are
+	// reachable only through it (§24.1).
+	assert.deepEqual(
+		(reg.def as { allDecls: readonly { name: string }[] }).allDecls.map(
+			(d) => d.name,
+		),
+		["region", "source", "chatter"],
+	);
 	assert.deepEqual(
 		reg.flags.map((f) => f.name),
-		["region", "chatter", "from-file", "from-url"],
+		["region", "chatter"],
 	);
 });
 
@@ -1246,7 +1280,7 @@ const deployCmd = defineReadOnlyCommand("deploy", {
 	flags: {
 		region: flag("region", t.str, {
 			help: "Region",
-			choices: ["eu", "us"],
+			choices: [{ value: "eu" }, { value: "us" }],
 			presence: "default",
 			default: "eu",
 		}),
@@ -1264,20 +1298,8 @@ const deployCmd = defineReadOnlyCommand("deploy", {
 			}),
 		}),
 	],
-	mutex: [
-		mutexGroup({
-			from_file: flag("from-file", t.str, {
-				help: "From file",
-				presence: "optional",
-			}),
-			from_url: flag("from-url", t.str, {
-				help: "From URL",
-				presence: "optional",
-			}),
-		}),
-	],
 	args: [arg("service", t.str, { help: "Service name", presence: "required" })],
-	dependencies: [requires({ flag: "from-file", dependsOn: "region" })],
+	dependencies: [requires({ flag: "replicas", dependsOn: "region" })],
 	handler: (args) => {
 		type _Args = Assert<
 			Equals<
@@ -1286,8 +1308,6 @@ const deployCmd = defineReadOnlyCommand("deploy", {
 					region: string;
 					replicas: bigint;
 					chatter: boolean;
-					from_file?: string;
-					from_url?: string;
 					service: string;
 				}
 			>
@@ -1304,7 +1324,7 @@ test("integration: precisely-typed command registers with derived data intact", 
 	assert.equal(reg.kind, "command");
 	assert.deepEqual(
 		reg.flags.map((f) => f.name),
-		["region", "replicas", "chatter", "from-file", "from-url"],
+		["region", "replicas", "chatter"],
 	);
 	assert.deepEqual(reg.tags, []);
 });
@@ -1459,32 +1479,32 @@ test('presence: "default" without a value does not register (TS-only)', () => {
 	);
 });
 
-test("presence: a mutex member cannot declare requiredness", () => {
+test("presence: a selector cannot declare optional, and refuses with a redirect", () => {
+	// The type union has no "optional" member, so only a widened caller
+	// reaches the registration refusal (ruling B2 made structural, §24.5).
 	rejects(
 		() =>
-			defineReadOnlyCommand("cmd", {
-				help: "h",
-				mutex: [mutexGroup({ a: strFlag("a"), b: optStrFlag("b") })],
-				handler: () => 0,
-			}),
-		'Flag "a": a mutex member cannot declare presence: "required": the group\'s own requirement is what makes the choice mandatory',
+			choiceFlag(
+				"via",
+				{ email: choice({ help: "email" }), sms: choice({ help: "sms" }) },
+				loose({ help: "h", presence: "optional" }),
+			),
+		'Flag "via": a choice flag cannot declare presence: "optional": an absent selection is a choice nobody named, so name it as a choice of its own',
 	);
-	// A member declaring a default is legal and unchanged (§21.3).
-	assert.doesNotThrow(() =>
-		defineReadOnlyCommand("cmd", {
-			help: "h",
-			mutex: [
-				mutexGroup({
-					a: flag("a", t.str, {
-						help: "h",
-						presence: "default",
-						default: "x",
-					}),
-					b: optStrFlag("b"),
-				}),
-			],
-			handler: () => 0,
-		}),
+	// A member flag's presence is `required once this member is elected`, and
+	// TypeScript's spelling has no slot for anything else -- a widened caller
+	// writing one is refused (§12.13's errMemberFlagPresence).
+	rejects(
+		() =>
+			memberChoiceFlag(
+				"scope",
+				{
+					all: loose({ ...choice({ help: "h" }), presence: "optional" }),
+					one: choice({ help: "h" }),
+				},
+				{ help: "h", presence: "required" },
+			),
+		'Choice "all" of "scope": a member flag must declare presence: "required", read as required once this member is elected',
 	);
 });
 
@@ -1518,7 +1538,7 @@ test("presence: an optional flag composes with choices and never checks absence"
 		flag("format", t.str, {
 			help: "h",
 			presence: "optional",
-			choices: ["text", "json"],
+			choices: [{ value: "text" }, { value: "json" }],
 		}),
 	);
 	rejects(
@@ -1527,7 +1547,7 @@ test("presence: an optional flag composes with choices and never checks absence"
 				help: "h",
 				presence: "default",
 				default: "yaml",
-				choices: ["text", "json"],
+				choices: [{ value: "text" }, { value: "json" }],
 			}),
 		"Flag \"format\": default 'yaml' is not in choices ['text', 'json']",
 	);

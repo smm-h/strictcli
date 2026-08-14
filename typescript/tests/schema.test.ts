@@ -31,13 +31,14 @@ import { deprecated } from "../src/factories.js";
 import {
 	type App,
 	arg,
+	choice,
 	coRequired,
 	createApp,
 	defineReadOnlyCommand,
 	flag,
 	flagSet,
 	implies,
-	mutexGroup,
+	memberChoiceFlag,
 	readOnlyPassthrough,
 	relativeToRoot,
 	requires,
@@ -294,38 +295,28 @@ const EXPECTED_JSON = `{
     },
     "output": {
       "name": "output",
-      "help": "Test mutex flags",
+      "help": "Test a member-spelled selector",
       "effect": "read_only",
       "flags": [
         {
-          "name": "as-json",
-          "type": "bool",
-          "help": "JSON output",
-          "presence": "optional",
-          "negatable": true
-        },
-        {
-          "name": "yaml",
-          "type": "bool",
-          "help": "YAML output",
-          "presence": "optional",
-          "negatable": true
-        },
-        {
-          "name": "text",
-          "type": "bool",
-          "help": "Text output",
-          "presence": "optional",
-          "negatable": true
-        }
-      ],
-      "constraints": [
-        {
-          "type": "mutex",
-          "flags": [
-            "as-json",
-            "yaml",
-            "text"
+          "name": "format",
+          "type": "choice",
+          "help": "Output format",
+          "elect_by": "member-flags",
+          "presence": "required",
+          "choices": [
+            {
+              "name": "as-json",
+              "help": "JSON output"
+            },
+            {
+              "name": "yaml",
+              "help": "YAML output"
+            },
+            {
+              "name": "text",
+              "help": "Text output"
+            }
           ]
         }
       ]
@@ -832,7 +823,12 @@ export function buildRichApp(): App {
 				presence: "default",
 				default: "info",
 				env: "RICH_LOG_LEVEL",
-				choices: ["debug", "info", "warn", "error"],
+				choices: [
+					{ value: "debug" },
+					{ value: "info" },
+					{ value: "warn" },
+					{ value: "error" },
+				],
 			}),
 			state_file: flag("state-file", t.str, {
 				help: "State file relative to the infra root",
@@ -935,23 +931,18 @@ export function buildRichApp(): App {
 
 	app.command(
 		defineReadOnlyCommand("output", {
-			help: "Test mutex flags",
-			mutex: [
-				mutexGroup({
-					as_json: flag("as-json", t.bool, {
-						help: "JSON output",
-						presence: "optional",
-					}),
-					yaml: flag("yaml", t.bool, {
-						help: "YAML output",
-						presence: "optional",
-					}),
-					text: flag("text", t.bool, {
-						help: "Text output",
-						presence: "optional",
-					}),
-				}),
-			],
+			help: "Test a member-spelled selector",
+			flags: {
+				format: memberChoiceFlag(
+					"format",
+					{
+						"as-json": choice({ help: "JSON output" }),
+						yaml: choice({ help: "YAML output" }),
+						text: choice({ help: "Text output" }),
+					},
+					{ help: "Output format", presence: "required" },
+				),
+			},
 			handler: () => 0,
 		}),
 	);
@@ -1062,13 +1053,19 @@ export function buildRichApp(): App {
 			flags: {
 				priority: flag("priority", t.int, {
 					help: "Priority level",
-					choices: [1n, 2n, 3n, 4n, 5n],
+					choices: [
+						{ value: 1n },
+						{ value: 2n },
+						{ value: 3n },
+						{ value: 4n },
+						{ value: 5n },
+					],
 					presence: "default",
 					default: 3n,
 				}),
 				threshold: flag("threshold", t.float, {
 					help: "Threshold value",
-					choices: [0.1, 0.5, 0.9],
+					choices: [{ value: 0.1 }, { value: 0.5 }, { value: 0.9 }],
 					presence: "default",
 					default: 0.5,
 				}),

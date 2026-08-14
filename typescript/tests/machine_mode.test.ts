@@ -9,12 +9,13 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
 	arg,
+	choice,
 	createApp,
 	defineMutatingCommand,
 	defineReadOnlyCommand,
 	flag,
 	flagSet,
-	mutexGroup,
+	memberChoiceFlag,
 	outcome,
 	t,
 } from "../src/index.js";
@@ -41,21 +42,17 @@ test("json is reserved on a flag-set flag", () => {
 	);
 });
 
-test("json is reserved on a mutex-group flag", () => {
+test("json is reserved on a member-spelled choice name", () => {
 	assert.throws(
 		() =>
-			mutexGroup({
-				json: flag("json", t.bool, {
-					help: "h",
-					presence: "default",
-					default: false,
-				}),
-				text: flag("text", t.bool, {
-					help: "h",
-					presence: "default",
-					default: false,
-				}),
-			}),
+			memberChoiceFlag(
+				"format",
+				{
+					json: choice({ help: "h" }),
+					text: choice({ help: "h" }),
+				},
+				{ help: "h", presence: "required" },
+			),
 		RESERVED,
 	);
 });
