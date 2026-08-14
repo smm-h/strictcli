@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// A flag registered with Optional() + Choices(...) means "optional; if
+// A flag registered with Optional() + Choices(Ch(..., "")) means "optional; if
 // passed, must be one of the choices". When the flag is NOT passed, its
 // resolved value is nil and choices validation must be skipped -- nil only
 // arises from Optional()/ArgOptional()/unset mutex members; a CLI-supplied
@@ -14,7 +14,7 @@ import (
 
 func TestFlagOptionalChoicesNotPassed(t *testing.T) {
 	app := simpleApp("cmd", "a command", "format={format}",
-		WithFlags(StringFlag("format", "output format", Optional(), Choices("text", "json"))))
+		WithFlags(StringFlag("format", "output format", Optional(), Choices(Ch("text", ""), Ch("json", "")))))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -26,7 +26,7 @@ func TestFlagOptionalChoicesNotPassed(t *testing.T) {
 
 func TestFlagOptionalChoicesPassedValid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "format={format}",
-		WithFlags(StringFlag("format", "output format", Optional(), Choices("text", "json"))))
+		WithFlags(StringFlag("format", "output format", Optional(), Choices(Ch("text", ""), Ch("json", "")))))
 	r := app.Test([]string{"cmd", "--format", "json"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -38,7 +38,7 @@ func TestFlagOptionalChoicesPassedValid(t *testing.T) {
 
 func TestFlagOptionalChoicesPassedInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "format={format}",
-		WithFlags(StringFlag("format", "output format", Optional(), Choices("text", "json"))))
+		WithFlags(StringFlag("format", "output format", Optional(), Choices(Ch("text", ""), Ch("json", "")))))
 	r := app.Test([]string{"cmd", "--format", "xml"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -51,7 +51,7 @@ func TestFlagOptionalChoicesPassedInvalid(t *testing.T) {
 func TestArgOptionalChoicesNotPassed(t *testing.T) {
 	app := simpleApp("cmd", "a command", "env={env}",
 		WithArgs(NewArg("env", "target env", ArgOptional(),
-			ArgChoices("dev", "staging", "prod"))))
+			ArgChoices(Ch("dev", ""), Ch("staging", ""), Ch("prod", "")))))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -64,7 +64,7 @@ func TestArgOptionalChoicesNotPassed(t *testing.T) {
 func TestArgOptionalChoicesPassedValid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "env={env}",
 		WithArgs(NewArg("env", "target env", ArgOptional(),
-			ArgChoices("dev", "staging", "prod"))))
+			ArgChoices(Ch("dev", ""), Ch("staging", ""), Ch("prod", "")))))
 	r := app.Test([]string{"cmd", "prod"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -77,7 +77,7 @@ func TestArgOptionalChoicesPassedValid(t *testing.T) {
 func TestArgOptionalChoicesPassedInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "env={env}",
 		WithArgs(NewArg("env", "target env", ArgOptional(),
-			ArgChoices("dev", "staging", "prod"))))
+			ArgChoices(Ch("dev", ""), Ch("staging", ""), Ch("prod", "")))))
 	r := app.Test([]string{"cmd", "local"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -89,7 +89,7 @@ func TestArgOptionalChoicesPassedInvalid(t *testing.T) {
 
 func TestGlobalFlagOptionalChoicesNotPassed(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok")
-	app.GlobalFlag(StringFlag("format", "output format", Optional(), Choices("text", "json")))
+	app.GlobalFlag(StringFlag("format", "output format", Optional(), Choices(Ch("text", ""), Ch("json", ""))))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -98,7 +98,7 @@ func TestGlobalFlagOptionalChoicesNotPassed(t *testing.T) {
 
 func TestGlobalFlagOptionalChoicesPassedInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok")
-	app.GlobalFlag(StringFlag("format", "output format", Optional(), Choices("text", "json")))
+	app.GlobalFlag(StringFlag("format", "output format", Optional(), Choices(Ch("text", ""), Ch("json", ""))))
 	r := app.Test([]string{"--format", "xml", "cmd"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -108,22 +108,23 @@ func TestGlobalFlagOptionalChoicesPassedInvalid(t *testing.T) {
 	}
 }
 
-func TestMutexFlagChoicesUnsetNotValidated(t *testing.T) {
-	// An unset flag inside a mutex group resolves to nil; its choices must
-	// not fire when the other group member is passed.
-	app := simpleApp("cmd", "a command", "format={format} output={output}",
-		WithMutex(MutexGroup{
-			Flags: []Flag{
-				StringFlag("format", "output format", Optional(), Choices("text", "json")),
-				StringFlag("output", "output path", Optional()),
-			},
-		}))
+func TestUnelectedScopeChoicesNotValidated(t *testing.T) {
+	// A choices flag inside a scope that was not elected is not resolved at
+	// all, so its choices cannot fire (contract §24.1: an unelected choice's
+	// flags are not resolved). This is what the deleted mutex version asserted,
+	// restated over the construct that replaced the group.
+	app := simpleApp("cmd", "a command", "mode={mode}",
+		WithFlags(MemberChoiceFlag("mode", "how to write output", Required(),
+			MemberChoice(StringFlag("format", "output format", Required(),
+				Choices(Ch("text", ""), Ch("json", ""))), "write a formatted document"),
+			MemberChoice(StringFlag("output", "output path", Required()), "write to a path"),
+		)))
 	r := app.Test([]string{"cmd", "--output", "out.txt"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
-	if r.Stdout != "format=None output=out.txt" {
-		t.Fatalf("expected 'format=None output=out.txt', got %q", r.Stdout)
+	if r.Stdout != "mode=output[value:out.txt]" {
+		t.Fatalf("expected 'mode=output[value:out.txt]', got %q", r.Stdout)
 	}
 }
 

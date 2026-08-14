@@ -597,7 +597,7 @@ func collectMCPToolsFromGroup(group *Group, path []string, toolDefs *[]interface
 func buildMCPToolDef(commandPath string, cmd *Command) map[string]interface{} {
 	def := map[string]interface{}{
 		"name":        commandPath,
-		"description": cmd.Help,
+		"description": toolDescription(cmd),
 		"effect":      cmd.Effect,
 		"inputSchema": buildJSONSchema(cmd),
 	}

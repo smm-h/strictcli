@@ -580,7 +580,7 @@ func TestInvokeChoicesValidation(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("run", "run it", captureHandler(&captured),
 		WithFlags(
-			StringFlag("mode", "operation mode", Choices("fast", "slow"), Required()),
+			StringFlag("mode", "operation mode", Choices(Ch("fast", ""), Ch("slow", "")), Required()),
 		), WithEffect(EffectReadOnly),
 	)
 
@@ -600,35 +600,42 @@ func TestInvokeChoicesValidation(t *testing.T) {
 	}
 }
 
-func TestInvokeMutexGroup(t *testing.T) {
+// TestInvokeSelectorRecord replaces TestInvokeMutexGroup: the programmatic
+// front door takes the ELECTED RECORD pre-typed, which is the same record a
+// handler receives (contract §24.11). Electing two choices is inexpressible
+// rather than refused -- that is the construct's own point -- so what remains to
+// assert is that the record satisfies the selector and reaches the handler.
+func TestInvokeSelectorRecord(t *testing.T) {
 	var captured map[string]interface{}
+	asJSON := MemberChoice(StringFlag("as-json", "JSON output", Required()), "JSON output")
 
-	makeApp := func() *App {
-		app := NewApp("myapp", "1.0.0", "test app")
-		app.Command("out", "output command", captureHandler(&captured),
-			WithMutex(MutexGroup{Flags: []Flag{
-				StringFlag("as-json", "JSON output", Optional()),
-				StringFlag("text", "text output", Optional()),
-			}}), WithEffect(EffectReadOnly),
-		)
-		return app
-	}
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("out", "output command", captureHandler(&captured),
+		WithFlags(MemberChoiceFlag("fmt", "output format", Required(),
+			asJSON,
+			MemberChoice(StringFlag("text", "text output", Required()), "text output"),
+		)), WithEffect(EffectReadOnly),
+	)
 
-	// Provide exactly one mutex flag
-	app1 := makeApp()
-	ir := app1.invoke("out", map[string]interface{}{"as_json": "data"})
+	ir := app.invoke("out", map[string]interface{}{"fmt": Elect(asJSON, Fields{"value": "data"})})
 	if ir.err != "" {
 		t.Fatalf("invoke error: %s", ir.err)
 	}
-
-	// Provide both (should error)
-	app2 := makeApp()
-	ir = app2.invoke("out", map[string]interface{}{"as_json": "data", "text": "data"})
-	if ir.err == "" {
-		t.Fatal("expected error for mutex violation")
+	e := GetElected(captured, "fmt")
+	if !e.Is(asJSON) {
+		t.Fatalf("elected = %q, want as-json", e.Name())
 	}
-	if !strings.Contains(ir.err, "mutually exclusive") {
-		t.Fatalf("expected 'mutually exclusive' in error, got %q", ir.err)
+	if got := Get[string](e.Fields, "value"); got != "data" {
+		t.Fatalf("payload = %q, want \"data\"", got)
+	}
+
+	// A selector with no election at all is refused, with the CLI's sentence.
+	ir = app.invoke("out", map[string]interface{}{})
+	if ir.err == "" {
+		t.Fatal("expected an error for an unsatisfied selector")
+	}
+	if !strings.Contains(ir.err, "one of --as-json, --text is required") {
+		t.Fatalf("error = %q", ir.err)
 	}
 }
 

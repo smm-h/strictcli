@@ -1,6 +1,9 @@
 package strictcli
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // errors.go centralizes all error/panic format templates used across the
 // strictcli package. Functions are grouped by their original source file for
@@ -270,9 +273,11 @@ func errArgDefaultNullNotOptional(name string) string {
 	return fmt.Sprintf("Arg %q: ArgDefault(nil) does not declare optionality: use ArgOptional() (it delivers nil when the arg is absent)", name)
 }
 
-func errFlagMutexMemberRequired(name string) string {
-	return fmt.Sprintf("Flag %q: a mutex member cannot declare Required(): the group's own requirement is what makes the choice mandatory", name)
-}
+// errFlagMutexMemberRequired is DELETED with MutexGroup (contract §21's
+// supersession box, §18.15 item 178). The rule INVERTED: a member flag now MUST
+// declare Required(), read as "required once this member is elected", which is
+// errMemberFlagPresence. The two state opposite rules about the same
+// declaration, so the old template is deleted rather than reworded.
 
 func errArgVariadicDefault(name string) string {
 	return fmt.Sprintf("Arg %q: a variadic arg cannot declare ArgDefault(): it always delivers a list, so declare ArgRequired() for at least one value or ArgOptional() for possibly none", name)
@@ -1417,4 +1422,226 @@ func errCallConsequentialUnconsented(cmdPath string) string {
 
 func errDryRunNotSupported(cmdPath string, reason string) string {
 	return fmt.Sprintf("--dry-run is not supported by command '%s': %s", cmdPath, reason)
+}
+
+// ---------------------------------------------------------------------------
+// selector.go / parse.go — the scoped-selector construct (contract §12.13, §24)
+//
+// The family splits across both parity categories, and the split is pinned
+// rather than derived: the ELECTION, SCOPE and DELIVERY templates are
+// parse-time (stderr, exit 1); the DECLARATION GUARDS are registration-time, in
+// §12.10's and §12.12's class. Templates that name a spelling carry Go's own
+// noun phrase inside a byte-identical sentence -- Required(), Optional(),
+// Default(<value>), Ch(<value>, "<help>"), ChoiceFlag(...),
+// MemberChoiceFlag(...).
+//
+// The scope path is itself a pinned format (renderScopePath in selector.go):
+// one segment per election, outermost first, joined by a single space; a
+// token-spelled segment is `--<selector> <choice>`, a member-spelled segment is
+// `--<choice>`; single-quoted wherever a template names one.
+// ---------------------------------------------------------------------------
+
+// errScopeSuffix is the clause appended to a presence message when the flag or
+// the selector lives inside a scope. Empty at root scope.
+func errScopeSuffix(path string) string {
+	return fmt.Sprintf(" under '%s'", path)
+}
+
+// errFlagOutOfScope is the round's central error, and deliberately NOT "unknown
+// flag": the flag is declared, it is simply not in the elected scope, and the
+// sentence names both sides.
+func errFlagOutOfScope(x string, owners string, why string) string {
+	return fmt.Sprintf("flag '--%s' is only valid under %s, but %s", x, owners, why)
+}
+
+func errScopeWhyElected(path string, origin string) string {
+	return fmt.Sprintf("'%s' was elected%s", path, origin)
+}
+
+func errScopeWhyNotProvided(sel string) string {
+	return fmt.Sprintf("'--%s' was not provided", sel)
+}
+
+func errScopeWhyNoMemberElected(members string) string {
+	return fmt.Sprintf("none of %s was elected", members)
+}
+
+// The three election-origin clauses. An election from a non-CLI source names
+// itself in every message it causes, because otherwise a refusal blames a
+// command line that does not contain the cause (§24.6).
+func errElectionOriginEnv(varName string) string {
+	return fmt.Sprintf(" from env var '%s'", varName)
+}
+
+func errElectionOriginConfig(key string) string {
+	return fmt.Sprintf(" from config key '%s'", key)
+}
+
+const errElectionOriginDefault = " by default"
+
+// errElectionOriginSuffix is the parenthesized form composition produces. It is
+// appended AFTER the scope suffix and never before it, and a command-line
+// election produces the EMPTY suffix rather than a bare "(elected)".
+func errElectionOriginSuffix(origin string) string {
+	if origin == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (elected%s)", origin)
+}
+
+// errSelectorElectedTwice: last-wins is right for a plain flag and wrong for an
+// election, because discarding a value would discard a whole scope with it.
+func errSelectorElectedTwice(sel string, values []string) string {
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		quoted[i] = "'" + v + "'"
+	}
+	return fmt.Sprintf("--%s: elected more than once, as %s", sel, strings.Join(quoted, " and "))
+}
+
+// errAmbientBindingSkippedEnv / errAmbientBindingSkippedConfig name a
+// conditional binding the run did not consult. They are DIAGNOSTICS, not
+// errors: no "error: " prefix, the debug channel, and the run continues.
+func errAmbientBindingSkippedEnv(varName, x, path string) string {
+	return fmt.Sprintf("not consulted: env var '%s' binds flag '--%s' under '%s', which was not elected", varName, x, path)
+}
+
+func errAmbientBindingSkippedConfig(key, x, path string) string {
+	return fmt.Sprintf("not consulted: config key '%s' binds flag '--%s' under '%s', which was not elected", key, x, path)
+}
+
+// --- Registration guards (§12.13's table) ---
+
+func errSelectorOptional(name string) string {
+	return fmt.Sprintf("Flag %q: a choice flag cannot declare Optional(): an absent selection is a choice nobody named, so name it as a choice of its own", name)
+}
+
+func errSelectorNoChoices(name string) string {
+	return fmt.Sprintf("Flag %q: a choice flag must declare at least two choices", name)
+}
+
+func errChoiceDuplicateName(sel, c string) string {
+	return fmt.Sprintf("Flag %q: choice %q is declared twice", sel, c)
+}
+
+func errChoiceHelpEmpty(sel, c string) string {
+	return fmt.Sprintf("Choice %q of %q: help text is required", c, sel)
+}
+
+func errSelectorDefaultUnknownChoice(sel string, v interface{}, names string) string {
+	return fmt.Sprintf("Flag %q: Default(%s) names no declared choice: must be one of: %s", sel, formatValueForError(v), names)
+}
+
+func errSelectorDefaultIncomplete(sel, c, sub string) string {
+	return fmt.Sprintf("Flag %q: Default(%q) elects choice %q, whose scope declares the required flag '--%s': a defaulted selection must be complete with nothing typed", sel, c, c, sub)
+}
+
+func errMemberFlagPresence(sel, m string) string {
+	return fmt.Sprintf("Choice %q of %q: a member flag must declare Required(), read as required once this member is elected", m, sel)
+}
+
+func errMemberSelectorShort(sel string) string {
+	return fmt.Sprintf("Flag %q: a member-spelled choice flag is never typed, so it cannot carry a short: declare the short on a member", sel)
+}
+
+func errMemberDefaultCarriesValue(sel, c string) string {
+	return fmt.Sprintf("Flag %q: Default(%q) elects choice %q, whose flag carries a value nothing supplies: only a payload-less member can be a default", sel, c, c)
+}
+
+func errTokenChoiceCarriesPayload(sel, c string) string {
+	return fmt.Sprintf("Choice %q of %q: a token-spelled choice cannot carry a payload: the token names the choice, and a choice that carries its own value belongs to a member-spelled choice flag, declared with MemberChoiceFlag(...)", c, sel)
+}
+
+func errChoicesEntryNotRecord(name string, i int) string {
+	return fmt.Sprintf("Flag %q: choices entry %d is a bare value: declare it as Ch(<value>, \"<help>\")", name, i)
+}
+
+// errMemberChoiceRequired is GO-ONLY, and it is the mirror of
+// errTokenChoiceCarriesPayload: Go's two selector constructors are twins, so a
+// plain Choice(...) can reach MemberChoiceFlag(...) the way a MemberChoice(...)
+// can reach ChoiceFlag(...). Python spells member election with a keyword and
+// TypeScript's factory takes its own choice shape, so neither sibling has an
+// input that could produce this state (§12.12's per-language precedent).
+func errMemberChoiceRequired(sel, c string) string {
+	return fmt.Sprintf("Choice %q of %q: a member-spelled choice flag declares its choices with MemberChoice(...), which names the flag that elects the choice", c, sel)
+}
+
+// errChoiceAliased is GO-ONLY: a *ChoiceDecl is an identity value, so the same
+// value can be written into two selectors, and its identity would then be
+// ambiguous at Match time. Python's choice classes and TypeScript's keyed map
+// have no aliasing site.
+func errChoiceAliased(c, firstSel, secondSel string) string {
+	return fmt.Sprintf("Choice %q of %q: a choice value belongs to exactly one choice flag; it is already declared by %q", c, secondSel, firstSel)
+}
+
+// --- Reserved names inside a scope (§12.13, S15) ---
+
+func errScopedNameChoiceReserved(c, sel string) string {
+	return fmt.Sprintf("Choice %q of %q: flag name 'choice' is reserved by the framework: it tags the delivered record", c, sel)
+}
+
+func errScopedNameValueReserved(c, sel string) string {
+	return fmt.Sprintf("Choice %q of %q: flag name 'value' is reserved by the framework: it carries a member-spelled choice's own payload", c, sel)
+}
+
+// --- Name collisions (§12.13, §24.7) ---
+
+func errScopedNameCollidesRoot(c, sel, x string) string {
+	return fmt.Sprintf("Choice %q of %q: flag '--%s' collides with a command-level flag of the same name: the scoped one could never be reached", c, sel, x)
+}
+
+func errScopedNameCollidesSelector(c, sel, x string) string {
+	return fmt.Sprintf("Choice %q of %q: flag '--%s' collides with the choice flag's own name", c, sel, x)
+}
+
+func errSiblingScopeShapeMismatch(sel, x, a, b string) string {
+	return fmt.Sprintf("Flag %q: flag '--%s' is declared by choices %q and %q with different value shapes: sibling scopes may reuse a name only with an identical type and arity, because tokenizing '--%s' cannot wait for an election", sel, x, a, b, x)
+}
+
+func errCoElectableNameReuse(name, x, p1, p2 string) string {
+	return fmt.Sprintf("command %q: flag '--%s' is declared under '%s' and under '%s', which can be elected at the same time: simultaneously electable scopes may not reuse a flag name", name, x, p1, p2)
+}
+
+func errShortCollidesAcrossScopes(name, s, a, b string) string {
+	return fmt.Sprintf("command %q: short '-%s' is claimed by '--%s' and '--%s', which can be elected at the same time", name, s, a, b)
+}
+
+// --- A constraint naming a scoped flag (§12.13, §24.8) ---
+
+func errConstraintReferencesScopedFlag(name, family, x, path string) string {
+	return fmt.Sprintf("command %q: %s references '%s', which is declared under '%s': dependency constraints operate at root scope only", name, family, x, path)
+}
+
+// --- Delivery-side panics (Go-only: Match is exhaustive at dispatch) ---
+
+func errGetElectedNoSuchKey(name string) string {
+	return fmt.Sprintf("strictcli.GetElected: no such key %q", name)
+}
+
+func errGetElectedNotSelector(name string, v interface{}) string {
+	return fmt.Sprintf("strictcli.GetElected: key %q has dynamic type %T, want *strictcli.Elected", name, v)
+}
+
+func errMatchForeignCase(sel, c string) string {
+	return fmt.Sprintf("strictcli.Match: case %q is not a choice of choice flag %q", c, sel)
+}
+
+func errMatchDuplicateCase(sel, c string) string {
+	return fmt.Sprintf("strictcli.Match: choice %q of choice flag %q has two cases", c, sel)
+}
+
+func errMatchMissingCases(sel string, missing []string) string {
+	return fmt.Sprintf("strictcli.Match: choice flag %q has no case for %s", sel, strings.Join(missing, ", "))
+}
+
+// errElectNotAChoice is raised on the programmatic front door when Elect names a
+// choice the selector does not declare.
+func errElectNotAChoice(sel, c string) string {
+	return fmt.Sprintf("--%s: elected value names choice %q, which is not declared by this choice flag", sel, c)
+}
+
+// errSelectorValueNotElected is raised on the programmatic front door when a
+// selector's kwarg is neither an elected record nor a choice name.
+func errSelectorValueNotElected(sel string, v interface{}) string {
+	return fmt.Sprintf("--%s: a choice flag's value must be strictcli.Elect(<choice>, ...) or a choice name, got %T", sel, v)
 }

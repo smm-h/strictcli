@@ -100,16 +100,16 @@ func TestFlagStructLiteralInFlagSetDoesNotRegister(t *testing.T) {
 	}
 }
 
-func TestFlagStructLiteralInMutexDoesNotRegister(t *testing.T) {
+// Presence is mandatory at EVERY depth: a struct literal inside a choice scope
+// declares none and does not register (contract §23.1 as amended by §18.15
+// item 178, §24.1).
+func TestFlagStructLiteralInScopeDoesNotRegister(t *testing.T) {
 	want := `Flag "a": presence is undeclared: declare exactly one of Required(), Optional(), or Default(<value>)`
 	got := mustPanic(t, func() {
-		app := NewApp("myapp", "1.0.0", "test app")
-		app.Command("cmd", "a command", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-			return Exit(0)
-		}, WithMutex(MutexGroup{Flags: []Flag{
-			{Name: "a", Type: TypeStr, Help: "a"},
-			{Name: "b", Type: TypeStr, Help: "b"},
-		}}), WithEffect(EffectReadOnly))
+		ChoiceFlag("via", "delivery channel", Required(),
+			Choice("email", "as an email", Flag{Name: "a", Type: TypeStr, Help: "a"}),
+			Choice("sms", "as a text", StringFlag("b", "b", Optional())),
+		)
 	})
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
@@ -286,71 +286,32 @@ func TestArgDefaultNilRedirectsToArgOptional(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// A mutex member cannot declare requiredness (§23.5, §21)
+// The mutex-member presence rule INVERTED (§21's supersession box, §12.13)
+//
+// errFlagMutexMemberRequired is deleted with MutexGroup. A member flag now MUST
+// declare Required(), read as "required once this member is elected", and the
+// tests for the inverted rule live in member_election_test.go. A scoped
+// sub-flag may be optional, required or defaulted exactly as any flag is,
+// resolved within its scope when that scope is elected (§23.5's superseded
+// mutex row).
 // ---------------------------------------------------------------------------
 
-func TestMutexMemberCannotDeclareRequired(t *testing.T) {
-	want := `Flag "profile": a mutex member cannot declare Required(): the group's own requirement is what makes the choice mandatory`
-	got := mustPanic(t, func() {
-		app := NewApp("myapp", "1.0.0", "test app")
-		app.Command("cmd", "a command", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-			return Exit(0)
-		}, WithMutex(MutexGroup{Flags: []Flag{
-			StringFlag("profile", "a profile", Required()),
-			BoolFlag("all-profiles", "every profile", Optional()),
-		}}), WithEffect(EffectReadOnly))
-	})
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
-	}
-}
-
-func TestMutexMemberOptionalAndDefaultAreLegal(t *testing.T) {
-	app := simpleApp("cmd", "a command", "profile={profile} count={count}",
-		WithMutex(MutexGroup{Flags: []Flag{
-			StringFlag("profile", "a profile", Optional()),
-			IntFlag("count", "how many", Default(3)),
-		}}))
-	// An unelected member delivers its declared default, and an unelected
-	// member declaring optional delivers nothing (§21.3, as amended).
-	r := app.Test([]string{"cmd", "--profile", "work"})
+func TestScopedSubFlagTakesAllThreePresences(t *testing.T) {
+	app := simpleApp("cmd", "a command", "via={via}",
+		WithFlags(ChoiceFlag("via", "delivery channel", Required(),
+			Choice("email", "as an email",
+				StringFlag("subject", "subject line", Required()),
+				StringFlag("cc", "carbon copy", Optional()),
+				IntFlag("retries", "how many retries", Default(3)),
+			),
+			Choice("sms", "as a text", StringFlag("phone-number", "the number", Required())),
+		)))
+	r := app.Test([]string{"cmd", "--via", "email", "--subject", "hi"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
-	if r.Stdout != "profile=work count=3" {
+	if r.Stdout != "via=email[cc:<nil> retries:3 subject:hi]" {
 		t.Fatalf("got %q", r.Stdout)
-	}
-	r = app.Test([]string{"cmd", "--count", "9"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
-	}
-	if r.Stdout != "profile=None count=9" {
-		t.Fatalf("got %q", r.Stdout)
-	}
-}
-
-// TestMutexMemberOptionalDeliversNilNotExemption pins the deletion of the
-// mutex-member presence exemption: the nil an unelected member delivers comes
-// from its OWN declaration now, not from a parse-time carve-out.
-func TestMutexMemberOptionalDeliversNil(t *testing.T) {
-	var got map[string]interface{}
-	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("cmd", "a command", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		got = kwargs
-		return Exit(0)
-	}, WithMutex(MutexGroup{Flags: []Flag{
-		StringFlag("file", "read from file", Optional()),
-		StringFlag("url", "read from URL", Optional()),
-	}}), WithEffect(EffectReadOnly))
-	if r := app.Test([]string{"cmd", "--url", "http://x"}); r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
-	}
-	v, ok := got["file"]
-	if !ok {
-		t.Fatal("expected a present key for the unelected member")
-	}
-	if v != nil {
-		t.Fatalf("expected nil for the unelected optional member, got %#v", v)
 	}
 }
 

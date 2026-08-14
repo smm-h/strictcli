@@ -146,7 +146,7 @@ func TestDictFlagNoChoices(t *testing.T) {
 			t.Fatalf("unexpected panic: %v", r)
 		}
 	}()
-	DictFlag(TypeStr, "headers", "HTTP headers", Unique(false), Choices("a", "b"), Default(map[string]interface{}{}))
+	DictFlag(TypeStr, "headers", "HTTP headers", Unique(false), Choices(Ch("a", ""), Ch("b", "")), Default(map[string]interface{}{}))
 }
 
 // --- CLI parsing: list flags ---

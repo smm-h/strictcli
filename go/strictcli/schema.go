@@ -15,6 +15,7 @@ var flagTypeName = map[FlagType]string{
 	TypeBool:      "bool",
 	TypeInt:       "int",
 	TypeFloat:     "float",
+	TypeChoice:    "choice",
 	TypeListStr:   "list[str]",
 	TypeListInt:   "list[int]",
 	TypeListFloat: "list[float]",
@@ -267,17 +268,11 @@ func serializeCommand(cmd *Command) map[string]interface{} {
 // serializeConstraints builds the constraints array from a command's mutex groups and dependencies.
 func serializeConstraints(cmd *Command) []interface{} {
 	var constraints []interface{}
-	// Mutex groups
-	for _, mg := range cmd.mutex {
-		flags := make([]interface{}, len(mg.Flags))
-		for i, f := range mg.Flags {
-			flags[i] = f.Name
-		}
-		constraints = append(constraints, map[string]interface{}{
-			"type":  "mutex",
-			"flags": flags,
-		})
-	}
+	// The "mutex" constraint entry is DELETED with MutexGroup (contract §21's
+	// supersession box): exactly-one left the constraint system entirely and is
+	// a member-spelled selector now, which is a FLAG entry rather than a
+	// constraint. The selector's own encoding is the schema-v2 amendment's
+	// (§24.11, §24.15).
 	// Dependencies
 	for _, dep := range cmd.dependencies {
 		switch d := dep.(type) {

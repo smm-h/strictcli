@@ -304,56 +304,28 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 		}
 	}
 
-	// Collect flag names that belong to mutex groups
-	mutexFlagNames := make(map[string]bool)
-	for _, mg := range cmd.mutex {
-		for _, f := range mg.Flags {
-			mutexFlagNames[f.Name] = true
-		}
-	}
-
-	// Regular flags (not in any mutex group)
-	var regularFlags []Flag
-	for _, f := range cmd.flags {
-		if !mutexFlagNames[f.Name] {
-			regularFlags = append(regularFlags, f)
-		}
-	}
-
-	if len(regularFlags) > 0 {
+	// Command flags, including every choice block at every depth. ONE alignment
+	// column is computed across the whole command's flag block, deepest entry
+	// included, so help text starts in the same column everywhere on the page
+	// (contract §24.10). The mutex section is gone with MutexGroup: a
+	// member-spelled selector renders inline, in declaration order.
+	if len(cmd.flags) > 0 {
+		entries := collectFlagHelpEntries(cmd.flags, 0)
 		lines = append(lines, "")
 		lines = append(lines, "Flags:")
-		specs := make([]string, len(regularFlags))
 		maxSpec := 0
-		for i, f := range regularFlags {
-			specs[i] = buildFlagSpec(f)
-			if len(specs[i]) > maxSpec {
-				maxSpec = len(specs[i])
+		for _, e := range entries {
+			if len(e.spec) > maxSpec {
+				maxSpec = len(e.spec)
 			}
 		}
-		for i, f := range regularFlags {
-			padding := maxSpec - len(specs[i]) + 4
-			meta := buildFlagMeta(f)
-			lines = append(lines, fmt.Sprintf("  %s%s%s%s", specs[i], strings.Repeat(" ", padding), f.Help, meta))
-		}
-	}
-
-	// Mutex groups
-	for _, mg := range cmd.mutex {
-		lines = append(lines, "")
-		lines = append(lines, "Flags (mutually exclusive):")
-		specs := make([]string, len(mg.Flags))
-		maxSpec := 0
-		for i, f := range mg.Flags {
-			specs[i] = buildFlagSpec(f)
-			if len(specs[i]) > maxSpec {
-				maxSpec = len(specs[i])
+		for _, e := range entries {
+			if e.right == "" {
+				lines = append(lines, "  "+e.spec)
+				continue
 			}
-		}
-		for i, f := range mg.Flags {
-			padding := maxSpec - len(specs[i]) + 4
-			meta := buildFlagMeta(f)
-			lines = append(lines, fmt.Sprintf("  %s%s%s%s", specs[i], strings.Repeat(" ", padding), f.Help, meta))
+			padding := maxSpec - len(e.spec) + 4
+			lines = append(lines, fmt.Sprintf("  %s%s%s", e.spec, strings.Repeat(" ", padding), e.right))
 		}
 	}
 
@@ -377,6 +349,87 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// flagHelpEntry is one rendered line of the command's flag block: the left
+// column (indent included) and the right column (help plus metadata).
+type flagHelpEntry struct {
+	spec  string
+	right string
+}
+
+// collectFlagHelpEntries renders a scope's flags, recursing into every choice.
+//
+// The layout (contract §24.10): a choice line indents TWO columns past its
+// selector's line, and a choice's scoped flags indent TWO columns past their
+// choice, so a flag at scope depth d carries 4*d extra columns and a choice line
+// of a selector at that depth carries 4*d+2.
+//
+// A choice-carrying flag renders as an indented block IFF any of its choices
+// carries help or a scope; otherwise it keeps the one-line `[choices: a, b, c]`
+// form. A selector is therefore always a block (its choices carry mandatory
+// help) and a value flag is a block exactly when its entries were given help.
+func collectFlagHelpEntries(flags []Flag, depth int) []flagHelpEntry {
+	var out []flagHelpEntry
+	pad := strings.Repeat(" ", 4*depth)
+	choicePad := strings.Repeat(" ", 4*depth+2)
+	for i := range flags {
+		f := &flags[i]
+		if f.Type == TypeChoice && f.memberSpelled {
+			// A member-spelled selector has no token to render, so its own line
+			// carries its help, the clause and its presence part, with the
+			// member flags rendered as ordinary flag lines two columns beneath.
+			out = append(out, flagHelpEntry{
+				spec:  pad + memberSelectorHeading,
+				right: f.Help + buildFlagMeta(*f),
+			})
+			for _, ch := range f.choiceDecls {
+				out = append(out, collectFlagHelpEntries(ch.Flags[:1], depth+1)...)
+				out[len(out)-1].right = ch.Help + buildFlagMeta(ch.Flags[0])
+				out = append(out, collectFlagHelpEntries(ch.Flags[1:], depth+1)...)
+			}
+			continue
+		}
+
+		out = append(out, flagHelpEntry{
+			spec:  pad + buildFlagSpec(*f),
+			right: f.Help + buildFlagMeta(*f),
+		})
+
+		if f.Type == TypeChoice {
+			for _, ch := range f.choiceDecls {
+				out = append(out, flagHelpEntry{spec: choicePad + ch.Name, right: ch.Help})
+				out = append(out, collectFlagHelpEntries(ch.Flags, depth+1)...)
+			}
+			continue
+		}
+		// A value flag's entries render in block form exactly when at least one
+		// of them carries help; an entry with no help renders the value alone.
+		if choiceRecordsCarryHelp(f.choiceRecords) {
+			for _, cv := range f.choiceRecords {
+				out = append(out, flagHelpEntry{
+					spec:  choicePad + formatValueForError(cv.Value),
+					right: cv.Help,
+				})
+			}
+		}
+	}
+	return out
+}
+
+// memberSelectorHeading is the clause a member-spelled selector's own line
+// carries in place of a token it never has (contract §24.10).
+const memberSelectorHeading = "(exactly one of the following)"
+
+// choiceRecordsCarryHelp reports whether any entry of a value flag's choices
+// list was given help, which is what promotes the flag to block rendering.
+func choiceRecordsCarryHelp(records []ChoiceValue) bool {
+	for _, cv := range records {
+		if cv.Help != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func buildFlagSpec(f Flag) string {
@@ -407,6 +460,8 @@ func buildFlagSpec(f Flag) string {
 			spec += " <int>"
 		case TypeFloat:
 			spec += " <float>"
+		case TypeChoice:
+			spec += " <choice>"
 		}
 	}
 	return spec
@@ -424,7 +479,10 @@ func buildFlagMeta(f Flag) string {
 	if f.Unique {
 		metaParts = append(metaParts, "unique")
 	}
-	if f.Choices != nil {
+	// The one-line choices form is kept only while the flag renders as one
+	// line: once any entry carries help, the entries render as a block instead
+	// (contract §24.10).
+	if f.Choices != nil && !choiceRecordsCarryHelp(f.choiceRecords) {
 		metaParts = append(metaParts, "choices: "+formatChoices(f.Choices))
 	}
 	if f.Env != "" {

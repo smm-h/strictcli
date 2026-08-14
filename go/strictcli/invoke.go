@@ -3,6 +3,7 @@ package strictcli
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
@@ -195,11 +196,29 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	store := newSourcedStore()
 	var positionals []string
 
+	// A selector's value on the programmatic front door is the same record a
+	// handler receives -- Elect(<choice>, Fields{...}) -- or, at the machine
+	// boundary, the flat form: the choice name under the selector's own key,
+	// with every scoped parameter a top-level key. Both are converted here into
+	// the SAME election and value input the argv path produces, so the two front
+	// doors agree by construction rather than by test (contract §24.11).
+	sup := newSuppliedElections()
+	cliByFlag := make(map[*Flag]interface{})
+	scopedNames := make(map[string]*Flag)
+	if cmd.index != nil && cmd.index.hasSelectors {
+		if errStr := collectInvokeElections(cmd, kwargs, sup, cliByFlag, scopedNames); errStr != "" {
+			return invokeResult{exitCode: 1, err: errStr}
+		}
+	}
+
 	for paramName, value := range kwargs {
 		flagName := paramToFlagName(paramName)
 
 		// Check if it's a command flag
 		if f, ok := flagByName[flagName]; ok {
+			if f.Type == TypeChoice {
+				continue // already folded into the election input
+			}
 			coerced, errStr := coerceInvokeValue(f, value)
 			if errStr != "" {
 				return invokeResult{exitCode: 1, err: errStr}
@@ -219,10 +238,31 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 			continue
 		}
 
+		// A scoped parameter supplied at the top level: legal at this boundary,
+		// where the schema is flat (§24.11), and refused by the SAME scope
+		// machinery the CLI parser uses when the combination is wrong.
+		if _, ok := scopedNames[flagName]; ok {
+			continue
+		}
+
 		return invokeResult{
 			exitCode: 1,
 			err:      errUnknownParameterForCommand(paramName, commandPath),
 		}
+	}
+
+	amb := ambientSource{hermetic: true}
+	est, electErr := elect(cmd, sup, amb)
+	if electErr != "" {
+		return invokeResult{exitCode: 1, err: electErr}
+	}
+	var suppliedOrder []string
+	for name := range sup.suppliedNames {
+		suppliedOrder = append(suppliedOrder, name)
+	}
+	sort.Strings(suppliedOrder)
+	if errStr := est.checkScope(suppliedOrder); errStr != "" {
+		return invokeResult{exitCode: 1, err: errStr}
 	}
 
 	// Build positionals list from kwargs in arg declaration order
@@ -259,7 +299,8 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	}
 
 	// Run validation and build final kwargs
-	validatedKwargs, postGlobalValues, sources, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames, a.infraRoots)
+	var noStdin *string
+	validatedKwargs, postGlobalValues, sources, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames, a.infraRoots, est, cliByFlag, amb, &noStdin)
 	if errStr != "" {
 		return invokeResult{exitCode: 1, err: errStr}
 	}
@@ -433,4 +474,107 @@ func (a *App) Call(commandPath string, kwargs map[string]interface{}, opts ...Ca
 		return ir.data, nil
 	}
 	return ir.exitCode, nil
+}
+
+// collectInvokeElections converts a programmatic call's selector arguments into
+// the same election-and-value input the argv path produces (contract §24.11).
+//
+// Two spellings reach this boundary, and they are two FRONT DOORS rather than
+// two spellings of one fact: App.Call takes the elected record pre-typed
+// (Elect(<choice>, Fields{...})), while the machine boundary's flat object
+// carries the choice name under the selector's own key and every scoped
+// parameter as a top-level key.
+func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *suppliedElections, cliByFlag map[*Flag]interface{}, scopedNames map[string]*Flag) string {
+	// Every scoped name, so a top-level scoped parameter is recognized rather
+	// than refused as unknown.
+	for _, name := range cmd.index.order {
+		for _, site := range cmd.index.sites[name] {
+			if len(site.path) > 0 {
+				scopedNames[name] = site.flag
+			}
+		}
+	}
+
+	var walk func(flags []Flag, args map[string]interface{}) string
+	walk = func(flags []Flag, args map[string]interface{}) string {
+		for i := range flags {
+			f := &flags[i]
+			if f.Type != TypeChoice {
+				continue
+			}
+			raw, ok := args[flagParamName(f.Name)]
+			if !ok {
+				continue
+			}
+			sup.suppliedNames[f.Name] = true
+			switch v := raw.(type) {
+			case *Elected:
+				ch := findChoice(f, v.decl.Name)
+				if ch != v.decl {
+					return errElectNotAChoice(f.Name, v.decl.Name)
+				}
+				sup.preElected[f] = ch
+				if errStr := bindElectedFields(f, ch, v.Fields, sup, cliByFlag); errStr != "" {
+					return errStr
+				}
+				if errStr := walk(ch.Flags, v.Fields); errStr != "" {
+					return errStr
+				}
+			case string:
+				ch := findChoice(f, v)
+				if ch == nil {
+					return errFlagInvalidChoice(f.Name, v, strings.Join(choiceNames(f), ", "))
+				}
+				sup.preElected[f] = ch
+				// The flat form's scoped parameters sit beside the selector, so
+				// the same top-level object supplies the next level too.
+				if errStr := bindElectedFields(f, ch, Fields(args), sup, cliByFlag); errStr != "" {
+					return errStr
+				}
+				if errStr := walk(ch.Flags, args); errStr != "" {
+					return errStr
+				}
+			default:
+				return errSelectorValueNotElected(f.Name, raw)
+			}
+		}
+		return ""
+	}
+	return walk(cmd.flags, kwargs)
+}
+
+// bindElectedFields records the values a scope's flags were given, keyed by the
+// declaration, and marks every named flag as supplied so scope validation sees
+// it.
+func bindElectedFields(sel *Flag, ch *ChoiceDecl, fields Fields, sup *suppliedElections, cliByFlag map[*Flag]interface{}) string {
+	for i := range ch.Flags {
+		sub := &ch.Flags[i]
+		key := flagParamName(sub.Name)
+		isMember := ch.member && i == 0
+		if isMember {
+			if !choiceCarriesPayload(ch) {
+				continue
+			}
+			// A member-spelled choice's payload arrives under the reserved name
+			// "value" in a record, and under the member's OWN flag name in the
+			// flat machine form -- which is the property name §24.11 publishes.
+			if v, ok := fields["value"]; ok {
+				cliByFlag[sub] = v
+				sup.suppliedNames[sub.Name] = true
+				continue
+			}
+		}
+		if v, ok := fields[key]; ok {
+			if sub.Type == TypeChoice {
+				continue // handled by the recursive walk
+			}
+			coerced, errStr := coerceInvokeValue(sub, v)
+			if errStr != "" {
+				return errStr
+			}
+			cliByFlag[sub] = coerced
+			sup.suppliedNames[sub.Name] = true
+		}
+	}
+	return ""
 }

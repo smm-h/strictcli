@@ -39,10 +39,30 @@ func buildJSONSchema(cmd *Command) map[string]interface{} {
 	// TypeScript do.
 	required := []interface{}{}
 
+	// The MCP projection is FLATTEN plus a description map (contract §24.11): a
+	// selector contributes one enum property named after itself, every scoped
+	// flag contributes a top-level property and NEVER appears in "required" --
+	// its requiredness is conditional and the schema has no vocabulary for that
+	// -- and a member-spelled selector projects identically to a token-spelled
+	// one, because tokenization is a command-line fact and there are no tokens
+	// at this boundary.
+	addScopedProperties(properties, cmd.flags)
+
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
 		paramName := flagParamName(f.Name)
 		prop := map[string]interface{}{}
+
+		if f.Type == TypeChoice {
+			prop["type"] = "string"
+			prop["enum"] = choiceEnum(f)
+			prop["description"] = f.Help
+			properties[paramName] = prop
+			if f.presence == presenceRequired {
+				required = append(required, paramName)
+			}
+			continue
+		}
 
 		if IsDictType(f.Type) {
 			prop["type"] = "object"
@@ -211,7 +231,7 @@ func (a *App) collectToolsFromGroup(
 func (a *App) makeTool(commandPath string, cmd *Command) Tool {
 	return Tool{
 		Name:          commandPath,
-		Description:   cmd.Help,
+		Description:   toolDescription(cmd),
 		Parameters:    buildJSONSchema(cmd),
 		Effect:        cmd.Effect,
 		Consequential: cmd.Consequential,
@@ -279,5 +299,133 @@ func (a *App) makeRouterTool(commandPaths []string) Tool {
 			}
 			return a.Call(cmdPath, fwd, opts...)
 		},
+	}
+}
+
+// choiceEnum renders a selector's declared choice names as a JSON Schema enum.
+func choiceEnum(sel *Flag) []interface{} {
+	out := make([]interface{}, len(sel.choiceDecls))
+	for i, c := range sel.choiceDecls {
+		out[i] = c.Name
+	}
+	return out
+}
+
+// addScopedProperties flattens every scoped flag into the command's own
+// argument object, at every depth. A member-spelled choice's payload flattens
+// under the MEMBER's own flag name, which the framework already guarantees
+// unique command-wide (contract §24.11). Nothing added here ever joins the
+// schema's "required" array.
+func addScopedProperties(properties map[string]interface{}, flags []Flag) {
+	var walk func(flags []Flag, scoped bool)
+	walk = func(flags []Flag, scoped bool) {
+		for i := range flags {
+			f := &flags[i]
+			if scoped {
+				properties[flagParamName(f.Name)] = scopedPropertySchema(f)
+			}
+			if f.Type != TypeChoice {
+				continue
+			}
+			for _, ch := range f.choiceDecls {
+				walk(ch.Flags, true)
+			}
+		}
+	}
+	walk(flags, false)
+}
+
+// scopedPropertySchema is one scoped flag's JSON Schema property.
+func scopedPropertySchema(f *Flag) map[string]interface{} {
+	prop := map[string]interface{}{}
+	switch {
+	case f.Type == TypeChoice:
+		prop["type"] = "string"
+		prop["enum"] = choiceEnum(f)
+	case IsDictType(f.Type):
+		prop["type"] = "object"
+		prop["additionalProperties"] = map[string]interface{}{"type": jsonSchemaType[ItemType(f.Type)]}
+	case IsListType(f.Type) || f.Repeatable:
+		prop["type"] = "array"
+		prop["items"] = map[string]interface{}{"type": jsonSchemaType[ItemType(f.Type)]}
+	default:
+		prop["type"] = jsonSchemaType[f.Type]
+	}
+	if f.Choices != nil {
+		choices := make([]interface{}, len(f.Choices))
+		copy(choices, f.Choices)
+		prop["enum"] = choices
+	}
+	prop["description"] = f.Help
+	return prop
+}
+
+// toolDescription is a command's help plus, when it declares any selector, the
+// deterministic scope block an agent reads to learn the constraint it cannot
+// see in the flat schema (contract §24.11).
+//
+//	Scoped parameters (enforced at call time):
+//	  via=email: subject (required), recipient (required)
+//	  via=sms: phone_number (required)
+//	  visibility=user-facing type=feature: (no parameters)
+//
+// One line per scope, at every depth, in declaration order. The key is the
+// scope's path rendered as `<selector>=<choice>` segments joined by a single
+// space, using the property names the schema publishes rather than the flags a
+// CLI user types.
+func toolDescription(cmd *Command) string {
+	if cmd.index == nil || !cmd.index.hasSelectors {
+		return cmd.Help
+	}
+	lines := scopeDescriptionLines(cmd.flags, nil)
+	if len(lines) == 0 {
+		return cmd.Help
+	}
+	return cmd.Help + "\n\nScoped parameters (enforced at call time):\n  " + strings.Join(lines, "\n  ")
+}
+
+// scopeDescriptionLines renders one line per scope, depth-first in declaration
+// order.
+func scopeDescriptionLines(flags []Flag, prefix []string) []string {
+	var out []string
+	for i := range flags {
+		f := &flags[i]
+		if f.Type != TypeChoice {
+			continue
+		}
+		for _, ch := range f.choiceDecls {
+			key := append(append([]string{}, prefix...), flagParamName(f.Name)+"="+flagParamName(ch.Name))
+			out = append(out, strings.Join(key, " ")+": "+scopeParameterList(ch))
+			out = append(out, scopeDescriptionLines(ch.Flags, key)...)
+		}
+	}
+	return out
+}
+
+// scopeParameterList renders one scope's parameters in declaration order, each
+// with its presence in parentheses. An empty scope renders "(no parameters)".
+func scopeParameterList(ch *ChoiceDecl) string {
+	var parts []string
+	for i := range ch.Flags {
+		f := &ch.Flags[i]
+		if ch.member && i == 0 && !choiceCarriesPayload(ch) {
+			continue
+		}
+		parts = append(parts, flagParamName(f.Name)+" ("+scopePresenceWord(f)+")")
+	}
+	if len(parts) == 0 {
+		return "(no parameters)"
+	}
+	return strings.Join(parts, ", ")
+}
+
+func scopePresenceWord(f *Flag) string {
+	switch f.presence {
+	case presenceRequired:
+		return "required"
+	case presenceOptional:
+		return "optional"
+	default:
+		return "default: " + formatValueForError(f.Default)
 	}
 }

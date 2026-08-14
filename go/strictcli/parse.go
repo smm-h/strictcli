@@ -206,26 +206,30 @@ func resolveAtPrefix(flagName, raw string, stdinConsumedBy **string) (string, st
 // conflictMode is "cli-wins" (default) or "error" (config+cli/env overlap is an error).
 // When hermetic is true, env var and config resolution are skipped entirely.
 // Returns (kwargs, postGlobalValues, sources, errorString).
-func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string, conflictMode string, hermetic bool, infraRoots map[string]string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
-	// Build flag lookup maps
-	longLookup := make(map[string]*Flag)    // --flag-name -> Flag
-	shortLookup := make(map[string]*Flag)   // -x -> Flag
+func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string, conflictMode string, hermetic bool, infraRoots map[string]string) (map[string]interface{}, map[string]interface{}, map[string]string, string, []string) {
+	// Build flag lookup maps over the command's WHOLE scope tree (contract
+	// §24.3): whether `--target` consumes the next argv element is decided
+	// before any choice is elected, which is why sibling scopes may reuse a name
+	// only with an identical value shape -- any site answers the arity question.
+	longLookup := make(map[string]*Flag)     // --flag-name -> Flag
+	shortLookup := make(map[string]*Flag)    // -x -> Flag
 	negationLookup := make(map[string]*Flag) // --no-flag-name -> Flag
 
-	for i := range cmd.flags {
-		f := &cmd.flags[i]
+	for _, name := range cmd.index.order {
+		f := cmd.index.sites[name][0].flag
 		longLookup["--"+f.Name] = f
-		if f.Short != "" {
-			shortLookup["-"+f.Short] = f
-		}
 		if f.Type == TypeBool && f.Negatable {
 			negationLookup["--no-"+f.Name] = f
 		}
+	}
+	for _, short := range cmd.index.shortOrder {
+		shortLookup["-"+short] = cmd.index.shorts[short][0].flag
 	}
 
 	// Also include global flags in the lookup tables so they are recognized
 	// when placed after the command name (matching Python's _parse_command)
 	globalFlagNames := make(map[string]bool)
+	globalByName := make(map[string]*Flag)
 	for i := range globalFlags {
 		f := &globalFlags[i]
 		longLookup["--"+f.Name] = f
@@ -236,28 +240,26 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			negationLookup["--no-"+f.Name] = f
 		}
 		globalFlagNames[f.Name] = true
+		globalByName[f.Name] = f
 	}
 
-	// Track which flags were set by CLI args
-	cliSet := make(map[string]interface{})
+	// --- Phase 1: TOKENIZE every occurrence, without interpreting any of it.
+	//
+	// Coercion is deferred to phase 4 so that a scope violation is reported
+	// before a coercion failure (§24.3's election -> scope -> value -> presence
+	// precedence). Occurrences keep command-line order, so the value phase
+	// reports the same coercion error, in the same order, as it always did.
+	var occs []occurrence
+	var suppliedOrder []string
+	suppliedSeen := make(map[string]bool)
 	var positionals []string
 
-	storeValue := func(f *Flag, value interface{}) string {
-		if f.Repeatable {
-			if existing, ok := cliSet[f.Name]; ok {
-				cliSet[f.Name] = append(existing.([]interface{}), value)
-			} else {
-				cliSet[f.Name] = []interface{}{value}
-			}
-			if f.Unique {
-				if dup := findDuplicate(cliSet[f.Name].([]interface{})); dup != nil {
-					return errFlagDuplicateValue(f.Name, formatValueForError(dup))
-				}
-			}
-		} else {
-			cliSet[f.Name] = value
+	record := func(name string, raw string, kind occKind) {
+		occs = append(occs, occurrence{name: name, raw: raw, kind: kind})
+		if !suppliedSeen[name] {
+			suppliedSeen[name] = true
+			suppliedOrder = append(suppliedOrder, name)
 		}
-		return ""
 	}
 
 	i := 0
@@ -286,15 +288,13 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 			if f, ok := longLookup[flagPart]; ok {
 				if f.Type == TypeBool {
-					return nil, nil, nil, errBoolFlagNoValue(flagPart)
+					return nil, nil, nil, errBoolFlagNoValue(flagPart), nil
 				}
-				if errStr := parseFlagRawValue(f, valuePart, cliSet, stdinConsumedBy, storeValue); errStr != "" {
-					return nil, nil, nil, errStr
-				}
+				record(f.Name, valuePart, occValue)
 			} else if _, ok := negationLookup[flagPart]; ok {
-				return nil, nil, nil, errBoolNegationNoValue(flagPart)
+				return nil, nil, nil, errBoolNegationNoValue(flagPart), nil
 			} else {
-				return nil, nil, nil, errUnknownFlag(flagPart)
+				return nil, nil, nil, errUnknownFlag(flagPart), nil
 			}
 			i++
 			continue
@@ -302,7 +302,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 		// --no-flag negation
 		if f, ok := negationLookup[tok]; ok {
-			cliSet[f.Name] = false
+			record(f.Name, "", occNegated)
 			i++
 			continue
 		}
@@ -311,19 +311,16 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		if strings.HasPrefix(tok, "--") {
 			f, ok := longLookup[tok]
 			if !ok {
-				return nil, nil, nil, errUnknownFlag(tok)
+				return nil, nil, nil, errUnknownFlag(tok), nil
 			}
 			if f.Type == TypeBool {
-				cliSet[f.Name] = true
+				record(f.Name, "", occBool)
 				i++
 			} else {
 				if i+1 >= len(tokens) {
-					return nil, nil, nil, errFlagRequiresValue(tok)
+					return nil, nil, nil, errFlagRequiresValue(tok), nil
 				}
-				raw := tokens[i+1]
-				if errStr := parseFlagRawValue(f, raw, cliSet, stdinConsumedBy, storeValue); errStr != "" {
-					return nil, nil, nil, errStr
-				}
+				record(f.Name, tokens[i+1], occValue)
 				i += 2
 			}
 			continue
@@ -333,16 +330,13 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		if strings.HasPrefix(tok, "-") && len(tok) == 2 {
 			if f, ok := shortLookup[tok]; ok {
 				if f.Type == TypeBool {
-					cliSet[f.Name] = true
+					record(f.Name, "", occBool)
 					i++
 				} else {
 					if i+1 >= len(tokens) {
-						return nil, nil, nil, errFlagRequiresValue(tok)
+						return nil, nil, nil, errFlagRequiresValue(tok), nil
 					}
-					raw := tokens[i+1]
-					if errStr := parseFlagRawValue(f, raw, cliSet, stdinConsumedBy, storeValue); errStr != "" {
-						return nil, nil, nil, errStr
-					}
+					record(f.Name, tokens[i+1], occValue)
 					i += 2
 				}
 				continue
@@ -355,237 +349,200 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		i++
 	}
 
+	// --- Phase 2: ELECT, outermost first, then recursively inside each elected
+	// choice. A token-spelled selector elects from any source; a member-spelled
+	// one elects from the command line only (§24.6).
+	sup := newSuppliedElections()
+	for _, o := range occs {
+		sup.suppliedNames[o.name] = true
+		if _, isGlobal := globalFlagNames[o.name]; isGlobal {
+			continue
+		}
+		sites, ok := cmd.index.sites[o.name]
+		if !ok {
+			continue
+		}
+		f := sites[0].flag
+		if f.Type == TypeChoice && !f.memberSpelled {
+			sup.tokenValues[o.name] = append(sup.tokenValues[o.name], o.raw)
+			continue
+		}
+		if isMemberFlagName(cmd.index, o.name) {
+			// A bool member is elected by `--<name>` and only when the value it
+			// resolves to is true; `--no-<name>` DECLINES (§21.2).
+			sup.memberElected[o.name] = o.kind != occNegated
+		}
+	}
+	amb := ambientSource{hermetic: hermetic, configData: configData}
+	est, electErr := elect(cmd, sup, amb)
+	if electErr != "" {
+		return nil, nil, nil, electErr, nil
+	}
+
+	// --- Phase 3: validate SCOPE membership of every supplied flag.
+	if errStr := est.checkScope(suppliedOrder); errStr != "" {
+		return nil, nil, nil, errStr, est.skipped
+	}
+
+	// --- Phase 4a: coerce the collected occurrences, in command-line order,
+	// against the LIVE declaration of each name.
+	cliByFlag := make(map[*Flag]interface{})
+	for _, o := range occs {
+		f := est.liveFlagFor(cmd, globalByName, o.name)
+		if f == nil {
+			continue // unreachable: scope validation passed
+		}
+		if f.Type == TypeChoice {
+			continue // the election is the selector's value
+		}
+		if o.kind == occNegated {
+			cliByFlag[f] = false
+			continue
+		}
+		if o.kind == occBool {
+			cliByFlag[f] = true
+			continue
+		}
+		if errStr := parseFlagRawValue(f, o.raw, cliByFlag, stdinConsumedBy); errStr != "" {
+			return nil, nil, nil, errStr, est.skipped
+		}
+	}
+
+	// Root-scope and global CLI values keep their name-keyed store, which is
+	// what the dependency, choices and validate machinery reads unchanged.
+	cliSet := make(map[string]interface{})
+	for i := range cmd.flags {
+		if v, ok := cliByFlag[&cmd.flags[i]]; ok {
+			cliSet[cmd.flags[i].Name] = v
+		}
+	}
+	for i := range globalFlags {
+		if v, ok := cliByFlag[&globalFlags[i]]; ok {
+			cliSet[globalFlags[i].Name] = v
+		}
+	}
+
 	// Track which flag names are set by env vs config (for source attribution).
 	envNames := make(map[string]bool)
 	configNames := make(map[string]bool)
 
 	// Resolve env vars for flags not set by CLI (skipped under --hermetic)
 	if !hermetic {
-	for i := range cmd.flags {
-		f := &cmd.flags[i]
-		if _, ok := cliSet[f.Name]; ok {
-			continue
-		}
-		if f.Env == "" {
-			continue
-		}
-		envVal, ok := os.LookupEnv(f.Env)
-		if !ok {
-			continue
-		}
-		// Compound types: dict parses JSON from env, list uses env_separator
-		if IsDictType(f.Type) {
-			entries, errStr := parseDictEnvValue(f.Name, envVal, ItemType(f.Type))
-			if errStr != "" {
-				return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
-			}
-			cliSet[f.Name] = entries
-			envNames[f.Name] = true
-			continue
-		}
-		if IsListType(f.Type) {
-			if f.EnvSeparator == "" {
-				return nil, nil, nil, errListFlagEnvRequiresSeparator(f.Name)
-			}
-			parts := splitEscaped(envVal, f.EnvSeparator[0])
-			elemType := ItemType(f.Type)
-			coercedList := make([]interface{}, 0, len(parts))
-			for _, element := range parts {
-				val, errStr := coerceToScalar(f.Name, element, elemType, nil)
-				if errStr != "" {
-					return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
-				}
-				coercedList = append(coercedList, val)
-			}
-			if f.Unique {
-				if dup := findDuplicate(coercedList); dup != nil {
-					return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
-				}
-			}
-			cliSet[f.Name] = coercedList
-			envNames[f.Name] = true
-			continue
-		}
-		switch f.Type {
-		case TypeBool:
-			boolVal, err := parseBoolStrict(envVal)
-			if err != nil {
-				return nil, nil, nil, errInvalidBoolEnvValue(envVal, f.Env, f.Name)
-			}
-			cliSet[f.Name] = boolVal
-		case TypeInt:
-			if f.Repeatable && f.EnvSeparator != "" {
-				parts := splitEscaped(envVal, f.EnvSeparator[0])
-				coercedList := make([]interface{}, 0, len(parts))
-				for _, element := range parts {
-					intVal, err := parseIntStrict(element)
-					if err != nil {
-						return nil, nil, nil, errFlagErrFromEnvVar(f.Name, err.Error(), f.Env)
-					}
-					coercedList = append(coercedList, intVal)
-				}
-				if f.Unique {
-					if dup := findDuplicate(coercedList); dup != nil {
-						return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
-					}
-				}
-				cliSet[f.Name] = coercedList
-			} else {
-				intVal, err := parseIntStrict(envVal)
-				if err != nil {
-					return nil, nil, nil, errFlagErrFromEnvVar(f.Name, err.Error(), f.Env)
-				}
-				if f.Repeatable {
-					cliSet[f.Name] = []interface{}{intVal}
-				} else {
-					cliSet[f.Name] = intVal
-				}
-			}
-		case TypeFloat:
-			if f.Repeatable && f.EnvSeparator != "" {
-				parts := splitEscaped(envVal, f.EnvSeparator[0])
-				coercedList := make([]interface{}, 0, len(parts))
-				for _, element := range parts {
-					floatVal, errStr := parseFloatStrict(f.Name, element)
-					if errStr != "" {
-						return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
-					}
-					coercedList = append(coercedList, floatVal)
-				}
-				if f.Unique {
-					if dup := findDuplicate(coercedList); dup != nil {
-						return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
-					}
-				}
-				cliSet[f.Name] = coercedList
-			} else {
-				floatVal, errStr := parseFloatStrict(f.Name, envVal)
-				if errStr != "" {
-					return nil, nil, nil, errWrappedFromEnvVar(errStr, f.Env)
-				}
-				if f.Repeatable {
-					cliSet[f.Name] = []interface{}{floatVal}
-				} else {
-					cliSet[f.Name] = floatVal
-				}
-			}
-		default: // TypeStr
-			if f.Repeatable && f.EnvSeparator != "" {
-				parts := splitEscaped(envVal, f.EnvSeparator[0])
-				coercedList := make([]interface{}, 0, len(parts))
-				for _, element := range parts {
-					resolved, errStr := resolveAtPrefix(f.Name, element, stdinConsumedBy)
-					if errStr != "" {
-						return nil, nil, nil, errStr
-					}
-					coercedList = append(coercedList, resolved)
-				}
-				if f.Unique {
-					if dup := findDuplicate(coercedList); dup != nil {
-						return nil, nil, nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
-					}
-				}
-				cliSet[f.Name] = coercedList
-			} else {
-				resolved, errStr := resolveAtPrefix(f.Name, envVal, stdinConsumedBy)
-				if errStr != "" {
-					return nil, nil, nil, errStr
-				}
-				if f.Repeatable {
-					cliSet[f.Name] = []interface{}{resolved}
-				} else {
-					cliSet[f.Name] = resolved
-				}
-			}
-		}
-		envNames[f.Name] = true
-	}
-
-	// Resolve config values for flags not set by CLI or env.
-	// In conflict mode "error", detect when config would set a flag
-	// already set by CLI or env.
-	if configData != nil {
 		for i := range cmd.flags {
 			f := &cmd.flags[i]
-			param := flagParamName(f.Name)
-			configVal, hasConfig := configData[param]
-			if !hasConfig {
+			// A selector's own env binding was already consulted by the election
+			// phase; consulting it again here would be a second application site.
+			if f.Type == TypeChoice {
 				continue
 			}
-			// Effective mode: per-flag override if set, else the app default.
-			effectiveMode := conflictMode
-			if f.hasConflictMode {
-				effectiveMode = f.ConflictMode
+			if _, ok := cliSet[f.Name]; ok {
+				continue
 			}
-			if existing, alreadySet := cliSet[f.Name]; alreadySet {
-				// Flag set by CLI or env, config also has a value. This is a
-				// conflict ONLY when the values diverge; identical values agree.
-				if effectiveMode == "error" {
-					coerced, errStr := coerceConfigValue(configVal, f)
-					if errStr != "" {
-						return nil, nil, nil, errConfigValueError(f.Name, errStr)
-					}
-					if !valuesEqualForConflict(existing, coerced, f) {
-						existingSource := "cli"
-						if envNames[f.Name] {
-							existingSource = "env"
-						}
-						return nil, nil, nil, errFlagSetInBothAndConfig(f.Name, existingSource)
-					}
-				}
-				continue // cli-wins, or error mode with matching values
+			if f.Env == "" {
+				continue
 			}
-			coerced, errStr := coerceConfigValue(configVal, f)
+			envVal, ok := os.LookupEnv(f.Env)
+			if !ok {
+				continue
+			}
+			val, errStr := resolveFlagEnvValue(f, envVal, stdinConsumedBy)
 			if errStr != "" {
-				return nil, nil, nil, errConfigValueError(f.Name, errStr)
+				return nil, nil, nil, errStr, est.skipped
 			}
-			if f.Unique {
-				if arr, ok := coerced.([]interface{}); ok {
-					if dup := findDuplicate(arr); dup != nil {
-						return nil, nil, nil, errConfigValueDuplicate(f.Name, formatValueForError(dup))
-					}
-				}
-			}
-			cliSet[f.Name] = coerced
-			configNames[f.Name] = true
+			cliSet[f.Name] = val
+			envNames[f.Name] = true
 		}
 
-		// Config-conflict detection for GLOBAL flags parsed AFTER the command
-		// name (`tool cmd --global X`). This is CONFLICT-DETECTION ONLY: config
-		// values for globals were already APPLIED during the pre-command
-		// global-flag pass (extractGlobalFlags), so applying them again here
-		// would be a second application site -- wrong even if idempotent. We
-		// must never write a config value into cliSet for a global here.
-		// Globals that reach cliSet at this point are purely CLI-parsed
-		// (post-command env for globals is never resolved here), so the
-		// divergence source is always "cli".
-		for i := range globalFlags {
-			f := &globalFlags[i]
-			existing, alreadySet := cliSet[f.Name]
-			if !alreadySet {
-				continue
+		// Resolve config values for flags not set by CLI or env.
+		// In conflict mode "error", detect when config would set a flag
+		// already set by CLI or env.
+		if configData != nil {
+			for i := range cmd.flags {
+				f := &cmd.flags[i]
+				// A selector's own config binding was already consulted by the
+				// election phase (§24.6).
+				if f.Type == TypeChoice {
+					continue
+				}
+				param := flagParamName(f.Name)
+				configVal, hasConfig := configData[param]
+				if !hasConfig {
+					continue
+				}
+				// Effective mode: per-flag override if set, else the app default.
+				effectiveMode := conflictMode
+				if f.hasConflictMode {
+					effectiveMode = f.ConflictMode
+				}
+				if existing, alreadySet := cliSet[f.Name]; alreadySet {
+					// Flag set by CLI or env, config also has a value. This is a
+					// conflict ONLY when the values diverge; identical values agree.
+					if effectiveMode == "error" {
+						coerced, errStr := coerceConfigValue(configVal, f)
+						if errStr != "" {
+							return nil, nil, nil, errConfigValueError(f.Name, errStr), est.skipped
+						}
+						if !valuesEqualForConflict(existing, coerced, f) {
+							existingSource := "cli"
+							if envNames[f.Name] {
+								existingSource = "env"
+							}
+							return nil, nil, nil, errFlagSetInBothAndConfig(f.Name, existingSource), est.skipped
+						}
+					}
+					continue // cli-wins, or error mode with matching values
+				}
+				coerced, errStr := coerceConfigValue(configVal, f)
+				if errStr != "" {
+					return nil, nil, nil, errConfigValueError(f.Name, errStr), est.skipped
+				}
+				if f.Unique {
+					if arr, ok := coerced.([]interface{}); ok {
+						if dup := findDuplicate(arr); dup != nil {
+							return nil, nil, nil, errConfigValueDuplicate(f.Name, formatValueForError(dup)), est.skipped
+						}
+					}
+				}
+				cliSet[f.Name] = coerced
+				configNames[f.Name] = true
 			}
-			param := flagParamName(f.Name)
-			configVal, hasConfig := configData[param]
-			if !hasConfig {
-				continue
-			}
-			effectiveMode := conflictMode
-			if f.hasConflictMode {
-				effectiveMode = f.ConflictMode
-			}
-			if effectiveMode != "error" {
-				continue
-			}
-			coerced, errStr := coerceConfigValue(configVal, f)
-			if errStr != "" {
-				return nil, nil, nil, errConfigValueError(f.Name, errStr)
-			}
-			if !valuesEqualForConflict(existing, coerced, f) {
-				return nil, nil, nil, errFlagSetInBothCliAndConfig(f.Name)
+
+			// Config-conflict detection for GLOBAL flags parsed AFTER the command
+			// name (`tool cmd --global X`). This is CONFLICT-DETECTION ONLY: config
+			// values for globals were already APPLIED during the pre-command
+			// global-flag pass (extractGlobalFlags), so applying them again here
+			// would be a second application site -- wrong even if idempotent. We
+			// must never write a config value into cliSet for a global here.
+			// Globals that reach cliSet at this point are purely CLI-parsed
+			// (post-command env for globals is never resolved here), so the
+			// divergence source is always "cli".
+			for i := range globalFlags {
+				f := &globalFlags[i]
+				existing, alreadySet := cliSet[f.Name]
+				if !alreadySet {
+					continue
+				}
+				param := flagParamName(f.Name)
+				configVal, hasConfig := configData[param]
+				if !hasConfig {
+					continue
+				}
+				effectiveMode := conflictMode
+				if f.hasConflictMode {
+					effectiveMode = f.ConflictMode
+				}
+				if effectiveMode != "error" {
+					continue
+				}
+				coerced, errStr := coerceConfigValue(configVal, f)
+				if errStr != "" {
+					return nil, nil, nil, errConfigValueError(f.Name, errStr), est.skipped
+				}
+				if !valuesEqualForConflict(existing, coerced, f) {
+					return nil, nil, nil, errFlagSetInBothCliAndConfig(f.Name), est.skipped
+				}
 			}
 		}
-	}
 	} // end if !hermetic
 
 	// Wrap cliSet into a sourcedStore with proper source attribution.
@@ -602,7 +559,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		}
 	}
 
-	return validateAndBuildKwargs(cmd, store, positionals, globalFlagNames, infraRoots)
+	kwargs, postGlobals, sources, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames, infraRoots, est, cliByFlag, amb, stdinConsumedBy)
+	return kwargs, postGlobals, sources, errStr, est.skipped
 }
 
 // applyFlagDefault resolves the default value for a flag that was not provided
@@ -660,58 +618,11 @@ func applyFlagDefault(f *Flag, prefix string, roots map[string]string) (interfac
 // runs custom validation, resolves positional args, and builds the final
 // kwargs map.
 // Returns (kwargs, postGlobalValues, errorString).
-func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []string, globalFlagNames map[string]bool, infraRoots map[string]string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
-	// Enforce mutex group constraints (before defaults).
-	// Election is CLI-only and value-aware (effects contract §21):
-	//   - a bool member elects only when the typed token resolved to true;
-	//     `--no-x` DECLINES (it names the member and says it is not the choice)
-	//   - every other type elects on presence with any value, including ""
-	//   - env and config elect nothing AND supply nothing: their entries are
-	//     dropped here, before dependency validation, so an unelected member
-	//     delivers its declared default (or nil) and never a stale env value
-	for _, mg := range cmd.mutex {
-		var elected []string
-		var declined []string
-		var firstDeclined string
-		for _, f := range mg.Flags {
-			if store.isEnvOrConfig(f.Name) {
-				store.delete(f.Name)
-				continue
-			}
-			if !store.isCLI(f.Name) {
-				continue
-			}
-			if v, _ := store.get(f.Name); f.Type == TypeBool && v != true {
-				declined = append(declined, "--no-"+f.Name)
-				if firstDeclined == "" {
-					firstDeclined = f.Name
-				}
-				continue
-			}
-			elected = append(elected, "--"+f.Name)
-		}
-		clause := ""
-		if firstDeclined != "" {
-			clause = errMutexDeclineClause(firstDeclined)
-		}
-		if len(elected) > 1 {
-			return nil, nil, nil, errMutuallyExclusive(strings.Join(elected, " and "))
-		}
-		if len(elected) == 1 && len(declined) > 0 {
-			return nil, nil, nil, errMutexRedundantNegation(
-				strings.Join(declined, " and "),
-				strings.TrimPrefix(elected[0], "--"),
-				clause,
-			)
-		}
-		if len(elected) == 0 {
-			names := make([]string, len(mg.Flags))
-			for j, f := range mg.Flags {
-				names[j] = "--" + f.Name
-			}
-			return nil, nil, nil, errOneOfRequired(strings.Join(names, ", "), clause)
-		}
-	}
+func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []string, globalFlagNames map[string]bool, infraRoots map[string]string, est *electionState, cliByFlag map[*Flag]interface{}, amb ambientSource, stdinConsumedBy **string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
+	// Election ran in phase 2 and scope validation in phase 3 (scope_parse.go).
+	// MutexGroup is deleted: "exactly one of these" is a member-spelled selector
+	// now, and §21.4's three errors survive verbatim inside the election phase
+	// (contract §21's supersession box, §24.4).
 
 	// Resolve Implies dependencies (before general dependency validation).
 	// Implied values are stored with SourceImplied.
@@ -769,11 +680,24 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 		}
 	}
 
-	// Apply defaults (SourceDefault). A mutex member is not special here any
-	// more: the presence exemption is deleted, and a member's own declaration
-	// says what its absence means (contract §23.4).
+	// Apply defaults (SourceDefault), and resolve every selector's elected
+	// record. Presence is the LAST phase: a required selector that elected
+	// nothing is refused here, after scope and value errors, in declaration
+	// order beside the ordinary required-flag errors (contract §24.3).
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
+		if f.Type == TypeChoice {
+			ls := est.bySel[f]
+			if ls.unsatisfied {
+				return nil, nil, nil, est.unsatisfiedSelectorError(ls)
+			}
+			elected, errMsg := est.resolveElected(ls, cliByFlag, amb, infraRoots, stdinConsumedBy)
+			if errMsg != "" {
+				return nil, nil, nil, errMsg
+			}
+			store.set(f.Name, elected, electionSource(ls.origin))
+			continue
+		}
 		if store.has(f.Name) {
 			continue
 		}
@@ -1332,10 +1256,10 @@ func coerceJSONValueToScalar(value interface{}, scalarType FlagType) (interface{
 	return value, ""
 }
 
-// storeDictValue merges dict entries into the cliSet map for a dict flag.
+// storeDictValue merges dict entries into the per-flag CLI value map.
 // Returns an error string (empty on success).
-func storeDictValue(cliSet map[string]interface{}, f *Flag, entries map[string]interface{}) string {
-	if existing, ok := cliSet[f.Name]; ok {
+func storeDictValue(cliByFlag map[*Flag]interface{}, f *Flag, entries map[string]interface{}) string {
+	if existing, ok := cliByFlag[f]; ok {
 		m := existing.(map[string]interface{})
 		for k, v := range entries {
 			m[k] = v
@@ -1345,22 +1269,43 @@ func storeDictValue(cliSet map[string]interface{}, f *Flag, entries map[string]i
 		for k, v := range entries {
 			m[k] = v
 		}
-		cliSet[f.Name] = m
+		cliByFlag[f] = m
+	}
+	return ""
+}
+
+// storeCLIValue records one coerced occurrence, appending for a repeatable flag
+// and overwriting for a scalar one. The map is keyed by the DECLARATION rather
+// than by name, because a name may be declared in several mutually exclusive
+// scopes (contract §24.7).
+func storeCLIValue(cliByFlag map[*Flag]interface{}, f *Flag, value interface{}) string {
+	if !f.Repeatable {
+		cliByFlag[f] = value
+		return ""
+	}
+	if existing, ok := cliByFlag[f]; ok {
+		cliByFlag[f] = append(existing.([]interface{}), value)
+	} else {
+		cliByFlag[f] = []interface{}{value}
+	}
+	if f.Unique {
+		if dup := findDuplicate(cliByFlag[f].([]interface{})); dup != nil {
+			return errFlagDuplicateValue(f.Name, formatValueForError(dup))
+		}
 	}
 	return ""
 }
 
 // parseFlagRawValue parses a raw string value for a flag, handling scalar,
-// list, and dict types. For dict flags, it modifies cliSet directly.
-// For scalar and list flags, it returns the coerced value via storeValue.
+// list, and dict types, and records it against the flag's declaration.
 // Returns error string (empty on success).
-func parseFlagRawValue(f *Flag, raw string, cliSet map[string]interface{}, stdinConsumedBy **string, storeValue func(*Flag, interface{}) string) string {
+func parseFlagRawValue(f *Flag, raw string, cliByFlag map[*Flag]interface{}, stdinConsumedBy **string) string {
 	if IsDictType(f.Type) {
 		entries, errStr := parseDictValue(f.Name, raw, ItemType(f.Type))
 		if errStr != "" {
 			return errStr
 		}
-		return storeDictValue(cliSet, f, entries)
+		return storeDictValue(cliByFlag, f, entries)
 	}
 	// For list flags, coerce using the item type
 	scalarType := f.Type
@@ -1371,5 +1316,134 @@ func parseFlagRawValue(f *Flag, raw string, cliSet map[string]interface{}, stdin
 	if errStr != "" {
 		return errStr
 	}
-	return storeValue(f, val)
+	return storeCLIValue(cliByFlag, f, val)
+}
+
+// resolveFlagEnvValue coerces one env var value for a flag, applying the same
+// compound, repeatable and @-prefix rules the CLI path applies. It is shared by
+// the root-scope env pass and the scoped-flag pass, so a conditional binding
+// resolves exactly as an unconditional one does when its scope is elected
+// (contract §24.6).
+func resolveFlagEnvValue(f *Flag, envVal string, stdinConsumedBy **string) (interface{}, string) {
+	// Compound types: dict parses JSON from env, list uses env_separator
+	if IsDictType(f.Type) {
+		entries, errStr := parseDictEnvValue(f.Name, envVal, ItemType(f.Type))
+		if errStr != "" {
+			return nil, errWrappedFromEnvVar(errStr, f.Env)
+		}
+		return entries, ""
+	}
+	if IsListType(f.Type) {
+		if f.EnvSeparator == "" {
+			return nil, errListFlagEnvRequiresSeparator(f.Name)
+		}
+		parts := splitEscaped(envVal, f.EnvSeparator[0])
+		elemType := ItemType(f.Type)
+		coercedList := make([]interface{}, 0, len(parts))
+		for _, element := range parts {
+			val, errStr := coerceToScalar(f.Name, element, elemType, nil)
+			if errStr != "" {
+				return nil, errWrappedFromEnvVar(errStr, f.Env)
+			}
+			coercedList = append(coercedList, val)
+		}
+		if f.Unique {
+			if dup := findDuplicate(coercedList); dup != nil {
+				return nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
+			}
+		}
+		return coercedList, ""
+	}
+	switch f.Type {
+	case TypeBool:
+		boolVal, err := parseBoolStrict(envVal)
+		if err != nil {
+			return nil, errInvalidBoolEnvValue(envVal, f.Env, f.Name)
+		}
+		return boolVal, ""
+	case TypeInt:
+		if f.Repeatable && f.EnvSeparator != "" {
+			parts := splitEscaped(envVal, f.EnvSeparator[0])
+			coercedList := make([]interface{}, 0, len(parts))
+			for _, element := range parts {
+				intVal, err := parseIntStrict(element)
+				if err != nil {
+					return nil, errFlagErrFromEnvVar(f.Name, err.Error(), f.Env)
+				}
+				coercedList = append(coercedList, intVal)
+			}
+			if f.Unique {
+				if dup := findDuplicate(coercedList); dup != nil {
+					return nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
+				}
+			}
+			return coercedList, ""
+		} else {
+			intVal, err := parseIntStrict(envVal)
+			if err != nil {
+				return nil, errFlagErrFromEnvVar(f.Name, err.Error(), f.Env)
+			}
+			if f.Repeatable {
+				return []interface{}{intVal}, ""
+			} else {
+				return intVal, ""
+			}
+		}
+	case TypeFloat:
+		if f.Repeatable && f.EnvSeparator != "" {
+			parts := splitEscaped(envVal, f.EnvSeparator[0])
+			coercedList := make([]interface{}, 0, len(parts))
+			for _, element := range parts {
+				floatVal, errStr := parseFloatStrict(f.Name, element)
+				if errStr != "" {
+					return nil, errWrappedFromEnvVar(errStr, f.Env)
+				}
+				coercedList = append(coercedList, floatVal)
+			}
+			if f.Unique {
+				if dup := findDuplicate(coercedList); dup != nil {
+					return nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
+				}
+			}
+			return coercedList, ""
+		} else {
+			floatVal, errStr := parseFloatStrict(f.Name, envVal)
+			if errStr != "" {
+				return nil, errWrappedFromEnvVar(errStr, f.Env)
+			}
+			if f.Repeatable {
+				return []interface{}{floatVal}, ""
+			} else {
+				return floatVal, ""
+			}
+		}
+	default: // TypeStr
+		if f.Repeatable && f.EnvSeparator != "" {
+			parts := splitEscaped(envVal, f.EnvSeparator[0])
+			coercedList := make([]interface{}, 0, len(parts))
+			for _, element := range parts {
+				resolved, errStr := resolveAtPrefix(f.Name, element, stdinConsumedBy)
+				if errStr != "" {
+					return nil, errStr
+				}
+				coercedList = append(coercedList, resolved)
+			}
+			if f.Unique {
+				if dup := findDuplicate(coercedList); dup != nil {
+					return nil, errFlagDuplicateValueFromEnv(f.Name, formatValueForError(dup), f.Env)
+				}
+			}
+			return coercedList, ""
+		} else {
+			resolved, errStr := resolveAtPrefix(f.Name, envVal, stdinConsumedBy)
+			if errStr != "" {
+				return nil, errStr
+			}
+			if f.Repeatable {
+				return []interface{}{resolved}, ""
+			} else {
+				return resolved, ""
+			}
+		}
+	}
 }

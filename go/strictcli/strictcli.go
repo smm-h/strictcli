@@ -27,6 +27,12 @@ const (
 	TypeInt   FlagType = iota
 	TypeFloat FlagType = iota
 
+	// TypeChoice is a SELECTOR: a flag whose value elects exactly one of its
+	// declared choices, each of which owns a scope of flags legal only while
+	// that choice is elected (contract §24). It is not a scalar and carries no
+	// value shape of its own.
+	TypeChoice FlagType = iota
+
 	// Compound type bit flags
 	listBit FlagType = 0x100
 	dictBit FlagType = 0x200
@@ -148,6 +154,21 @@ type Flag struct {
 	// flag-colliding ConfigField inherits the flag's handling.
 	ConflictMode string
 
+	// choiceRecords carries the per-entry help of a value flag's Choices, in
+	// declaration order and index-aligned with Choices. Help rendering reads it;
+	// the parser reads Choices (contract §24.2).
+	choiceRecords []ChoiceValue
+
+	// choiceDecls is a SELECTOR's declared choices, in declaration order. It is
+	// unexported on purpose: a Flag struct literal cannot be a selector at all,
+	// which is §23.2's presenceBits guarantee extended to the new construct
+	// (contract §24.12).
+	choiceDecls []*ChoiceDecl
+	// memberSpelled records that the selector was declared with
+	// MemberChoiceFlag: its choices are elected by their own flags and no
+	// selector token is ever typed (contract §24.4).
+	memberSpelled bool
+
 	// hasDefault records that Default(v) was applied. It is internal
 	// bookkeeping for the declared value only: requiredness comes from
 	// `presence`, never from this field (contract §23.4).
@@ -170,19 +191,15 @@ type Arg struct {
 	Type       FlagType
 	Choices    []interface{}
 
-	hasDefault   bool
-	presence     presenceKind
-	presenceBits uint8
+	choiceRecords []ChoiceValue
+	hasDefault    bool
+	presence      presenceKind
+	presenceBits  uint8
 }
 
 // FlagSet is a reusable bundle of flags.
 type FlagSet struct {
 	Name  string
-	Flags []Flag
-}
-
-// MutexGroup is a group of mutually exclusive flags. Exactly one must be provided.
-type MutexGroup struct {
 	Flags []Flag
 }
 
@@ -305,14 +322,17 @@ type Command struct {
 	// (contract §19.6) -- a SQL dump, an SVG, a hash-verified JSON document.
 	// In machine mode the envelope moves to stderr so the artifact's bytes are
 	// untouched. Outside machine mode the declaration changes nothing at all.
-	OwnsStdout         bool
-	Grants             []Grant
-	Forwarding         *Forwarding
-	flags              []Flag
-	args               []Arg
-	flagSets           []FlagSet
-	mutex              []MutexGroup
-	dependencies       []Dependency
+	OwnsStdout   bool
+	Grants       []Grant
+	Forwarding   *Forwarding
+	flags        []Flag
+	args         []Arg
+	flagSets     []FlagSet
+	dependencies []Dependency
+	// index is the command's whole declaration tree flattened by name, built
+	// once at registration (contract §24). It is what makes tokenization,
+	// election, scope validation and help rendering see every depth.
+	index              *flagIndex
 	tags               []string
 	configFields       []string // bound config field names
 	Passthrough        bool
@@ -694,13 +714,30 @@ func WithTestCoverage() AppOption {
 }
 
 // FlagOption configures a Flag.
-type FlagOption func(*Flag)
+//
+// It is an INTERFACE rather than a func type (contract §24.12, ruling S12): a
+// func cannot also carry a choice's name, help, scope and IDENTITY, and identity
+// is what lets a handler switch on a choice by reference instead of by string.
+// Every constructor's signature is unchanged -- Required() still returns
+// FlagOption and still compiles at every call site. The one caller shape that
+// breaks is a hand-written strictcli.FlagOption func literal, which can reach
+// only Flag's exported fields, cannot declare presence, and therefore already
+// fails registration today (§23.2).
+type FlagOption interface {
+	applyFlag(*Flag)
+}
+
+// flagOptFunc adapts a plain func(*Flag) to the FlagOption interface. It is the
+// carrier every option constructor below returns.
+type flagOptFunc func(*Flag)
+
+func (fn flagOptFunc) applyFlag(f *Flag) { fn(f) }
 
 // Short sets the single-character short form for a flag.
 func Short(s string) FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.Short = s
-	}
+	})
 }
 
 // Default declares the flag's presence as "a default value the framework
@@ -711,68 +748,111 @@ func Short(s string) FlagOption {
 // Default(nil) is a registration error: a null-valued default is not a spelling
 // of optionality. Use Optional(), which delivers nil when the flag is absent.
 func Default(v interface{}) FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.Default = v
 		f.hasDefault = true
 		f.presenceBits |= presenceBitDefault
-	}
+	})
 }
 
 // Required declares that a value must be supplied for this flag, from any
 // source (CLI, env, config, or an implication). One of the three sibling
 // presence options; see Default.
 func Required() FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.presenceBits |= presenceBitRequired
-	}
+	})
 }
 
 // Optional declares that absence is legal and is delivered AS absence: the
 // handler receives nil. One of the three sibling presence options; see Default.
 func Optional() FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.presenceBits |= presenceBitOptional
-	}
+	})
 }
 
 // Env sets the environment variable name for a flag.
 func Env(varName string) FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.Env = varName
-	}
+	})
 }
 
 // Prefixed controls whether env var prefix validation is applied.
 func Prefixed(b bool) FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.Prefixed = b
-	}
+	})
 }
 
-// Choices sets the allowed values for a flag.
-func Choices(vals ...interface{}) FlagOption {
-	return func(f *Flag) {
-		if vals == nil {
-			f.Choices = []interface{}{}
-		} else {
-			f.Choices = vals
+// ChoiceValue is one entry of a value flag's (or positional arg's) choices list:
+// a value plus its OPTIONAL help. It is minted only by Ch -- a
+// ChoiceValue struct literal declares a bare value and is refused at
+// registration (contract §24.2: an entry that may carry help and an entry that
+// carries none would otherwise be two spellings of one fact).
+type ChoiceValue struct {
+	// Value is the allowed value, of the flag's or arg's declared type.
+	Value interface{}
+	// Help is the entry's help text. Empty means "no help", which is the one
+	// place in the framework an empty help string is legal: Go has no optional
+	// parameters, and an empty help string is refused everywhere it is
+	// mandatory, so the spelling has no second meaning to destroy (§24.12).
+	Help string
+
+	// viaCh records that this record came from Ch(). A struct literal reaches
+	// the constructors with it false and is refused, the same guarantee
+	// presenceBits gives the presence declaration (§23.2).
+	viaCh bool
+}
+
+// Ch declares one choices entry: a value and its help. Ch(v, "") is the
+// no-help spelling.
+func Ch(value interface{}, help string) ChoiceValue {
+	return ChoiceValue{Value: value, Help: help, viaCh: true}
+}
+
+// choiceValuesToRecords validates a choices list and splits it into the plain
+// value list the parser and schema use and the record list help rendering uses.
+// name is the flag or arg name for the error text.
+func choiceValuesToRecords(name string, vals []ChoiceValue) ([]interface{}, []ChoiceValue) {
+	values := make([]interface{}, len(vals))
+	records := make([]ChoiceValue, len(vals))
+	for i, cv := range vals {
+		if !cv.viaCh {
+			panic(errChoicesEntryNotRecord(name, i))
 		}
+		values[i] = cv.Value
+		records[i] = cv
 	}
+	if vals == nil {
+		values = []interface{}{}
+		records = []ChoiceValue{}
+	}
+	return values, records
+}
+
+// Choices sets the allowed values for a flag. Every entry is a record built by
+// Ch(value, help); the bare-value entry is deleted (contract §24.2).
+func Choices(vals ...ChoiceValue) FlagOption {
+	return flagOptFunc(func(f *Flag) {
+		f.Choices, f.choiceRecords = choiceValuesToRecords(f.Name, vals)
+	})
 }
 
 // Repeatable marks a flag as accepting multiple occurrences.
 func Repeatable() FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.Repeatable = true
-	}
+	})
 }
 
 // Unique controls whether a repeatable flag rejects duplicate values.
 func Unique(b bool) FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.Unique = b
 		f.hasUnique = true
-	}
+	})
 }
 
 // ConflictMode sets the per-flag config conflict mode, overriding the app-level
@@ -780,13 +860,13 @@ func Unique(b bool) FlagOption {
 // only to flags; standalone ConfigFields have no CLI/env conflict surface, and a
 // flag-colliding ConfigField inherits the flag's handling.
 func ConflictMode(mode string) FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		if mode != "cli-wins" && mode != "error" {
 			panic(errConflictModeBadMode(mode))
 		}
 		f.ConflictMode = mode
 		f.hasConflictMode = true
-	}
+	})
 }
 
 // ConnectionURLFlag marks a flag as a connection-URL (URL-class) flag bound to
@@ -796,32 +876,32 @@ func ConflictMode(mode string) FlagOption {
 // via WithConnectionEnv is a registration-time hard error, as is marking a flag
 // URL-class without a binding.
 func ConnectionURLFlag(envVar string) FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.ConnectionURL = true
 		f.ConnectionEnv = envVar
-	}
+	})
 }
 
 // EnvSeparator sets the character used to split an env var value into multiple
 // values for a repeatable flag (e.g., "," to split "a,b,c" into ["a","b","c"]).
 func EnvSeparator(sep string) FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.EnvSeparator = sep
-	}
+	})
 }
 
 // ValidateFn sets a validation function for a flag.
 func ValidateFn(fn func(interface{}) error) FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.Validate = fn
-	}
+	})
 }
 
 // Negatable controls whether a bool flag supports --no-X negation.
 func NegatableOpt(b bool) FlagOption {
-	return func(f *Flag) {
+	return flagOptFunc(func(f *Flag) {
 		f.Negatable = b
-	}
+	})
 }
 
 // ArgOption configures an Arg.
@@ -873,14 +953,12 @@ func ArgType(t FlagType) ArgOption {
 	}
 }
 
-// ArgChoices sets the allowed values for a positional argument.
-func ArgChoices(vals ...interface{}) ArgOption {
+// ArgChoices sets the allowed values for a positional argument. Entries are the
+// same Ch(value, help) records a flag's Choices takes (contract §24.2, §24.7:
+// positionals stay command-level, with choices in the record spelling).
+func ArgChoices(vals ...ChoiceValue) ArgOption {
 	return func(a *Arg) {
-		if vals == nil {
-			a.Choices = []interface{}{}
-		} else {
-			a.Choices = vals
-		}
+		a.Choices, a.choiceRecords = choiceValuesToRecords(a.Name, vals)
 	}
 }
 
@@ -905,13 +983,6 @@ func WithFlags(flags ...Flag) CmdOption {
 func WithFlagSets(flagSets ...FlagSet) CmdOption {
 	return func(c *Command) {
 		c.flagSets = append(c.flagSets, flagSets...)
-	}
-}
-
-// WithMutex adds mutex groups to a command.
-func WithMutex(groups ...MutexGroup) CmdOption {
-	return func(c *Command) {
-		c.mutex = append(c.mutex, groups...)
 	}
 }
 
@@ -1122,7 +1193,7 @@ func StringFlag(name, help string, opts ...FlagOption) Flag {
 		Prefixed: true,
 	}
 	for _, opt := range opts {
-		opt(&f)
+		opt.applyFlag(&f)
 	}
 	validateFlagConfig(&f)
 	return f
@@ -1138,7 +1209,7 @@ func BoolFlag(name, help string, opts ...FlagOption) Flag {
 		Negatable: true,
 	}
 	for _, opt := range opts {
-		opt(&f)
+		opt.applyFlag(&f)
 	}
 	validateFlagConfig(&f)
 	return f
@@ -1153,7 +1224,7 @@ func IntFlag(name, help string, opts ...FlagOption) Flag {
 		Prefixed: true,
 	}
 	for _, opt := range opts {
-		opt(&f)
+		opt.applyFlag(&f)
 	}
 	validateFlagConfig(&f)
 	return f
@@ -1168,7 +1239,7 @@ func FloatFlag(name, help string, opts ...FlagOption) Flag {
 		Prefixed: true,
 	}
 	for _, opt := range opts {
-		opt(&f)
+		opt.applyFlag(&f)
 	}
 	validateFlagConfig(&f)
 	return f
@@ -1187,7 +1258,7 @@ func ListFlag(itemType FlagType, name, help string, opts ...FlagOption) Flag {
 		Repeatable: true,
 	}
 	for _, opt := range opts {
-		opt(&f)
+		opt.applyFlag(&f)
 	}
 	// List flags are always repeatable; override any explicit Repeatable(false)
 	f.Repeatable = true
@@ -1209,7 +1280,7 @@ func DictFlag(valueType FlagType, name, help string, opts ...FlagOption) Flag {
 		Repeatable: true,
 	}
 	for _, opt := range opts {
-		opt(&f)
+		opt.applyFlag(&f)
 	}
 	// Dict flags are always repeatable
 	f.Repeatable = true
@@ -2473,6 +2544,15 @@ func (a *App) newDispatchContext(stdout, stderr io.Writer, pr parseResult, reser
 		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun, stdout))
 	ctx.commandName = pr.cmd.Name
 	ctx.payloadSchema = pr.cmd.PayloadSchema
+	// Every conditional binding this run did not consult is NAMED, one line per
+	// binding, in declaration order, on the debug channel: hidden by default,
+	// shown by --verbose, and carried in machine mode's diagnostics at level
+	// "debug" whatever the human stream did (contract §24.6). Surfacing is what
+	// keeps the rule inside the no-silent-degradation rule rather than beside
+	// it.
+	for _, line := range pr.skippedBindings {
+		ctx.Debug(line)
+	}
 	return ctx
 }
 
@@ -2836,6 +2916,12 @@ type parseResult struct {
 	dumpSchema      bool
 	serveMCP        bool
 	hermetic        bool // --hermetic active for this invocation
+	// skippedBindings names every conditional env/config binding this run did
+	// NOT consult, because its scope was not elected (contract §24.6). They are
+	// DIAGNOSTICS, emitted on the debug channel once the dispatch context
+	// exists, so they are hidden by default, shown by --verbose, and carried in
+	// machine mode's diagnostics at level "debug".
+	skippedBindings []string
 }
 
 // preScanResult holds the results of the position-aware pre-scan for
@@ -3266,7 +3352,7 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 	}
 
-	kwargs, postGlobalValues, cmdSources, err := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy, a.configConflictMode, preScan.hermetic, a.infraRoots)
+	kwargs, postGlobalValues, cmdSources, err, skipped := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy, a.configConflictMode, preScan.hermetic, a.infraRoots)
 	if err != "" {
 		parts := append([]string{a.Name}, path...)
 		parts = append(parts, cmd.Name)
@@ -3289,7 +3375,7 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 		cmdSources[k] = v
 	}
-	return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources, hermetic: preScan.hermetic}
+	return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources, hermetic: preScan.hermetic, skippedBindings: skipped}
 }
 
 // tokensContainHelp checks if --help or -h appears in tokens before any "--"
@@ -3335,22 +3421,15 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 		}
 	}
 
-	storeValue := func(f *Flag, value interface{}) string {
-		if f.Repeatable {
-			if existing, ok := globalValues[f.Name]; ok {
-				globalValues[f.Name] = append(existing.([]interface{}), value)
-			} else {
-				globalValues[f.Name] = []interface{}{value}
+	// Global flags are unconditional, so the per-flag CLI map the command path
+	// uses is folded back onto names as soon as parsing finishes.
+	globalByFlag := make(map[*Flag]interface{})
+	flushGlobals := func() {
+		for i := range a.globalFlags {
+			if v, ok := globalByFlag[&a.globalFlags[i]]; ok {
+				globalValues[a.globalFlags[i].Name] = v
 			}
-			if f.Unique {
-				if dup := findDuplicate(globalValues[f.Name].([]interface{})); dup != nil {
-					return errFlagDuplicateValue(f.Name, formatValueForError(dup))
-				}
-			}
-		} else {
-			globalValues[f.Name] = value
 		}
-		return ""
 	}
 
 	i := 0
@@ -3376,7 +3455,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 				if f.Type == TypeBool {
 					return nil, nil, nil, errBoolFlagNoValue(flagPart)
 				}
-				if errStr := parseFlagRawValue(f, valuePart, globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
+				if errStr := parseFlagRawValue(f, valuePart, globalByFlag, &a.stdinConsumedBy); errStr != "" {
 					return nil, nil, nil, errStr
 				}
 				i++
@@ -3402,7 +3481,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 				if i+1 >= len(argv) {
 					return nil, nil, nil, errFlagRequiresValue(tok)
 				}
-				if errStr := parseFlagRawValue(f, argv[i+1], globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
+				if errStr := parseFlagRawValue(f, argv[i+1], globalByFlag, &a.stdinConsumedBy); errStr != "" {
 					return nil, nil, nil, errStr
 				}
 				i += 2
@@ -3419,7 +3498,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 				if i+1 >= len(argv) {
 					return nil, nil, nil, errFlagRequiresValue(tok)
 				}
-				if errStr := parseFlagRawValue(f, argv[i+1], globalValues, &a.stdinConsumedBy, storeValue); errStr != "" {
+				if errStr := parseFlagRawValue(f, argv[i+1], globalByFlag, &a.stdinConsumedBy); errStr != "" {
 					return nil, nil, nil, errStr
 				}
 				i += 2
@@ -3432,6 +3511,7 @@ func (a *App) extractGlobalFlags(argv []string, hermetic bool) (map[string]inter
 	}
 
 	remaining := argv[i:]
+	flushGlobals()
 
 	// All values set in the CLI loop above are SourceCLI.
 	// Mark them now before env/config/default layers add more.
@@ -3735,9 +3815,9 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		}
 	}
 
-	// Passthrough commands cannot have flags, args, flag sets, or mutex
+	// Passthrough commands cannot have flags, args or flag sets
 	if cmd.Passthrough {
-		if len(cmd.flags) > 0 || len(cmd.args) > 0 || len(cmd.flagSets) > 0 || len(cmd.mutex) > 0 {
+		if len(cmd.flags) > 0 || len(cmd.args) > 0 || len(cmd.flagSets) > 0 {
 			var parts []string
 			if len(cmd.flags) > 0 {
 				parts = append(parts, "flags")
@@ -3747,9 +3827,6 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 			}
 			if len(cmd.flagSets) > 0 {
 				parts = append(parts, "flag sets")
-			}
-			if len(cmd.mutex) > 0 {
-				parts = append(parts, "mutex groups")
 			}
 			panic(errCommandPassthroughCannotHave(name, strings.Join(parts, ", ")))
 		}
@@ -3770,41 +3847,42 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 			resolveFlagPresence(&cmd.flagSets[i].Flags[j])
 		}
 	}
-	for i := range cmd.mutex {
-		for j := range cmd.mutex[i].Flags {
-			resolveFlagPresence(&cmd.mutex[i].Flags[j])
-		}
-	}
 	for i := range cmd.args {
 		resolveArgPresence(&cmd.args[i])
 	}
 
-	// Merge flag set flags and mutex flags into a unified all-flags list for validation
+	// Merge flag set flags into a unified all-flags list for validation
 	allFlags := make([]Flag, 0, len(cmd.flags))
 	allFlags = append(allFlags, cmd.flags...)
 	for _, fs := range cmd.flagSets {
 		allFlags = append(allFlags, fs.Flags...)
 	}
 
-	// Validate mutex groups
-	mutexFlagNames := make(map[string]bool)
-	for _, mg := range cmd.mutex {
-		if len(mg.Flags) < 2 {
-			panic(errCommandMutexMinFlags(name, len(mg.Flags)))
-		}
-		for _, f := range mg.Flags {
-			if mutexFlagNames[f.Name] {
-				panic(errCommandFlagInMultipleMutex(name, f.Name))
+	// The scope tree is indexed here, over the FINAL flag slice: every site
+	// holds a pointer into it, and cmd.flags is assigned the same backing array
+	// below. Indexing it is also what makes the whole-command rules checkable --
+	// root-versus-scoped collisions, simultaneously-electable name and short
+	// reuse, and the sibling shape rule at any depth (§24.7).
+	cmd.index = buildFlagIndex(allFlags)
+	validateCommandScopes(name, cmd.index)
+
+	// A constraint naming a SCOPED flag is a registration error: the scope
+	// already IS the constraint, and expressing one fact in two mechanisms is
+	// how the two disagree later (§24.8). Checked BEFORE the unknown-flag
+	// guards below, which would otherwise report a scoped operand as unknown.
+	for _, dep := range cmd.dependencies {
+		switch d := dep.(type) {
+		case CoRequired:
+			for _, flagName := range d.Flags {
+				rejectScopedConstraintOperand(name, "CoRequired", flagName, cmd.index)
 			}
-			// The group's own requirement is what makes the choice
-			// mandatory, so a member that must always be supplied
-			// contradicts a group that permits exactly one (§23.5).
-			if f.presence == presenceRequired {
-				panic(errFlagMutexMemberRequired(f.Name))
-			}
-			mutexFlagNames[f.Name] = true
+		case Requires:
+			rejectScopedConstraintOperand(name, "Requires", d.Flag, cmd.index)
+			rejectScopedConstraintOperand(name, "Requires", d.DependsOn, cmd.index)
+		case Implies:
+			rejectScopedConstraintOperand(name, "Implies", d.Flag, cmd.index)
+			rejectScopedConstraintOperand(name, "Implies", d.Implies, cmd.index)
 		}
-		allFlags = append(allFlags, mg.Flags...)
 	}
 
 	// Check duplicate flag names and collisions with global flags
@@ -3929,6 +4007,14 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	cmd.tags = mergeTags(inheritedTags, cmd.tags)
 
 	return cmd
+}
+
+// rejectScopedConstraintOperand refuses a dependency family operand that names a
+// flag declared inside a choice scope (contract §24.8).
+func rejectScopedConstraintOperand(cmdName, family, flagName string, idx *flagIndex) {
+	if path := idx.scopedFlagPath(flagName); path != nil {
+		panic(errConstraintReferencesScopedFlag(cmdName, family, flagName, renderScopePath(path)))
+	}
 }
 
 // withFrameworkInternal sets the private framework-internal marker. It is

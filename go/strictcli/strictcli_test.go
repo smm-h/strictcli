@@ -601,7 +601,7 @@ func TestEnvIntBadValue(t *testing.T) {
 
 func TestChoicesValidStr(t *testing.T) {
 	app := simpleApp("cmd", "a command", "format={format}",
-		WithFlags(StringFlag("format", "output format", Choices("text", "json"), Required())))
+		WithFlags(StringFlag("format", "output format", Choices(Ch("text", ""), Ch("json", "")), Required())))
 	r := app.Test([]string{"cmd", "--format", "json"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -613,7 +613,7 @@ func TestChoicesValidStr(t *testing.T) {
 
 func TestChoicesInvalidStr(t *testing.T) {
 	app := simpleApp("cmd", "a command", "format={format}",
-		WithFlags(StringFlag("format", "output format", Choices("text", "json"), Required())))
+		WithFlags(StringFlag("format", "output format", Choices(Ch("text", ""), Ch("json", "")), Required())))
 	r := app.Test([]string{"cmd", "--format", "xml"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -628,7 +628,7 @@ func TestChoicesInvalidStr(t *testing.T) {
 
 func TestChoicesValidInt(t *testing.T) {
 	app := simpleApp("cmd", "a command", "port={port}",
-		WithFlags(IntFlag("port", "the port", Choices(80, 443, 8080), Required())))
+		WithFlags(IntFlag("port", "the port", Choices(Ch(80, ""), Ch(443, ""), Ch(8080, "")), Required())))
 	r := app.Test([]string{"cmd", "--port", "443"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -640,7 +640,7 @@ func TestChoicesValidInt(t *testing.T) {
 
 func TestChoicesInvalidInt(t *testing.T) {
 	app := simpleApp("cmd", "a command", "port={port}",
-		WithFlags(IntFlag("port", "the port", Choices(80, 443, 8080), Required())))
+		WithFlags(IntFlag("port", "the port", Choices(Ch(80, ""), Ch(443, ""), Ch(8080, "")), Required())))
 	r := app.Test([]string{"cmd", "--port", "9090"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -652,7 +652,7 @@ func TestChoicesInvalidInt(t *testing.T) {
 
 func TestChoicesInHelp(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
-		WithFlags(StringFlag("format", "output format", Default("text"), Choices("text", "json"))))
+		WithFlags(StringFlag("format", "output format", Default("text"), Choices(Ch("text", ""), Ch("json", "")))))
 	r := app.Test([]string{"cmd", "--help"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
@@ -822,7 +822,7 @@ func TestRepeatableInt(t *testing.T) {
 
 func TestRepeatableWithChoicesValid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "tags={tag}",
-		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Choices("alpha", "beta", "gamma"), Default([]interface{}{}))))
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Choices(Ch("alpha", ""), Ch("beta", ""), Ch("gamma", "")), Default([]interface{}{}))))
 	r := app.Test([]string{"cmd", "--tag", "alpha", "--tag", "gamma"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -834,7 +834,7 @@ func TestRepeatableWithChoicesValid(t *testing.T) {
 
 func TestRepeatableWithChoicesInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "tags={tag}",
-		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Choices("alpha", "beta"), Default([]interface{}{}))))
+		WithFlags(StringFlag("tag", "a tag", Repeatable(), Unique(false), Choices(Ch("alpha", ""), Ch("beta", "")), Default([]interface{}{}))))
 	r := app.Test([]string{"cmd", "--tag", "alpha", "--tag", "delta"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -902,170 +902,11 @@ func TestRepeatableEnv(t *testing.T) {
 	}
 }
 
-// --- Mutex tests ---
-
-func TestMutexNeitherProvided(t *testing.T) {
-	app := simpleApp("cmd", "a command", "loud={loud} hushed={hushed}",
-		WithMutex(MutexGroup{
-			Flags: []Flag{
-				BoolFlag("loud", "loud output", Default(false)),
-				BoolFlag("hushed", "hushed output", Default(false)),
-			},
-		}))
-	r := app.Test([]string{"cmd"})
-	if r.ExitCode != 1 {
-		t.Fatalf("expected exit 1, got %d", r.ExitCode)
-	}
-	if !strings.Contains(r.Stderr, "one of") || !strings.Contains(r.Stderr, "is required") {
-		t.Fatalf("stderr should contain 'one of' and 'is required', got %q", r.Stderr)
-	}
-}
-
-func TestMutexOneProvided(t *testing.T) {
-	app := simpleApp("cmd", "a command", "loud={loud} hushed={hushed}",
-		WithMutex(MutexGroup{
-			Flags: []Flag{
-				BoolFlag("loud", "loud output", Default(false)),
-				BoolFlag("hushed", "hushed output", Default(false)),
-			},
-		}))
-	r := app.Test([]string{"cmd", "--loud"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
-	}
-	if !strings.Contains(r.Stdout, "loud=true") {
-		t.Fatalf("stdout should contain 'loud=true', got %q", r.Stdout)
-	}
-}
-
-func TestMutexBothProvidedError(t *testing.T) {
-	app := simpleApp("cmd", "a command", "ok",
-		WithMutex(MutexGroup{
-			Flags: []Flag{
-				BoolFlag("loud", "loud output", Default(false)),
-				BoolFlag("hushed", "hushed output", Default(false)),
-			},
-		}))
-	r := app.Test([]string{"cmd", "--loud", "--hushed"})
-	if r.ExitCode != 1 {
-		t.Fatalf("expected exit 1, got %d", r.ExitCode)
-	}
-	if !strings.Contains(r.Stderr, "--loud") || !strings.Contains(r.Stderr, "--hushed") {
-		t.Fatalf("stderr should mention both flags, got %q", r.Stderr)
-	}
-	if !strings.Contains(r.Stderr, "mutually exclusive") {
-		t.Fatalf("stderr should contain 'mutually exclusive', got %q", r.Stderr)
-	}
-}
-
-func TestMutexRequiredNoneError(t *testing.T) {
-	app := simpleApp("cmd", "a command", "ok",
-		WithMutex(MutexGroup{
-			Flags: []Flag{
-				BoolFlag("loud", "loud output", Default(false)),
-				BoolFlag("hushed", "hushed output", Default(false)),
-			},
-		}))
-	r := app.Test([]string{"cmd"})
-	if r.ExitCode != 1 {
-		t.Fatalf("expected exit 1, got %d", r.ExitCode)
-	}
-	if !strings.Contains(r.Stderr, "required") {
-		t.Fatalf("stderr should contain 'required', got %q", r.Stderr)
-	}
-}
-
-func TestMutexRequiredOneOk(t *testing.T) {
-	app := simpleApp("cmd", "a command", "loud={loud} hushed={hushed}",
-		WithMutex(MutexGroup{
-			Flags: []Flag{
-				BoolFlag("loud", "loud output", Default(false)),
-				BoolFlag("hushed", "hushed output", Default(false)),
-			},
-		}))
-	r := app.Test([]string{"cmd", "--hushed"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
-	}
-	if !strings.Contains(r.Stdout, "hushed=true") {
-		t.Fatalf("stdout should contain 'hushed=true', got %q", r.Stdout)
-	}
-}
-
-func TestMutexStrFlags(t *testing.T) {
-	app := simpleApp("fetch", "fetch data", "file={file} url={url}",
-		WithMutex(MutexGroup{
-			Flags: []Flag{
-				StringFlag("file", "read from file", Optional()),
-				StringFlag("url", "read from URL", Optional()),
-			},
-		}))
-	r := app.Test([]string{"fetch", "--file", "data.txt"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
-	}
-	if !strings.Contains(r.Stdout, "file=data.txt") {
-		t.Fatalf("stdout should contain 'file=data.txt', got %q", r.Stdout)
-	}
-}
-
-func TestMutexStrFlagsBothError(t *testing.T) {
-	app := simpleApp("fetch", "fetch data", "ok",
-		WithMutex(MutexGroup{
-			Flags: []Flag{
-				StringFlag("file", "read from file", Optional()),
-				StringFlag("url", "read from URL", Optional()),
-			},
-		}))
-	r := app.Test([]string{"fetch", "--file", "data.txt", "--url", "http://example.com"})
-	if r.ExitCode != 1 {
-		t.Fatalf("expected exit 1, got %d", r.ExitCode)
-	}
-	if !strings.Contains(r.Stderr, "mutually exclusive") {
-		t.Fatalf("stderr should contain 'mutually exclusive', got %q", r.Stderr)
-	}
-}
-
-func TestMutexHelpSection(t *testing.T) {
-	app := simpleApp("cmd", "a command", "ok",
-		WithFlags(StringFlag("name", "your name", Default("anon"))),
-		WithMutex(MutexGroup{
-			Flags: []Flag{
-				BoolFlag("loud", "loud output", Default(false)),
-				BoolFlag("hushed", "hushed output", Default(false)),
-			},
-		}))
-	r := app.Test([]string{"cmd", "--help"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d", r.ExitCode)
-	}
-	if !strings.Contains(r.Stdout, "Flags (mutually exclusive):") {
-		t.Fatalf("stdout should contain mutex section header, got %q", r.Stdout)
-	}
-	if !strings.Contains(r.Stdout, "--loud") || !strings.Contains(r.Stdout, "--hushed") {
-		t.Fatalf("stdout should contain mutex flags, got %q", r.Stdout)
-	}
-	if !strings.Contains(r.Stdout, "Flags:") || !strings.Contains(r.Stdout, "--name") {
-		t.Fatalf("stdout should contain regular flags, got %q", r.Stdout)
-	}
-}
-
-func TestMutexRequiredInHelp(t *testing.T) {
-	app := simpleApp("cmd", "a command", "ok",
-		WithMutex(MutexGroup{
-			Flags: []Flag{
-				BoolFlag("loud", "loud output", Default(false)),
-				BoolFlag("hushed", "hushed output", Default(false)),
-			},
-		}))
-	r := app.Test([]string{"cmd", "--help"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected exit 0, got %d", r.ExitCode)
-	}
-	if !strings.Contains(r.Stdout, "Flags (mutually exclusive):") {
-		t.Fatalf("stdout should contain required mutex header, got %q", r.Stdout)
-	}
-}
+// The mutex tests that stood here are DELETED with MutexGroup (contract §21's
+// supersession box). Their semantics -- election, exclusivity, the required
+// error, and the help section -- live in member_election_test.go and
+// selector_test.go, restated over the member-spelled selector that replaced the
+// construct, with §21.4's sentences asserted byte-for-byte.
 
 // --- Nesting (Group) tests ---
 
@@ -1499,7 +1340,7 @@ func TestEnvChoicesValid(t *testing.T) {
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome {
 		fmt.Print("format=" + formatValue(args["format"]))
 		return Exit(0)
-	}, WithFlags(StringFlag("format", "output format", Default("text"), Env("MYAPP_FORMAT"), Choices("text", "json"))), WithEffect(EffectReadOnly))
+	}, WithFlags(StringFlag("format", "output format", Default("text"), Env("MYAPP_FORMAT"), Choices(Ch("text", ""), Ch("json", "")))), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
@@ -1536,7 +1377,7 @@ func TestEnvChoicesInvalid(t *testing.T) {
 
 	app := NewApp("myapp", "1.0.0", "test app", WithEnvPrefix("MYAPP"))
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("format", "output format", Default("text"), Env("MYAPP_FORMAT"), Choices("text", "json"))), WithEffect(EffectReadOnly))
+		WithFlags(StringFlag("format", "output format", Default("text"), Env("MYAPP_FORMAT"), Choices(Ch("text", ""), Ch("json", "")))), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 1 {
@@ -2340,7 +2181,7 @@ func TestFloatFlagDefault(t *testing.T) {
 
 func TestFloatFlagChoices(t *testing.T) {
 	app := simpleApp("cmd", "a command", "rate={rate}",
-		WithFlags(FloatFlag("rate", "the rate", Choices(1.0, 2.5, 3.14), Required())))
+		WithFlags(FloatFlag("rate", "the rate", Choices(Ch(1.0, ""), Ch(2.5, ""), Ch(3.14, "")), Required())))
 	// Valid choice
 	r := app.Test([]string{"cmd", "--rate", "2.5"})
 	if r.ExitCode != 0 {
@@ -3206,7 +3047,7 @@ func TestDumpSchemaContents(t *testing.T) {
 	app := NewApp("myapp", "2.3.4", "My great app")
 	app.Command("deploy", "Deploy the app", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithFlags(
-			StringFlag("target", "Deploy target", Short("t"), Choices("prod", "staging"), Required()),
+			StringFlag("target", "Deploy target", Short("t"), Choices(Ch("prod", ""), Ch("staging", "")), Required()),
 			BoolFlag("force-deploy", "Force deploy", Default(false)),
 		),
 		WithArgs(
@@ -3433,7 +3274,7 @@ func TestDumpSchemaGlobalFlags(t *testing.T) {
 	tmpDir := chdirTemp(t)
 	app := NewApp("testapp", "1.0.0", "A test app")
 	app.GlobalFlag(BoolFlag("loud", "Loud output", Short("V"), Default(false)))
-	app.GlobalFlag(StringFlag("output", "Output format", Default("text"), Choices("text", "json")))
+	app.GlobalFlag(StringFlag("output", "Output format", Default("text"), Choices(Ch("text", ""), Ch("json", ""))))
 	app.Command("noop", "Does nothing", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"--dump-schema"})
@@ -7080,40 +6921,11 @@ func TestSchemaVersionInDefaults(t *testing.T) {
 	}
 }
 
-func TestSchemaConstraintsMutex(t *testing.T) {
-	chdirTemp(t)
-	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithMutex(MutexGroup{Flags: []Flag{
-			StringFlag("output-json", "JSON output", Optional()),
-			StringFlag("output-xml", "XML output", Optional()),
-		}}), WithEffect(EffectReadOnly),
-	)
-	schema, err := dumpSchema(app)
-	if err != nil {
-		t.Fatalf("dumpSchema error: %v", err)
-	}
-	commands := schema["commands"].(map[string]interface{})
-	cmd := commands["cmd"].(map[string]interface{})
-	constraints, ok := cmd["constraints"].([]interface{})
-	if !ok {
-		t.Fatal("expected 'constraints' array in command")
-	}
-	if len(constraints) != 1 {
-		t.Fatalf("expected 1 constraint, got %d", len(constraints))
-	}
-	c := constraints[0].(map[string]interface{})
-	if c["type"] != "mutex" {
-		t.Fatalf("expected type 'mutex', got %v", c["type"])
-	}
-	flags := c["flags"].([]interface{})
-	if len(flags) != 2 {
-		t.Fatalf("expected 2 flags in mutex, got %d", len(flags))
-	}
-	if flags[0] != "output-json" || flags[1] != "output-xml" {
-		t.Fatalf("expected flags [output-json, output-xml], got %v", flags)
-	}
-}
+// TestSchemaConstraintsMutex is DELETED with the "mutex" constraint entry
+// (contract §21's supersession box): exactly-one left the constraint system
+// entirely and is a member-spelled selector now, which is a FLAG entry rather
+// than a constraint. The selector's own dump encoding belongs to the schema-v2
+// amendment (§24.11, §24.15).
 
 func TestSchemaConstraintsCoRequired(t *testing.T) {
 	chdirTemp(t)
@@ -7225,10 +7037,6 @@ func TestSchemaConstraintsMixed(t *testing.T) {
 			BoolFlag("loud", "Loud output", Default(false)),
 			BoolFlag("debug", "Debug mode", Default(false)),
 		),
-		WithMutex(MutexGroup{Flags: []Flag{
-			StringFlag("format-json", "JSON format", Optional()),
-			StringFlag("format-xml", "XML format", Optional()),
-		}}),
 		WithDependencies(
 			CoRequired{Flags: []string{"host", "port"}},
 			Requires{Flag: "port", DependsOn: "host"},
@@ -7242,23 +7050,19 @@ func TestSchemaConstraintsMixed(t *testing.T) {
 	commands := schema["commands"].(map[string]interface{})
 	cmd := commands["cmd"].(map[string]interface{})
 	constraints := cmd["constraints"].([]interface{})
-	// 1 mutex + 3 dependencies = 4 constraints
-	if len(constraints) != 4 {
-		t.Fatalf("expected 4 constraints, got %d", len(constraints))
+	// 3 dependencies; the mutex entry is deleted with the construct.
+	if len(constraints) != 3 {
+		t.Fatalf("expected 3 constraints, got %d", len(constraints))
 	}
-	// First should be mutex (mutex comes before dependencies)
-	if constraints[0].(map[string]interface{})["type"] != "mutex" {
-		t.Fatalf("expected first constraint to be mutex, got %v", constraints[0])
+	// co_required, requires, implies in declaration order
+	if constraints[0].(map[string]interface{})["type"] != "co_required" {
+		t.Fatalf("expected first constraint to be co_required, got %v", constraints[0])
 	}
-	// Then co_required, requires, implies in order
-	if constraints[1].(map[string]interface{})["type"] != "co_required" {
-		t.Fatalf("expected second constraint to be co_required, got %v", constraints[1])
+	if constraints[1].(map[string]interface{})["type"] != "requires" {
+		t.Fatalf("expected second constraint to be requires, got %v", constraints[1])
 	}
-	if constraints[2].(map[string]interface{})["type"] != "requires" {
-		t.Fatalf("expected third constraint to be requires, got %v", constraints[2])
-	}
-	if constraints[3].(map[string]interface{})["type"] != "implies" {
-		t.Fatalf("expected fourth constraint to be implies, got %v", constraints[3])
+	if constraints[2].(map[string]interface{})["type"] != "implies" {
+		t.Fatalf("expected third constraint to be implies, got %v", constraints[2])
 	}
 }
 
@@ -7554,7 +7358,7 @@ func TestArgStrDefaultType(t *testing.T) {
 
 func TestArgChoicesStr(t *testing.T) {
 	app := simpleApp("cmd", "a command", "val={env}",
-		WithArgs(NewArg("env", "target env", ArgChoices("dev", "staging", "prod"), ArgRequired())))
+		WithArgs(NewArg("env", "target env", ArgChoices(Ch("dev", ""), Ch("staging", ""), Ch("prod", "")), ArgRequired())))
 	r := app.Test([]string{"cmd", "prod"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -7566,7 +7370,7 @@ func TestArgChoicesStr(t *testing.T) {
 
 func TestArgChoicesStrInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
-		WithArgs(NewArg("env", "target env", ArgChoices("dev", "staging", "prod"), ArgRequired())))
+		WithArgs(NewArg("env", "target env", ArgChoices(Ch("dev", ""), Ch("staging", ""), Ch("prod", "")), ArgRequired())))
 	r := app.Test([]string{"cmd", "local"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -7578,7 +7382,7 @@ func TestArgChoicesStrInvalid(t *testing.T) {
 
 func TestArgChoicesInt(t *testing.T) {
 	app := simpleApp("cmd", "a command", "val={level}",
-		WithArgs(NewArg("level", "log level", ArgType(TypeInt), ArgChoices(1, 2, 3), ArgRequired())))
+		WithArgs(NewArg("level", "log level", ArgType(TypeInt), ArgChoices(Ch(1, ""), Ch(2, ""), Ch(3, "")), ArgRequired())))
 	r := app.Test([]string{"cmd", "2"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -7590,7 +7394,7 @@ func TestArgChoicesInt(t *testing.T) {
 
 func TestArgChoicesIntInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
-		WithArgs(NewArg("level", "log level", ArgType(TypeInt), ArgChoices(1, 2, 3), ArgRequired())))
+		WithArgs(NewArg("level", "log level", ArgType(TypeInt), ArgChoices(Ch(1, ""), Ch(2, ""), Ch(3, "")), ArgRequired())))
 	r := app.Test([]string{"cmd", "5"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -7611,7 +7415,7 @@ func TestArgChoicesBoolPanics(t *testing.T) {
 			t.Fatalf("expected choices+bool error, got %q", msg)
 		}
 	}()
-	NewArg("flag", "a bool arg", ArgType(TypeBool), ArgChoices(true, false), ArgRequired())
+	NewArg("flag", "a bool arg", ArgType(TypeBool), ArgChoices(Ch(true, ""), Ch(false, "")), ArgRequired())
 }
 
 func TestArgChoicesEmptyPanics(t *testing.T) {
@@ -7639,7 +7443,7 @@ func TestArgChoicesTypeMismatchPanics(t *testing.T) {
 			t.Fatalf("expected type mismatch error, got %q", msg)
 		}
 	}()
-	NewArg("count", "how many", ArgType(TypeInt), ArgChoices("one", "two"), ArgRequired())
+	NewArg("count", "how many", ArgType(TypeInt), ArgChoices(Ch("one", ""), Ch("two", "")), ArgRequired())
 }
 
 func TestArgDefaultTypeMismatchPanics(t *testing.T) {
@@ -7667,7 +7471,7 @@ func TestArgDefaultNotInChoicesPanics(t *testing.T) {
 			t.Fatalf("expected 'not in choices' error, got %q", msg)
 		}
 	}()
-	NewArg("env", "target", ArgDefault("local"), ArgChoices("dev", "prod"))
+	NewArg("env", "target", ArgDefault("local"), ArgChoices(Ch("dev", ""), Ch("prod", "")))
 }
 
 func TestVariadicTypedArg(t *testing.T) {
@@ -7696,7 +7500,7 @@ func TestVariadicTypedArgInvalid(t *testing.T) {
 
 func TestVariadicArgWithChoices(t *testing.T) {
 	app := simpleApp("cmd", "a command", "vals={items}",
-		WithArgs(NewArg("items", "items", ArgChoices("a", "b", "c"), Variadic(), ArgRequired())))
+		WithArgs(NewArg("items", "items", ArgChoices(Ch("a", ""), Ch("b", ""), Ch("c", "")), Variadic(), ArgRequired())))
 	r := app.Test([]string{"cmd", "a", "c"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -7736,7 +7540,7 @@ func TestArgTypeStrNotInHelp(t *testing.T) {
 
 func TestArgChoicesInHelp(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
-		WithArgs(NewArg("env", "target env", ArgChoices("dev", "prod"), ArgRequired())))
+		WithArgs(NewArg("env", "target env", ArgChoices(Ch("dev", ""), Ch("prod", "")), ArgRequired())))
 	r := app.Test([]string{"cmd", "--help"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
@@ -7748,7 +7552,7 @@ func TestArgChoicesInHelp(t *testing.T) {
 
 func TestArgTypeAndChoicesInHelp(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
-		WithArgs(NewArg("level", "log level", ArgType(TypeInt), ArgChoices(1, 2, 3), ArgRequired())))
+		WithArgs(NewArg("level", "log level", ArgType(TypeInt), ArgChoices(Ch(1, ""), Ch(2, ""), Ch(3, "")), ArgRequired())))
 	r := app.Test([]string{"cmd", "--help"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", r.ExitCode)
@@ -7798,7 +7602,7 @@ func TestSchemaArgChoices(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithArgs(
-			NewArg("env", "target", ArgChoices("dev", "prod"), ArgRequired()),
+			NewArg("env", "target", ArgChoices(Ch("dev", ""), Ch("prod", "")), ArgRequired()),
 		), WithEffect(EffectReadOnly),
 	)
 	schema, err := dumpSchema(app)
@@ -7883,7 +7687,7 @@ func TestArgBoolDefaultType(t *testing.T) {
 
 func TestArgChoicesFloat(t *testing.T) {
 	app := simpleApp("cmd", "a command", "val={ratio}",
-		WithArgs(NewArg("ratio", "the ratio", ArgType(TypeFloat), ArgChoices(1.0, 2.5, 3.14), ArgRequired())))
+		WithArgs(NewArg("ratio", "the ratio", ArgType(TypeFloat), ArgChoices(Ch(1.0, ""), Ch(2.5, ""), Ch(3.14, "")), ArgRequired())))
 	r := app.Test([]string{"cmd", "2.5"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
@@ -7895,7 +7699,7 @@ func TestArgChoicesFloat(t *testing.T) {
 
 func TestArgChoicesFloatInvalid(t *testing.T) {
 	app := simpleApp("cmd", "a command", "ok",
-		WithArgs(NewArg("ratio", "the ratio", ArgType(TypeFloat), ArgChoices(1.0, 2.5, 3.14), ArgRequired())))
+		WithArgs(NewArg("ratio", "the ratio", ArgType(TypeFloat), ArgChoices(Ch(1.0, ""), Ch(2.5, ""), Ch(3.14, "")), ArgRequired())))
 	r := app.Test([]string{"cmd", "9.99"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -8537,30 +8341,32 @@ func TestConfigConflictModeImpliedExcluded(t *testing.T) {
 	}
 }
 
-func TestConfigConflictModeFiresBeforeMutex(t *testing.T) {
+func TestConfigConflictModeFiresBeforeElection(t *testing.T) {
 	tmpDir, cleanup := configTestSetup(t)
 	defer cleanup()
 
 	// Under divergence-awareness a conflict requires the config value to differ
 	// from the CLI value. Config sets format_json=false while the CLI passes
 	// --format-json (true): values diverge -> conflict fires. The CLI also
-	// passes --format-yaml so mutex would also fire -- conflict wins.
+	// passes --format-yaml so the election would also fire -- conflict wins.
+	// This is item 119's carve-out, which §21's supersession box keeps
+	// untouched over member spelling.
 	writeConfig(t, tmpDir, "testapp", map[string]interface{}{"format_json": false})
 
 	app := NewApp("testapp", "1.0.0", "test app", WithConfig(), WithConfigConflictMode("error"))
 	app.Command("run", "run it", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithMutex(MutexGroup{Flags: []Flag{
+		WithFlags(
 			BoolFlag("format-json", "output as JSON", Default(false)),
 			BoolFlag("format-yaml", "output as YAML", Default(false)),
-		}}), WithEffect(EffectReadOnly),
+		), WithEffect(EffectReadOnly),
 	)
 
-	// Both conflict AND mutex would fire. Conflict should fire first.
+	// The conflict fires on the config/CLI divergence.
 	r := app.Test([]string{"run", "--format-json", "--format-yaml"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	// Should mention conflict, not mutex
+	// Should mention conflict
 	if !strings.Contains(r.Stderr, "set in both") {
 		t.Fatalf("expected conflict error, got %q", r.Stderr)
 	}

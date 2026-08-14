@@ -103,7 +103,7 @@ func TestJsonSchemaOptionalFlagNotInRequired(t *testing.T) {
 func TestJsonSchemaChoicesAsEnum(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("deploy", "deploy", nopHandler, WithFlags(
-		StringFlag("env", "environment", Choices("dev", "staging", "prod"), Required()),
+		StringFlag("env", "environment", Choices(Ch("dev", ""), Ch("staging", ""), Ch("prod", "")), Required()),
 	), WithEffect(EffectReadOnly))
 
 	schema := app.JsonSchema("deploy")
@@ -232,7 +232,7 @@ func TestJsonSchemaPositionalArg(t *testing.T) {
 func TestJsonSchemaArgChoices(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app")
 	app.Command("set-level", "set level", nopHandler,
-		WithArgs(NewArg("level", "log level", ArgChoices("debug", "info", "warn", "error"), ArgRequired())), WithEffect(EffectReadOnly),
+		WithArgs(NewArg("level", "log level", ArgChoices(Ch("debug", ""), Ch("info", ""), Ch("warn", ""), Ch("error", "")), ArgRequired())), WithEffect(EffectReadOnly),
 	)
 
 	schema := app.JsonSchema("set-level")

@@ -9,105 +9,24 @@ import (
 // Five-way presence semantics for source-filtered queries
 // ---------------------------------------------------------------------------
 
-// Test 1: A mutex group where one flag has source=default should NOT trigger
-// mutex violation. A flag whose value came from Default() is not "present"
-// for mutex evaluation.
-func TestMutexDefaultSourceNotPresent(t *testing.T) {
-	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("out", "output", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return Exit(0)
-	},
-		WithMutex(MutexGroup{Flags: []Flag{
-			BoolFlag("as-json", "JSON output", Default(false)),
-			BoolFlag("text", "text output", Default(false)),
-		}}), WithEffect(EffectReadOnly),
-	)
-
-	// Provide only --json via CLI. --text has Default(false), so it will get
-	// source=default. The mutex check should see only --json as "present"
-	// and NOT fire a mutex violation.
-	r := app.Test([]string{"out", "--as-json"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
-	}
-
-	// Also test via invoke: provide only "json". "text" is absent and will
-	// be defaulted. Mutex should not fire.
-	app2 := NewApp("myapp", "1.0.0", "test app")
-	app2.Command("out", "output", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return Exit(0)
-	},
-		WithMutex(MutexGroup{Flags: []Flag{
-			BoolFlag("as-json", "JSON output", Default(false)),
-			BoolFlag("text", "text output", Default(false)),
-		}}), WithEffect(EffectReadOnly),
-	)
-	ir := app2.invoke("out", map[string]interface{}{"as_json": true})
-	if ir.err != "" {
-		t.Fatalf("invoke: expected success, got error: %s", ir.err)
-	}
-}
-
-// Test 2: A mutex group where one flag has source=implied should NOT trigger
-// mutex violation. Implied values do not count as "present" for mutex.
-func TestMutexImpliedSourceNotPresent(t *testing.T) {
-	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("out", "output", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return Exit(0)
-	},
-		WithMutex(MutexGroup{Flags: []Flag{
-			BoolFlag("as-json", "JSON output", Optional()),
-			BoolFlag("text", "text output", Optional()),
-		}}),
-		WithDependencies(
-			// Providing --loud implies --text=true
-			Implies{Flag: "loud", Implies: "text", Value: true},
-		),
-		WithFlags(
-			BoolFlag("loud", "loud mode", Default(false)),
-		), WithEffect(EffectReadOnly),
-	)
-
-	// Provide --json and --loud. --loud implies --text=true (source=implied).
-	// The mutex group contains both json and text, but text is implied, so
-	// the mutex should see only json as "present" and NOT fire a violation.
-	r := app.Test([]string{"out", "--as-json", "--loud"})
-	if r.ExitCode != 0 {
-		t.Fatalf("expected success, got exit code %d: %s", r.ExitCode, r.Stderr)
-	}
-}
-
-// Test 3: A mutex group where one flag is cli + another is config -- SHOULD
-// trigger mutex violation. But since config is temporarily marked as SourceCLI
-// (Phase 2a will give it SourceConfig), this test passes trivially because
-// both flags will be seen as "present" (SourceCLI). The test documents the
-// intended behavior and will become meaningful after Phase 2a.
-func TestMutexCliAndConfigBothPresent(t *testing.T) {
-	// We cannot easily test config source right now because parseCommand
-	// temporarily marks config values as SourceCLI. This test verifies the
-	// intended end-state behavior: when both cli and config values are
-	// present in a mutex group, it should error.
-	//
-	// For now, we test via invoke with two values provided (both SourceCLI),
-	// which is the equivalent scenario.
-	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("out", "output", func(ctx *Context, kwargs map[string]interface{}) Outcome {
-		return Exit(0)
-	},
-		WithMutex(MutexGroup{Flags: []Flag{
-			StringFlag("as-json", "JSON output", Optional()),
-			StringFlag("text", "text output", Optional()),
-		}}), WithEffect(EffectReadOnly),
-	)
-
-	ir := app.invoke("out", map[string]interface{}{"as_json": "data", "text": "data"})
-	if ir.err == "" {
-		t.Fatal("expected mutex violation error")
-	}
-	if !strings.Contains(ir.err, "mutually exclusive") {
-		t.Fatalf("expected 'mutually exclusive' error, got: %s", ir.err)
-	}
-}
+// Tests 1-3 stood here and are DELETED with MutexGroup (contract §21's
+// supersession box). Each asserted how a source label interacted with a group's
+// cardinality check, and the construct removed the interaction rather than
+// changing it:
+//
+//   - "a defaulted member is not present for the group" -- a member flag must
+//     now declare Required() (§12.13's errMemberFlagPresence), so a defaulted
+//     member cannot be written at all.
+//   - "an implied member is not present for the group" -- a dependency naming a
+//     scoped flag is a registration error (§24.8), so the shape is refused.
+//   - "two provided members are mutually exclusive on the programmatic path" --
+//     the programmatic value is ONE elected record (§24.11), so electing two is
+//     inexpressible rather than refused. The CLI-side sentence is asserted in
+//     member_election_test.go.
+//
+// What survives is the source semantics themselves, which the tests below and
+// the dependency tests still cover, plus the election's own source label
+// (TestSelectorSourceFollowsElection in selector_test.go).
 
 // Test 4: A dependency (Requires) where the required flag has source=implied
 // should PASS. Implied values count as "present" for dependency checks.
@@ -172,22 +91,28 @@ func TestRequiresDefaultSourceNotPresent(t *testing.T) {
 // and absent-then-defaulted flags as SourceDefault.
 // ---------------------------------------------------------------------------
 
-// Test that invoke with a provided kwarg treats it as SourceCLI for mutex.
-func TestInvokeMutexProvidedKwargIsCliSource(t *testing.T) {
+// Test that invoke's elected record satisfies a member-spelled selector, and
+// that the selector's own key carries source "cli" on that path.
+func TestInvokeElectedRecordIsCliSource(t *testing.T) {
+	jsonChoice := MemberChoice(StringFlag("as-json", "JSON output", Required()), "JSON output")
+	var gotSource string
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("out", "output", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		gotSource = ctx.Source("fmt")
 		return Exit(0)
 	},
-		WithMutex(MutexGroup{Flags: []Flag{
-			StringFlag("as-json", "JSON output", Optional()),
-			StringFlag("text", "text output", Optional()),
-		}}), WithEffect(EffectReadOnly),
+		WithFlags(MemberChoiceFlag("fmt", "output format", Required(),
+			jsonChoice,
+			MemberChoice(StringFlag("text", "text output", Required()), "text output"),
+		)), WithEffect(EffectReadOnly),
 	)
 
-	// Provide exactly one mutex flag via invoke -- should succeed.
-	ir := app.invoke("out", map[string]interface{}{"as_json": "data"})
+	ir := app.invoke("out", map[string]interface{}{"fmt": Elect(jsonChoice, Fields{"value": "data"})})
 	if ir.err != "" {
 		t.Fatalf("invoke: expected success, got error: %s", ir.err)
+	}
+	if gotSource != "cli" {
+		t.Fatalf("source = %q, want \"cli\"", gotSource)
 	}
 }
 
