@@ -1799,6 +1799,44 @@ test("mcp: a malformed answer is a protocol error", async () => {
 	);
 });
 
+/*
+ * §22.4's blob is unpadded base64url and no other spelling of it.
+ *
+ * Left to themselves the three languages' decoders disagree: Python's accepts
+ * padding and Node's ignores anything outside the alphabet, while Go's refuses
+ * both -- and all three ignore a newline or the trailing bits of a final
+ * character that does not fill a byte. The blob is attacker-controlled input,
+ * so the spelling is checked before any decoder sees it, identically
+ * everywhere.
+ */
+test("mcp: a continuation accepts only canonical unpadded base64url", () => {
+	const alphabet =
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+	const continuation = new McpContinuation();
+	const now = 1000000;
+	const good = continuation.mint("cli/1.0.0", "digest", now);
+	const [head, mac] = good.split(".") as [string, string];
+	// The same data bits with a flipped ignored trailing bit: a lax decoder
+	// yields the identical MAC bytes and accepts the blob.
+	const noisy =
+		mac.slice(0, -1) +
+		alphabet[alphabet.indexOf(mac[mac.length - 1] as string) ^ 1];
+	for (const spelling of [
+		`${good}=`, // padding
+		`${good}*`, // outside the alphabet
+		`${head.slice(0, 5)}\n${head.slice(5)}.${mac}`, // a newline a decoder may skip
+		`${head}.${noisy}`, // non-canonical trailing bits
+	]) {
+		assert.equal(
+			continuation.verify(spelling, "cli/1.0.0", "digest", now),
+			"requestState failed verification",
+			`accepted a non-canonical spelling: ${spelling}`,
+		);
+	}
+	// The canonical spelling still verifies, and is consumed doing so.
+	assert.equal(continuation.verify(good, "cli/1.0.0", "digest", now), undefined);
+});
+
 test("mcp: a continuation expires, and is worthless to another process", () => {
 	// No clock reaches the wire, so expiry is driven at the mint.
 	const continuation = new McpContinuation();

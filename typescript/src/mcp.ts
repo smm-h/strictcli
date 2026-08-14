@@ -719,6 +719,47 @@ const MCP_ERR_STATE_WRONG_CLIENT =
 const MCP_ERR_STATE_WRONG_REQUEST = "requestState does not match this request";
 const MCP_ERR_STATE_REUSED = "requestState has already been used";
 
+/** The base64url alphabet, in value order -- the one spelling §22.4 defines. */
+const B64URL_ALPHABET =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+/**
+ * Whether `text` is the ONE unpadded base64url spelling of some bytes.
+ *
+ * The three languages' decoders do not agree on their own -- Python's ignores
+ * stray characters and accepts padding, Node's ignores anything outside the
+ * alphabet, and Go's skips newlines -- and all three ignore the trailing bits
+ * of a final character that does not fill a byte, so a blob's last character
+ * can be altered without changing what it decodes to. The blob is
+ * attacker-controlled input, so the spelling is checked here, before any
+ * decoder sees it, identically in all three implementations.
+ */
+function b64urlCanonical(text: string): boolean {
+	const remainder = text.length % 4;
+	if (remainder === 1) {
+		// No byte string encodes to a length one past a multiple of four.
+		return false;
+	}
+	let last = 0;
+	for (const char of text) {
+		last = B64URL_ALPHABET.indexOf(char);
+		if (last < 0) {
+			return false;
+		}
+	}
+	if (remainder === 0) {
+		return true;
+	}
+	// Two characters carry one byte and three carry two, so the final character
+	// has 4 or 2 bits left over, and a canonical encoder leaves them zero.
+	return (last & (remainder === 2 ? 0b1111 : 0b11)) === 0;
+}
+
+/** Decodes canonical unpadded base64url, or undefined when it is not one. */
+function b64urlDecode(text: string): Buffer | undefined {
+	return b64urlCanonical(text) ? Buffer.from(text, "base64url") : undefined;
+}
+
 /**
  * Mints and verifies the integrity-protected continuation state blob.
  *
@@ -773,8 +814,11 @@ export class McpContinuation {
 		if (parts.length !== 2) {
 			return MCP_ERR_STATE_VERIFICATION;
 		}
-		const raw = Buffer.from(parts[0] as string, "base64url");
-		const mac = Buffer.from(parts[1] as string, "base64url");
+		const raw = b64urlDecode(parts[0] as string);
+		const mac = b64urlDecode(parts[1] as string);
+		if (raw === undefined || mac === undefined) {
+			return MCP_ERR_STATE_VERIFICATION;
+		}
 		const expected = this.#mac(raw);
 		if (
 			mac.length !== expected.length ||
