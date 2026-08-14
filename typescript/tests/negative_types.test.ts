@@ -27,6 +27,8 @@ interface Diagnostic {
 }
 
 let cached: Diagnostic[] | undefined;
+/** The compiler's raw output, including the elaboration lines diagnostics() drops. */
+let cachedRaw = "";
 
 /** Compiles tests/negative once and returns its parsed diagnostics. */
 function diagnostics(): Diagnostic[] {
@@ -45,6 +47,7 @@ function diagnostics(): Diagnostic[] {
 		{ encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
 	);
 	const out = `${res.stdout ?? ""}${res.stderr ?? ""}`;
+	cachedRaw = out;
 	cached = out
 		.split("\n")
 		.filter((l) => l.includes("): error TS"))
@@ -103,6 +106,54 @@ test("negative types: extracting from a SETTLED-typed result compiles cleanly", 
 	assert.deepEqual(d, []);
 });
 
+test("negative types: a COMPUTED choice key does not compile, naming itself", () => {
+	// A computed key would silently degrade the delivered tag to `string` and
+	// make assertNever accept anything. Since silence is the failure mode, the
+	// choice map is constrained to literal keys (contract §24.12).
+	const d = diagnostics().filter((x) =>
+		x.file.endsWith("computed_choice_key.ts"),
+	);
+	assert.equal(d.length, 1, JSON.stringify(d));
+	assert.equal(d[0]?.code, "TS2345");
+	// The constraint names itself in the compiler's elaboration, which is the
+	// "compile error naming itself" §24.12 asks for.
+	assert.match(cachedRaw, /__choice_keys_must_be_literal/);
+});
+
+test("negative types: a selector default naming no choice does not compile", () => {
+	// Typed `keyof C & string`, so the mistake is a COMPILE error before it is
+	// a registration error (§24.12).
+	const d = diagnostics().filter((x) =>
+		x.file.endsWith("selector_default_unknown_choice.ts"),
+	);
+	assert.equal(d.length, 1, JSON.stringify(d));
+	assert.equal(d[0]?.code, "TS2322");
+	assert.equal(
+		d[0]?.text,
+		`Type '"pigeon"' is not assignable to type '"email" | "sms"'.`,
+	);
+});
+
+test("negative types: a sub-flag is not a top-level arg, and the switch is exhaustive", () => {
+	// The structural fix for infer.ts's remaining unsoundness: a scope's flags
+	// are unreachable except through the tag that proves the scope was elected
+	// (§24.12).
+	const d = diagnostics().filter((x) =>
+		x.file.endsWith("scoped_flag_is_not_top_level.ts"),
+	);
+	assert.equal(d.length, 2, JSON.stringify(d));
+	assert.equal(d[0]?.code, "TS2339");
+	assert.match(d[0]?.text ?? "", /^Property 'subject' does not exist on type/);
+	// assertNever refuses the unhandled `sms` member: the missing case is a
+	// compile error at the default branch.
+	assert.equal(d[1]?.code, "TS2345");
+	assert.match(d[1]?.text ?? "", /readonly choice: "sms"/);
+	assert.match(
+		d[1]?.text ?? "",
+		/is not assignable to parameter of type 'never'/,
+	);
+});
+
 test("negative types: the fixture project produces exactly the pinned errors", () => {
-	assert.equal(diagnostics().length, 3, JSON.stringify(diagnostics()));
+	assert.equal(diagnostics().length, 7, JSON.stringify(diagnostics()));
 });
