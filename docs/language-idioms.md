@@ -93,8 +93,9 @@ those is a gain that reaches exactly one language.
 ### Go: a package-private field closes a trap the exported one left open
 
 `Required()`, `Optional()` and `Default(v)` all write the same **package-private**
-`presenceBits` field on the `Flag` struct (`go/strictcli/strictcli.go`), which no
-caller outside the package can set and only those three options do write. A
+`presenceBits` field on the `Flag` struct (`go/strictcli/strictcli.go`). Those
+three options are the only things that write it, and no caller outside the
+package can. A
 `Flag` **struct literal** -- written directly, passing through none of the
 option constructors -- therefore declares no presence, and does not register:
 
