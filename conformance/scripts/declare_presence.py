@@ -129,6 +129,13 @@ def migrate(path: Path, *, write: bool) -> int:
     cases = json.loads(path.read_text())
     changed = 0
     for case in cases:
+        if case.get("skip_schema_validation", False):
+            # A case that opts out of the case schema is spelling a
+            # declaration the schema refuses -- an undeclared presence, or a
+            # null-valued default -- because the error that refuses it is
+            # exactly what the case asserts. Writing the missing declaration
+            # here would delete the input the assertion needs.
+            continue
         app = case.get("app", {})
         if "global_flags" in app:
             app["global_flags"], n = _migrate_flags(app["global_flags"], mutex_member=False)
