@@ -21,6 +21,7 @@ import {
 } from "./effects.js";
 import {
 	errArgBoolDefaultTypeMismatch,
+	errArgChoiceMagnitude,
 	errArgChoicesEmpty,
 	errArgChoicesEntryNotRecord,
 	errArgChoicesIncompatibleBool,
@@ -63,6 +64,7 @@ import {
 	errConstraintReferencesScopedFlag,
 	errDeprecatedMessageEmpty,
 	errDeprecatedNameEmpty,
+	errFlagChoiceMagnitude,
 	errFlagChoicesEmpty,
 	errFlagChoicesIncompatibleBool,
 	errFlagChoiceTypeMismatch,
@@ -275,6 +277,30 @@ function validateChoiceRecords(
 			throw new RegistrationError(helpEmpty());
 		}
 	});
+}
+
+/**
+ * §12.14's guard, over one declaration's resolved choice values.
+ *
+ * An `int` choice is a `bigint` here, so the comparison is a bigint one: the
+ * magnitude test is `> 2^53`, never `>=` -- 2^53 itself round-trips through a
+ * double exactly. A `float` choice is a `number` and is deliberately exempt
+ * (§12.14): the canonical float form round-trips to the identical double.
+ */
+const CHOICE_MAX_MAGNITUDE = 2n ** 53n;
+
+function validateChoiceMagnitudes(
+	values: readonly unknown[],
+	magnitude: (v: string) => string,
+): void {
+	for (const value of values) {
+		if (typeof value !== "bigint") {
+			continue;
+		}
+		if (value > CHOICE_MAX_MAGNITUDE || value < -CHOICE_MAX_MAGNITUDE) {
+			throw new RegistrationError(magnitude(String(value)));
+		}
+	}
 }
 
 /**
@@ -690,6 +716,9 @@ function validateFlagConfig(
 				);
 			}
 		}
+		validateChoiceMagnitudes(choiceValues(o.choices), (v) =>
+			errFlagChoiceMagnitude(name, v),
+		);
 	}
 	// Every default check below runs only for a `presence: "default"`
 	// declaration: an optional or required flag HAS no value to check, and an
@@ -919,6 +948,9 @@ export function arg<
 				);
 			}
 		}
+		validateChoiceMagnitudes(choiceValues(o.choices), (v) =>
+			errArgChoiceMagnitude(name, v),
+		);
 	}
 	// As on flags, the value checks below apply to a declared value only.
 	const dflt = presence === "default" ? o.default : undefined;

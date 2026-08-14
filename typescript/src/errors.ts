@@ -17,6 +17,8 @@
  * - Go error-typed parameters become errStr: string (the message text).
  */
 
+import { PDETAIL_MAGNITUDE } from "./payload_schema.js";
+
 /** Thrown for registration-time validation failures (Go: panic / Python: ValueError). */
 export class RegistrationError extends Error {
 	constructor(message: string) {
@@ -2450,6 +2452,32 @@ export function errMemberDefaultCarriesValue(
  */
 export function errTokenChoiceCarriesPayload(sel: string, c: string): string {
 	return `${choicePrefix(c, sel)}a token-spelled choice cannot carry a payload: the token names the choice, and a choice that carries its own value belongs to a member-spelled choice flag, declared with ${MEMBER_SELECTOR_SPELLING}`;
+}
+
+/**
+ * §12.14's schema-v2 declaration guard, on the flag surface.
+ *
+ * The published `value_schema` fragment carries a declaration's choices as a
+ * JSON Schema `enum`, and a reader that parses JSON numbers as IEEE-754
+ * doubles -- which every reader of a `.strictcli/schema.json` is entitled to
+ * be -- reads back a DIFFERENT integer. The framework refuses the declaration
+ * rather than publishing a fragment it already knows will be misread.
+ *
+ * Float choices are deliberately exempt: the canonical float form is by
+ * construction the shortest string that round-trips to the identical double,
+ * so a double-parsing reader recovers the declared value exactly.
+ *
+ * `<v>` renders as the integer's decimal digits with a leading `-` when
+ * negative and no separators -- `String(bigint)`, which coincides with
+ * Python's `repr` and Go's `%d`.
+ */
+export function errFlagChoiceMagnitude(name: string, v: string): string {
+	return `Flag ${q(name)}: choice ${v}: ${PDETAIL_MAGNITUDE}`;
+}
+
+/** §12.14's guard on the arg surface -- one condition, two surfaces. */
+export function errArgChoiceMagnitude(name: string, v: string): string {
+	return `Arg ${q(name)}: choice ${v}: ${PDETAIL_MAGNITUDE}`;
 }
 
 /**

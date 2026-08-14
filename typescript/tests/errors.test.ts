@@ -85,7 +85,11 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // guards promoted from Python-authored to cross-language pinned templates --
 // §24.7 permits sibling scopes to reuse a short and said nothing more, which
 // left two states with a rule and no message.
-const EXPECTED_TEMPLATE_COUNT = 355;
+// The schema-v2 round (§12.14) adds 2: errFlagChoiceMagnitude and
+// errArgChoiceMagnitude, one condition on two surfaces -- an int choice whose
+// magnitude a JSON reader's double cannot carry back. The clause after the
+// colon is the payload regime's own, reused byte-for-byte.
+const EXPECTED_TEMPLATE_COUNT = 357;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

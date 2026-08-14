@@ -1742,3 +1742,85 @@ test("sources: a skipped CONFIG binding is named under --verbose too", async () 
 		);
 	});
 });
+
+// =========================================================================
+// §12.14 -- an int choice beyond ±2^53 is a registration error
+// =========================================================================
+
+const MAGNITUDE_CLAUSE =
+	"the number's magnitude exceeds 2^53 (declare a big identifier as a string)";
+
+test("guard: an int choice beyond 2^53 is refused on a flag", () => {
+	rejects(
+		() =>
+			flag("id", t.int, {
+				help: "the id",
+				presence: "required",
+				choices: [{ value: 1n }, { value: 9007199254740993n }],
+			}),
+		`Flag "id": choice 9007199254740993: ${MAGNITUDE_CLAUSE}`,
+	);
+});
+
+test("guard: an int choice beyond 2^53 is refused on an arg", () => {
+	rejects(
+		() =>
+			arg("id", t.int, {
+				help: "the id",
+				presence: "required",
+				choices: [{ value: 1n }, { value: 9007199254740993n }],
+			}),
+		`Arg "id": choice 9007199254740993: ${MAGNITUDE_CLAUSE}`,
+	);
+});
+
+test("guard: the negative side is refused and renders its sign", () => {
+	rejects(
+		() =>
+			flag("id", t.int, {
+				help: "the id",
+				presence: "required",
+				choices: [{ value: -9007199254740993n }],
+			}),
+		`Flag "id": choice -9007199254740993: ${MAGNITUDE_CLAUSE}`,
+	);
+});
+
+test("guard: exactly 2^53 registers", () => {
+	// The guard is `exceeds`, not `reaches`: 2^53 itself round-trips through a
+	// double exactly.
+	flag("id", t.int, {
+		help: "the id",
+		presence: "required",
+		choices: [{ value: 9007199254740992n }, { value: -9007199254740992n }],
+	});
+	arg("id", t.int, {
+		help: "the id",
+		presence: "required",
+		choices: [{ value: 9007199254740992n }],
+	});
+});
+
+test("guard: a float choice of the same magnitude is exempt", () => {
+	// The canonical float form is by construction the shortest string that
+	// round-trips to the identical double, so nothing is lost there.
+	flag("ratio", t.float, {
+		help: "the ratio",
+		presence: "required",
+		choices: [{ value: 1e300 }, { value: 0.5 }],
+	});
+});
+
+test("guard: a list carrier's int choices are covered too", () => {
+	// The guard runs over a declaration's resolved choice VALUES, whatever
+	// arity the carrier publishes them at.
+	rejects(
+		() =>
+			flag("ids", t.list(t.int), {
+				help: "the ids",
+				presence: "required",
+				choices: [{ value: 9007199254740993n }],
+			}),
+		`Flag "ids": choice 9007199254740993: ${MAGNITUDE_CLAUSE}`,
+	);
+});

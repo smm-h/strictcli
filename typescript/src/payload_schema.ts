@@ -54,7 +54,14 @@ export const PAYLOAD_JSON_TYPES = [
 const PAYLOAD_MAX_MAGNITUDE = 2 ** 53;
 
 const PDETAIL_NOT_JSON = "the value is not representable in JSON";
-const PDETAIL_MAGNITUDE =
+/**
+ * Exported because §12.14's registration guard reuses this clause BYTE-FOR-BYTE
+ * (`Flag "<name>": choice <v>: <clause>`): the same condition at a second
+ * boundary -- there a value being written into the envelope, here one being
+ * written into the schema file -- and a second wording for one fact is what
+ * §12.13's reuse rule exists to prevent.
+ */
+export const PDETAIL_MAGNITUDE =
 	"the number's magnitude exceeds 2^53 (declare a big identifier as a string)";
 const PDETAIL_TYPE_SHAPE = '"type" must be a string or an array of strings';
 const PDETAIL_TYPE_EMPTY = '"type" must not be an empty array';
