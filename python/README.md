@@ -104,7 +104,7 @@ Requiredness is satisfied by any source that supplies a value: a command-line to
 
 `ctx.provided(name)` answers whether the **invocation** caused a value: true for `cli`, `env`, `config` and `implied`, false for `default` and `infra`. `ctx.source(name)` still answers the narrower question of which origin it was.
 
-A mutex group member declares `optional` or a default -- never `required`, since the group's own requirement is what makes the choice mandatory. A handler parameter bound to an optional flag or argument must default to `None` if it defaults to anything, so the sentinel the declaration removed cannot come back one line later.
+A handler parameter bound to an optional flag or argument must default to `None` if it defaults to anything, so the sentinel the declaration removed cannot come back one line later. A choice flag declares `required` or a default and never `optional` -- an absent selection is a choice nobody named, so it is named as a choice of its own.
 
 ### Four flag types
 
@@ -188,19 +188,50 @@ auth_flags = strictcli.FlagSet(
 def deploy(ctx, token, insecure): ...
 ```
 
-### Mutually exclusive flag groups
+### Choice flags: a choice is a declaration scope
 
-Exactly one flag from the group must be provided.
+A **choice flag** elects exactly one of its declared choices, and each choice
+owns the flags that exist only while it is elected. A flag supplied outside its
+elected scope is a distinct parse error naming both sides -- never "unknown
+flag" -- and the elected value reaches the handler as one tagged record that
+`match` consumes exhaustively.
 
 ```python
-@app.command("log", help="Show logs", effect="read_only", mutex=[
-    strictcli.MutexGroup(flags=[
-        strictcli.Flag(name="since", type=str, help="Show logs since a timestamp", presence="optional"),
-        strictcli.Flag(name="tail", type=int, help="Show the last N lines", presence="optional"),
-    ]),
-])
-def log(ctx, since, tail): ...
+@strictcli.choice("email", help="deliver the notification as an email message")
+class Email:
+    subject: str = strictcli.sub_flag(help="subject line", presence="required")
+    recipient: str = strictcli.sub_flag(help="destination address", presence="required")
+
+
+@strictcli.choice("sms", help="deliver the notification as a text message")
+class Sms:
+    phone_number: str = strictcli.sub_flag(help="destination number", presence="required")
+
+
+@app.command("send", help="Send one notification", effect="mutating")
+@strictcli.choice_flag("via", help="Delivery channel", short="v", presence="required",
+                       elect_by="selector-token", choices=[Email, Sms])
+def send(ctx, via: Email | Sms):
+    match via:
+        case Email(subject=subject, recipient=recipient): ...
+        case Sms(phone_number=number): ...
+        case _: assert_never(via)
 ```
+
+`notify send --via email --subject hi` parses; `notify send --via sms --subject hi`
+says *`--subject` is only valid under `--via email`*. Order is irrelevant --
+nothing is interpreted until every token is collected -- and a choice flag may be
+declared inside a choice's scope to any depth (`strictcli.sub_choice_flag`).
+
+`elect_by` is mandatory and has no default. `elect_by="member-flags"` spells each
+choice as its own flag instead (`--profile work` / `--all-profiles`), with no
+selector token ever typed; a member's payload is declared
+`value: str = strictcli.member_value(help=...)`.
+
+Scoped flags are never top-level handler arguments, at any depth, so every
+declared top-level key is still always present. Inside the record,
+`strictcli.provided(via, "subject")` answers whether the invocation caused a
+field's value.
 
 ### Flag dependencies
 
@@ -264,11 +295,21 @@ Flags that accumulate values across multiple occurrences. Requires explicit `uni
 
 ### Choices
 
-Restrict flag values to an allowed set.
+Restrict flag values to an allowed set. Every entry is a record, and its help is
+optional:
 
 ```python
-@strictcli.flag("format", type=str, help="Output format", choices=["json", "csv", "xml"], presence="required")
+@strictcli.flag("format", type=str, help="Output format", presence="required",
+                choices=[strictcli.Choice("json", help="one JSON document"),
+                         strictcli.Choice("csv"),
+                         strictcli.Choice("xml")])
 ```
+
+Help renders on one line (`[choices: json, csv, xml]`) until an entry carries
+help, at which point the whole flag renders as an indented block.
+
+The boundary against a choice flag is structural, not a matter of taste: **need a
+scope or member spelling -> choice flag; a plain constrained value -> choices.**
 
 ### Custom validation
 
@@ -322,7 +363,8 @@ operations (`run`, `spawn`, `write`, `mkdir`, `remove`, `rename`, `chmod`,
 `http`) are recorded rather than performed and rendered as a would-do log.
 
 Four flag names are owned by the framework and cannot be declared at any level
-(app flags, command flags, flag sets, mutex groups). They arrive on the context,
+(app flags, command flags, flag sets, and flags declared inside a choice's
+scope at any depth). They arrive on the context,
 never as handler kwargs:
 
 | Flag | Context property |
@@ -456,7 +498,7 @@ paths have no TTY contract, so a consequential command is dispatched directly.
 | `Flag` | Flag declaration |
 | `Arg` | Positional argument |
 | `FlagSet` | Reusable flag bundle |
-| `MutexGroup` | Mutually exclusive flags |
+| `Choice` | One entry of a `choices=` value flag: a value with optional help |
 | `CoRequired` | Flags that must appear together |
 | `Requires` | One flag depends on another |
 | `Implies` | Auto-set a bool flag from another |
@@ -474,6 +516,8 @@ paths have no TTY contract, so a consequential command is dispatched directly.
 | `@app.command(name, help=..., effect=...)` | Register a command (`effect` is mandatory) |
 | `@strictcli.flag(name, type=, help=..., presence=/default=)` | Declare a flag (presence is mandatory) |
 | `@strictcli.arg(name, help=..., presence=/default=)` | Declare a positional argument (presence is mandatory) |
+| `@strictcli.choice_flag(name, help=..., choices=, elect_by=, presence=/default=)` | Declare a choice flag (`elect_by` is mandatory) |
+| `@strictcli.choice(name, help=...)` | Declare one choice of a choice flag, and its scope |
 | `@app.error_check(name)` / `@app.warn_check(name)` | Register a check handler |
 
 ### App methods
