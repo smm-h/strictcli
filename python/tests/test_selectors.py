@@ -1365,3 +1365,50 @@ def test_hermetic_suppresses_a_scoped_env_binding(monkeypatch):
     r = _ambient_app().test(["--hermetic", "send", "--via", "email"])
     assert r.exit_code == 1
     assert "error: flag '--subject' is required under '--via email'\n" in r.stderr
+
+
+# ---------------------------------------------------------------------------
+# Parse-problem precedence spans the root scope too
+# ---------------------------------------------------------------------------
+
+
+def _precedence_notify():
+    app = strictcli.App(name="notify", version="1.0.0", help="notifier")
+
+    @app.command("send", help="send one", effect="mutating")
+    @choice_flag(
+        "via", help="delivery channel", presence="required",
+        elect_by="selector-token", choices=[Email, Sms, Webhook],
+    )
+    @strictcli.flag("count", type=int, help="how many", presence="optional")
+    def send(ctx, via: Via, count):
+        return 0
+
+    return app
+
+
+def test_a_scope_violation_outranks_a_root_value_that_will_not_coerce():
+    """Election and scope are structural, so they are decided before any
+    value -- including a ROOT-scope value -- is interpreted."""
+    r = _precedence_notify().test(
+        ["send", "--count", "abc", "--via", "sms", "--subject", "hi"],
+    )
+    assert r.exit_code == 1
+    assert (
+        "error: flag '--subject' is only valid under '--via email', but "
+        "'--via sms' was elected\n"
+    ) in r.stderr
+
+
+def test_an_unknown_choice_outranks_a_root_value_that_will_not_coerce():
+    r = _precedence_notify().test(["send", "--count", "abc", "--via", "carrier-pigeon"])
+    assert r.exit_code == 1
+    assert "error: --via: invalid value 'carrier-pigeon'" in r.stderr
+
+
+def test_a_root_value_problem_is_still_reported_when_the_shape_is_sound():
+    r = _precedence_notify().test(
+        ["send", "--count", "abc", "--via", "sms", "--phone-number", "+1"],
+    )
+    assert r.exit_code == 1
+    assert "error: --count: expected integer, got 'abc'\n" in r.stderr

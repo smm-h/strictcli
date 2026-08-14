@@ -200,3 +200,79 @@ def test_str_flag_value_starting_with_hyphen():
     r = app.test(["cmd", "-o", "-5"])
     assert r.exit_code == 0
     assert "offset=-5" in r.stdout
+
+
+# ---------------------------------------------------------------------------
+# Parse-problem precedence: structure before value
+#
+# The rule is normative for EVERY command, not only for one that declares a
+# selector: an unknown flag, an unknown choice and a scope violation are facts
+# about the command line's shape, and shape is decided before any token's text
+# is interpreted as a value. A command line carrying both kinds of problem
+# therefore reports the same error whatever the order of the two tokens.
+# ---------------------------------------------------------------------------
+
+
+def _precedence_app():
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("cmd", effect="read_only", help="a command")
+    @strictcli.flag("count", type=int, help="how many", presence="optional")
+    @strictcli.flag("ratio", type=float, help="the ratio", presence="optional")
+    @strictcli.flag(
+        "mode", type=str, help="the mode", presence="optional",
+        choices=[strictcli.Choice("fast"), strictcli.Choice("slow")],
+    )
+    def cmd(ctx, count, ratio, mode):
+        print("ok")
+
+    return app
+
+
+def test_an_unknown_flag_outranks_a_value_that_will_not_coerce():
+    r = _precedence_app().test(["cmd", "--count", "abc", "--unknown"])
+    assert r.exit_code == 1
+    assert "error: unknown flag '--unknown'\n" in r.stderr
+
+
+def test_the_same_holds_when_the_bad_value_comes_second():
+    r = _precedence_app().test(["cmd", "--unknown", "--count", "abc"])
+    assert r.exit_code == 1
+    assert "error: unknown flag '--unknown'\n" in r.stderr
+
+
+def test_an_unknown_flag_outranks_a_float_that_will_not_coerce():
+    r = _precedence_app().test(["cmd", "--ratio", "nope", "--unknown"])
+    assert r.exit_code == 1
+    assert "error: unknown flag '--unknown'\n" in r.stderr
+
+
+def test_an_unknown_flag_outranks_an_invalid_choice():
+    r = _precedence_app().test(["cmd", "--mode", "sideways", "--unknown"])
+    assert r.exit_code == 1
+    assert "error: unknown flag '--unknown'\n" in r.stderr
+
+
+def test_a_value_problem_alone_still_reports_itself():
+    """Precedence orders problems; it never suppresses one."""
+    r = _precedence_app().test(["cmd", "--count", "abc"])
+    assert r.exit_code == 1
+    assert "error: --count: expected integer, got 'abc'\n" in r.stderr
+
+
+def test_value_problems_are_reported_in_argv_order_among_themselves():
+    r = _precedence_app().test(["cmd", "--count", "abc", "--ratio", "nope"])
+    assert r.exit_code == 1
+    assert "error: --count: expected integer, got 'abc'\n" in r.stderr
+
+    r = _precedence_app().test(["cmd", "--ratio", "nope", "--count", "abc"])
+    assert r.exit_code == 1
+    assert "--ratio" in r.stderr
+
+
+def test_a_missing_value_is_structural_and_outranks_a_bad_value():
+    """`--flag` with nothing after it is a token-consumption fact, decided in
+    the scan; it is reported ahead of a value that will not coerce."""
+    r = _precedence_app().test(["cmd", "--count", "abc", "--ratio"])
+    assert r.exit_code == 1
+    assert "error: flag '--ratio' requires a value\n" in r.stderr

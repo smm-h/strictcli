@@ -11594,6 +11594,33 @@ def _build_scope_values(
     return result
 
 
+def _elect_and_validate_scopes(
+    cmd: Command,
+    occs: list[_Occ],
+    *,
+    config_data: dict | None = None,
+    hermetic: bool = False,
+    pre_typed: bool = False,
+) -> _ElectionState:
+    """Phases 1-3: elect, bind the reused shorts, validate scope membership.
+
+    The STRUCTURAL half of selector resolution, split out so a caller can run
+    it before any value is coerced anywhere on the command line. Parse-problem
+    precedence is normative for every command, not only for one that declares
+    a selector: an unknown flag, an unknown choice and a scope violation are
+    all facts about the command line's SHAPE, and shape is decided before any
+    token's text is interpreted as a value.
+    """
+    state = _ElectionState()
+    _elect_all(
+        cmd.selectors, (), occs, state,
+        config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
+    )
+    _resolve_short_occurrences(cmd, occs, state)
+    _validate_scopes(cmd, occs, state)
+    return state
+
+
 def _resolve_selectors(
     cmd: Command,
     occs: list[_Occ],
@@ -11603,18 +11630,21 @@ def _resolve_selectors(
     pre_typed: bool = False,
     stdin_consumed_by: list | None = None,
     conflict_mode: str = "cli-wins",
+    state: _ElectionState | None = None,
 ) -> _SelectorResult:
-    """Run all four phases over a command's selectors."""
+    """Run all four phases over a command's selectors.
+
+    ``state`` carries the result of phases 1-3 when a caller has already run
+    them (:func:`_elect_and_validate_scopes`); passing it never re-runs them.
+    """
     if stdin_consumed_by is None:
         stdin_consumed_by = [None]
-    state = _ElectionState()
     member_spelled = _member_spelling_map(cmd.selectors)
-    _elect_all(
-        cmd.selectors, (), occs, state,
-        config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
-    )
-    _resolve_short_occurrences(cmd, occs, state)
-    _validate_scopes(cmd, occs, state)
+    if state is None:
+        state = _elect_and_validate_scopes(
+            cmd, occs,
+            config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
+        )
     result = _build_scope_values(
         cmd.selectors, (), occs, state,
         config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
@@ -11781,6 +11811,13 @@ def _parse_command(
     # Track which flags were set by CLI args
     cli_set: dict[str, object] = {}  # flag.name -> value
     positionals: list[str] = []
+    # Every ROOT-scope flag occurrence, recorded without interpreting its text.
+    # The token scan decides SHAPE only -- which flag a token names, whether it
+    # consumes the next argv element -- and every coercion happens afterwards,
+    # so a structural problem is always reported before a value problem
+    # whatever their order on the command line. `raw` is a str for a value
+    # token and True/False for a bool-style one.
+    root_occs: list[tuple[Flag, object]] = []
     # Phase 1: every scoped occurrence, collected WITHOUT interpreting any of
     # it. Whether a token consumes the next argv element is decided here, before
     # any choice is elected -- which is why sibling scopes may reuse a name only
@@ -11896,23 +11933,7 @@ def _parse_command(
                     raise _ParseError(
                         f"flag '{flag_part}' is a boolean flag and does not take a value"
                     )
-                if f.compound == "dict":
-                    _store_dict_flag(f, value_part, cli_set)
-                elif f.type is int:
-                    try:
-                        _store_value(f, _strict_int(value_part))
-                    except ValueError as e:
-                        raise _ParseError(f"--{f.name}: {e}")
-                elif f.type is float:
-                    try:
-                        _store_value(f, _strict_float(value_part))
-                    except ValueError as e:
-                        raise _float_parse_error(f.name, value_part, e)
-                else:
-                    resolved, stdin_consumed_by[0] = _resolve_at_prefix(
-                        f.name, value_part, stdin_consumed_by[0],
-                    )
-                    _store_value(f, resolved)
+                root_occs.append((f, value_part))
             elif flag_part in negation_lookup:
                 raise _ParseError(
                     f"flag '{flag_part}' is a boolean negation and does not take a value"
@@ -11925,7 +11946,7 @@ def _parse_command(
         # --no-flag negation
         if tok in negation_lookup:
             f = negation_lookup[tok]
-            cli_set[f.name] = False
+            root_occs.append((f, False))
             i += 1
             continue
 
@@ -11934,29 +11955,12 @@ def _parse_command(
             if tok in long_lookup:
                 f = long_lookup[tok]
                 if f.type is bool and f.compound != "dict":
-                    cli_set[f.name] = True
+                    root_occs.append((f, True))
                     i += 1
                 else:
                     # str/int/float/dict flag: consume next token as value
                     if i + 1 < len(tokens):
-                        raw = tokens[i + 1]
-                        if f.compound == "dict":
-                            _store_dict_flag(f, raw, cli_set)
-                        elif f.type is int:
-                            try:
-                                _store_value(f, _strict_int(raw))
-                            except ValueError as e:
-                                raise _ParseError(f"--{f.name}: {e}")
-                        elif f.type is float:
-                            try:
-                                _store_value(f, _strict_float(raw))
-                            except ValueError as e:
-                                raise _float_parse_error(f.name, raw, e)
-                        else:
-                            resolved, stdin_consumed_by[0] = _resolve_at_prefix(
-                                f.name, raw, stdin_consumed_by[0],
-                            )
-                            _store_value(f, resolved)
+                        root_occs.append((f, tokens[i + 1]))
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -11968,29 +11972,12 @@ def _parse_command(
         if tok.startswith("-") and len(tok) == 2 and tok in short_lookup:
             f = short_lookup[tok]
             if f.type is bool and f.compound != "dict":
-                cli_set[f.name] = True
+                root_occs.append((f, True))
                 i += 1
             else:
                 # str/int/float/dict flag: consume next token as value
                 if i + 1 < len(tokens):
-                    raw = tokens[i + 1]
-                    if f.compound == "dict":
-                        _store_dict_flag(f, raw, cli_set)
-                    elif f.type is int:
-                        try:
-                            _store_value(f, _strict_int(raw))
-                        except ValueError as e:
-                            raise _ParseError(f"--{f.name}: {e}")
-                    elif f.type is float:
-                        try:
-                            _store_value(f, _strict_float(raw))
-                        except ValueError as e:
-                            raise _float_parse_error(f.name, raw, e)
-                    else:
-                        resolved, stdin_consumed_by[0] = _resolve_at_prefix(
-                            f.name, raw, stdin_consumed_by[0],
-                        )
-                        _store_value(f, resolved)
+                    root_occs.append((f, tokens[i + 1]))
                     i += 2
                 else:
                     raise _ParseError(f"flag '{tok}' requires a value")
@@ -12000,6 +11987,37 @@ def _parse_command(
         # treat as a positional arg (e.g. negative numbers like -7, -3.14)
         positionals.append(tok)
         i += 1
+
+    # The structural half of selector resolution runs HERE, between the token
+    # scan and the first coercion: an unknown choice and a scope violation
+    # outrank a value that will not parse, whichever came first in argv.
+    election_state: _ElectionState | None = None
+    if cmd.selectors:
+        election_state = _elect_and_validate_scopes(
+            cmd, scoped_occs, config_data=config_data, hermetic=hermetic,
+        )
+
+    # The value pass over the root-scope occurrences, in argv order.
+    for f, raw in root_occs:
+        if raw is True or raw is False:
+            cli_set[f.name] = raw
+        elif f.compound == "dict":
+            _store_dict_flag(f, raw, cli_set)
+        elif f.type is int:
+            try:
+                _store_value(f, _strict_int(raw))
+            except ValueError as e:
+                raise _ParseError(f"--{f.name}: {e}")
+        elif f.type is float:
+            try:
+                _store_value(f, _strict_float(raw))
+            except ValueError as e:
+                raise _float_parse_error(f.name, raw, e)
+        else:
+            resolved, stdin_consumed_by[0] = _resolve_at_prefix(
+                f.name, raw, stdin_consumed_by[0],
+            )
+            _store_value(f, resolved)
 
     # Track which flag names are set by env vs config (for source attribution).
     env_names: set[str] = set()
@@ -12217,6 +12235,7 @@ def _parse_command(
         selector_result = _resolve_selectors(
             cmd, scoped_occs, config_data=config_data, hermetic=hermetic,
             stdin_consumed_by=stdin_consumed_by, conflict_mode=conflict_mode,
+            state=election_state,
         )
         if out_diagnostics is not None:
             out_diagnostics.extend(selector_result.diagnostics)
