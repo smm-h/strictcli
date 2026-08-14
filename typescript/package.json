@@ -1,6 +1,6 @@
 {
 	"name": "strictcli",
-	"version": "0.38.0",
+	"version": "0.39.0",
 	"type": "module",
 	"description": "TS-native strict CLI framework - declare everything, infer nothing",
 	"engines": {
