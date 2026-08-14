@@ -1210,6 +1210,24 @@ func TestMCPRequestMetadataIsValidated(t *testing.T) {
 			})},
 			message: "unrecognized reserved _meta key: 'io.modelcontextprotocol/whatever'",
 		},
+		// More than one offending key names the lexically first, in every
+		// implementation: Go sorts because its map iteration is randomized
+		// (§22.2), and Python and TypeScript sort so the verdict is the same
+		// one rather than their document's own order.
+		{
+			name: "more than one offending key names the first in sorted order",
+			params: map[string]interface{}{"_meta": metaWith(map[string]interface{}{
+				"z!bad": 1, "a!bad": 1,
+			})},
+			message: "invalid _meta key name: 'a!bad'",
+		},
+		{
+			name: "the sorted order spans both key rules",
+			params: map[string]interface{}{"_meta": metaWith(map[string]interface{}{
+				"z!bad": 1, "io.mcp/whatever": 1,
+			})},
+			message: "unrecognized reserved _meta key: 'io.mcp/whatever'",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
