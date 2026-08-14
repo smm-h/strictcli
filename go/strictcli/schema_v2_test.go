@@ -844,3 +844,114 @@ func TestTheToolSchemaCarriesAnArrayEnumInsideItems(t *testing.T) {
 		}
 	}
 }
+
+// The Python implementation writes these exact bytes for the same declaration,
+// which is what §25.8's whole point is: a repository whose schema file is
+// written sometimes by one implementation and sometimes by another sees a diff
+// exactly when something changed. The fixture is the minimal app, so what it
+// pins is the `defaults` block -- the largest fixed region of every dump.
+func TestTheDefaultsBlockMatchesTheSiblingImplementationsBytes(t *testing.T) {
+	app := schemaTestApp(t)
+	os.WriteFile("go.mod", []byte("module testproject\n"), 0o644)
+	app.Command("noop", "Does nothing", noop, WithEffect(EffectReadOnly))
+	got := dumpText(t, app)
+	want := pythonMinimalDump
+	if got != want {
+		t.Fatalf("the dump diverged from the sibling implementations:\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
+// pythonMinimalDump is the Python implementation's dump of the minimal app,
+// captured verbatim.
+const pythonMinimalDump = `{
+  "schema_version": 2,
+  "defaults": {
+    "schema_version": 2,
+    "app": {
+      "env_prefix": null,
+      "config": false,
+      "config_format": "json",
+      "config_path": null,
+      "config_conflict_mode": "cli-wins",
+      "proc_observe_allowlist": [],
+      "global_flags": [],
+      "commands": {},
+      "groups": {},
+      "deprecated": {},
+      "tag_contracts": {},
+      "checks": {},
+      "config_fields": {},
+      "infra": {}
+    },
+    "flag": {
+      "short": null,
+      "env": null,
+      "env_separator": null,
+      "prefixed": true,
+      "choices": null,
+      "elect_by": null,
+      "unique": false,
+      "conflict_mode": null,
+      "negatable": null
+    },
+    "arg": {
+      "variadic": false,
+      "choices": null
+    },
+    "choice": {
+      "flags": []
+    },
+    "choice_record": {
+      "help": null
+    },
+    "command": {
+      "consequential": false,
+      "dry_run_supported": true,
+      "dry_run_unsupported_reason": null,
+      "payload_schema": null,
+      "owns_stdout": false,
+      "passthrough": false,
+      "flags": [],
+      "flag_sets": [],
+      "args": [],
+      "tags": [],
+      "constraints": [],
+      "hidden": false,
+      "interactive": false,
+      "config_fields": [],
+      "grants": [],
+      "forwarding": null
+    },
+    "group": {
+      "commands": {},
+      "groups": {},
+      "deprecated": {},
+      "tags": [],
+      "hidden": false
+    },
+    "config_field": {
+      "default": null,
+      "bound_commands": []
+    },
+    "check": {
+      "scope": null
+    },
+    "infra": {
+      "roots": [],
+      "handshakes": [],
+      "connections": []
+    }
+  },
+  "project_id": "testproject",
+  "name": "testapp",
+  "version": "1.0.0",
+  "help": "A test app",
+  "commands": {
+    "noop": {
+      "name": "noop",
+      "help": "Does nothing",
+      "effect": "read_only"
+    }
+  }
+}
+`
