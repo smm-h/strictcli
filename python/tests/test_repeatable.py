@@ -63,7 +63,7 @@ def test_repeatable_with_type_int():
 
 def test_repeatable_with_choices_valid():
     """Repeatable with choices: each valid value is accepted."""
-    app = _make_app_with_repeatable(choices=["alpha", "beta", "gamma"])
+    app = _make_app_with_repeatable(choices=[strictcli.Choice("alpha"), strictcli.Choice("beta"), strictcli.Choice("gamma")])
     r = app.test(["cmd", "--record", "alpha", "--record", "gamma"])
     assert r.exit_code == 0
     assert "record=['alpha', 'gamma']" in r.stdout
@@ -71,7 +71,7 @@ def test_repeatable_with_choices_valid():
 
 def test_repeatable_with_choices_invalid():
     """Repeatable with choices: an invalid value in any occurrence is rejected."""
-    app = _make_app_with_repeatable(choices=["alpha", "beta", "gamma"])
+    app = _make_app_with_repeatable(choices=[strictcli.Choice("alpha"), strictcli.Choice("beta"), strictcli.Choice("gamma")])
     r = app.test(["cmd", "--record", "alpha", "--record", "delta"])
     assert r.exit_code == 1
     assert "invalid value" in r.stderr

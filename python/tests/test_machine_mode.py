@@ -53,12 +53,43 @@ class TestJsonNameIsReserved:
                 strictcli.Flag(name="json", type=bool, default=False, help="h"),
             ])
 
-    def test_mutex_group_flag(self):
+    def test_scoped_flag_at_any_depth(self):
+        """The ban re-runs at every depth: a choice's scope is a level (§24.7).
+
+        A scope is validated when the SELECTOR claims it, because every message
+        a scope raises names both the choice and its selector (§12.13).
+        """
+
+        @strictcli.choice("email", help="deliver by email")
+        class Email:
+            json: bool = strictcli.sub_flag(help="h", default=False)
+
+        @strictcli.choice("sms", help="deliver by text")
+        class Sms:
+            pass
+
         with pytest.raises(ValueError, match=_RESERVED):
-            strictcli.MutexGroup(flags=[
-                strictcli.Flag(name="json", type=bool, default=False, help="h"),
-                strictcli.Flag(name="text", type=bool, default=False, help="h"),
-            ])
+            strictcli.choice_flag(
+                "via", help="delivery channel", presence="required",
+                elect_by="selector-token", choices=[Email, Sms],
+            )
+
+    def test_a_member_choice_named_json(self):
+        """Under member spelling a choice name IS a flag name (§24.7)."""
+
+        @strictcli.choice("json", help="JSON output")
+        class AsJson:
+            pass
+
+        @strictcli.choice("text", help="Text output")
+        class Text:
+            pass
+
+        with pytest.raises(ValueError, match=_RESERVED):
+            strictcli.choice_flag(
+                "format", help="the output format", presence="required",
+                elect_by="member-flags", choices=[AsJson, Text],
+            )
 
     def test_positional_arg_named_json_is_unaffected(self):
         # The ban covers the flag surface only: an arg has no `--` spelling.

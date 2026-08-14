@@ -208,22 +208,31 @@ class TestPassthroughWithFlagSetsRaisesValueError:
             assert "flag sets" in str(e)
 
 
-class TestPassthroughWithMutexRaisesValueError:
-    def test_mutex(self):
+class TestPassthroughWithChoiceFlagRaisesValueError:
+    def test_choice_flag(self):
         pt = strictcli.Passthrough(handler=lambda ctx, n, a, g: 0)
-        mg = strictcli.MutexGroup(flags=[
-            strictcli.Flag(name="as-json", type=bool, default=False, help="json output"),
-            strictcli.Flag(name="yaml", type=bool, default=False, help="yaml output"),
-        ])
+
+        @strictcli.choice("as-json", help="json output")
+        class AsJson:
+            pass
+
+        @strictcli.choice("yaml", help="yaml output")
+        class Yaml:
+            pass
+
         app = _build_app()
         try:
-            @app.command("exec", effect="read_only", help="run", passthrough=pt, mutex=[mg])
-            def exec_cmd(json, yaml):
+            @app.command("exec", effect="read_only", help="run", passthrough=pt)
+            @strictcli.choice_flag(
+                "format", help="the output format", presence="required",
+                elect_by="member-flags", choices=[AsJson, Yaml],
+            )
+            def exec_cmd(ctx, format):
                 pass
             assert False, "should have raised ValueError"
         except ValueError as e:
             assert "passthrough" in str(e)
-            assert "mutex" in str(e)
+            assert "choice flags" in str(e)
 
 
 class TestMultiplePassthroughSameHandler:

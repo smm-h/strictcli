@@ -12,49 +12,57 @@ import strictcli
 
 
 # ---------------------------------------------------------------------------
-# Mutex flags: the unset member resolves to None
+# Optional flags inside a choice's scope: absence is delivered as absence
+#
+# The mutex-member cases this section used to cover are gone with the construct
+# (§21's box): an unelected scope is not delivered at all, so there is no
+# per-member value for choices or a validator to see. What survives is the same
+# rule one level down -- an OPTIONAL sub-flag delivers None, and neither
+# choices validation nor a custom validator runs on it (§24.1, §23.5).
 # ---------------------------------------------------------------------------
 
 
-def _mutex_choices_app():
-    mg = strictcli.MutexGroup(
-        flags=[
-            strictcli.Flag(
-                name="format", type=str, help="output format",
-                presence="optional", choices=["text", "json"],
-            ),
-            strictcli.Flag(name="output", type=str, help="output path", presence="optional"),
-        ],
-    )
+def _scoped_choices_app(validator=None):
+    @strictcli.choice("write", help="write the output")
+    class Write:
+        format: str = strictcli.sub_flag(
+            help="output format", presence="optional",
+            choices=[strictcli.Choice("text"), strictcli.Choice("json")],
+            validate=validator,
+        )
+
+    @strictcli.choice("discard", help="discard the output")
+    class Discard:
+        pass
+
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
-    def cmd(ctx, format, output):
-        print(f"format={format} output={output}")
+    @app.command("cmd", effect="read_only", help="a command")
+    @strictcli.choice_flag(
+        "mode", help="what to do with the output", presence="required",
+        elect_by="selector-token", choices=[Write, Discard],
+    )
+    def cmd(ctx, mode: Write | Discard):
+        print(repr(mode))
 
     return app
 
 
-def test_mutex_flag_choices_unset_not_validated():
-    """Choices on an unset mutex flag must not fire when the other member is passed."""
-    app = _mutex_choices_app()
-    r = app.test(["cmd", "--output", "out.txt"])
+def test_scoped_optional_choices_unset_not_validated():
+    """Choices on an unset optional sub-flag must not fire."""
+    r = _scoped_choices_app().test(["cmd", "--mode", "write"])
     assert r.exit_code == 0
-    assert "format=None output=out.txt" in r.stdout
+    assert "Write(format=None)" in r.stdout
 
 
-def test_mutex_flag_choices_passed_valid():
-    """A valid choice on the mutex flag is still accepted."""
-    app = _mutex_choices_app()
-    r = app.test(["cmd", "--format", "json"])
+def test_scoped_optional_choices_passed_valid():
+    r = _scoped_choices_app().test(["cmd", "--mode", "write", "--format", "json"])
     assert r.exit_code == 0
-    assert "format=json output=None" in r.stdout
+    assert "Write(format='json')" in r.stdout
 
 
-def test_mutex_flag_choices_passed_invalid():
-    """An invalid choice on the mutex flag is still rejected."""
-    app = _mutex_choices_app()
-    r = app.test(["cmd", "--format", "xml"])
+def test_scoped_optional_choices_passed_invalid():
+    r = _scoped_choices_app().test(["cmd", "--mode", "write", "--format", "xml"])
     assert r.exit_code == 1
     assert "--format: invalid value 'xml', must be one of: text, json" in r.stderr
 
@@ -72,7 +80,7 @@ def _arg_choices_app(**arg_kwargs):
         effect="read_only", help="a command",
         args=[strictcli.Arg(
             name="env", help="target env",
-            choices=["dev", "staging", "prod"], **arg_kwargs,
+            choices=[strictcli.Choice("dev"), strictcli.Choice("staging"), strictcli.Choice("prod")], **arg_kwargs,
         )],
     )
     def cmd(ctx, env=None):
@@ -128,36 +136,39 @@ def _name_validator(val):
         raise ValueError("bad name")
 
 
-def _mutex_validate_app():
-    mg = strictcli.MutexGroup(
-        flags=[
-            strictcli.Flag(
-                name="name", type=str, help="a name",
-                presence="optional", validate=_name_validator,
-            ),
-            strictcli.Flag(name="id", type=str, help="an id", presence="optional"),
-        ],
-    )
+def _scoped_validate_app():
+    @strictcli.choice("named", help="address it by name")
+    class Named:
+        name: str = strictcli.sub_flag(
+            help="a name", presence="optional", validate=_name_validator,
+        )
+
+    @strictcli.choice("numbered", help="address it by id")
+    class Numbered:
+        id: str = strictcli.sub_flag(help="an id", presence="optional")
+
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
-    def cmd(ctx, name, id):
-        print(f"name={name} id={id}")
+    @app.command("cmd", effect="read_only", help="a command")
+    @strictcli.choice_flag(
+        "by", help="how to address it", presence="required",
+        elect_by="selector-token", choices=[Named, Numbered],
+    )
+    def cmd(ctx, by: Named | Numbered):
+        print(repr(by))
 
     return app
 
 
-def test_mutex_flag_validate_unset_not_called():
-    """A custom validator must not run for an unset mutex flag (value None)."""
-    app = _mutex_validate_app()
-    r = app.test(["cmd", "--id", "42"])
+def test_scoped_optional_validate_unset_not_called():
+    """A custom validator must not run for an unset optional sub-flag."""
+    r = _scoped_validate_app().test(["cmd", "--by", "named"])
     assert r.exit_code == 0
-    assert "name=None id=42" in r.stdout
+    assert "Named(name=None)" in r.stdout
 
 
-def test_mutex_flag_validate_passed_still_runs():
+def test_scoped_optional_validate_passed_still_runs():
     """A passed value is still validated."""
-    app = _mutex_validate_app()
-    r = app.test(["cmd", "--name", "bad"])
+    r = _scoped_validate_app().test(["cmd", "--by", "named", "--name", "bad"])
     assert r.exit_code == 1
     assert "--name: bad name" in r.stderr

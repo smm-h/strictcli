@@ -341,43 +341,44 @@ def test_requires_same_flag_error():
 # ---------------------------------------------------------------------------
 
 
-def test_dependency_with_mutex_interaction():
-    """A flag can participate in both a mutex group and a dependency."""
-    mg = strictcli.MutexGroup(
-        flags=[
-            strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output"),
-            strictcli.Flag(name="csv", type=bool, default=False, help="CSV output"),
-        ],
-    )
+def test_a_constraint_cannot_reference_a_scoped_flag():
+    """§24.8: the scope already IS the constraint, so naming one is refused.
+
+    Expressing the same fact twice, in two mechanisms, is how the two disagree
+    later. Constraints stay at root scope, where the flags they name are
+    unconditional.
+    """
+
+    @strictcli.choice("email", help="deliver by email")
+    class Email:
+        subject: str = strictcli.sub_flag(help="the subject", presence="required")
+
+    @strictcli.choice("sms", help="deliver by text")
+    class Sms:
+        phone: str = strictcli.sub_flag(help="the number", presence="required")
+
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
-    # --output requires that one of the format flags is set (tested via
-    # Requires on --as-json). The mutex ensures only one format flag is used.
-    @app.command(
-        "cmd", effect="read_only", help="a command",
-        mutex=[mg],
-        dependencies=[strictcli.Requires(flag="output", depends_on="as-json")],
+    with pytest.raises(ValueError) as exc:
+
+        @app.command(
+            "cmd", effect="read_only", help="a command",
+            dependencies=[
+                strictcli.Requires(flag="output", depends_on="subject"),
+            ],
+        )
+        @strictcli.choice_flag(
+            "via", help="delivery channel", presence="required",
+            elect_by="selector-token", choices=[Email, Sms],
+        )
+        @strictcli.flag("output", type=str, help="output path", default="")
+        def cmd(ctx, output, via: Email | Sms):
+            pass
+
+    assert str(exc.value) == (
+        'command "cmd": Requires references \'subject\', which is declared '
+        "under '--via email': dependency constraints operate at root scope only"
     )
-    @strictcli.flag("output", type=str, help="output path", default="")
-    def cmd(ctx, output, as_json, csv):
-        print(f"output={output} json={as_json} csv={csv}")
-
-    # --as-json alone -> ok
-    r = app.test(["cmd", "--as-json"])
-    assert r.exit_code == 0
-
-    # --output with --as-json -> ok
-    r = app.test(["cmd", "--output", "file.txt", "--as-json"])
-    assert r.exit_code == 0
-    assert "output=file.txt" in r.stdout
-    assert "json=True" in r.stdout
-
-    # --output without --as-json -> error (requires)
-    r = app.test(["cmd", "--output", "file.txt", "--csv"])
-    assert r.exit_code == 1
-    assert "requires" in r.stderr
-    assert "--output" in r.stderr
-    assert "--as-json" in r.stderr
 
 
 # ---------------------------------------------------------------------------

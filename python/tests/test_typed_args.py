@@ -421,7 +421,7 @@ def test_str_arg_choices_valid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="color", help="pick a color", choices=["red", "blue", "green"], presence="required")],
+        args=[strictcli.Arg(name="color", help="pick a color", choices=[strictcli.Choice("red"), strictcli.Choice("blue"), strictcli.Choice("green")], presence="required")],
     )
     def cmd(ctx, color):
         print(f"color={color}")
@@ -438,7 +438,7 @@ def test_str_arg_choices_invalid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="color", help="pick a color", choices=["red", "blue", "green"], presence="required")],
+        args=[strictcli.Arg(name="color", help="pick a color", choices=[strictcli.Choice("red"), strictcli.Choice("blue"), strictcli.Choice("green")], presence="required")],
     )
     def cmd(ctx, color):
         pass
@@ -456,7 +456,7 @@ def test_int_arg_choices_valid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[1, 2, 3], presence="required")],
+        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[strictcli.Choice(1), strictcli.Choice(2), strictcli.Choice(3)], presence="required")],
     )
     def cmd(ctx, level):
         print(f"level={level} type={type(level).__name__}")
@@ -473,7 +473,7 @@ def test_int_arg_choices_invalid():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[1, 2, 3], presence="required")],
+        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[strictcli.Choice(1), strictcli.Choice(2), strictcli.Choice(3)], presence="required")],
     )
     def cmd(ctx, level):
         pass
@@ -487,13 +487,13 @@ def test_int_arg_choices_invalid():
 def test_choices_registration_type_mismatch():
     """Choices items must match the arg's type at registration."""
     with pytest.raises(ValueError, match="choice 'x' is not of type int"):
-        strictcli.Arg(name="level", help="pick", type=int, choices=["x", "y"], presence="required")
+        strictcli.Arg(name="level", help="pick", type=int, choices=[strictcli.Choice("x"), strictcli.Choice("y")], presence="required")
 
 
 def test_choices_bool_incompatible():
     """Choices is incompatible with type=bool."""
     with pytest.raises(ValueError, match="choices is incompatible with type=bool"):
-        strictcli.Arg(name="flag", help="pick", type=bool, choices=[True, False], presence="required")
+        strictcli.Arg(name="flag", help="pick", type=bool, choices=[strictcli.Choice(True), strictcli.Choice(False)], presence="required")
 
 
 def test_choices_empty_list():
@@ -507,7 +507,7 @@ def test_choices_default_must_be_in_choices():
     with pytest.raises(ValueError, match="default .* is not in choices"):
         strictcli.Arg(
             name="x", help="pick", 
-            default="yellow", choices=["red", "blue"],
+            default="yellow", choices=[strictcli.Choice("red"), strictcli.Choice("blue")],
         )
 
 
@@ -515,7 +515,7 @@ def test_choices_default_valid():
     """Default value in choices is accepted."""
     a = strictcli.Arg(
         name="x", help="pick", 
-        default="red", choices=["red", "blue"],
+        default="red", choices=[strictcli.Choice("red"), strictcli.Choice("blue")],
     )
     assert a.default == "red"
 
@@ -529,7 +529,7 @@ def test_variadic_int_arg_choices():
         effect="read_only", help="a command",
         args=[strictcli.Arg(
             name="levels", help="pick levels", type=int,
-            choices=[1, 2, 3], variadic=True, presence="required",
+            choices=[strictcli.Choice(1), strictcli.Choice(2), strictcli.Choice(3)], variadic=True, presence="required",
         )],
     )
     def cmd(ctx, levels):
@@ -676,7 +676,7 @@ def test_invoke_int_arg_with_choices():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[1, 2, 3], presence="required")],
+        args=[strictcli.Arg(name="level", help="pick a level", type=int, choices=[strictcli.Choice(1), strictcli.Choice(2), strictcli.Choice(3)], presence="required")],
     )
     def cmd(ctx, level):
         captured["level"] = level
@@ -795,7 +795,7 @@ def test_choices_shown_in_help():
     @app.command(
         "cmd",
         effect="read_only", help="a command",
-        args=[strictcli.Arg(name="color", help="pick a color", choices=["red", "blue"], presence="required")],
+        args=[strictcli.Arg(name="color", help="pick a color", choices=[strictcli.Choice("red"), strictcli.Choice("blue")], presence="required")],
     )
     def cmd(ctx, color):
         pass
@@ -829,7 +829,7 @@ def test_decorator_arg_with_choices():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.arg("color", help="pick a color", choices=["red", "blue"], presence="required")
+    @strictcli.arg("color", help="pick a color", choices=[strictcli.Choice("red"), strictcli.Choice("blue")], presence="required")
     def cmd(ctx, color):
         print(f"color={color}")
 

@@ -273,23 +273,34 @@ class TestCallErrorCases:
         with pytest.raises(strictcli.InvokeError, match="unknown parameter 'bogus'"):
             app.call("run", bogus="value")
 
-    def test_mutex_violation(self):
+    def test_selector_without_an_elected_record(self):
+        """call() takes the elected record; nothing else satisfies it (§24.11)."""
         app = _build_app()
 
-        @app.command(
-            "fmt", effect="read_only", help="format",
-            mutex=[strictcli.MutexGroup(
-                flags=[
-                    strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output"),
-                    strictcli.Flag(name="yaml", type=bool, default=False, help="YAML output"),
-                ],
-            )],
-        )
-        def fmt(ctx, as_json, yaml):
+        @strictcli.choice("as-json", help="JSON output")
+        class AsJson:
             pass
 
-        with pytest.raises(strictcli.InvokeError, match="mutually exclusive"):
-            app.call("fmt", as_json=True, yaml=True)
+        @strictcli.choice("yaml", help="YAML output")
+        class Yaml:
+            pass
+
+        @app.command("fmt", effect="read_only", help="format")
+        @strictcli.choice_flag(
+            "format", help="the output format", presence="required",
+            elect_by="member-flags", choices=[AsJson, Yaml],
+        )
+        def fmt(ctx, format: AsJson | Yaml):
+            pass
+
+        with pytest.raises(
+            strictcli.InvokeError, match="one of --as-json, --yaml is required",
+        ):
+            app.call("fmt")
+        with pytest.raises(
+            strictcli.InvokeError, match="must be an instance of a declared choice",
+        ):
+            app.call("fmt", format=True)
 
     def test_group_path_raises(self):
         """Calling a group (not a command) raises InvokeError."""

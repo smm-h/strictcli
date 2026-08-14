@@ -5,9 +5,12 @@ from __future__ import annotations
 __version__ = "0.40.0"
 
 __all__ = [
-    "App", "Flag", "Arg", "FlagSet", "MutexGroup", "CoRequired", "Requires",
+    "App", "Flag", "Arg", "FlagSet", "CoRequired", "Requires",
     "Implies", "Passthrough", "Forwarding", "DeprecatedCommand", "Result",
     "InvokeError",
+    # The scoped-selector construct (contract §24)
+    "Choice", "choice", "choice_flag", "sub_flag", "sub_choice_flag",
+    "member_value", "provided",
     "Grant", "EffectFailed", "Unsettled", "Completed", "Spawned", "Response",
     "PROC_MUTATE", "PROC_SPAWN", "FILE_WRITE", "NET_MUTATE",
     "flag", "arg",
@@ -27,6 +30,7 @@ import base64
 import binascii
 import calendar
 import contextlib
+import dataclasses
 import decimal
 import keyword
 import fnmatch
@@ -42,6 +46,8 @@ import subprocess
 import sys
 import time
 import tomllib
+import types as _pytypes
+import typing
 
 import tomlkit
 from tomlkit.items import InlineTable, Table
@@ -49,7 +55,10 @@ from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, NamedTuple, Protocol, TypeVar, get_args, get_origin, runtime_checkable
+from typing import (
+    Any, Callable, NamedTuple, Protocol, TypeVar,
+    get_args, get_origin, get_type_hints, runtime_checkable,
+)
 
 # TypeVar for decorator return types — preserves the decorated function's type
 F = TypeVar("F", bound=Callable[..., Any])
@@ -4306,14 +4315,6 @@ def _raise_arg_default_null_not_optional(name: str):
     )
 
 
-def _raise_flag_mutex_member_required(name: str):
-    """Message template: a mutex member cannot declare requiredness (§23.5)."""
-    raise ValueError(
-        f'Flag "{name}": a mutex member cannot declare presence="required": '
-        f"the group's own requirement is what makes the choice mandatory"
-    )
-
-
 def _raise_arg_variadic_default(name: str):
     """Message template: a variadic arg cannot declare a default (§23.3)."""
     raise ValueError(
@@ -4491,6 +4492,97 @@ def _validate_element_type(
             )
 
 
+# ---------------------------------------------------------------------------
+# The value-flag choice record (contract §24.2)
+# ---------------------------------------------------------------------------
+
+# The per-language noun phrases §12.13 pins for Python, used inside sentences
+# that are byte-identical across the three implementations.
+# Attribute a `@choice`-decorated class carries, holding its raw declaration.
+_CHOICE_SPEC_ATTR = "__strictcli_choice__"
+# Metadata key on a dataclass field declared by sub_flag/sub_choice_flag/
+# member_value.
+_SCOPE_FIELD_KEY = "strictcli_scope"
+# Attribute holding a delivered record's per-field source labels (§24.9).
+_RECORD_SOURCES_ATTR = "__strictcli_sources__"
+
+_RECORD_SPELLING = "Choice(<value>, help=...)"
+_SELECTOR_SPELLING = "choice_flag(...)"
+_MEMBER_SELECTOR_SPELLING = 'choice_flag(..., elect_by="member-flags")'
+
+
+@dataclass(frozen=True)
+class Choice:
+    """One entry of a `choices=` value flag: a value, with optional help.
+
+    A `choices=` entry is ALWAYS a record (contract §24.2): the bare-value entry
+    is deleted, because an entry that may carry help and an entry that carries
+    none would be two spellings of one fact. The help is optional -- that is
+    what keeps §24.10's one-line rendering reachable -- and non-empty when
+    supplied, like every other help string in the framework.
+
+    Distinct from ``@choice``, which declares a SELECTOR's choice: a name,
+    mandatory help, and a scope. The case twins name different constructs, and
+    the confusion is named outright by a registration error rather than by
+    inventing a third noun (§24.12).
+    """
+
+    value: object
+    help: str | None = field(default=None, kw_only=True)
+
+    def __post_init__(self) -> None:
+        if self.help is not None:
+            _require_non_empty_str(self.help, "help", "Choice")
+
+
+def _raise_choices_entry_not_record(surface: str, name: str, index: int):
+    """Message template: a bare `choices=` entry (contract §12.13)."""
+    raise ValueError(
+        f'{surface} "{name}": choices entry {index} is a bare value: '
+        f"declare it as {_RECORD_SPELLING}"
+    )
+
+
+def _raise_choices_entry_is_choice_class(
+    surface: str, name: str, index: int, cls_name: str,
+):
+    """Message template: a `@choice` class reached `choices=` (§12.13).
+
+    Python-only: Go's `Ch` and TypeScript's record literal are distinct types
+    from a choice, so the sibling mis-declaration is a compile error.
+    """
+    raise ValueError(
+        f'{surface} "{name}": choices entry {index} is the choice class '
+        f"'{cls_name}', which declares a scope: a choice with a scope belongs "
+        f"to a choice flag, declared with {_SELECTOR_SPELLING}"
+    )
+
+
+def _resolve_choice_records(
+    surface: str, name: str, entries: object,
+) -> tuple[list["Choice"], list]:
+    """Validate a `choices=` list of records and split it into (records, values).
+
+    The declaration surface accepts records only; the resolved VALUE list is
+    what every downstream value rule (coercion, validation, help, schema, MCP)
+    continues to read, unchanged.
+    """
+    if not isinstance(entries, list) or len(entries) == 0:
+        raise ValueError(f'{surface} "{name}": choices must be a non-empty list')
+    records: list[Choice] = []
+    for i, entry in enumerate(entries):
+        if isinstance(entry, Choice):
+            records.append(entry)
+            continue
+        spec = getattr(entry, _CHOICE_SPEC_ATTR, None)
+        if spec is not None and isinstance(entry, type):
+            _raise_choices_entry_is_choice_class(
+                surface, name, i, entry.__name__,
+            )
+        _raise_choices_entry_not_record(surface, name, i)
+    return records, [r.value for r in records]
+
+
 @dataclass
 class Flag:
     """Represents a --flag declaration."""
@@ -4529,28 +4621,16 @@ class Flag:
     compound: str = "scalar"  # "scalar", "list", or "dict"
     item_type: type | None = None  # for list[T]: the T
     value_type: type | None = None  # for dict[str, T]: the T
+    # The declared `choices=` RECORDS (contract §24.2), kept beside the resolved
+    # value list so per-entry help survives to help rendering. Set by
+    # __post_init__ from `choices`, never by the caller.
+    choice_records: tuple["Choice", ...] | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Flag")
-        if self.name == "force":
-            raise ValueError(
-                "flag 'force' is a reserved name; use a qualified name "
-                "like 'force-overwrite' or 'force-delete'"
-            )
-        if self.name in _RESERVED_FRAMEWORK_FLAG_NAMES:
-            _raise_flag_name_reserved_by_framework(self.name)
-        if self.name == _RESERVED_MACHINE_FLAG_NAME:
-            _raise_flag_name_json_reserved()
-        if self.name == _RESERVED_CONSENT_PARAM_NAME:
-            _raise_flag_name_consent_reserved()
-        if self.name in _BANNED_FLAG_NAMES:
-            _raise_flag_name_yes_banned()
-        if self.name.startswith("no-"):
-            raise ValueError(
-                f"flag '{self.name}': names starting with 'no-' are "
-                f"reserved for the negation system; use a positive "
-                f"name instead"
-            )
+        # One function holds every flag-name ban, so the scoped declaration
+        # surfaces raise the identical messages at every depth (§24.7).
+        _check_flag_name_bans(self.name)
 
         # The presence declaration, resolved before anything reads `default`.
         # Nothing downstream infers presence from the shape of another
@@ -4651,12 +4731,16 @@ class Flag:
             raise ValueError(f'Flag "{self.name}": env_separator must be a single character')
         if self.env_separator == "\\":
             raise ValueError(f'Flag "{self.name}": env_separator cannot be a backslash')
-        # Validate choices
+        # Validate choices. Every entry is a record (contract §24.2); the
+        # resolved value list is what the rest of the framework reads.
         if self.choices is not None:
             if self.type is bool:
                 raise ValueError(f'Flag "{self.name}": choices is incompatible with type=bool')
-            if not isinstance(self.choices, list) or len(self.choices) == 0:
-                raise ValueError(f'Flag "{self.name}": choices must be a non-empty list')
+            records, values = _resolve_choice_records(
+                "Flag", self.name, self.choices,
+            )
+            self.choice_records = tuple(records)
+            self.choices = values
             for c in self.choices:
                 if not isinstance(c, self.type):
                     raise ValueError(
@@ -4756,6 +4840,8 @@ class Arg:
     # Compound type fields (set by __post_init__, not by caller)
     compound: str = "scalar"
     item_type: type | None = None
+    # The declared `choices=` records (contract §24.2), same as a flag's.
+    choice_records: tuple["Choice", ...] | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.help, "help", "Arg")
@@ -4806,16 +4892,17 @@ class Arg:
             raise ValueError(
                 f"Arg.type must be str, bool, int, or float, got {self.type!r}"
             )
-        # Validate choices
+        # Validate choices -- record entries, same rule as a flag's (§24.2).
         if self.choices is not None:
             if self.type is bool:
                 raise ValueError(
                     f'Arg "{self.name}": choices is incompatible with type=bool'
                 )
-            if not isinstance(self.choices, list) or len(self.choices) == 0:
-                raise ValueError(
-                    f'Arg "{self.name}": choices must be a non-empty list'
-                )
+            records, values = _resolve_choice_records(
+                "Arg", self.name, self.choices,
+            )
+            self.choice_records = tuple(records)
+            self.choices = values
             for c in self.choices:
                 if not isinstance(c, self.type):
                     raise ValueError(
@@ -4867,11 +4954,1015 @@ class FlagSet:
     flags: list[Flag] = field(default_factory=list)
 
 
-@dataclass
-class MutexGroup:
-    """A group of mutually exclusive flags."""
+# ---------------------------------------------------------------------------
+# The scoped-selector construct (contract §24)
+#
+# A choice is a declaration scope. A SELECTOR is a flag that elects exactly one
+# of its declared choices, and each choice owns the flags that exist only while
+# it is elected. The command is the ROOT scope, which is what makes every rule
+# below uniform at every depth.
+#
+# `MutexGroup` is subsumed by this construct and deleted (§21's box, §24.4):
+# "exactly one of these" is member spelling, where each choice is spelled as
+# its own flag and no selector token is ever typed.
+# ---------------------------------------------------------------------------
 
-    flags: list[Flag] = field(default_factory=list)
+#: How a selector is spelled on the command line. Mandatory on every selector,
+#: with no default: Python declares closed vocabularies as keyword strings, and
+#: the spelling is a decision, never an inference (§24.12).
+_ELECT_SELECTOR_TOKEN = "selector-token"
+_ELECT_MEMBER_FLAGS = "member-flags"
+_ELECT_MODES = (_ELECT_SELECTOR_TOKEN, _ELECT_MEMBER_FLAGS)
+
+# The two names reserved inside every scope, because the delivered record uses
+# them: `choice` tags the record and `value` carries a member's own payload
+# (§24.7). The record's object form is flat, and that flatness is what makes
+# the pair reserved.
+_SCOPE_RESERVED_CHOICE = "choice"
+_SCOPE_RESERVED_VALUE = "value"
+
+
+@dataclass(frozen=True)
+class _ChoiceDecl:
+    """What `@choice` records: the raw declaration, before a selector claims it.
+
+    Field validation is deferred to the selector build, because every message a
+    scope raises is prefixed `Choice "<c>" of "<sel>": ` -- a choice name is
+    unique only within its selector, so the prefix names both (§12.13).
+    """
+
+    name: str
+    help: str
+    cls: type
+    localns: dict
+
+
+@dataclass(frozen=True)
+class _ChoiceSpec:
+    """One choice of one selector: a name, mandatory help, and a scope."""
+
+    name: str
+    help: str
+    cls: type
+    members: tuple[object, ...]  # Flag | _Selector, in declaration order
+    payload: Flag | None = None  # member spelling's `value` field, if any
+
+
+@dataclass(frozen=True)
+class _Selector:
+    """A choice flag: the selector plus the scopes its choices own."""
+
+    name: str
+    help: str
+    presence: str
+    choices: tuple[_ChoiceSpec, ...]
+    elect_by: str
+    default: object = _MISSING  # an INSTANCE of one of the choice classes
+    short: str | None = None
+    env: str | None = None
+
+    @property
+    def is_member_spelled(self) -> bool:
+        return self.elect_by == _ELECT_MEMBER_FLAGS
+
+    def choice_by_name(self, name: str) -> _ChoiceSpec | None:
+        for c in self.choices:
+            if c.name == name:
+                return c
+        return None
+
+    def choice_by_class(self, cls: type) -> _ChoiceSpec | None:
+        for c in self.choices:
+            if c.cls is cls:
+                return c
+        return None
+
+
+# --- registration message templates (contract §12.13) ----------------------
+
+
+def _raise_selector_optional(name: str):
+    raise ValueError(
+        f'Flag "{name}": a choice flag cannot declare '
+        f'{_PRESENCE_SPELLING[_PRESENCE_OPTIONAL]}: an absent selection is a '
+        f"choice nobody named, so name it as a choice of its own"
+    )
+
+
+def _raise_selector_no_choices(name: str):
+    raise ValueError(
+        f'Flag "{name}": a choice flag must declare at least two choices'
+    )
+
+
+def _raise_choice_duplicate_name(sel: str, c: str):
+    raise ValueError(f'Flag "{sel}": choice "{c}" is declared twice')
+
+
+def _raise_choice_help_empty(sel: str, c: str):
+    raise ValueError(f'Choice "{c}" of "{sel}": help text is required')
+
+
+def _raise_selector_default_unknown_choice(sel: str, value: object, names: str):
+    raise ValueError(
+        f'Flag "{sel}": {_default_spelling(value)} names no declared choice: '
+        f"must be one of: {names}"
+    )
+
+
+def _raise_member_selector_short(sel: str):
+    raise ValueError(
+        f'Flag "{sel}": a member-spelled choice flag is never typed, so it '
+        f"cannot carry a short: declare the short on a member"
+    )
+
+
+def _raise_member_default_carries_value(sel: str, c: str):
+    raise ValueError(
+        f'Flag "{sel}": {_default_spelling_bare()} elects choice "{c}", whose '
+        f"flag carries a value nothing supplies: only a payload-less member "
+        f"can be a default"
+    )
+
+
+def _raise_token_choice_carries_payload(sel: str, c: str):
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": a token-spelled choice cannot carry a '
+        f"payload: the token names the choice, and a choice that carries its "
+        f"own value belongs to a member-spelled choice flag, declared with "
+        f"{_MEMBER_SELECTOR_SPELLING}"
+    )
+
+
+def _raise_scoped_name_choice_reserved(c: str, sel: str):
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": flag name \'choice\' is reserved by the '
+        f"framework: it tags the delivered record"
+    )
+
+
+def _raise_scoped_name_value_reserved(c: str, sel: str):
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": flag name \'value\' is reserved by the '
+        f"framework: it carries a member-spelled choice's own payload"
+    )
+
+
+def _raise_scoped_name_collides_root(c: str, sel: str, x: str):
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": flag \'--{x}\' collides with a '
+        f"command-level flag of the same name: the scoped one could never be "
+        f"reached"
+    )
+
+
+def _raise_scoped_name_collides_selector(c: str, sel: str, x: str):
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": flag \'--{x}\' collides with the choice '
+        f"flag's own name"
+    )
+
+
+def _raise_sibling_scope_shape_mismatch(sel: str, x: str, a: str, b: str):
+    raise ValueError(
+        f'Flag "{sel}": flag \'--{x}\' is declared by choices "{a}" and "{b}" '
+        f"with different value shapes: sibling scopes may reuse a name only "
+        f"with an identical type and arity, because tokenizing '--{x}' cannot "
+        f"wait for an election"
+    )
+
+
+def _raise_co_electable_name_reuse(name: str, x: str, p1: str, p2: str):
+    raise ValueError(
+        f'command "{name}": flag \'--{x}\' is declared under \'{p1}\' and '
+        f"under '{p2}', which can be elected at the same time: simultaneously "
+        f"electable scopes may not reuse a flag name"
+    )
+
+
+def _raise_short_collides_across_scopes(name: str, s: str, a: str, b: str):
+    raise ValueError(
+        f'command "{name}": short \'-{s}\' is claimed by \'--{a}\' and '
+        f"'--{b}', which can be elected at the same time"
+    )
+
+
+def _raise_scoped_positional(c: str, sel: str):
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": positional args cannot be declared inside a '
+        f"choice scope: a positional's meaning would depend on an election "
+        f"that may be typed after it"
+    )
+
+
+def _raise_constraint_references_scoped_flag(
+    name: str, family: str, x: str, path: str,
+):
+    raise ValueError(
+        f'command "{name}": {family} references \'{x}\', which is declared '
+        f"under '{path}': dependency constraints operate at root scope only"
+    )
+
+
+def _raise_handler_selector_annotation(
+    name: str, param: str, sel: str, union: str, written: str,
+):
+    """Python-only (§12.13): the handler parameter must annotate the union.
+
+    Without this a developer can annotate one choice class and `assert_never`
+    then passes the type checker while silently skipping branches -- the check
+    is what makes exhaustiveness SOUND rather than hoped for.
+    """
+    raise ValueError(
+        f'command "{name}": handler parameter \'{param}\' is bound to choice '
+        f"flag '--{sel}' and must be annotated {union}, got {written}"
+    )
+
+
+def _raise_handler_kwargs_with_selector(name: str):
+    """Python-only (§12.13): a **kwargs handler cannot carry a selector."""
+    raise ValueError(
+        f'command "{name}": a command declaring a choice flag cannot use a '
+        f"**kwargs handler: the elected value must reach a named, annotated "
+        f"parameter"
+    )
+
+
+def _raise_handler_annotation_unresolved(name: str, param: str, written: str):
+    """Python-only (§12.13): the annotation did not resolve at registration."""
+    raise ValueError(
+        f'command "{name}": handler parameter \'{param}\' annotation {written} '
+        f"cannot be resolved at registration: a choice class must be "
+        f"importable at run time, not only under TYPE_CHECKING"
+    )
+
+
+def _default_spelling_bare() -> str:
+    """`default=` with no value clause, for messages about the spelling."""
+    return "default="
+
+
+# --- authored Python-only registration guards ------------------------------
+# The pinned catalogue covers the conditions all three languages can reach.
+# These name mis-declarations only Python's spelling can produce.
+
+
+def _raise_selector_elect_by_undeclared(name: str):
+    raise ValueError(
+        f'Flag "{name}": elect_by is undeclared: declare '
+        f'elect_by="{_ELECT_SELECTOR_TOKEN}" or '
+        f'elect_by="{_ELECT_MEMBER_FLAGS}"'
+    )
+
+
+def _raise_selector_elect_by_invalid(name: str, value: object):
+    raise ValueError(
+        f'Flag "{name}": elect_by must be "{_ELECT_SELECTOR_TOKEN}" or '
+        f'"{_ELECT_MEMBER_FLAGS}", got {value!r}'
+    )
+
+
+def _raise_choices_entry_not_choice_class(name: str, index: int, got: str):
+    raise ValueError(
+        f'Flag "{name}": choices entry {index} is {got}, not a choice class: '
+        f"declare it with @choice(...)"
+    )
+
+
+def _raise_choice_name_charset(sel: str, c: str):
+    raise ValueError(
+        f'Flag "{sel}": choice name "{c}" must match [a-z][a-z0-9-]*'
+    )
+
+
+def _raise_scope_field_undeclared(c: str, sel: str, fieldname: str):
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": field \'{fieldname}\' declares no flag: '
+        f"declare it with sub_flag(...), sub_choice_flag(...) or "
+        f"member_value(...)"
+    )
+
+
+def _raise_member_value_field_name(c: str, sel: str, fieldname: str):
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": member_value(...) declares the payload on '
+        f"field '{fieldname}': a member-spelled choice's payload is delivered "
+        f"under the reserved name 'value'"
+    )
+
+
+def _raise_scope_annotation_unresolved(c: str, sel: str, fieldname: str):
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": the annotation of field \'{fieldname}\' '
+        f"cannot be resolved at registration: a choice class must be "
+        f"importable at run time, not only under TYPE_CHECKING"
+    )
+
+
+def _raise_scope_selector_annotation(
+    c: str, sel: str, fieldname: str, nested: str, union: str, written: str,
+):
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": field \'{fieldname}\' is bound to choice '
+        f"flag '--{nested}' and must be annotated {union}, got {written}"
+    )
+
+
+def _raise_selector_default_not_instance(sel: str, got: str):
+    raise ValueError(
+        f'Flag "{sel}": {_default_spelling_bare()} must be an instance of a '
+        f"declared choice class, got {got}"
+    )
+
+
+# --- the declaration surface -----------------------------------------------
+
+
+def choice(name: str, *, help: str):  # noqa: A002 - mirrors the framework keyword
+    """Class decorator: declare one choice of a selector, and its scope.
+
+    The decorated class becomes a **frozen, keyword-only dataclass** -- it is
+    both the declaration and the delivered type, with structural equality, a
+    useful repr, no mutable-default hazard and no field-ordering rule leaking
+    out of ``dataclasses`` (§24.12). Its fields ARE the scope's flags, declared
+    with :func:`sub_flag`, :func:`sub_choice_flag` or :func:`member_value`.
+
+    Validation of the scope is deferred to the selector that claims this class,
+    because every message a scope raises names both the choice and the selector.
+    """
+
+    def decorator(cls: type) -> type:
+        localns = dict(sys._getframe(1).f_locals)
+        dc = dataclasses.dataclass(frozen=True, kw_only=True)(cls)
+        setattr(dc, _CHOICE_SPEC_ATTR, _ChoiceDecl(
+            name=name, help=help, cls=dc, localns=localns,
+        ))
+        return dc
+
+    return decorator
+
+
+def sub_flag(
+    *,
+    help: str,  # noqa: A002
+    presence: object = _MISSING,
+    default: object = _MISSING,
+    short: str | None = None,
+    choices: list | None = None,
+    env: str | None = None,
+    repeatable: bool = False,
+    unique: object = _MISSING,
+    negatable: object = _MISSING,
+    validate: Callable | None = None,
+):
+    """Declare one flag of a choice's scope, inside the choice's class body.
+
+    Takes **no** ``name=``: the field name IS the flag name (``phone_number``
+    -> ``--phone-number``), which is the mapping the framework already uses in
+    the other direction for handler parameters (§24.12). The type comes from
+    the field's annotation.
+
+    Presence is declared here exactly as it is on a command-level flag
+    (§24.1): a scope is not a presence declaration and never supplies one.
+    """
+    payload = {
+        "kind": "flag",
+        "help": help,
+        "presence": presence,
+        "default": default,
+        "short": short,
+        "choices": choices,
+        "env": env,
+        "repeatable": repeatable,
+        "unique": unique,
+        "negatable": negatable,
+        "validate": validate,
+    }
+    meta = {_SCOPE_FIELD_KEY: payload}
+    if not isinstance(default, _MissingSentinel):
+        return field(default=default, metadata=meta)
+    return field(metadata=meta)
+
+
+def sub_choice_flag(
+    *,
+    help: str,  # noqa: A002
+    choices: list[type],
+    elect_by: object = _MISSING,
+    presence: object = _MISSING,
+    default: object = _MISSING,
+    short: str | None = None,
+    env: str | None = None,
+):
+    """Declare a NESTED selector inside a choice's scope (§24.1's recursion).
+
+    A selector is a flag, so a selector may be declared inside a choice's scope
+    to unlimited depth. "Required exactly when user-facing" stops being a rule a
+    handler enforces and becomes where the declaration sits.
+    """
+    payload = {
+        "kind": "selector",
+        "help": help,
+        "choices": choices,
+        "elect_by": elect_by,
+        "presence": presence,
+        "default": default,
+        "short": short,
+        "env": env,
+    }
+    meta = {_SCOPE_FIELD_KEY: payload}
+    if not isinstance(default, _MissingSentinel):
+        return field(default=default, metadata=meta)
+    return field(metadata=meta)
+
+
+def member_value(*, help: str):  # noqa: A002
+    """Declare a member-spelled choice's own payload (§24.4, §24.12).
+
+    A payload is exactly one value, delivered under the reserved name ``value``,
+    and only under member spelling. It takes no presence keyword, because
+    electing the member supplies it.
+    """
+    return field(metadata={_SCOPE_FIELD_KEY: {"kind": "payload", "help": help}})
+
+
+def choice_flag(
+    name: str,
+    *,
+    help: str,  # noqa: A002
+    choices: list[type],
+    elect_by: object = _MISSING,
+    presence: object = _MISSING,
+    default: object = _MISSING,
+    short: str | None = None,
+    env: str | None = None,
+) -> Callable[[F], F]:
+    """Attach a selector (a choice flag) to a command handler (§24.12).
+
+    ``elect_by="selector-token"`` spells the selector as a token of its own
+    (``--via email``); ``elect_by="member-flags"`` spells each choice as its own
+    flag (``--profile work`` / ``--all-profiles``) and no selector token is ever
+    typed. The keyword is mandatory and has no default.
+    """
+    localns = dict(sys._getframe(1).f_locals)
+    decl = _make_selector(
+        name, help=help, choices=choices, elect_by=elect_by,
+        presence=presence, default=default, short=short, env=env,
+        localns=localns,
+    )
+
+    def decorator(func: F) -> F:
+        if not hasattr(func, "_strictcli_flags"):
+            func._strictcli_flags = []  # type: ignore[attr-defined]
+        func._strictcli_flags.append(decl)  # type: ignore[attr-defined]
+        return func
+
+    return decorator
+
+
+def provided(record: object, name: str) -> bool:
+    """Return True when the INVOCATION caused this scoped field's value (§24.9).
+
+    The delivered record answers provided-ness for its OWN fields; the
+    context-level accessors deliberately do not see scope interiors, because a
+    scoped name is not unique command-wide. Spelled as a function over the
+    record rather than as a method, because the record's fields are user-named
+    and a method would occupy a name a scope might want.
+    """
+    sources = getattr(record, _RECORD_SOURCES_ATTR, None)
+    if sources is None:
+        raise KeyError(f"no source info for flag {name!r}")
+    key = name.replace("-", "_")
+    if key in sources:
+        return sources[key] in _PROVIDED_SOURCES
+    if name in sources:
+        return sources[name] in _PROVIDED_SOURCES
+    raise KeyError(f"no source info for flag {name!r}")
+
+
+# --- building the declaration ----------------------------------------------
+
+
+def _scope_field_name(fieldname: str) -> str:
+    """The flag name a scope field declares: the field name, dashed."""
+    return fieldname.replace("_", "-")
+
+
+def _render_union(sel: _Selector) -> str:
+    """The declared union, in declaration order, joined by ` | `.
+
+    Nothing else joins it: a selector is never optional (§24.5), so there is no
+    `None` member to render.
+    """
+    return " | ".join(c.cls.__name__ for c in sel.choices)
+
+
+def _render_annotation(annotation: object) -> str:
+    """An annotation as written, for the annotation-mismatch messages."""
+    members = _union_members(annotation)
+    if members is None:
+        return getattr(annotation, "__name__", None) or str(annotation)
+    return " | ".join(
+        "None" if m is type(None)
+        else (getattr(m, "__name__", None) or str(m))
+        for m in members
+    )
+
+
+def _union_members(annotation: object) -> list[object] | None:
+    origin = get_origin(annotation)
+    if origin is typing.Union or origin is _pytypes.UnionType:
+        return list(get_args(annotation))
+    return None
+
+
+def _annotation_matches_selector(annotation: object, sel: _Selector) -> bool:
+    expected = [c.cls for c in sel.choices]
+    members = _union_members(annotation)
+    got = members if members is not None else [annotation]
+    if len(got) != len(expected):
+        return False
+    return all(a is b for a, b in zip(got, expected))
+
+
+def _make_selector(
+    name: str,
+    *,
+    help: str,  # noqa: A002
+    choices: object,
+    elect_by: object,
+    presence: object,
+    default: object,
+    short: str | None,
+    env: str | None,
+    localns: dict,
+) -> _Selector:
+    """Build and fully validate one selector declaration."""
+    _require_non_empty_str(help, "help", "Flag")
+    # Every existing flag-name ban re-runs on a selector's own name: a selector
+    # IS a flag (§24.7). A member-spelled selector's name is never typed, but it
+    # is the handler key and the noun help and errors use.
+    _check_flag_name_bans(name)
+
+    if isinstance(elect_by, _MissingSentinel):
+        _raise_selector_elect_by_undeclared(name)
+    if elect_by not in _ELECT_MODES:
+        _raise_selector_elect_by_invalid(name, elect_by)
+
+    if not isinstance(choices, list) or len(choices) < 2:
+        _raise_selector_no_choices(name)
+
+    resolved_presence = _resolve_presence("Flag", name, presence, default)
+    if resolved_presence == _PRESENCE_OPTIONAL:
+        _raise_selector_optional(name)
+
+    if elect_by == _ELECT_MEMBER_FLAGS and short is not None:
+        _raise_member_selector_short(name)
+
+    specs: list[_ChoiceSpec] = []
+    seen: set[str] = set()
+    for i, cls in enumerate(choices):
+        decl = getattr(cls, _CHOICE_SPEC_ATTR, None) if isinstance(cls, type) else None
+        if not isinstance(decl, _ChoiceDecl) or decl.cls is not cls:
+            if isinstance(cls, Choice):
+                got = "a value record"
+            elif isinstance(cls, type):
+                got = f"the class '{cls.__name__}'"
+            else:
+                got = f"the value {_format_value_for_error(cls)!r}"
+            _raise_choices_entry_not_choice_class(name, i, got)
+        if decl.name in seen:
+            _raise_choice_duplicate_name(name, decl.name)
+        seen.add(decl.name)
+        specs.append(_build_choice_spec(name, decl, elect_by, localns))
+
+    sel = _Selector(
+        name=name, help=help, presence=resolved_presence,
+        choices=tuple(specs), elect_by=elect_by, default=default,
+        short=short, env=env,
+    )
+
+    # A scoped flag may not reuse the name of the selector that owns it: it
+    # could never be distinguished from the selector's own token (§24.7).
+    for spec in specs:
+        for m in spec.members:
+            mname = m.name
+            if mname == name:
+                _raise_scoped_name_collides_selector(spec.name, name, mname)
+
+    # Sibling scopes may reuse a name only with an identical VALUE SHAPE: two
+    # choices of one selector can never be elected together, so the name is
+    # unambiguous at delivery -- but tokenization precedes election, so the
+    # token's arity may not depend on the outcome (§24.7, §12.13).
+    shapes: dict[str, tuple[str, tuple]] = {}
+    for spec in specs:
+        for m in spec.members:
+            shape = _value_shape(m)
+            prev = shapes.get(m.name)
+            if prev is not None and prev[1] != shape:
+                _raise_sibling_scope_shape_mismatch(
+                    name, m.name, prev[0], spec.name,
+                )
+            if prev is None:
+                shapes[m.name] = (spec.name, shape)
+
+    # The default is a complete elected value: a choice INSTANCE. A frozen
+    # dataclass cannot be constructed without its required fields, so the
+    # incomplete state is unconstructable and there is nothing to check
+    # (§24.5 -- this is why Go's and TypeScript's completeness template is
+    # Python-excluded).
+    if resolved_presence == _PRESENCE_DEFAULT:
+        owner = None
+        for spec in specs:
+            if type(default) is spec.cls:
+                owner = spec
+                break
+        if owner is None:
+            if isinstance(default, (str, int, float, bool)):
+                names = ", ".join(c.name for c in specs)
+                _raise_selector_default_unknown_choice(name, default, names)
+            _raise_selector_default_not_instance(
+                name, type(default).__name__,
+            )
+        if elect_by == _ELECT_MEMBER_FLAGS and owner.payload is not None:
+            _raise_member_default_carries_value(name, owner.name)
+
+    return sel
+
+
+def _value_shape(member: object) -> tuple:
+    """A declaration's value shape: its type AND arity together (§25.3's noun).
+
+    Two sibling declarations of one name must tokenize identically, which is
+    exactly what this tuple captures.
+    """
+    if isinstance(member, _Selector):
+        return ("selector", member.elect_by)
+    f: Flag = member  # type: ignore[assignment]
+    return (f.compound, f.type, bool(f.repeatable))
+
+
+def _check_flag_name_bans(name: str) -> None:
+    """Every existing flag-name ban, applied at every depth (§24.7, §12.13).
+
+    A ban enforced only against a flat root list is this construct's most
+    likely correctness defect, so the bans live in one function that the root
+    surface (``Flag.__post_init__``) and every scoped surface both call.
+    """
+    if name == "force":
+        raise ValueError(
+            "flag 'force' is a reserved name; use a qualified name "
+            "like 'force-overwrite' or 'force-delete'"
+        )
+    if name in _RESERVED_FRAMEWORK_FLAG_NAMES:
+        _raise_flag_name_reserved_by_framework(name)
+    if name == _RESERVED_MACHINE_FLAG_NAME:
+        _raise_flag_name_json_reserved()
+    if name == _RESERVED_CONSENT_PARAM_NAME:
+        _raise_flag_name_consent_reserved()
+    if name in _BANNED_FLAG_NAMES:
+        _raise_flag_name_yes_banned()
+    if name.startswith("no-"):
+        raise ValueError(
+            f"flag '{name}': names starting with 'no-' are "
+            f"reserved for the negation system; use a positive "
+            f"name instead"
+        )
+
+
+def _build_choice_spec(
+    sel_name: str, decl: _ChoiceDecl, elect_by: str, sel_localns: dict,
+) -> _ChoiceSpec:
+    """Build one choice's scope, validating every rule at this depth."""
+    if not isinstance(decl.help, str) or not decl.help.strip():
+        _raise_choice_help_empty(sel_name, decl.name)
+    if not _IDENTIFIER_RE.fullmatch(decl.name):
+        _raise_choice_name_charset(sel_name, decl.name)
+    if elect_by == _ELECT_MEMBER_FLAGS:
+        # Under member spelling a choice name IS a flag name and inherits every
+        # flag-name rule, including the bans (§24.7).
+        _check_flag_name_bans(decl.name)
+
+    cls = decl.cls
+    ns = dict(sel_localns)
+    ns.update(decl.localns)
+    try:
+        hints = get_type_hints(cls, localns=ns)
+    except NameError:
+        hints = {}
+
+    members: list[object] = []
+    payload: Flag | None = None
+    for f in dataclasses.fields(cls):
+        meta = f.metadata.get(_SCOPE_FIELD_KEY)
+        if meta is None:
+            if isinstance(f.default, Arg):
+                _raise_scoped_positional(decl.name, sel_name)
+            _raise_scope_field_undeclared(decl.name, sel_name, f.name)
+        flag_name = _scope_field_name(f.name)
+        if meta["kind"] == "payload":
+            if f.name != _SCOPE_RESERVED_VALUE:
+                _raise_member_value_field_name(decl.name, sel_name, f.name)
+            if elect_by != _ELECT_MEMBER_FLAGS:
+                _raise_token_choice_carries_payload(sel_name, decl.name)
+            if f.name not in hints:
+                _raise_scope_annotation_unresolved(
+                    decl.name, sel_name, f.name,
+                )
+            payload = Flag(
+                name=decl.name, type=hints[f.name], help=meta["help"],
+                presence=_PRESENCE_REQUIRED,
+            )
+            continue
+        # The two reserved names, checked before anything else looks at the
+        # declaration: the delivered record uses them (§24.7).
+        if f.name == _SCOPE_RESERVED_CHOICE:
+            _raise_scoped_name_choice_reserved(decl.name, sel_name)
+        if f.name == _SCOPE_RESERVED_VALUE:
+            _raise_scoped_name_value_reserved(decl.name, sel_name)
+        if f.name not in hints:
+            _raise_scope_annotation_unresolved(decl.name, sel_name, f.name)
+        annotation = hints[f.name]
+        if meta["kind"] == "flag":
+            members.append(Flag(
+                name=flag_name,
+                type=annotation,
+                help=meta["help"],
+                presence=meta["presence"],
+                default=meta["default"],
+                short=meta["short"],
+                choices=meta["choices"],
+                env=meta["env"],
+                repeatable=meta["repeatable"],
+                unique=meta["unique"],
+                negatable=meta["negatable"],
+                validate=meta["validate"],
+            ))
+            continue
+        nested = _make_selector(
+            flag_name,
+            help=meta["help"], choices=meta["choices"],
+            elect_by=meta["elect_by"], presence=meta["presence"],
+            default=meta["default"], short=meta["short"], env=meta["env"],
+            localns=ns,
+        )
+        if not _annotation_matches_selector(annotation, nested):
+            _raise_scope_selector_annotation(
+                decl.name, sel_name, f.name, nested.name,
+                _render_union(nested), _render_annotation(annotation),
+            )
+        members.append(nested)
+
+    return _ChoiceSpec(
+        name=decl.name, help=decl.help, cls=cls,
+        members=tuple(members), payload=payload,
+    )
+
+
+def _check_handler_selector_annotations(
+    cmd_name: str,
+    handler: Callable,
+    selectors: list[_Selector],
+    localns: dict,
+) -> None:
+    """The Python-only mandatory annotation check (§12.13, §24.12)."""
+    raw = getattr(handler, "__annotations__", {}) or {}
+    try:
+        hints = get_type_hints(handler, localns=localns)
+    except NameError:
+        hints = None
+    for sel in selectors:
+        param = _flag_param_name(sel.name)
+        written = raw.get(param)
+        if hints is None or param not in hints:
+            if written is None:
+                _raise_handler_selector_annotation(
+                    cmd_name, param, sel.name, _render_union(sel), "nothing",
+                )
+            _raise_handler_annotation_unresolved(
+                cmd_name, param,
+                written if isinstance(written, str)
+                else _render_annotation(written),
+            )
+        if not _annotation_matches_selector(hints[param], sel):
+            _raise_handler_selector_annotation(
+                cmd_name, param, sel.name, _render_union(sel),
+                _render_annotation(hints[param]),
+            )
+
+
+# --- the site table (every token a scoped declaration can accept) ----------
+
+
+@dataclass(frozen=True)
+class _Site:
+    """One declared token, plus the election chain that makes it exist.
+
+    ``path`` is the scope path: one ``(selector name, choice name)`` segment per
+    election, outermost first. An empty path is the ROOT scope.
+    """
+
+    name: str
+    kind: str  # "flag" | "selector" | "member"
+    path: tuple[tuple[str, str], ...]
+    decl: object  # Flag | _Selector
+    choice: _ChoiceSpec | None = None  # for kind == "member"
+
+    @property
+    def takes_value(self) -> bool:
+        if self.kind == "selector":
+            return True
+        if self.kind == "member":
+            return self.choice.payload is not None
+        f: Flag = self.decl  # type: ignore[assignment]
+        return not (f.type is bool and f.compound == "scalar")
+
+    @property
+    def negatable(self) -> bool:
+        """Whether `--no-<name>` is a legal token for this site.
+
+        A payload-less member is declined by `--no-<name>` (§21.2, carried over
+        into member spelling by §24.4).
+        """
+        if self.kind == "member":
+            return self.choice.payload is None
+        if self.kind == "selector":
+            return False
+        f: Flag = self.decl  # type: ignore[assignment]
+        return f.type is bool and f.negatable and f.compound == "scalar"
+
+    @property
+    def value_flag(self) -> Flag:
+        """The Flag whose value shape this token carries."""
+        if self.kind == "member":
+            return self.choice.payload
+        return self.decl  # type: ignore[return-value]
+
+
+def _walk_sites(
+    members: tuple[object, ...], path: tuple[tuple[str, str], ...],
+) -> list[_Site]:
+    """Every token reachable below ``members``, in declaration order."""
+    sites: list[_Site] = []
+    for m in members:
+        if isinstance(m, Flag):
+            sites.append(_Site(m.name, "flag", path, m))
+            continue
+        sel: _Selector = m
+        if sel.is_member_spelled:
+            for c in sel.choices:
+                sites.append(_Site(c.name, "member", path, sel, c))
+        else:
+            sites.append(_Site(sel.name, "selector", path, sel))
+        for c in sel.choices:
+            sites.extend(_walk_sites(c.members, path + ((sel.name, c.name),)))
+    return sites
+
+
+def _render_scope_path(
+    path: tuple[tuple[str, str], ...], member_spelled: dict[str, bool],
+) -> str:
+    """The pinned scope-path format (§12.13).
+
+    One segment per election on the path, outermost first, joined by a single
+    space; a token-spelled segment is ``--<selector> <choice>`` and a
+    member-spelled segment is ``--<choice>`` -- the member's own flag, which is
+    the only token a reader ever types.
+    """
+    parts: list[str] = []
+    for sel_name, choice_name in path:
+        if member_spelled.get(sel_name):
+            parts.append(f"--{choice_name}")
+        else:
+            parts.append(f"--{sel_name} {choice_name}")
+    return " ".join(parts)
+
+
+def _member_spelling_map(selectors: tuple[_Selector, ...]) -> dict[str, bool]:
+    """selector name -> whether it is member-spelled, at every depth."""
+    out: dict[str, bool] = {}
+
+    def walk(sels: tuple[_Selector, ...]) -> None:
+        for s in sels:
+            out[s.name] = s.is_member_spelled
+            for c in s.choices:
+                walk(tuple(m for m in c.members if isinstance(m, _Selector)))
+
+    walk(selectors)
+    return out
+
+
+def _paths_mutually_exclusive(
+    a: tuple[tuple[str, str], ...], b: tuple[tuple[str, str], ...],
+) -> bool:
+    """True when two scopes can never be live at the same time.
+
+    Stated against SIMULTANEOUSLY ELECTABLE scopes rather than against siblings
+    deliberately (§24.7): it is the formulation that still holds if multi-elect
+    is ever adopted.
+    """
+    for (sa, ca), (sb, cb) in zip(a, b):
+        if sa != sb:
+            return False
+        if ca != cb:
+            return True
+    return False
+
+
+def _divergent_selector(
+    a: tuple[tuple[str, str], ...], b: tuple[tuple[str, str], ...],
+) -> tuple[str, str, str] | None:
+    """The (selector, choice a, choice b) where two sibling paths diverge."""
+    for (sa, ca), (sb, cb) in zip(a, b):
+        if sa != sb:
+            return None
+        if ca != cb:
+            return (sa, ca, cb)
+    return None
+
+
+def _validate_scoped_names(
+    cmd_name: str,
+    root_flags: list[Flag],
+    selectors: list[_Selector],
+    global_flags: list[Flag] | None,
+    sites: list[_Site],
+) -> None:
+    """The name and short collision rules (§24.7, §12.13)."""
+    member_spelled = _member_spelling_map(tuple(selectors))
+    # Every token the ROOT scope owns: command flags, global flags, a
+    # token-spelled selector's own token, and a member-spelled selector's
+    # member flags.
+    root_names = {f.name for f in root_flags}
+    if global_flags:
+        root_names |= {gf.name for gf in global_flags}
+    root_tokens: list[str] = [f.name for f in root_flags]
+    for site in sites:
+        if not site.path:
+            root_tokens.append(site.name)
+    seen_root: set[str] = set()
+    for token in root_tokens:
+        if token in seen_root:
+            raise ValueError(
+                f'command "{cmd_name}": duplicate flag name "{token}"'
+            )
+        seen_root.add(token)
+    root_names |= seen_root
+
+    scoped = [s for s in sites if s.path]
+    for site in scoped:
+        owner_sel, owner_choice = site.path[-1]
+        if site.name in root_names:
+            _raise_scoped_name_collides_root(owner_choice, owner_sel, site.name)
+        # A scoped flag may not reuse the name of any selector on its own path:
+        # that token is always live wherever this one is.
+        for sel_name, _choice in site.path:
+            if site.name == sel_name:
+                _raise_scoped_name_collides_selector(
+                    owner_choice, owner_sel, site.name,
+                )
+
+    by_name: dict[str, list[_Site]] = {}
+    for site in scoped:
+        by_name.setdefault(site.name, []).append(site)
+    for token, group in by_name.items():
+        for i in range(len(group)):
+            for j in range(i + 1, len(group)):
+                a, b = group[i], group[j]
+                if _paths_mutually_exclusive(a.path, b.path):
+                    continue
+                _raise_co_electable_name_reuse(
+                    cmd_name, token,
+                    _render_scope_path(a.path, member_spelled),
+                    _render_scope_path(b.path, member_spelled),
+                )
+
+    # Shorts are claimed across every simultaneously live scope; sibling scopes
+    # may reuse one (§24.7).
+    shorts: list[tuple[str, _Site]] = []
+    for site in sites:
+        if site.kind == "member":
+            short = site.choice.payload.short if site.choice.payload else None
+        else:
+            short = getattr(site.decl, "short", None)
+        if short:
+            shorts.append((short, site))
+    scoped_short_count = len(shorts)  # noqa: F841 -- read below
+    for f in root_flags:
+        if f.short:
+            shorts.append((f.short, _Site(f.name, "flag", (), f)))
+    for i in range(len(shorts)):
+        for j in range(i + 1, len(shorts)):
+            if i >= scoped_short_count:
+                # Two root flags: pre-existing territory this round does not
+                # start policing.
+                continue
+            (s1, a), (s2, b) = shorts[i], shorts[j]
+            if s1 != s2 or a.name == b.name:
+                continue
+            if _paths_mutually_exclusive(a.path, b.path):
+                continue
+            _raise_short_collides_across_scopes(cmd_name, s1, a.name, b.name)
 
 
 @dataclass
@@ -5119,7 +6210,15 @@ class Command:
     flags: tuple[Flag, ...] = ()
     args: tuple[Arg, ...] = ()
     flag_sets: tuple[FlagSet, ...] = ()
-    mutex: tuple[MutexGroup, ...] = ()
+    # Root-scope selectors, in declaration order (contract §24).
+    selectors: tuple[_Selector, ...] = ()
+    # Root flags and selectors interleaved in declaration order,
+    # which is the order help renders them in.
+    members: tuple[object, ...] = ()
+    # Every token a scoped declaration can accept, keyed by token name.
+    sites: dict = field(default_factory=dict)
+    # Short -> scoped token name, for the shorts scoped declarations claim.
+    shorts: dict = field(default_factory=dict)
     dependencies: tuple[CoRequired | Requires | Implies, ...] = ()
     passthrough: Passthrough | None = None
     tags: frozenset[str] = frozenset()
@@ -5244,7 +6343,6 @@ class Group:
         owns_stdout: bool = False,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
-        mutex: list[MutexGroup] | None = None,
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
         grants: list[Grant] | None = None,
@@ -5261,6 +6359,7 @@ class Group:
                 raise ValueError(
                     f'command "{name}" collides with an existing group'
                 )
+            handler_localns = dict(sys._getframe(1).f_locals)
             cmd = _build_and_validate_command(
                 name, help=help, effect=effect,
                 consequential=consequential,
@@ -5268,7 +6367,7 @@ class Group:
                 dry_run_unsupported_reason=dry_run_unsupported_reason,
                 payload_schema=payload_schema,
                 owns_stdout=owns_stdout,
-                handler=func, args=args, flag_sets=flag_sets, mutex=mutex,
+                handler=func, args=args, flag_sets=flag_sets,
                 dependencies=dependencies,
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
@@ -5283,6 +6382,7 @@ class Group:
                 config_fields_ref=self._config_fields_ref,
                 infra_root_names=self._infra_root_names,
                 connection_env_names=self._connection_env_names,
+                handler_localns=handler_localns,
             )
             self.commands[name] = cmd
             return func
@@ -6978,7 +8078,6 @@ class App:
         owns_stdout: bool = False,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
-        mutex: list[MutexGroup] | None = None,
         dependencies: list[CoRequired | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
         grants: list[Grant] | None = None,
@@ -6991,6 +8090,7 @@ class App:
         """Decorator to register a top-level command."""
 
         def decorator(func: F) -> F:
+            handler_localns = dict(sys._getframe(1).f_locals)
             cmd = _build_and_validate_command(
                 name,
                 help=help,
@@ -7003,7 +8103,6 @@ class App:
                 handler=func,
                 args=args,
                 flag_sets=flag_sets,
-                mutex=mutex,
                 dependencies=dependencies,
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
@@ -7018,6 +8117,7 @@ class App:
                 config_fields_ref=self._config_fields,
                 infra_root_names=self._infra_root_names,
                 connection_env_names=self._connection_env_names,
+                handler_localns=handler_localns,
             )
             self._commands[name] = cmd
             return func
@@ -7248,7 +8348,6 @@ class App:
         effect: str,
         handler: Callable,
         args: list[Arg] | None = None,
-        mutex: list[MutexGroup] | None = None,
         extra_flags: list[Flag] | None = None,
         interactive: bool = False,
         payload_schema: dict | None = None,
@@ -7272,7 +8371,6 @@ class App:
             handler=handler,
             args=args,
             flag_sets=None,
-            mutex=mutex,
             dependencies=None,
             env_prefix=self.env_prefix,
             global_flags=self._global_flags,
@@ -8076,6 +9174,7 @@ class App:
         # Pass stdin_consumed_by as a mutable single-element list so
         # _parse_command can update the shared state.
         stdin_state: list[str | None] = [self._stdin_consumed_by]
+        self._last_selector_diagnostics = []
         try:
             cmd, kwargs, post_global, sources = _parse_command(
                 cmd, rest, self._global_flags, config_data=self._config_data,
@@ -8083,6 +9182,7 @@ class App:
                 conflict_mode=self.config_conflict_mode,
                 hermetic=is_hermetic,
                 infra_roots=self._infra_roots,
+                out_diagnostics=self._last_selector_diagnostics,
             )
         except _ParseError as e:
             prefix_parts = [self.name] + path + [cmd.name]
@@ -8690,6 +9790,12 @@ class App:
             command_name=cmd.name,
             payload_schema=cmd.payload_schema,
         )
+        # Every ambient binding a non-elected scope skipped is NAMED, one line
+        # per binding, in declaration order, at debug level -- hidden by
+        # default, shown by --verbose, and carried in machine mode's
+        # diagnostics whatever the human stream did (§24.6).
+        for line in getattr(self, "_last_selector_diagnostics", ()) or ():
+            ctx.debug(line)
         if mode == "run":
             # The confirm protocol fires only on the real CLI path.
             self._confirm_consequential(cmd, cmd_path)
@@ -8878,7 +9984,7 @@ class App:
 
     def _invoke(
         self, command_path: str, kwargs: dict[str, object],
-        *, approve_consequential: bool = False,
+        *, approve_consequential: bool = False, flat: bool = False,
     ) -> object:
         """Invoke a command programmatically with pre-typed kwargs.
 
@@ -8984,6 +10090,27 @@ class App:
                 return None
             return result
 
+        # A selector's value is the same record a handler receives: a choice
+        # instance, pre-typed (§24.11). The flat machine form is converted into
+        # one at the protocol boundary instead, through the SAME election,
+        # scope and presence machinery the argv path uses.
+        selector_result: _SelectorResult | None = None
+        if cmd.selectors:
+            if flat:
+                selector_result = _resolve_selectors(
+                    cmd, _flat_occurrences(cmd, kwargs), pre_typed=True,
+                )
+                kwargs = {
+                    k: v for k, v in kwargs.items()
+                    if k not in _flat_selector_params(cmd)
+                }
+            else:
+                selector_result = _selector_result_from_records(cmd, kwargs)
+                kwargs = {
+                    k: v for k, v in kwargs.items()
+                    if k not in selector_result.values
+                }
+
         # Build reverse mapping: param_name (underscore) -> flag.name (dashes)
         param_to_flag: dict[str, str] = {}
         for f in cmd.flags:
@@ -9034,6 +10161,7 @@ class App:
         # Validate and build final kwargs via the shared validation pipeline
         _cmd, final_kwargs, _global_cli_set, invoke_sources = _validate_and_build_kwargs(
             cmd, store, positionals, global_flag_names, self._infra_roots,
+            selector_result=selector_result,
         )
 
         # Merge global flag values into final kwargs
@@ -9111,7 +10239,7 @@ class App:
 
     def _call_with_kwargs(
         self, command_path: str, kwargs: dict[str, object],
-        *, approve_consequential: bool,
+        *, approve_consequential: bool, flat: bool = False,
     ) -> object:
         """call() with the handler kwargs as a dict instead of a splat.
 
@@ -9125,7 +10253,7 @@ class App:
         try:
             return self._invoke(
                 command_path, kwargs,
-                approve_consequential=approve_consequential,
+                approve_consequential=approve_consequential, flat=flat,
             )
         except _ParseError as e:
             raise InvokeError(str(e)) from e
@@ -9242,15 +10370,18 @@ class App:
         async def execute(
             *, approve_consequential: bool = False, **kwargs: object,
         ) -> object:
-            return await app_ref.acall(
-                command_path,
-                approve_consequential=approve_consequential,
-                **kwargs,
+            # The tool descriptor publishes the FLAT projection (§24.11), so
+            # the values that come back are flat too and are converted into
+            # elected records at this boundary.
+            import asyncio
+            return await asyncio.to_thread(
+                app_ref._call_with_kwargs, command_path, dict(kwargs),
+                approve_consequential=approve_consequential, flat=True,
             )
 
         return Tool(
             name=command_path,
-            description=cmd.help,
+            description=_tool_description(cmd, cmd.help),
             parameters=_build_json_schema(cmd),
             effect=cmd.effect,
             consequential=cmd.consequential,
@@ -9382,6 +10513,58 @@ def _build_json_schema(cmd: Command) -> dict:
         if a.presence == _PRESENCE_REQUIRED:
             required.append(a.name)
 
+    # The selector projection is FLATTEN plus a description map (§24.11). The
+    # selector contributes one property named after itself; every scoped flag
+    # contributes a top-level property and NEVER appears in `required` -- its
+    # requiredness is conditional on an election, and the schema has no
+    # vocabulary for that. A member-spelled selector projects IDENTICALLY to a
+    # token-spelled one: tokenization is a command-line fact and there are no
+    # tokens at this boundary.
+    for sel in cmd.selectors:
+        param = _flag_param_name(sel.name)
+        properties[param] = {
+            "type": "string",
+            "enum": [c.name for c in sel.choices],
+            "description": sel.help,
+        }
+        if sel.presence == _PRESENCE_REQUIRED:
+            required.append(param)
+    for group in cmd.sites.values():
+        site = group[0]
+        if site.kind == "selector":
+            sel = site.decl
+            properties[_flag_param_name(sel.name)] = {
+                "type": "string",
+                "enum": [c.name for c in sel.choices],
+                "description": sel.help,
+            }
+            continue
+        if site.kind == "member":
+            payload = site.choice.payload
+            if payload is None:
+                continue
+            properties[_flag_param_name(site.name)] = {
+                "type": _JSON_SCHEMA_TYPES[payload.type],
+                "description": payload.help,
+            }
+            continue
+        f = site.decl
+        prop = {}
+        if f.compound == "list":
+            prop["type"] = "array"
+            prop["items"] = {"type": _JSON_SCHEMA_TYPES[f.item_type]}
+        elif f.compound == "dict":
+            prop["type"] = "object"
+            prop["additionalProperties"] = {
+                "type": _JSON_SCHEMA_TYPES[f.value_type],
+            }
+        else:
+            prop["type"] = _JSON_SCHEMA_TYPES[f.type]
+        if f.choices is not None:
+            prop["enum"] = f.choices[:]
+        prop["description"] = f.help
+        properties[_flag_param_name(f.name)] = prop
+
     schema: dict = {
         "type": "object",
         "properties": properties,
@@ -9389,6 +10572,57 @@ def _build_json_schema(cmd: Command) -> dict:
         "additionalProperties": False,
     }
     return schema
+
+
+def _tool_description(cmd: Command, help_text: str) -> str:
+    """The tool description, plus the scope block a selector needs (§24.11).
+
+    The scope structure survives in the DESCRIPTION, appended as a
+    deterministic block so an agent can read the constraint it cannot see in
+    the schema. The cost is stated rather than discovered: an agent cannot see
+    the scope rule before it calls; it learns by being refused.
+    """
+    if not cmd.selectors:
+        return help_text
+    lines: list[str] = ["Scoped parameters (enforced at call time):"]
+    _scope_description_lines(cmd.selectors, (), lines)
+    return help_text + "\n\n" + "\n".join(lines)
+
+
+def _scope_description_lines(
+    members: tuple, path: tuple, out: list[str],
+) -> None:
+    """One line per scope, at every depth, in declaration order (§24.11)."""
+    for m in members:
+        if not isinstance(m, _Selector):
+            continue
+        for c in m.choices:
+            child = path + ((_flag_param_name(m.name), c.name),)
+            key = " ".join(f"{s}={v}" for s, v in child)
+            params: list[str] = []
+            for entry in c.members:
+                name = _flag_param_name(entry.name)
+                if isinstance(entry, _Selector):
+                    presence = (
+                        "required" if entry.presence == _PRESENCE_REQUIRED
+                        else f"default: "
+                        f"{entry.choice_by_class(type(entry.default)).name}"
+                    )
+                else:
+                    presence = _scope_presence_text(entry)
+                params.append(f"{name} ({presence})")
+            out.append(
+                f"  {key}: " + (", ".join(params) if params else "(no parameters)")
+            )
+            _scope_description_lines(c.members, child, out)
+
+
+def _scope_presence_text(f: Flag) -> str:
+    if f.presence == _PRESENCE_REQUIRED:
+        return "required"
+    if f.presence == _PRESENCE_OPTIONAL:
+        return "optional"
+    return f"default: {_format_declared_default_for_help(f)}"
 
 
 def _tokens_contain_help(tokens: list[str]) -> bool:
@@ -9444,54 +10678,23 @@ def _validate_and_build_kwargs(
     positionals: list[str],
     global_flag_names: set[str],
     infra_roots: dict[str, str] | None = None,
+    selector_result: "_SelectorResult | None" = None,
 ) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
     """Validate parsed values and build the kwargs dict for the command handler.
 
-    This is the second half of command parsing: mutex enforcement, implies
-    resolution, dependency checks, defaults, choices validation, custom
-    validation, positional arg resolution, and kwargs building. It operates
-    on sourced values in the store and doesn't care how they were produced.
+    This is the second half of command parsing: implies resolution, dependency
+    checks, defaults, choices validation, custom validation, positional arg
+    resolution, and kwargs building. It operates on sourced values in the store
+    and doesn't care how they were produced.
+
+    ``selector_result`` carries the already-elected records (contract §24): a
+    selector's four parse phases run before this function, because a scope
+    violation must be reported before any missing-required-flag consequence of
+    it (§24.3's precedence rule).
 
     Returns (cmd, kwargs, global_cli_set, sources) where sources maps
     flag param names to source labels (cli/env/config/default/implied).
     """
-    # Step 4.5: enforce mutex group constraints (before defaults are applied).
-    # Election is CLI-only and value-aware (contract §21):
-    #   - a bool member elects only when the typed token resolved to true;
-    #     `--no-x` DECLINES (it names the member and says it is not the choice)
-    #   - every other type elects on presence with any value, including ""
-    #   - env and config elect nothing AND supply nothing: their entries are
-    #     dropped here, before dependency validation, so an unelected member
-    #     delivers its declared default (or None) and never a stale env value
-    for mg in cmd.mutex:
-        elected: list[Flag] = []
-        declined: list[Flag] = []
-        for f in mg.flags:
-            if store.is_env_or_config(f.name):
-                store.delete(f.name)
-                continue
-            if not store.is_cli(f.name):
-                continue
-            if f.type is bool and store[f.name] is not True:
-                declined.append(f)
-            else:
-                elected.append(f)
-        clause = (
-            _msg_mutex_decline_clause(declined[0].name) if declined else ""
-        )
-        if len(elected) > 1:
-            names = " and ".join(f"--{f.name}" for f in elected)
-            raise _ParseError(f"{names} are mutually exclusive")
-        if len(elected) == 1 and declined:
-            declined_names = " and ".join(f"--no-{f.name}" for f in declined)
-            raise _ParseError(
-                f"{declined_names} cannot be combined with "
-                f"--{elected[0].name}{clause}"
-            )
-        if not elected:
-            names = ", ".join(f"--{f.name}" for f in mg.flags)
-            raise _ParseError(f"one of {names} is required{clause}")
-
     # Step 4.55: resolve Implies dependencies (before dependency checks, so
     # implied values participate in downstream CoRequired/Requires validation).
     # Implied values are stored with _Source.IMPLIED.
@@ -9626,6 +10829,12 @@ def _validate_and_build_kwargs(
     for a in cmd.args:
         if a.name in arg_values:
             kwargs[a.name] = arg_values[a.name]
+    # Delivery is ONE tagged value per selector, under the selector's own key.
+    # Sub-flags are never top-level handler arguments, at any depth, which is
+    # what keeps §23's delivery invariant untouched rather than merely
+    # compatible (§24.1).
+    if selector_result is not None:
+        kwargs.update(selector_result.values)
 
     # Separate out global flag values parsed from post-command tokens
     global_cli_set: dict[str, object] = {}
@@ -9646,8 +10855,801 @@ def _validate_and_build_kwargs(
     for name in global_flag_names:
         if name in raw_sources:
             sources[_flag_param_name(name)] = raw_sources[name]
+    # A selector's own key is in the per-parse store like any flag's, and
+    # answers `ctx.provided` / `ctx.source` as any flag does (§24.5, §24.9).
+    # Its SCOPE's names are deliberately absent: a scoped name is not unique
+    # command-wide, so asking for one raises the existing unknown-name error
+    # rather than inventing a second vocabulary.
+    if selector_result is not None:
+        sources.update(selector_result.sources)
 
     return cmd, kwargs, global_cli_set, sources
+
+
+# ---------------------------------------------------------------------------
+# Selector parsing (contract §24.3)
+#
+# Parsing is PHASED, and the phases are what make order independence, the
+# distinct out-of-scope error, and that error's priority over a missing
+# required flag fall out instead of being special-cased:
+#
+#   1. tokenize every occurrence, without interpreting any of it
+#   2. resolve elections, outermost first, then recursively inside each
+#      elected choice
+#   3. validate scope membership of every supplied flag
+#   4. resolve values and presence within the LIVE scopes only
+#
+# Error precedence is pinned by that order: election -> scope -> value ->
+# presence, so a command line with several problems reports the same error
+# every time and never one that depends on declaration order.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _Occ:
+    """One scoped token occurrence, uninterpreted."""
+
+    name: str
+    raw: object  # str for value tokens, True/False for bool-style tokens
+    token: str
+
+
+@dataclass
+class _ElectionState:
+    """What phase 2 decided, read by phases 3 and 4."""
+
+    elected: dict[tuple, "_ChoiceSpec | None"] = field(default_factory=dict)
+    origin: dict[tuple, str] = field(default_factory=dict)
+    from_default: set[tuple] = field(default_factory=set)
+    declined: dict[tuple, list[str]] = field(default_factory=dict)
+
+
+@dataclass
+class _SelectorResult:
+    """The delivered records, their sources, and the run's skipped bindings."""
+
+    values: dict[str, object] = field(default_factory=dict)
+    sources: dict[str, str] = field(default_factory=dict)
+    diagnostics: list[str] = field(default_factory=list)
+
+
+def _msg_election_origin_env(var: str) -> str:
+    return f" from env var '{var}'"
+
+
+def _msg_election_origin_config(key: str) -> str:
+    return f" from config key '{key}'"
+
+
+_MSG_ELECTION_ORIGIN_DEFAULT = " by default"
+
+
+def _msg_election_origin_suffix(origin: str) -> str:
+    """` (elected<origin>)`, appended AFTER the scope suffix (§12.13).
+
+    A command-line election produces the EMPTY suffix rather than a bare
+    `(elected)`: the wrapper exists exactly when the clause it wraps does.
+    """
+    if not origin:
+        return ""
+    return f" (elected{origin})"
+
+
+def _msg_scope_suffix(path_text: str) -> str:
+    """` under '<scope path>'`, empty at root scope (§12.13)."""
+    if not path_text:
+        return ""
+    return f" under '{path_text}'"
+
+
+def _msg_flag_out_of_scope(x: str, owners: str, why: str) -> str:
+    return f"flag '--{x}' is only valid under {owners}, but {why}"
+
+
+def _msg_scope_why_elected(path_text: str, origin: str) -> str:
+    return f"'{path_text}' was elected{origin}"
+
+
+def _msg_scope_why_not_provided(sel: str) -> str:
+    return f"'--{sel}' was not provided"
+
+
+def _msg_scope_why_no_member_elected(members: str) -> str:
+    return f"none of {members} was elected"
+
+
+def _msg_selector_elected_twice(sel: str, values: list[str]) -> str:
+    spelled = " and ".join(f"'{v}'" for v in values)
+    return f"--{sel}: elected more than once, as {spelled}"
+
+
+def _msg_ambient_binding_skipped_env(var: str, x: str, path_text: str) -> str:
+    return (
+        f"not consulted: env var '{var}' binds flag '--{x}' under "
+        f"'{path_text}', which was not elected"
+    )
+
+
+def _msg_ambient_binding_skipped_config(key: str, x: str, path_text: str) -> str:
+    return (
+        f"not consulted: config key '{key}' binds flag '--{x}' under "
+        f"'{path_text}', which was not elected"
+    )
+
+
+def _sel_key(path: tuple, sel_name: str) -> tuple:
+    return path + ((sel_name, "*"),)
+
+
+def _path_is_live(path: tuple, state: _ElectionState) -> bool:
+    prefix: tuple = ()
+    for sel_name, choice_name in path:
+        elected = state.elected.get(_sel_key(prefix, sel_name))
+        if elected is None or elected.name != choice_name:
+            return False
+        prefix = prefix + ((sel_name, choice_name),)
+    return True
+
+
+def _path_origin(path: tuple, state: _ElectionState) -> str:
+    """The outermost non-command-line election on a live path, if any.
+
+    An election from a non-CLI source names itself in every message it causes
+    (§24.6): a required sub-flag missing under a scope elected by an
+    environment variable would otherwise blame a command line that does not
+    contain the cause.
+    """
+    prefix: tuple = ()
+    for sel_name, choice_name in path:
+        origin = state.origin.get(_sel_key(prefix, sel_name), "")
+        if origin:
+            return origin
+        prefix = prefix + ((sel_name, choice_name),)
+    return ""
+
+
+def _elect_all(
+    members: tuple,
+    path: tuple,
+    occs: list[_Occ],
+    state: _ElectionState,
+    *,
+    config_data: dict | None,
+    hermetic: bool,
+    pre_typed: bool,
+) -> None:
+    """Phase 2: resolve elections, outermost first, then recursively."""
+    for m in members:
+        if not isinstance(m, _Selector):
+            continue
+        key = _sel_key(path, m.name)
+        elected: _ChoiceSpec | None = None
+        origin = ""
+        if m.is_member_spelled:
+            elected, origin = _elect_member_spelled(m, occs, state, key)
+        else:
+            elected, origin = _elect_token_spelled(
+                m, occs, config_data=config_data, hermetic=hermetic,
+                pre_typed=pre_typed,
+            )
+        state.elected[key] = elected
+        state.origin[key] = origin
+        if origin == _MSG_ELECTION_ORIGIN_DEFAULT:
+            state.from_default.add(key)
+        if elected is not None:
+            _elect_all(
+                elected.members, path + ((m.name, elected.name),), occs, state,
+                config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
+            )
+
+
+def _elect_token_spelled(
+    sel: _Selector,
+    occs: list[_Occ],
+    *,
+    config_data: dict | None,
+    hermetic: bool,
+    pre_typed: bool,
+) -> tuple["_ChoiceSpec | None", str]:
+    """A token-spelled selector elects from any source (§24.6, ruling S5)."""
+    seen = [o for o in occs if o.name == sel.name]
+    if len(seen) > 1:
+        # Last-wins is right for a plain flag and wrong for an election:
+        # discarding a value would discard a whole scope with it (§12.13).
+        raise _ParseError(_msg_selector_elected_twice(
+            sel.name, [str(o.raw) for o in seen],
+        ))
+    if seen:
+        return _lookup_choice(sel, str(seen[0].raw)), ""
+    if not pre_typed and not hermetic and sel.env is not None:
+        env_val = os.environ.get(sel.env)
+        if env_val is not None:
+            return (
+                _lookup_choice(sel, env_val),
+                _msg_election_origin_env(sel.env),
+            )
+    if not pre_typed and not hermetic and config_data:
+        key = _flag_param_name(sel.name)
+        if key in config_data:
+            raw = config_data[key]
+            if not isinstance(raw, str):
+                raise _ParseError(
+                    f"--{sel.name}: config value error: expected str, "
+                    f"got {_config_typename(raw)}"
+                )
+            return (
+                _lookup_choice(sel, raw),
+                _msg_election_origin_config(key),
+            )
+    if sel.presence == _PRESENCE_DEFAULT:
+        return (
+            sel.choice_by_class(type(sel.default)),
+            _MSG_ELECTION_ORIGIN_DEFAULT,
+        )
+    return None, ""
+
+
+def _lookup_choice(sel: _Selector, value: str) -> "_ChoiceSpec":
+    """Resolve a choice by name, reusing the existing invalid-choice sentence.
+
+    A value that names no declared choice gains NO new template: a migrated
+    declaration must not change the bytes a user reads (§12.13's reuse table).
+    """
+    spec = sel.choice_by_name(value)
+    if spec is None:
+        names = ", ".join(c.name for c in sel.choices)
+        raise _ParseError(
+            f"--{sel.name}: invalid value '{value}', must be one of: {names}"
+        )
+    return spec
+
+
+def _elect_member_spelled(
+    sel: _Selector,
+    occs: list[_Occ],
+    state: _ElectionState,
+    key: tuple,
+) -> tuple["_ChoiceSpec | None", str]:
+    """A member-spelled selector elects from the command line ONLY (§24.6).
+
+    §21's per-type election rules survive verbatim here: a payload-less member
+    elects only on `--<name>` and `--no-<name>` DECLINES; a payload-carrying
+    member elects on presence with any value, including "".
+    """
+    elected: list[_ChoiceSpec] = []
+    declined: list[_ChoiceSpec] = []
+    for c in sel.choices:
+        hits = [o for o in occs if o.name == c.name]
+        if not hits:
+            continue
+        if c.payload is None:
+            if hits[-1].raw is True:
+                elected.append(c)
+            else:
+                declined.append(c)
+        else:
+            elected.append(c)
+    state.declined[key] = [c.name for c in declined]
+    clause = (
+        _msg_mutex_decline_clause(declined[0].name) if declined else ""
+    )
+    if len(elected) > 1:
+        names = " and ".join(f"--{c.name}" for c in elected)
+        raise _ParseError(f"{names} are mutually exclusive")
+    if len(elected) == 1 and declined:
+        declined_names = " and ".join(f"--no-{c.name}" for c in declined)
+        raise _ParseError(
+            f"{declined_names} cannot be combined with "
+            f"--{elected[0].name}{clause}"
+        )
+    if elected:
+        return elected[0], ""
+    if sel.presence == _PRESENCE_DEFAULT:
+        return (
+            sel.choice_by_class(type(sel.default)),
+            _MSG_ELECTION_ORIGIN_DEFAULT,
+        )
+    return None, ""
+
+
+def _validate_scopes(
+    cmd: Command, occs: list[_Occ], state: _ElectionState,
+) -> None:
+    """Phase 3: every supplied flag must sit in a live scope (§24.3)."""
+    member_spelled = _member_spelling_map(cmd.selectors)
+    for occ in occs:
+        group = cmd.sites.get(occ.name, ())
+        if any(_path_is_live(s.path, state) for s in group):
+            continue
+        owners = " or ".join(
+            f"'{_render_scope_path(s.path, member_spelled)}'" for s in group
+        )
+        why = _scope_why(group[0], state, cmd, member_spelled)
+        raise _ParseError(_msg_flag_out_of_scope(occ.name, owners, why))
+
+
+def _scope_why(
+    site: _Site,
+    state: _ElectionState,
+    cmd: Command,
+    member_spelled: dict[str, bool],
+) -> str:
+    """Blame the OUTERMOST unsatisfied election on the first owner's path.
+
+    A flag two levels down whose outer election is the one that failed blames
+    the outer election, not the dead selector directly above it: that is the
+    token the reader would have to change (§24.3, §12.13).
+    """
+    prefix: tuple = ()
+    for sel_name, choice_name in site.path:
+        key = _sel_key(prefix, sel_name)
+        elected = state.elected.get(key)
+        if elected is None:
+            sel = _find_selector(cmd.selectors, sel_name)
+            if sel is not None and sel.is_member_spelled:
+                members = ", ".join(f"--{c.name}" for c in sel.choices)
+                return _msg_scope_why_no_member_elected(members)
+            return _msg_scope_why_not_provided(sel_name)
+        if elected.name != choice_name:
+            elected_path = _render_scope_path(
+                prefix + ((sel_name, elected.name),), member_spelled,
+            )
+            return _msg_scope_why_elected(
+                elected_path, state.origin.get(key, ""),
+            )
+        prefix = prefix + ((sel_name, choice_name),)
+    raise AssertionError("site is in scope")  # pragma: no cover
+
+
+def _find_selector(selectors: tuple, name: str) -> "_Selector | None":
+    for s in selectors:
+        if not isinstance(s, _Selector):
+            continue
+        if s.name == name:
+            return s
+        for c in s.choices:
+            found = _find_selector(tuple(c.members), name)
+            if found is not None:
+                return found
+    return None
+
+
+def _report_skipped_bindings(
+    members: tuple,
+    path: tuple,
+    state: _ElectionState,
+    out: list[str],
+    *,
+    config_data: dict | None,
+    member_spelled: dict[str, bool],
+    live: bool = True,
+) -> None:
+    """Name every ambient binding a non-elected scope skipped (§24.6).
+
+    Conditional bindings are a DECLARATION property, not a runtime adaptation:
+    the binding's condition is written in the declaration, the framework
+    evaluates the same condition the same way every run, and the same command
+    line plus the same environment always produces the same values. What is
+    refused is the SILENT part -- and it is refused by surfacing.
+    """
+    for m in members:
+        if isinstance(m, Flag):
+            if live:
+                continue
+            path_text = _render_scope_path(path, member_spelled)
+            if m.env is not None and os.environ.get(m.env) is not None:
+                out.append(_msg_ambient_binding_skipped_env(
+                    m.env, m.name, path_text,
+                ))
+            key = _flag_param_name(m.name)
+            if config_data and key in config_data:
+                out.append(_msg_ambient_binding_skipped_config(
+                    key, m.name, path_text,
+                ))
+            continue
+        for c in m.choices:
+            child = path + ((m.name, c.name),)
+            _report_skipped_bindings(
+                c.members, child, state, out,
+                config_data=config_data, member_spelled=member_spelled,
+                live=live and _path_is_live(child, state),
+            )
+
+
+def _coerce_scoped_value(
+    f: Flag, raw: object, stdin_consumed_by: list,
+) -> object:
+    """Coerce one supplied scoped value, with the root surface's own errors."""
+    if isinstance(raw, bool):
+        return raw
+    text = str(raw)
+    if f.type is int:
+        try:
+            return _strict_int(text)
+        except ValueError as e:
+            raise _ParseError(f"--{f.name}: {e}")
+    if f.type is float:
+        try:
+            return _strict_float(text)
+        except ValueError as e:
+            raise _float_parse_error(f.name, text, e)
+    resolved, stdin_consumed_by[0] = _resolve_at_prefix(
+        f.name, text, stdin_consumed_by[0],
+    )
+    return resolved
+
+
+def _check_scoped_config_conflict(
+    f: Flag,
+    cli_value: object,
+    *,
+    config_data: dict | None,
+    hermetic: bool,
+    pre_typed: bool,
+    conflict_mode: str,
+) -> None:
+    """The both-sources conflict check, applied inside a live scope."""
+    if pre_typed or hermetic or not config_data:
+        return
+    effective = (
+        f.conflict_mode
+        if not isinstance(f.conflict_mode, _MissingSentinel)
+        else conflict_mode
+    )
+    if effective != "error":
+        return
+    key = _flag_param_name(f.name)
+    if key not in config_data:
+        return
+    try:
+        coerced = _coerce_config_value(config_data[key], f)
+    except ValueError as e:
+        raise _ParseError(f"--{f.name}: config value error: {e}")
+    if not _values_equal_for_conflict(cli_value, coerced, f):
+        raise _ParseError(
+            f"flag '{f.name}' set in both cli and config; remove one"
+        )
+
+
+def _resolve_scoped_flag(
+    f: Flag,
+    occs: list[_Occ],
+    *,
+    scope_suffix: str,
+    origin_suffix: str,
+    config_data: dict | None,
+    hermetic: bool,
+    pre_typed: bool,
+    stdin_consumed_by: list,
+    conflict_mode: str = "cli-wins",
+) -> tuple[object, str]:
+    """Phase 4 for one scoped flag: value, then presence (§24.1)."""
+    hits = [o for o in occs if o.name == f.name]
+    if hits:
+        if pre_typed:
+            value = hits[-1].raw
+        elif f.compound == "dict":
+            store: dict = {}
+            for o in hits:
+                _store_dict_flag(f, str(o.raw), store)
+            value = store[f.name]
+        elif f.repeatable:
+            value = []
+            for o in hits:
+                coerced = _coerce_scoped_value(f, o.raw, stdin_consumed_by)
+                if f.unique and coerced in value:
+                    raise _ParseError(
+                        f"--{f.name}: duplicate value "
+                        f"'{_format_value_for_error(coerced)}'"
+                    )
+                value.append(coerced)
+        else:
+            value = _coerce_scoped_value(f, hits[-1].raw, stdin_consumed_by)
+        _check_scoped_config_conflict(
+            f, value, config_data=config_data, hermetic=hermetic,
+            pre_typed=pre_typed, conflict_mode=conflict_mode,
+        )
+        _validate_choices(f.name, value, f.repeatable, f.choices)
+        if f.validate is not None and value is not None:
+            for v in (value if f.repeatable else [value]):
+                try:
+                    f.validate(v)
+                except ValueError as e:
+                    raise _ParseError(f"--{f.name}: {e}")
+        return value, "cli"
+    # An ambient binding is consulted exactly when its scope is elected, which
+    # is the only path that reaches this function (§24.6).
+    if not pre_typed and not hermetic and f.env is not None:
+        env_val = os.environ.get(f.env)
+        if env_val is not None:
+            if f.type is bool:
+                try:
+                    return _strict_bool(env_val), "env"
+                except ValueError:
+                    raise _ParseError(
+                        f"invalid boolean value {env_val!r} for env var "
+                        f"'{f.env}' (flag '--{f.name}')"
+                    )
+            return (
+                _coerce_scoped_value(f, env_val, stdin_consumed_by),
+                "env",
+            )
+    if not pre_typed and not hermetic and config_data:
+        key = _flag_param_name(f.name)
+        if key in config_data:
+            try:
+                return _coerce_config_value(config_data[key], f), "config"
+            except ValueError as e:
+                raise _ParseError(f"--{f.name}: config value error: {e}")
+    if f.presence == _PRESENCE_DEFAULT:
+        if f.compound == "dict":
+            return dict(f.default), "default"
+        if f.repeatable:
+            return list(f.default), "default"
+        return f.default, "default"
+    if f.presence == _PRESENCE_OPTIONAL:
+        return None, "default"
+    raise _ParseError(
+        f"flag '--{f.name}' is required{scope_suffix}{origin_suffix}"
+    )
+
+
+def _instantiate_choice(
+    sel: _Selector,
+    spec: _ChoiceSpec,
+    path: tuple,
+    occs: list[_Occ],
+    state: _ElectionState,
+    *,
+    config_data: dict | None,
+    hermetic: bool,
+    pre_typed: bool,
+    stdin_consumed_by: list,
+    member_spelled: dict[str, bool],
+    conflict_mode: str = "cli-wins",
+) -> object:
+    """Build one elected choice's record: the tag plus that choice's fields."""
+    values: dict[str, object] = {}
+    sources: dict[str, str] = {}
+    if spec.payload is not None:
+        hits = [o for o in occs if o.name == spec.name]
+        raw = hits[-1].raw if hits else None
+        values[_SCOPE_RESERVED_VALUE] = (
+            raw if pre_typed
+            else _coerce_scoped_value(spec.payload, raw, stdin_consumed_by)
+        )
+        # §21.3's `config_conflict_mode="error"` carve-out survives untouched
+        # on member flags (§21's box, item 119): it is a value-hygiene check
+        # about the operator's own configuration, and it runs even where the
+        # config value itself is never consulted.
+        _check_scoped_config_conflict(
+            spec.payload, values[_SCOPE_RESERVED_VALUE],
+            config_data=config_data, hermetic=hermetic,
+            pre_typed=pre_typed, conflict_mode=conflict_mode,
+        )
+        sources[_SCOPE_RESERVED_VALUE] = "cli"
+    inner = _build_scope_values(
+        spec.members, path, occs, state,
+        config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
+        stdin_consumed_by=stdin_consumed_by, member_spelled=member_spelled,
+        conflict_mode=conflict_mode,
+    )
+    values.update(inner.values)
+    sources.update(inner.sources)
+    record = spec.cls(**values)
+    object.__setattr__(record, _RECORD_SOURCES_ATTR, sources)
+    return record
+
+
+def _declared_default_record(instance: object) -> object:
+    """A defaulted selection is complete and delivered as declared (§24.5).
+
+    Electing a choice on the command line never borrows the default's values,
+    and a default is never rebuilt from the invocation: it is one complete
+    selection, and every field of it was decided by the declaration.
+    """
+    if getattr(instance, _RECORD_SOURCES_ATTR, None) is None:
+        sources = {
+            f.name: "default" for f in dataclasses.fields(instance)
+        }
+        object.__setattr__(instance, _RECORD_SOURCES_ATTR, sources)
+    return instance
+
+
+def _build_scope_values(
+    members: tuple,
+    path: tuple,
+    occs: list[_Occ],
+    state: _ElectionState,
+    *,
+    config_data: dict | None,
+    hermetic: bool,
+    pre_typed: bool,
+    stdin_consumed_by: list,
+    member_spelled: dict[str, bool],
+    conflict_mode: str = "cli-wins",
+) -> _SelectorResult:
+    """Phase 4: resolve values and presence within the live scopes only."""
+    result = _SelectorResult()
+    path_text = _render_scope_path(path, member_spelled)
+    scope_suffix = _msg_scope_suffix(path_text)
+    origin_suffix = _msg_election_origin_suffix(_path_origin(path, state))
+    for m in members:
+        if isinstance(m, Flag):
+            value, source = _resolve_scoped_flag(
+                m, occs, scope_suffix=scope_suffix,
+                origin_suffix=origin_suffix, config_data=config_data,
+                hermetic=hermetic, pre_typed=pre_typed,
+                stdin_consumed_by=stdin_consumed_by,
+                conflict_mode=conflict_mode,
+            )
+            result.values[_flag_param_name(m.name)] = value
+            result.sources[_flag_param_name(m.name)] = source
+            continue
+        key = _sel_key(path, m.name)
+        elected = state.elected.get(key)
+        param = _flag_param_name(m.name)
+        if elected is None:
+            if m.presence != _PRESENCE_REQUIRED:  # pragma: no cover - defensive
+                raise AssertionError("a selector declares required or a default")
+            if m.is_member_spelled:
+                names = ", ".join(f"--{c.name}" for c in m.choices)
+                declined = state.declined.get(key, [])
+                clause = (
+                    _msg_mutex_decline_clause(declined[0]) if declined else ""
+                )
+                raise _ParseError(
+                    f"one of {names} is required{scope_suffix}{clause}"
+                )
+            raise _ParseError(
+                f"flag '--{m.name}' is required{scope_suffix}{origin_suffix}"
+            )
+        if key in state.from_default:
+            result.values[param] = _declared_default_record(m.default)
+            result.sources[param] = "default"
+            continue
+        result.values[param] = _instantiate_choice(
+            m, elected, path + ((m.name, elected.name),), occs, state,
+            config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
+            stdin_consumed_by=stdin_consumed_by, member_spelled=member_spelled,
+            conflict_mode=conflict_mode,
+        )
+        origin = state.origin.get(key, "")
+        result.sources[param] = (
+            "env" if origin.startswith(" from env var")
+            else "config" if origin.startswith(" from config key")
+            else "cli"
+        )
+    return result
+
+
+def _resolve_selectors(
+    cmd: Command,
+    occs: list[_Occ],
+    *,
+    config_data: dict | None = None,
+    hermetic: bool = False,
+    pre_typed: bool = False,
+    stdin_consumed_by: list | None = None,
+    conflict_mode: str = "cli-wins",
+) -> _SelectorResult:
+    """Run all four phases over a command's selectors."""
+    if stdin_consumed_by is None:
+        stdin_consumed_by = [None]
+    state = _ElectionState()
+    member_spelled = _member_spelling_map(cmd.selectors)
+    _elect_all(
+        cmd.selectors, (), occs, state,
+        config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
+    )
+    _validate_scopes(cmd, occs, state)
+    result = _build_scope_values(
+        cmd.selectors, (), occs, state,
+        config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
+        stdin_consumed_by=stdin_consumed_by, member_spelled=member_spelled,
+        conflict_mode=conflict_mode,
+    )
+    if not pre_typed and not hermetic:
+        _report_skipped_bindings(
+            cmd.selectors, (), state, result.diagnostics,
+            config_data=config_data, member_spelled=member_spelled,
+        )
+    return result
+
+
+def _flat_selector_params(cmd: Command) -> set[str]:
+    """Every property name a selector contributes to the MCP projection.
+
+    The selector's own name, plus every scoped flag at every depth -- which is
+    exactly the flattening §24.11 pins, and the set the flat form must be
+    stripped of before the ordinary kwargs machinery sees it.
+    """
+    names: set[str] = {_flag_param_name(s.name) for s in cmd.selectors}
+    for group in cmd.sites.values():
+        for site in group:
+            names.add(_flag_param_name(site.name))
+    return names
+
+
+def _flat_occurrences(cmd: Command, arguments: dict) -> list[_Occ]:
+    """Convert the flat machine form into occurrences (§24.11).
+
+    A member-spelled selector projects IDENTICALLY to a token-spelled one:
+    tokenization is a command-line fact and there are no tokens at this
+    boundary, so a member's payload flattens under the member's own name.
+    """
+    occs: list[_Occ] = []
+    for sel in cmd.selectors:
+        param = _flag_param_name(sel.name)
+        if param in arguments:
+            _flat_selector_occ(sel, arguments[param], occs)
+    for group in cmd.sites.values():
+        site = group[0]
+        if site.kind != "flag":
+            continue
+        param = _flag_param_name(site.name)
+        if param in arguments:
+            occs.append(_Occ(site.name, arguments[param], f"--{site.name}"))
+    for group in cmd.sites.values():
+        for site in group:
+            if site.kind != "selector":
+                continue
+            param = _flag_param_name(site.name)
+            if param in arguments:
+                _flat_selector_occ(site.decl, arguments[param], occs)
+    return occs
+
+
+def _flat_selector_occ(sel: _Selector, value: object, occs: list[_Occ]) -> None:
+    """One selector's election, spelled the way the flat form spells it."""
+    if not sel.is_member_spelled:
+        occs.append(_Occ(sel.name, value, f"--{sel.name}"))
+        return
+    spec = sel.choice_by_name(str(value))
+    if spec is None:
+        names = ", ".join(c.name for c in sel.choices)
+        raise _ParseError(
+            f"--{sel.name}: invalid value '{value}', must be one of: {names}"
+        )
+    occs.append(_Occ(
+        spec.name, True if spec.payload is None else None, f"--{spec.name}",
+    ))
+
+
+def _selector_result_from_records(
+    cmd: Command, kwargs: dict[str, object],
+) -> _SelectorResult:
+    """`call()` takes the elected record, pre-typed (§24.11)."""
+    result = _SelectorResult()
+    for sel in cmd.selectors:
+        param = _flag_param_name(sel.name)
+        if param not in kwargs:
+            if sel.presence == _PRESENCE_DEFAULT:
+                result.values[param] = _declared_default_record(sel.default)
+                result.sources[param] = "default"
+                continue
+            if sel.is_member_spelled:
+                names = ", ".join(f"--{c.name}" for c in sel.choices)
+                raise _ParseError(f"one of {names} is required")
+            raise _ParseError(f"flag '--{sel.name}' is required")
+        value = kwargs[param]
+        spec = sel.choice_by_class(type(value))
+        if spec is None:
+            _raise_invoke_selector_not_record(cmd.name, sel, value)
+        result.values[param] = _declared_default_record(value)
+        result.sources[param] = "cli"
+    return result
+
+
+def _raise_invoke_selector_not_record(
+    cmd_name: str, sel: _Selector, value: object,
+):
+    """Authored: `call()` was handed something that is not an elected record."""
+    raise _ParseError(
+        f"parameter '{_flag_param_name(sel.name)}' for command '{cmd_name}' "
+        f"must be an instance of a declared choice of '--{sel.name}' "
+        f"({_render_union(sel)}), got {type(value).__name__}"
+    )
 
 
 def _parse_command(
@@ -9659,6 +11661,7 @@ def _parse_command(
     conflict_mode: str = "cli-wins",
     hermetic: bool = False,
     infra_roots: dict[str, str] | None = None,
+    out_diagnostics: list[str] | None = None,
 ) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
     """Parse tokens against a resolved command's flags and args.
 
@@ -9700,6 +11703,57 @@ def _parse_command(
     # Track which flags were set by CLI args
     cli_set: dict[str, object] = {}  # flag.name -> value
     positionals: list[str] = []
+    # Phase 1: every scoped occurrence, collected WITHOUT interpreting any of
+    # it. Whether a token consumes the next argv element is decided here, before
+    # any choice is elected -- which is why sibling scopes may reuse a name only
+    # with an identical value shape (§24.3).
+    scoped_occs: list[_Occ] = []
+
+    def _scoped_site(token_name: str) -> "_Site | None":
+        group = cmd.sites.get(token_name)
+        return group[0] if group else None
+
+    def _consume_scoped(tok: str, idx: int) -> int | None:
+        """Record one scoped occurrence, or return None if `tok` is not one."""
+        name = tok[2:] if tok.startswith("--") else ""
+        inline: str | None = None
+        if tok.startswith("--") and "=" in tok:
+            head, inline = tok.split("=", 1)
+            name = head[2:]
+        elif tok.startswith("-") and len(tok) == 2:
+            name = cmd.shorts.get(tok[1], "")
+            if not name:
+                return None
+        elif not tok.startswith("--"):
+            return None
+        if name.startswith("no-"):
+            target = name[3:]
+            site = _scoped_site(target)
+            if site is not None and site.negatable:
+                if inline is not None:
+                    raise _ParseError(
+                        f"flag '--{name}' is a boolean negation and does not "
+                        f"take a value"
+                    )
+                scoped_occs.append(_Occ(target, False, tok))
+                return idx + 1
+        site = _scoped_site(name)
+        if site is None:
+            return None
+        if not site.takes_value:
+            if inline is not None:
+                raise _ParseError(
+                    f"flag '--{name}' is a boolean flag and does not take a value"
+                )
+            scoped_occs.append(_Occ(name, True, tok))
+            return idx + 1
+        if inline is not None:
+            scoped_occs.append(_Occ(name, inline, tok))
+            return idx + 1
+        if idx + 1 >= len(tokens):
+            raise _ParseError(f"flag '--{name}' requires a value")
+        scoped_occs.append(_Occ(name, tokens[idx + 1], tok))
+        return idx + 2
 
     def _store_value(f: Flag, value: object) -> None:
         """Store a parsed value, appending to a list for repeatable flags."""
@@ -9740,6 +11794,14 @@ def _parse_command(
             stop_flags = True
             i += 1
             continue
+
+        # A scoped token. Root and scoped names are disjoint by registration
+        # (§24.7), so consulting the site table first cannot shadow a root flag.
+        if cmd.sites:
+            consumed = _consume_scoped(tok, i)
+            if consumed is not None:
+                i = consumed
+                continue
 
         # --flag=value form
         if tok.startswith("--") and "=" in tok:
@@ -10069,7 +12131,19 @@ def _parse_command(
         else:
             store.set(k, v, _Source.CLI)
 
-    return _validate_and_build_kwargs(cmd, store, positionals, global_flag_names, infra_roots)
+    selector_result = None
+    if cmd.selectors:
+        selector_result = _resolve_selectors(
+            cmd, scoped_occs, config_data=config_data, hermetic=hermetic,
+            stdin_consumed_by=stdin_consumed_by, conflict_mode=conflict_mode,
+        )
+        if out_diagnostics is not None:
+            out_diagnostics.extend(selector_result.diagnostics)
+
+    return _validate_and_build_kwargs(
+        cmd, store, positionals, global_flag_names, infra_roots,
+        selector_result=selector_result,
+    )
 
 
 def _flag_param_name(flag_name: str) -> str:
@@ -10097,7 +12171,6 @@ def _build_and_validate_command(
     handler: Callable,
     args: list[Arg] | None,
     flag_sets: list[FlagSet] | None,
-    mutex: list[MutexGroup] | None,
     dependencies: list[CoRequired | Requires | Implies] | None = None,
     env_prefix: str | None,
     global_flags: list[Flag] | None = None,
@@ -10114,6 +12187,7 @@ def _build_and_validate_command(
     config_fields_ref: dict[str, ConfigField] | None = None,
     infra_root_names: frozenset[str] | None = None,
     connection_env_names: frozenset[str] | None = None,
+    handler_localns: dict | None = None,
 ) -> Command:
     """Build a Command from a decorated handler, validate everything.
 
@@ -10173,15 +12247,19 @@ def _build_and_validate_command(
                 )
         resolved_config_fields = tuple(config_fields)
 
-    # Passthrough commands must not have flags, args, flag sets, or mutex groups
+    # Passthrough commands must not have flags, args, flag sets or selectors
     if passthrough is not None:
-        decorator_flags = list(getattr(handler, "_strictcli_flags", []))
+        decorator_decls = list(getattr(handler, "_strictcli_flags", []))
+        decorator_flags = [d for d in decorator_decls if isinstance(d, Flag)]
+        decorator_selectors = [
+            d for d in decorator_decls if isinstance(d, _Selector)
+        ]
         decorator_args = list(getattr(handler, "_strictcli_args", []))
         has_flags = bool(decorator_flags)
         has_args = bool(args) or bool(decorator_args)
         has_flag_sets = bool(flag_sets)
-        has_mutex = bool(mutex)
-        if has_flags or has_args or has_flag_sets or has_mutex:
+        has_selectors = bool(decorator_selectors)
+        if has_flags or has_args or has_flag_sets or has_selectors:
             parts = []
             if has_flags:
                 parts.append("flags")
@@ -10189,8 +12267,8 @@ def _build_and_validate_command(
                 parts.append("args")
             if has_flag_sets:
                 parts.append("flag sets")
-            if has_mutex:
-                parts.append("mutex groups")
+            if has_selectors:
+                parts.append("choice flags")
             raise ValueError(
                 f'command "{name}": passthrough commands cannot have '
                 + ", ".join(parts)
@@ -10215,10 +12293,19 @@ def _build_and_validate_command(
             _framework_internal=framework_internal,
         )
 
-    # Collect flags attached by @strictcli.flag decorators
+    # Collect flags and selectors attached by @strictcli.flag / @choice_flag.
     # Reverse because Python decorators execute bottom-to-top, so the list
-    # is in reverse declaration order.
-    decorator_flags: list[Flag] = list(reversed(getattr(handler, "_strictcli_flags", [])))
+    # is in reverse declaration order. The two share one list so their relative
+    # declaration order survives to help rendering (§24.10).
+    decorator_decls: list[object] = list(
+        reversed(getattr(handler, "_strictcli_flags", []))
+    )
+    decorator_flags: list[Flag] = [
+        d for d in decorator_decls if isinstance(d, Flag)
+    ]
+    selectors: list[_Selector] = [
+        d for d in decorator_decls if isinstance(d, _Selector)
+    ]
     # Collect args attached by @strictcli.arg decorators -- reversed for the
     # same reason as flags, so positional binding follows declaration order.
     decorator_args: list[Arg] = list(reversed(getattr(handler, "_strictcli_args", [])))
@@ -10233,40 +12320,18 @@ def _build_and_validate_command(
     for flag_set in resolved_flag_sets:
         flag_set_flags.extend(flag_set.flags)
 
-    # Resolve mutex groups and merge their flags
-    resolved_mutex = list(mutex) if mutex else []
-    mutex_flags: list[Flag] = []
-    for mg in resolved_mutex:
-        # Validate: mutex groups must have at least 2 flags
-        if len(mg.flags) < 2:
-            raise ValueError(
-                f'command "{name}": mutex group must have at least 2 flags, '
-                f"got {len(mg.flags)}"
-            )
-        for mf in mg.flags:
-            # A member declares `optional` or a default; requiredness would
-            # contradict a group that permits exactly one (§23.5, §12.12).
-            if mf.presence == _PRESENCE_REQUIRED:
-                _raise_flag_mutex_member_required(mf.name)
-        mutex_flags.extend(mg.flags)
-
-    # Validate: mutex flags must not overlap between groups
-    mutex_flag_names: set[str] = set()
-    for mg in resolved_mutex:
-        for f in mg.flags:
-            if f.name in mutex_flag_names:
-                raise ValueError(
-                    f'command "{name}": flag "{f.name}" appears in multiple mutex groups'
-                )
-            mutex_flag_names.add(f.name)
-
-    # All flags: decorator flags + flag set flags + mutex flags + extra flags
-    all_flags = decorator_flags + flag_set_flags + mutex_flags
+    # All flags: decorator flags + flag set flags + extra flags
+    all_flags = decorator_flags + flag_set_flags
     if extra_flags:
         all_flags.extend(extra_flags)
+    # The ordered member list help renders from: declared flags and selectors
+    # interleaved, then flag-set and framework-added flags.
+    all_members: list[object] = list(decorator_decls) + list(flag_set_flags)
+    if extra_flags:
+        all_members.extend(extra_flags)
 
-    # Validate: no duplicate flag names (catches mutex flags overlapping with
-    # regular flags or flag set flags)
+    # Validate: no duplicate flag names (catches flag-set flags overlapping
+    # with decorator flags)
     seen_flag_names: set[str] = set()
     for f in all_flags:
         if f.name in seen_flag_names:
@@ -10281,6 +12346,25 @@ def _build_and_validate_command(
                 raise ValueError(
                     f'command "{name}": flag "{f.name}" collides with a global flag'
                 )
+
+    # Build the site table -- every token a scoped declaration can accept --
+    # and run the cross-scope name and short rules over it (§24.7).
+    site_list = _walk_sites(tuple(selectors), ())
+    _validate_scoped_names(name, all_flags, selectors, global_flags, site_list)
+    sites: dict[str, tuple[_Site, ...]] = {}
+    for site in site_list:
+        sites.setdefault(site.name, []).append(site)  # type: ignore[union-attr]
+    sites = {k: tuple(v) for k, v in sites.items()}
+    scoped_shorts: dict[str, str] = {}
+    for site in site_list:
+        short = (
+            site.choice.payload.short if site.kind == "member"
+            and site.choice.payload is not None
+            else getattr(site.decl, "short", None)
+            if site.kind != "member" else None
+        )
+        if short:
+            scoped_shorts[short] = site.name
 
     # Validate: a command flag colliding with a config field (validation-only
     # coexistence) must have an agreeing default. Config fields registered after
@@ -10342,6 +12426,8 @@ def _build_and_validate_command(
     expected_names: set[str] = set()
     for f in all_flags:
         expected_names.add(_flag_param_name(f.name))
+    for s in selectors:
+        expected_names.add(_flag_param_name(s.name))
     for a in all_args:
         expected_names.add(a.name)
     # Global flags are also passed to handlers
@@ -10356,7 +12442,22 @@ def _build_and_validate_command(
     if has_var_keyword and forwarding is None:
         _raise_handler_var_keyword_undeclared(name)
 
+    # A **kwargs handler cannot carry a selector at all, forwarding or not: the
+    # elected value must reach a named, ANNOTATED parameter, because the
+    # annotation is what makes the handler's `match` exhaustive (§12.13, S11).
+    if has_var_keyword and selectors:
+        _raise_handler_kwargs_with_selector(name)
+
     if not has_var_keyword:
+        # Check each selector has a matching parameter
+        for s in selectors:
+            pname = _flag_param_name(s.name)
+            if pname not in param_names:
+                raise ValueError(
+                    f'command "{name}": handler missing parameter "{pname}" '
+                    f'for flag "{s.name}"'
+                )
+
         # Check each flag has a matching parameter
         for f in all_flags:
             pname = _flag_param_name(f.name)
@@ -10382,6 +12483,19 @@ def _build_and_validate_command(
                 f'command "{name}": handler has extra parameter "{extra_name}" '
                 f"not matching any flag or arg"
             )
+
+    # The mandatory handler-annotation check (§24.12, §12.13). The parameter
+    # bound to a selector must be annotated with exactly the declared union;
+    # without it a developer could annotate one choice class and `assert_never`
+    # would pass the type checker while silently skipping branches. Annotations
+    # resolve through `typing.get_type_hints` against the handler's module
+    # globals PLUS the decorating frame's locals, so a name importable only
+    # under TYPE_CHECKING is a registration error naming it rather than a
+    # NameError at import time.
+    if selectors:
+        _check_handler_selector_annotations(
+            name, handler, selectors, handler_localns or {},
+        )
 
     # A handler parameter bound to an OPTIONAL flag or arg must itself default
     # to None (contract §23.3, L1.6). Anything else re-introduces at the handler
@@ -10418,8 +12532,36 @@ def _build_and_validate_command(
             _raise_handler_param_optional_arg_default(name, pname, decl.name)
         _raise_handler_param_optional_flag_default(name, pname, decl.name)
 
-    # Validate dependencies
+    # Validate dependencies. A constraint naming a SCOPED flag is refused
+    # outright (§24.8): the scope already IS the constraint -- a co-requirement,
+    # an exclusivity and a conditional requirement in one declaration -- and
+    # expressing one fact in two mechanisms is how the two disagree later.
     resolved_dependencies = list(dependencies) if dependencies else []
+    if site_list:
+        _member_spelled = _member_spelling_map(tuple(selectors))
+        _scoped_paths: dict[str, tuple[tuple[str, str], ...]] = {}
+        for _site in site_list:
+            if _site.path and _site.name not in _scoped_paths:
+                _scoped_paths[_site.name] = _site.path
+
+        def _refuse_scoped(family: str, flag_name: str) -> None:
+            path = _scoped_paths.get(flag_name)
+            if path is not None:
+                _raise_constraint_references_scoped_flag(
+                    name, family, flag_name,
+                    _render_scope_path(path, _member_spelled),
+                )
+
+        for dep in resolved_dependencies:
+            if isinstance(dep, CoRequired):
+                for flag_name in dep.flags:
+                    _refuse_scoped("CoRequired", flag_name)
+            elif isinstance(dep, Requires):
+                _refuse_scoped("Requires", dep.flag)
+                _refuse_scoped("Requires", dep.depends_on)
+            elif isinstance(dep, Implies):
+                _refuse_scoped("Implies", dep.flag)
+                _refuse_scoped("Implies", dep.implies)
     for dep in resolved_dependencies:
         if isinstance(dep, CoRequired):
             if len(dep.flags) < 2:
@@ -10519,7 +12661,10 @@ def _build_and_validate_command(
         flags=tuple(all_flags),
         args=tuple(all_args),
         flag_sets=tuple(resolved_flag_sets),
-        mutex=tuple(resolved_mutex),
+        selectors=tuple(selectors),
+        members=tuple(all_members),
+        sites=sites,
+        shorts=scoped_shorts,
         dependencies=tuple(resolved_dependencies),
         tags=effective_tags,
         hidden=hidden,
@@ -10783,8 +12928,13 @@ def _build_flag_spec(f: Flag) -> str:
     return spec
 
 
-def _build_flag_meta(f: Flag) -> str:
-    """Build the bracketed metadata suffix for a flag."""
+def _build_flag_meta(f: Flag, *, block: bool = False) -> str:
+    """Build the bracketed metadata suffix for a flag.
+
+    ``block`` is set when the flag's choices render as an indented block
+    beneath it (§24.10), which is where the one-line ``[choices: a, b]`` form
+    would say the same thing twice.
+    """
     meta_parts: list[str] = []
     if f.compound == "list":
         meta_parts.append("list")
@@ -10794,7 +12944,7 @@ def _build_flag_meta(f: Flag) -> str:
         meta_parts.append("repeatable")
     if f.unique is True:
         meta_parts.append("unique")
-    if f.choices is not None:
+    if f.choices is not None and not block:
         choices_str = ", ".join(str(c) for c in f.choices)
         meta_parts.append(f"choices: {choices_str}")
     if f.env is not None:
@@ -10844,6 +12994,106 @@ def _format_declared_default_for_help(decl: "Flag | Arg") -> str:
     if decl.type is bool and compound == "scalar":
         return "true" if value else "false"
     return _format_default_for_help(value)
+
+
+def _renders_as_block(f: Flag) -> bool:
+    """A choice-carrying flag renders as an indented block iff any of its
+    choices carries help or a scope; otherwise it keeps today's one-line
+    ``[choices: a, b, c]`` form (§24.10)."""
+    if f.choice_records is None:
+        return False
+    return any(r.help for r in f.choice_records)
+
+
+def _build_selector_spec(sel: _Selector) -> str:
+    """The left-column spec for a selector's own line.
+
+    A member-spelled selector has no token to render, so its own line carries
+    its name bare -- it is the handler's key and the noun errors use, never
+    something a user types (§24.10).
+    """
+    if sel.is_member_spelled:
+        return sel.name
+    spec = f"--{sel.name}"
+    if sel.short:
+        spec += f", -{sel.short}"
+    return f"{spec} <choice>"
+
+
+def _build_member_spec(spec: _ChoiceSpec) -> str:
+    """The left-column spec for one member flag under member spelling."""
+    out = f"--{spec.name}"
+    payload = spec.payload
+    if payload is not None:
+        if payload.short:
+            out += f", -{payload.short}"
+        if payload.type is not bool:
+            out += f" <{_TYPE_NAMES[payload.type]}>"
+    return out
+
+
+def _format_selector_presence(sel: _Selector) -> str:
+    """The one presence part a selector's line carries (§23.8, §24.10).
+
+    A defaulted selector renders its COMPLETE elected value -- the choice plus
+    the fields its scope needed -- because that is what the default is (§24.5).
+    """
+    if sel.presence == _PRESENCE_REQUIRED:
+        return " [required]"
+    spec = sel.choice_by_class(type(sel.default))
+    inner = ", ".join(
+        f"{f.name}={_format_default_for_help(getattr(sel.default, _flag_param_name(f.name)))}"
+        for f in spec.members
+        if isinstance(f, Flag)
+    )
+    rendered = spec.name + (f" ({inner})" if inner else "")
+    return f" [default: {rendered}]"
+
+
+def _flag_block_rows(
+    members: tuple, indent: int,
+) -> list[tuple[int, str, str, str]]:
+    """Every line of the command's flag block, as (indent, spec, help, meta).
+
+    A choice line indents two columns past its selector's line, and a choice's
+    scoped flags indent two columns past their choice; recursion adds two per
+    level (§24.10).
+    """
+    rows: list[tuple[int, str, str, str]] = []
+    for m in members:
+        if isinstance(m, Flag):
+            block = _renders_as_block(m)
+            rows.append((
+                indent, _build_flag_spec(m), m.help,
+                _build_flag_meta(m, block=block),
+            ))
+            if block:
+                for record in m.choice_records or ():
+                    rows.append((
+                        indent + 2,
+                        _format_default_for_help(record.value),
+                        record.help or "",
+                        "",
+                    ))
+            continue
+        sel: _Selector = m
+        presence = _format_selector_presence(sel)
+        if sel.is_member_spelled:
+            rows.append((
+                indent, _build_selector_spec(sel),
+                f"{sel.help} (exactly one of the following)", presence,
+            ))
+            for c in sel.choices:
+                rows.append((
+                    indent + 2, _build_member_spec(c), c.help, " [required]",
+                ))
+                rows.extend(_flag_block_rows(c.members, indent + 4))
+            continue
+        rows.append((indent, _build_selector_spec(sel), sel.help, presence))
+        for c in sel.choices:
+            rows.append((indent + 2, c.name, c.help, ""))
+            rows.extend(_flag_block_rows(c.members, indent + 4))
+    return rows
 
 
 def _format_dry_run_section(cmd: Command) -> list[str]:
@@ -10896,36 +13146,19 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
             meta = " [" + "] [".join(meta_parts) + "]"
             lines.append(f"  {dn}{' ' * padding}{help_text}{meta}")
 
-    # Collect flag names that belong to mutex groups
-    mutex_flag_names: set[str] = set()
-    for mg in cmd.mutex:
-        for f in mg.flags:
-            mutex_flag_names.add(f.name)
-
-    # Regular flags (not in any mutex group)
-    regular_flags = [f for f in cmd.flags if f.name not in mutex_flag_names]
-
-    if regular_flags:
+    # The command's own flag block. ONE alignment column is computed across the
+    # whole block, deepest entry included, so help text starts in the same
+    # column everywhere on the page (§24.10).
+    rows = _flag_block_rows(cmd.members, 2)
+    if rows:
         lines.append("")
         lines.append("Flags:")
-        specs = [_build_flag_spec(f) for f in regular_flags]
-        max_spec = max(len(s) for s in specs)
-        for f, spec in zip(regular_flags, specs):
-            padding = max_spec - len(spec) + 4
-            meta = _build_flag_meta(f)
-            lines.append(f"  {spec}{' ' * padding}{f.help}{meta}")
-
-    # Mutex groups
-    for mg in cmd.mutex:
-        lines.append("")
-        label = "Flags (mutually exclusive):"
-        lines.append(label)
-        specs = [_build_flag_spec(f) for f in mg.flags]
-        max_spec = max(len(s) for s in specs)
-        for f, spec in zip(mg.flags, specs):
-            padding = max_spec - len(spec) + 4
-            meta = _build_flag_meta(f)
-            lines.append(f"  {spec}{' ' * padding}{f.help}{meta}")
+        column = max(indent + len(spec) for indent, spec, _, _ in rows) + 4
+        for indent, spec, help_text, meta in rows:
+            padding = column - indent - len(spec)
+            lines.append(
+                f"{' ' * indent}{spec}{' ' * padding}{help_text}{meta}".rstrip()
+            )
 
     # Global flags
     if app._global_flags:
@@ -11612,6 +13845,53 @@ def _serialize_flag(f: Flag) -> dict:
     return d
 
 
+def _serialize_selector(sel: _Selector) -> dict:
+    """Serialize one selector: the nested choices and scopes, each choice's
+    help, each scoped entry's presence and default, and the spelling (§24.11).
+
+    NOT the pinned v2 encoding -- that is the schema-v2 amendment's, which the
+    two rounds ship into one release. This is the minimum that keeps
+    `--dump-schema` from flattening a selector away.
+    """
+    d: dict = {
+        "name": sel.name,
+        "help": sel.help,
+        "presence": sel.presence,
+        "elect_by": sel.elect_by,
+    }
+    if sel.short is not None:
+        d["short"] = sel.short
+    if sel.env is not None:
+        d["env"] = sel.env
+    choices: list[dict] = []
+    for c in sel.choices:
+        entry: dict = {"name": c.name, "help": c.help}
+        if c.payload is not None:
+            entry["value"] = {
+                "type": _TYPE_NAMES[c.payload.type],
+                "help": c.payload.help,
+            }
+        scope = [
+            _serialize_selector(m) if isinstance(m, _Selector)
+            else _serialize_flag(m)
+            for m in c.members
+        ]
+        if scope:
+            entry["flags"] = scope
+        choices.append(entry)
+    d["choices"] = choices
+    if sel.presence == _PRESENCE_DEFAULT:
+        spec = sel.choice_by_class(type(sel.default))
+        flat: dict = {"choice": spec.name}
+        for f in spec.members:
+            if isinstance(f, Flag):
+                flat[f.name] = getattr(
+                    sel.default, _flag_param_name(f.name),
+                )
+        d["default"] = flat
+    return d
+
+
 def _serialize_arg(a: Arg) -> dict:
     """Serialize an Arg to a JSON-serializable dict.
 
@@ -11698,12 +13978,14 @@ def _serialize_command(cmd: Command) -> dict:
     tags = sorted(cmd.tags)
     if tags:
         d["tags"] = tags
+    # Selectors are published nested, never flattened away: a dump that
+    # flattened one would restore exactly the erasure §13's presence box ended
+    # (§24.11). The full v1-successor encoding is the schema-v2 amendment's;
+    # this is the minimum that keeps the dump honest until it arrives.
+    selectors = [_serialize_selector(s) for s in cmd.selectors]
+    if selectors:
+        d["selectors"] = selectors
     constraints: list[dict] = []
-    for mg in cmd.mutex:
-        constraints.append({
-            "type": "mutex",
-            "flags": [f.name for f in mg.flags],
-        })
     for dep in cmd.dependencies:
         if isinstance(dep, CoRequired):
             constraints.append({
@@ -12585,7 +14867,7 @@ def _mcp_handle_tools_list(
         # true (absence means "not consequential").
         entry: dict = {
             "name": dotted_path,
-            "description": help_text,
+            "description": _tool_description(cmd, help_text),
             "effect": cmd.effect,
             "inputSchema": _build_json_schema(cmd),
         }
@@ -12927,7 +15209,7 @@ def _mcp_handle_tools_call(
     try:
         result = app._call_with_kwargs(
             tool_name, dict(arguments),
-            approve_consequential=approve_consequential,
+            approve_consequential=approve_consequential, flat=True,
         )
     except InvokeError as e:
         return _mcp_tool_result(app, req_id, str(e), modern=modern, is_error=True)

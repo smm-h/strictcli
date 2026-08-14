@@ -116,7 +116,7 @@ def test_validate_runs_after_choices():
     @app.command("cmd", effect="read_only", help="a command")
     @strictcli.flag(
         "port", type=int, help="the port",
-        choices=[80, 443], validate=tracking_validator, presence="required",
+        choices=[strictcli.Choice(80), strictcli.Choice(443)], validate=tracking_validator, presence="required",
     )
     def cmd(ctx, port):
         print(f"port={port}")

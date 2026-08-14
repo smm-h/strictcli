@@ -213,7 +213,7 @@ class TestListFlagParsing:
         @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "level", type=list[str], help="levels",
-            choices=["debug", "info", "error"], default=[],
+            choices=[strictcli.Choice("debug"), strictcli.Choice("info"), strictcli.Choice("error")], default=[],
         )
         def cmd(ctx, level):
             print(f"level={level!r}")
@@ -374,7 +374,7 @@ class TestDictFlagRegistration:
         with pytest.raises(ValueError, match="dict type cannot be combined with choices"):
             strictcli.Flag(
                 name="data", type=dict[str, str], help="data",
-                choices=["a", "b"], default={},
+                choices=[strictcli.Choice("a"), strictcli.Choice("b")], default={},
             )
 
     def test_dict_with_env_separator_rejected(self):

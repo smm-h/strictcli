@@ -56,12 +56,47 @@ class TestReservedNameBan:
         assert BAN_MESSAGE in str(exc.value)
 
     @pytest.mark.parametrize("name", QUARTET)
-    def test_banned_in_a_mutex_group(self, name):
+    def test_banned_inside_a_choice_scope_at_every_depth(self, name):
+        """§24.7: every existing name ban re-runs at every depth.
+
+        A ban enforced only against a flat root list is this construct's most
+        likely correctness defect, so it is a requirement rather than a
+        discovery. The scope is validated when the SELECTOR claims it, which is
+        where a message can name both the choice and the selector.
+        """
+        field = name.replace("-", "_")
+        email = strictcli.choice("email", help="deliver by email")(
+            type("Email", (), {
+                "__annotations__": {field: bool},
+                field: strictcli.sub_flag(help="nope", default=False),
+            }),
+        )
+
+        @strictcli.choice("sms", help="deliver by text")
+        class Sms:
+            pass
+
         with pytest.raises(ValueError) as exc:
-            strictcli.MutexGroup(flags=[
-                strictcli.Flag(name=name, type=bool, default=False, help="nope"),
-                strictcli.Flag(name="other", type=bool, default=False, help="other"),
-            ])
+            strictcli.choice_flag(
+                "via", help="delivery channel", presence="required",
+                elect_by="selector-token", choices=[email, Sms],
+            )
+        assert BAN_MESSAGE in str(exc.value)
+
+    @pytest.mark.parametrize("name", QUARTET)
+    def test_banned_as_a_member_choice_name(self, name):
+        """Under member spelling a choice name IS a flag name (§24.7)."""
+        member = strictcli.choice(name, help="a member")(type("M", (), {}))
+
+        @strictcli.choice("other", help="the other member")
+        class Other:
+            pass
+
+        with pytest.raises(ValueError) as exc:
+            strictcli.choice_flag(
+                "mode", help="the mode", presence="required",
+                elect_by="member-flags", choices=[member, Other],
+            )
         assert BAN_MESSAGE in str(exc.value)
 
     def test_yes_is_banned_outright(self):

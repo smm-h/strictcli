@@ -478,46 +478,56 @@ class TestInvokeUnknownKwarg:
             app._invoke("run", {"bogus": "value"})
 
 
-class TestInvokeMutex:
-    """_invoke enforces mutex group constraints."""
+class TestInvokeSelectors:
+    """_invoke takes the elected record, pre-typed (§24.11)."""
 
-    def test_mutex_both_provided(self):
+    def test_a_non_record_value_is_refused(self):
         app = _build_app()
 
-        @app.command(
-            "fmt", effect="read_only", help="format",
-            mutex=[strictcli.MutexGroup(
-                flags=[
-                    strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output"),
-                    strictcli.Flag(name="yaml", type=bool, default=False, help="YAML output"),
-                ],
-            )],
-        )
-        def fmt(ctx, as_json, yaml):
+        @strictcli.choice("as-json", help="JSON output")
+        class AsJson:
             pass
 
-        with pytest.raises(Exception, match="mutually exclusive"):
-            app._invoke("fmt", {"as_json": True, "yaml": True})
+        @strictcli.choice("yaml", help="YAML output")
+        class Yaml:
+            pass
 
-    def test_mutex_one_provided(self):
+        @app.command("fmt", effect="read_only", help="format")
+        @strictcli.choice_flag(
+            "format", help="the output format", presence="required",
+            elect_by="member-flags", choices=[AsJson, Yaml],
+        )
+        def fmt(ctx, format: AsJson | Yaml):
+            pass
+
+        with pytest.raises(
+            Exception, match="must be an instance of a declared choice",
+        ):
+            app._invoke("fmt", {"format": True})
+
+    def test_the_record_reaches_the_handler_unchanged(self):
         captured = {}
         app = _build_app()
 
-        @app.command(
-            "fmt", effect="read_only", help="format",
-            mutex=[strictcli.MutexGroup(
-                flags=[
-                    strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output"),
-                    strictcli.Flag(name="yaml", type=bool, default=False, help="YAML output"),
-                ],
-            )],
-        )
-        def fmt(ctx, as_json, yaml):
-            captured.update({"json": as_json, "yaml": yaml})
+        @strictcli.choice("as-json", help="JSON output")
+        class AsJson:
+            indent: int = strictcli.sub_flag(help="indent width", default=2)
 
-        app._invoke("fmt", {"as_json": True})
-        assert captured["json"] is True
-        assert captured["yaml"] is False  # bool mutex non-selected gets default False
+        @strictcli.choice("yaml", help="YAML output")
+        class Yaml:
+            pass
+
+        @app.command("fmt", effect="read_only", help="format")
+        @strictcli.choice_flag(
+            "format", help="the output format", presence="required",
+            elect_by="member-flags", choices=[AsJson, Yaml],
+        )
+        def fmt(ctx, format: AsJson | Yaml):
+            captured["format"] = format
+
+        value = AsJson(indent=4)
+        app._invoke("fmt", {"format": value})
+        assert captured["format"] is value
 
 
 class TestInvokeDependencies:
@@ -565,7 +575,7 @@ class TestInvokeChoices:
         app = _build_app()
 
         @app.command("set-level", effect="read_only", help="set level")
-        @strictcli.flag("level", type=str, help="log level", choices=["debug", "info", "warn", "error"], presence="required")
+        @strictcli.flag("level", type=str, help="log level", choices=[strictcli.Choice("debug"), strictcli.Choice("info"), strictcli.Choice("warn"), strictcli.Choice("error")], presence="required")
         def set_level(ctx, level):
             pass
 
@@ -577,7 +587,7 @@ class TestInvokeChoices:
         app = _build_app()
 
         @app.command("set-level", effect="read_only", help="set level")
-        @strictcli.flag("level", type=str, help="log level", choices=["debug", "info", "warn", "error"], presence="required")
+        @strictcli.flag("level", type=str, help="log level", choices=[strictcli.Choice("debug"), strictcli.Choice("info"), strictcli.Choice("warn"), strictcli.Choice("error")], presence="required")
         def set_level(ctx, level):
             captured["level"] = level
 

@@ -178,7 +178,7 @@ class TestJsonSchemaChoices:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command")
-        @strictcli.flag("env", type=str, choices=["dev", "staging", "prod"], help="environment", presence="required")
+        @strictcli.flag("env", type=str, choices=[strictcli.Choice("dev"), strictcli.Choice("staging"), strictcli.Choice("prod")], help="environment", presence="required")
         def cmd(ctx, env):
             pass
 
@@ -189,7 +189,7 @@ class TestJsonSchemaChoices:
         app = _build_app()
 
         @app.command("cmd", effect="read_only", help="a command", args=[
-            strictcli.Arg(name="level", help="log level", choices=["debug", "info", "warn"], presence="required"),
+            strictcli.Arg(name="level", help="log level", choices=[strictcli.Choice("debug"), strictcli.Choice("info"), strictcli.Choice("warn")], presence="required"),
         ])
         def cmd(ctx, level):
             pass

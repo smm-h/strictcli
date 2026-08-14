@@ -255,7 +255,7 @@ def test_float_flag_choices():
     app = strictcli.App(name="test", version="1.0.0", help="test app")
 
     @app.command("cmd", effect="read_only", help="a command")
-    @strictcli.flag("rate", type=float, help="the rate", choices=[0.5, 1.0, 2.0], presence="required")
+    @strictcli.flag("rate", type=float, help="the rate", choices=[strictcli.Choice(0.5), strictcli.Choice(1.0), strictcli.Choice(2.0)], presence="required")
     def cmd(ctx, rate):
         print(f"rate={rate}")
 

@@ -322,7 +322,7 @@ def test_config_choices_validation(tmp_path, monkeypatch):
 
     @app.command("run", effect="read_only", help="run something")
     @strictcli.flag("format", type=str, help="output format",
-                     choices=["json", "yaml", "text"], default="text")
+                     choices=[strictcli.Choice("json"), strictcli.Choice("yaml"), strictcli.Choice("text")], default="text")
     def run(ctx, format):
         print(f"format={format}")
 
@@ -1689,36 +1689,48 @@ def test_conflict_mode_implied_excluded(tmp_path, monkeypatch):
     assert r.exit_code == 0
 
 
-def test_conflict_mode_fires_before_mutex(tmp_path, monkeypatch):
-    """Conflict fires before mutex when both would error.
+def test_conflict_mode_fires_on_an_elected_member(tmp_path, monkeypatch):
+    """§21.3's carve-out survives member spelling untouched (§21's box, item 119).
 
-    Under divergence-awareness, a conflict requires the config value to differ
-    from the CLI value. Config sets format_json=false while the CLI passes
-    --format-json (true): the values diverge, so the conflict fires. The CLI
-    also passes --format-yaml so mutex would also fire -- conflict wins.
+    "Not consulted at all" describes value DELIVERY and election. It does not
+    describe the both-sources conflict check, which is a value-hygiene rule
+    about the operator's own configuration: an app configured with
+    config_conflict_mode="error" that has a config value for the member the
+    command line then elects with a diverging value reports the conflict.
     """
     config_dir = tmp_path / "testapp"
     config_dir.mkdir(parents=True)
-    (config_dir / "config.json").write_text('{"format_json": false}')
+    (config_dir / "config.json").write_text('{"profile": "from-config"}')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = strictcli.App(
         name="testapp", version="1.0.0", help="test",
         config=True, config_conflict_mode="error",
     )
 
-    format_json = strictcli.Flag(name="format-json", type=bool, default=False,
-                                  help="output as JSON")
-    format_yaml = strictcli.Flag(name="format-yaml", type=bool, default=False,
-                                  help="output as YAML")
+    @strictcli.choice("profile", help="one named profile")
+    class NamedProfile:
+        value: str = strictcli.member_value(help="the profile name")
 
-    @app.command("run", effect="read_only", help="run", mutex=[strictcli.MutexGroup(flags=[format_json, format_yaml])])
-    def run(ctx, format_json, format_yaml):
+    @strictcli.choice("all-profiles", help="every profile")
+    class AllProfiles:
         pass
 
-    r = app.test(["run", "--format-json", "--format-yaml"])
+    @app.command("run", effect="read_only", help="run")
+    @strictcli.choice_flag(
+        "mode", help="which profiles", presence="required",
+        elect_by="member-flags", choices=[NamedProfile, AllProfiles],
+    )
+    def run(ctx, mode: NamedProfile | AllProfiles):
+        pass
+
+    r = app.test(["run", "--profile", "typed"])
     assert r.exit_code == 1
-    # Should mention conflict (set in both), not mutex
     assert "set in both" in r.stderr
+
+    # An UNELECTED member has no conflict: the command line supplied nothing
+    # to diverge from.
+    r = app.test(["run", "--all-profiles"])
+    assert r.exit_code == 0
 
 
 # --- Phase 2.2: divergence-aware conflict mode + per-flag override ---

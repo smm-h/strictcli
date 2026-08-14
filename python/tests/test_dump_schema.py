@@ -119,7 +119,7 @@ class TestSchemaCommands:
 
         @app.command("deploy", effect="read_only", help="Deploy the app")
         @strictcli.flag("target", type=str, help="Deploy target", short="t",
-                        choices=["prod", "staging"], presence="required")
+                        choices=[strictcli.Choice("prod"), strictcli.Choice("staging")], presence="required")
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force deploy")
         def deploy(ctx, target, force_deploy):
             pass
@@ -267,7 +267,7 @@ class TestSchemaGlobalFlags:
             flags=[
                 strictcli.Flag(name="loud", type=bool, default=False, help="Verbose output", short="V"),
                 strictcli.Flag(name="output", type=str, help="Output format",
-                               default="text", choices=["text", "json"]),
+                               default="text", choices=[strictcli.Choice("text"), strictcli.Choice("json")]),
             ]
         )
 
@@ -684,7 +684,7 @@ class TestSchemaNonDefaultValues:
 
         @app.command("cmd", effect="read_only", help="A command")
         @strictcli.flag("level", type=int, help="Level", short="l",
-                        default=3, env="MY_LEVEL", choices=[1, 2, 3])
+                        default=3, env="MY_LEVEL", choices=[strictcli.Choice(1), strictcli.Choice(2), strictcli.Choice(3)])
         def cmd(ctx, level):
             pass
 
@@ -812,26 +812,42 @@ class TestSchemaConstraints:
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         assert "constraints" not in data["commands"]["noop"]
 
-    def test_mutex_group(self, tmp_path, monkeypatch):
+    def test_the_mutex_constraint_entry_is_gone(self, tmp_path, monkeypatch):
+        """`MutexGroup` is deleted, and so is its schema entry (§21's box)."""
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        json_flag = strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output")
-        text_flag = strictcli.Flag(name="text", type=bool, default=False, help="Text output")
+        @strictcli.choice("as-json", help="JSON output")
+        class AsJson:
+            pass
 
-        @app.command("show", effect="read_only", help="Show data",
-                     mutex=[strictcli.MutexGroup(flags=[json_flag, text_flag])])
-        def show(ctx, as_json, text):
+        @strictcli.choice("text", help="Text output")
+        class Text:
+            pass
+
+        @app.command("show", effect="read_only", help="Show data")
+        @strictcli.choice_flag(
+            "format", help="the output format", presence="required",
+            elect_by="member-flags", choices=[AsJson, Text],
+        )
+        def show(ctx, format: AsJson | Text):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         cmd = data["commands"]["show"]
-        assert "constraints" in cmd
-        assert len(cmd["constraints"]) == 1
-        c = cmd["constraints"][0]
-        assert c["type"] == "mutex"
-        assert c["flags"] == ["as-json", "text"]
+        assert "constraints" not in cmd
+        # The selector is published NESTED, never flattened away (§24.11).
+        assert cmd["selectors"] == [{
+            "name": "format",
+            "help": "the output format",
+            "presence": "required",
+            "elect_by": "member-flags",
+            "choices": [
+                {"name": "as-json", "help": "JSON output"},
+                {"name": "text", "help": "Text output"},
+            ],
+        }]
 
     def test_co_required(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -899,26 +915,22 @@ class TestSchemaConstraints:
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
-        json_flag = strictcli.Flag(name="as-json", type=bool, default=False, help="JSON output")
-        text_flag = strictcli.Flag(name="text", type=bool, default=False, help="Text output")
-
         @app.command("deploy", effect="read_only", help="Deploy",
-                     mutex=[strictcli.MutexGroup(flags=[json_flag, text_flag])],
                      dependencies=[
                          strictcli.CoRequired(flags=["host", "port"]),
                          strictcli.Requires(flag="port", depends_on="host"),
                      ])
         @strictcli.flag("host", type=str, help="Hostname", presence="required")
         @strictcli.flag("port", type=int, help="Port number", presence="required")
-        def deploy(ctx, as_json, text, host, port):
+        def deploy(ctx, host, port):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         cmd = data["commands"]["deploy"]
-        assert len(cmd["constraints"]) == 3
+        assert len(cmd["constraints"]) == 2
         types = [c["type"] for c in cmd["constraints"]]
-        assert types == ["mutex", "co_required", "requires"]
+        assert types == ["co_required", "requires"]
 
     def test_constraint_flag_names_use_dashes(self, tmp_path, monkeypatch):
         """Constraint flag names should use dashes (flag names), not underscores."""

@@ -140,7 +140,7 @@ class TestFrameworkInternalMarker:
                 help="run",
                 effect="read_only",
                 handler=foreign,
-                args=None, flag_sets=None, mutex=None,
+                args=None, flag_sets=None,
                 env_prefix=None,
                 forwarding=strictcli.Forwarding(reason="x"),
                 framework_internal=True,

@@ -222,38 +222,45 @@ class TestPresenceValueInvalid:
         )
 
 
-class TestMutexMemberRequired:
-    def test_a_mutex_member_cannot_declare_requiredness(self):
+class TestMemberFlagPresenceInverts:
+    """§12.12's `errFlagMutexMemberRequired` is DELETED and its rule inverts.
+
+    A mutex member may not declare requiredness; a member flag now MUST -- read
+    as *required once this member is elected* (§21's box, §12.13). In Python
+    the member's presence is not declarable at all: `member_value(...)` takes no
+    presence keyword, and a frozen dataclass field with no default is required
+    by construction, so the non-required state is unconstructable. The template
+    is therefore Python-EXCLUDED, exactly as the defaulted-selector
+    completeness check is (§24.5).
+    """
+
+    def test_the_old_template_is_gone(self):
+        assert not hasattr(strictcli, "MutexGroup")
+        assert not hasattr(strictcli, "_raise_flag_mutex_member_required")
+
+    def test_a_member_payload_is_required_once_elected(self):
         app = _app()
-        mg = strictcli.MutexGroup(flags=[
-            strictcli.Flag(name="json-out", type=bool, help="json", presence="required"),
-            strictcli.Flag(name="yaml-out", type=bool, help="yaml", presence="optional"),
-        ])
-        with pytest.raises(ValueError) as exc:
 
-            @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
-            def cmd(ctx, json_out, yaml_out=None):
-                pass
+        @strictcli.choice("profile", help="one named profile")
+        class Profile:
+            value: str = strictcli.member_value(help="the profile name")
 
-        assert str(exc.value) == (
-            'Flag "json-out": a mutex member cannot declare presence="required": '
-            "the group's own requirement is what makes the choice mandatory"
+        @strictcli.choice("all-profiles", help="every profile")
+        class AllProfiles:
+            pass
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.choice_flag(
+            "mode", help="which profiles", presence="required",
+            elect_by="member-flags", choices=[Profile, AllProfiles],
         )
+        def cmd(ctx, mode: Profile | AllProfiles):
+            print(repr(mode))
 
-    def test_a_mutex_member_may_declare_a_default(self):
-        app = _app()
-        mg = strictcli.MutexGroup(flags=[
-            strictcli.Flag(name="fast", type=bool, help="fast", default=False),
-            strictcli.Flag(name="slow", type=bool, help="slow", presence="optional"),
-        ])
-
-        @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
-        def cmd(ctx, fast, slow=None):
-            print(f"fast={fast} slow={slow}")
-
-        r = app.test(["cmd", "--slow"])
-        assert r.exit_code == 0
-        assert "fast=False slow=True" in r.stdout
+        r = app.test(["cmd", "--profile"])
+        assert r.exit_code == 1
+        assert "error: flag '--profile' requires a value\n" in r.stderr
+        assert app.test(["cmd", "--profile", "work"]).exit_code == 0
 
 
 class TestHandlerParameterCheck:
@@ -615,7 +622,7 @@ class TestComposition:
         @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "format", type=str, help="format", presence="optional",
-            choices=["text", "json"],
+            choices=[strictcli.Choice("text"), strictcli.Choice("json")],
         )
         def cmd(ctx, format=None):
             print(f"format={format!r}")
@@ -626,18 +633,28 @@ class TestComposition:
         assert bad.exit_code == 1
         assert "--format: invalid value 'xml'" in bad.stderr
 
-    def test_an_unelected_mutex_member_delivers_its_own_declaration(self):
+    def test_an_optional_sub_flag_delivers_absence_as_a_present_field(self):
+        """§23 applies again one level down, unchanged (§24.1)."""
         app = _app()
-        mg = strictcli.MutexGroup(flags=[
-            strictcli.Flag(name="output", type=str, help="output", presence="optional"),
-            strictcli.Flag(name="target", type=str, help="target", default="prod"),
-        ])
 
-        @app.command("cmd", effect="read_only", help="a command", mutex=[mg])
-        def cmd(ctx, output=None, target=None):
-            print(f"output={output!r} target={target!r}")
+        @strictcli.choice("write", help="write the output")
+        class Write:
+            output: str = strictcli.sub_flag(help="output", presence="optional")
+            target: str = strictcli.sub_flag(help="target", default="prod")
 
-        r = app.test(["cmd", "--output", "out.txt"])
+        @strictcli.choice("discard", help="discard the output")
+        class Discard:
+            pass
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.choice_flag(
+            "mode", help="what to do", presence="required",
+            elect_by="selector-token", choices=[Write, Discard],
+        )
+        def cmd(ctx, mode: Write | Discard):
+            print(f"output={mode.output!r} target={mode.target!r}")
+
+        r = app.test(["cmd", "--mode", "write", "--output", "out.txt"])
         assert r.exit_code == 0
         assert "output='out.txt' target='prod'" in r.stdout
 
@@ -825,7 +842,7 @@ class TestHelpMarkers:
         @app.command("cmd", effect="read_only", help="a command")
         @strictcli.flag(
             "format", type=str, help="the format", presence="optional",
-            choices=["text", "json"], env="FMT", prefixed=False,
+            choices=[strictcli.Choice("text"), strictcli.Choice("json")], env="FMT", prefixed=False,
         )
         def cmd(ctx, format=None):
             pass
