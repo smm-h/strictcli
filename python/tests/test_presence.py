@@ -158,15 +158,56 @@ class TestNullValuedDefault:
             'presence="optional" (it delivers None when the arg is absent)'
         )
 
-    def test_the_redirect_wins_over_the_two_declared_error(self):
-        """`default=None` is not a declaration at all, so it never counts as
-        the second of two."""
+    def test_the_two_declared_error_wins_over_the_redirect(self):
+        """The count check runs first (§12.12's implementation-sweep box,
+        ledger item 154).
+
+        A null default written BESIDE a presence declaration is a combination
+        error, and the message names both spellings -- including the one that
+        was actually written, `default=None`. The redirect teaches the old
+        idiom of writing `default=None` alone; an author who wrote `presence=`
+        already knows the keyword and gets the neutral combination error.
+        """
         with pytest.raises(ValueError) as exc:
             strictcli.Flag(
                 name="target", type=str, help="the target",
                 presence="optional", default=None,
             )
-        assert "does not declare optionality" in str(exc.value)
+        assert str(exc.value) == (
+            'Flag "target": presence is declared twice: presence="optional" '
+            "and default=None cannot be combined; declare exactly one"
+        )
+        with pytest.raises(ValueError) as exc:
+            strictcli.Flag(
+                name="target", type=str, help="the target",
+                presence="required", default=None,
+            )
+        assert str(exc.value) == (
+            'Flag "target": presence is declared twice: presence="required" '
+            "and default=None cannot be combined; declare exactly one"
+        )
+
+    def test_the_two_declared_error_wins_over_the_redirect_on_an_arg(self):
+        """The arg twin of the rule above: `Arg`, the arg spellings, and the
+        same canonical order (ledger item 154)."""
+        with pytest.raises(ValueError) as exc:
+            strictcli.Arg(
+                name="path", help="the path",
+                presence="optional", default=None,
+            )
+        assert str(exc.value) == (
+            'Arg "path": presence is declared twice: presence="optional" '
+            "and default=None cannot be combined; declare exactly one"
+        )
+        with pytest.raises(ValueError) as exc:
+            strictcli.Arg(
+                name="path", help="the path",
+                presence="required", default=None,
+            )
+        assert str(exc.value) == (
+            'Arg "path": presence is declared twice: presence="required" '
+            "and default=None cannot be combined; declare exactly one"
+        )
 
 
 class TestPresenceValueInvalid:
@@ -528,6 +569,45 @@ class TestComposition:
         r = app.test(["cmd", "--sign"])
         assert r.exit_code == 1
         assert "flag '--sign' requires '--key'" in r.stderr
+
+    def test_co_required_with_a_required_member(self):
+        # §23.5's CoRequired row: a required member is always provided, so the
+        # group then forces every other member to be provided in every
+        # invocation. The shape is legal; the errors are the two it can reach.
+        def app():
+            a = _app()
+
+            @a.command(
+                "cmd", effect="read_only", help="a command",
+                dependencies=[strictcli.CoRequired(flags=["cert", "key"])],
+            )
+            @strictcli.flag("cert", type=str, help="the certificate", presence="required")
+            @strictcli.flag("key", type=str, help="the private key", presence="optional")
+            def cmd(ctx, cert, key=None):
+                print(f"cert={cert} key={key}")
+
+            return a
+
+        both = app().test(["cmd", "--cert", "c.pem", "--key", "k.pem"])
+        assert both.exit_code == 0, both.stderr
+        assert both.stdout == "cert=c.pem key=k.pem\n"
+
+        # Only the required member: the group is violated, because a required
+        # member cannot be absent to make the group vacuously satisfied.
+        only_required = app().test(["cmd", "--cert", "c.pem"])
+        assert only_required.exit_code == 1
+        assert only_required.stderr == (
+            "error: flags --cert, --key must be used together\n"
+            "try 'test cmd --help'\n"
+        )
+
+        # Neither: the dependency check sees an empty group (vacuously fine)
+        # and the required check is what fires.
+        neither = app().test(["cmd"])
+        assert neither.exit_code == 1
+        assert neither.stderr == (
+            "error: flag '--cert' is required\ntry 'test cmd --help'\n"
+        )
 
     def test_choices_compose_with_optional_in_both_directions(self):
         app = _app()

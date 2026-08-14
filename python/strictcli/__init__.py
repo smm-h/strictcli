@@ -4348,6 +4348,12 @@ def _resolve_presence(
     errors, and `default=None` is refused with a redirect to the optional
     spelling rather than accepted as a second spelling of the same fact.
 
+    The count check runs FIRST (§12.12's implementation-sweep amendment, ledger
+    item 154). A null default written BESIDE a presence declaration is a
+    combination error and reads as one, naming both spellings; the redirect is
+    reserved for the null default written as the sole declaration, which is the
+    old idiom it exists to teach.
+
     ``surface`` is ``"Flag"`` or ``"Arg"`` and selects the message family.
     """
     is_flag = surface == "Flag"
@@ -4355,18 +4361,19 @@ def _resolve_presence(
     has_default = not isinstance(default, _MissingSentinel)
     if has_presence and presence not in _PRESENCE_DECLARABLE:
         _raise_presence_value_invalid(surface, name, presence)
-    if has_default and default is None:
-        if is_flag:
-            _raise_flag_default_null_not_optional(name)
-        _raise_arg_default_null_not_optional(name)
     if has_presence and has_default:
         # Canonical order (required, optional, default) regardless of the order
-        # they were written in, so the line is deterministic.
+        # they were written in, so the line is deterministic. A null default
+        # reaches here too, and names the spelling that was actually written.
         first = _PRESENCE_SPELLING[presence]
         second = _default_spelling(default)
         if is_flag:
             _raise_flag_presence_declared_twice(name, first, second)
         _raise_arg_presence_declared_twice(name, first, second)
+    if has_default and default is None:
+        if is_flag:
+            _raise_flag_default_null_not_optional(name)
+        _raise_arg_default_null_not_optional(name)
     if has_presence:
         return presence
     if has_default:
