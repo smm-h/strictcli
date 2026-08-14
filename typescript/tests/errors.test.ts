@@ -80,7 +80,12 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // errArgDefaultElementTypeMismatch. A list-typed arg must be variadic and a
 // variadic arg refuses a default, so no arg can carry a list default for them
 // to describe; the flag-side counterparts are untouched.
-const EXPECTED_TEMPLATE_COUNT = 353;
+// The scoped-selector implementations' sweep (§18.19 item 221) adds 2:
+// errShortShapeMismatch and errShortOnAmbiguousElection, the two short-reuse
+// guards promoted from Python-authored to cross-language pinned templates --
+// §24.7 permits sibling scopes to reuse a short and said nothing more, which
+// left two states with a rule and no message.
+const EXPECTED_TEMPLATE_COUNT = 355;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

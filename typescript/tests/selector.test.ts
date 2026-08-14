@@ -971,6 +971,174 @@ test("guard: a short is claimed across every simultaneously live scope", () => {
 	);
 });
 
+/**
+ * The two short-reuse guards (§12.13, §18.19 item 221). §24.7 permits sibling
+ * scopes to reuse a short and says nothing more, which left two states with a
+ * rule and no message. Both are `command "<name>": ` messages, because the
+ * claimants live in different scopes and neither owns the collision.
+ */
+test("guard: sibling scopes may reuse a short when the two tokenize alike", () => {
+	// Legal: the token consumes argv identically whatever the election decides.
+	defineReadOnlyCommand("send", {
+		help: "h",
+		flags: {
+			via: choiceFlag(
+				"via",
+				{
+					email: choice({
+						help: "email",
+						flags: {
+							subject: flag("subject", t.str, {
+								help: "h",
+								short: "s",
+								presence: "optional",
+							}),
+						},
+					}),
+					sms: choice({
+						help: "sms",
+						flags: {
+							sender: flag("sender", t.str, {
+								help: "h",
+								short: "s",
+								presence: "optional",
+							}),
+						},
+					}),
+				},
+				{ help: "h", presence: "required" },
+			),
+		},
+		handler: () => 0,
+	});
+});
+
+test("guard: a short reused by sibling scopes must tokenize identically", () => {
+	rejects(
+		() =>
+			defineReadOnlyCommand("send", {
+				help: "h",
+				flags: {
+					via: choiceFlag(
+						"via",
+						{
+							email: choice({
+								help: "email",
+								flags: {
+									subject: flag("subject", t.str, {
+										help: "h",
+										short: "s",
+										presence: "optional",
+									}),
+								},
+							}),
+							sms: choice({
+								help: "sms",
+								flags: {
+									silent: flag("silent", t.bool, {
+										help: "h",
+										short: "s",
+										presence: "optional",
+									}),
+								},
+							}),
+						},
+						{ help: "h", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		"command \"send\": short '-s' is claimed by '--subject' and '--silent' with different value shapes: sibling scopes may reuse a short only with an identical type and arity, because tokenizing '-s' cannot wait for an election",
+	);
+});
+
+test("guard: a short reused by sibling scopes may not name an election", () => {
+	// Which name a reused short binds to resolves AFTER the elections, and an
+	// election token has to be readable before any election has happened.
+	rejects(
+		() =>
+			defineReadOnlyCommand("send", {
+				help: "h",
+				flags: {
+					via: choiceFlag(
+						"via",
+						{
+							email: choice({
+								help: "email",
+								flags: {
+									subject: flag("subject", t.str, {
+										help: "h",
+										short: "s",
+										presence: "optional",
+									}),
+								},
+							}),
+							webhook: choice({
+								help: "webhook",
+								flags: {
+									scheme: choiceFlag(
+										"scheme",
+										{
+											http: choice({ help: "plain" }),
+											https: choice({ help: "tls" }),
+										},
+										{ help: "h", short: "s", presence: "required" },
+									),
+								},
+							}),
+						},
+						{ help: "h", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		"command \"send\": short '-s' is reused by sibling scopes and also claimed by '--scheme', which elects: an election token is read before any election has happened, so its short cannot be shared",
+	);
+});
+
+test("guard: the short-claim table walks member scopes too", () => {
+	// Two sibling MEMBER scopes are covered by the same words: the guards are
+	// stated over scopes, never over the choices of a token-spelled selector,
+	// which is what closes the member-scope hazard.
+	rejects(
+		() =>
+			defineReadOnlyCommand("run", {
+				help: "h",
+				flags: {
+					target: memberChoiceFlag(
+						"target",
+						{
+							profile: choice({
+								help: "one profile",
+								value: t.str,
+								flags: {
+									subject: flag("subject", t.str, {
+										help: "h",
+										short: "s",
+										presence: "optional",
+									}),
+								},
+							}),
+							all_profiles: choice({
+								help: "every profile",
+								flags: {
+									silent: flag("silent", t.bool, {
+										help: "h",
+										short: "s",
+										presence: "optional",
+									}),
+								},
+							}),
+						},
+						{ help: "h", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		"command \"run\": short '-s' is claimed by '--subject' and '--silent' with different value shapes: sibling scopes may reuse a short only with an identical type and arity, because tokenizing '-s' cannot wait for an election",
+	);
+});
+
 test("guard: a positional arg cannot be declared inside a choice scope", () => {
 	rejects(
 		() =>

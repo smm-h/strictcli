@@ -2536,6 +2536,40 @@ export function errShortCollidesAcrossScopes(
 	return `command ${q(name)}: short '-${s}' is claimed by '--${a}' and '--${b}', which can be elected at the same time`;
 }
 
+/**
+ * `errSiblingScopeShapeMismatch`'s argument one token over (§18.19 item 221):
+ * which NAME a reused short binds to is decided after the election, so the
+ * short may only be reused when the token consumes argv identically whatever
+ * the election decides. Same noun (value shape), same reason clause -- widened
+ * rather than twinned into an arity-only sibling.
+ *
+ * The site is the COMMAND, because the two claimants live in different scopes
+ * and neither one owns the collision.
+ */
+export function errShortShapeMismatch(
+	name: string,
+	s: string,
+	a: string,
+	b: string,
+): string {
+	return `command ${q(name)}: short '-${s}' is claimed by '--${a}' and '--${b}' with different value shapes: sibling scopes may reuse a short only with an identical type and arity, because tokenizing '-${s}' cannot wait for an election`;
+}
+
+/**
+ * The ordering hazard shape comparison cannot see: a short reused across
+ * sibling scopes AND claimed by a candidate that is itself an election token
+ * is refused outright, because the binding resolves after the elections and an
+ * election token has to be readable before any election has happened. There is
+ * no shape that makes it legal, so the guard refuses rather than comparing.
+ */
+export function errShortOnAmbiguousElection(
+	name: string,
+	s: string,
+	x: string,
+): string {
+	return `command ${q(name)}: short '-${s}' is reused by sibling scopes and also claimed by '--${x}', which elects: an election token is read before any election has happened, so its short cannot be shared`;
+}
+
 /** A positional's meaning cannot depend on an election typed after it (§24.7). */
 export function errScopedPositional(c: string, sel: string): string {
 	return `${choicePrefix(c, sel)}positional args cannot be declared inside a choice scope: a positional's meaning would depend on an election that may be typed after it`;

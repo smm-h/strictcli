@@ -113,6 +113,8 @@ import {
 	errSelectorNoChoices,
 	errSelectorOptional,
 	errShortCollidesAcrossScopes,
+	errShortOnAmbiguousElection,
+	errShortShapeMismatch,
 	errSiblingScopeShapeMismatch,
 	errTokenChoiceCarriesPayload,
 	PRESENCE_SPELLING_OPTIONAL,
@@ -1698,6 +1700,120 @@ function validateDeclTree(
 					errShortCollidesAcrossScopes(cmdName, short, a.name, b.name),
 				);
 			}
+		}
+	}
+	validateSiblingScopeShorts(cmdName, decls);
+}
+
+/** One token a declaration puts on the command line, for the short-claim table. */
+interface DeclSite {
+	readonly name: string;
+	/** An `election` site is read BEFORE any election has happened. */
+	readonly kind: "flag" | "election";
+	readonly shape: string;
+	readonly short: string | undefined;
+}
+
+/**
+ * Every token reachable below a selector, in declaration order -- which is
+ * what makes the two guards below cover MEMBER scopes as well as the choices
+ * of a token-spelled selector. A table built only from token-spelled
+ * selectors' choices leaves exactly that hazard open (§12.13, §18.19 item 221).
+ *
+ * Root-level ordinary flags are not sites: a root short colliding with a
+ * scoped one is `errShortCollidesAcrossScopes`'s condition, checked above.
+ */
+function collectDeclSites(
+	decls: readonly AnyDecl[],
+	scoped: boolean,
+	out: DeclSite[],
+): void {
+	for (const decl of decls) {
+		if (decl.kind === "flag") {
+			if (scoped) {
+				const s = surfaceNames(decl)[0] as SurfaceName;
+				out.push({
+					name: decl.name,
+					kind: "flag",
+					shape: valueShapeOf(s),
+					short: flagOpts(decl).short,
+				});
+			}
+			continue;
+		}
+		for (const s of surfaceNames(decl)) {
+			// A member-spelled election's token belongs to its own choice flag,
+			// which cannot carry a short at all, and TypeScript's member payload
+			// has no short slot -- so a member site claims none.
+			out.push({
+				name: s.name,
+				kind: "election",
+				shape: valueShapeOf(s),
+				short: s.elects === undefined ? decl.opts.short : undefined,
+			});
+		}
+		for (const c of Object.values(decl.choices)) {
+			collectDeclSites(Object.values(c.flags), true, out);
+		}
+	}
+}
+
+/**
+ * The two sibling-scope short rules (§18.19 item 221). Sibling scopes may
+ * reuse a short -- they can never be live together -- but the binding is
+ * resolved AFTER the elections, so the token must consume argv identically
+ * whatever the election decides, and it may never be the token that elects.
+ */
+function validateSiblingScopeShorts(
+	cmdName: string,
+	decls: readonly AnyDecl[],
+): void {
+	const sites: DeclSite[] = [];
+	collectDeclSites(decls, false, sites);
+	const byName = new Map<string, DeclSite[]>();
+	for (const site of sites) {
+		const entries = byName.get(site.name) ?? [];
+		entries.push(site);
+		byName.set(site.name, entries);
+	}
+	// short -> the distinct NAMES claiming it, in declaration order. One name
+	// declared by two sibling scopes is the sibling-NAME rule's business, not
+	// this one's.
+	const claims = new Map<string, string[]>();
+	for (const site of sites) {
+		if (site.short === undefined || site.short === "") {
+			continue;
+		}
+		const names = claims.get(site.short) ?? [];
+		if (!names.includes(site.name)) {
+			names.push(site.name);
+		}
+		claims.set(site.short, names);
+	}
+	for (const [short, names] of claims) {
+		if (names.length < 2) {
+			continue;
+		}
+		const shapes = new Set<string>();
+		for (const name of names) {
+			for (const site of byName.get(name) ?? []) {
+				if (site.kind !== "flag") {
+					throw new RegistrationError(
+						errShortOnAmbiguousElection(cmdName, short, name),
+					);
+				}
+				shapes.add(site.shape);
+			}
+		}
+		if (shapes.size > 1) {
+			throw new RegistrationError(
+				errShortShapeMismatch(
+					cmdName,
+					short,
+					names[0] as string,
+					names[1] as string,
+				),
+			);
 		}
 	}
 }
