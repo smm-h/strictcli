@@ -204,6 +204,12 @@ function buildFlag(fd) {
 	if ("short" in fd) {
 		opts.short = fd.short;
 	}
+	// presence is a mandatory case-schema key (effects contract §23.1); a case
+	// that omits it is meant to reach the framework's undeclared-presence
+	// error, so it is passed through exactly as written.
+	if ("presence" in fd) {
+		opts.presence = fd.presence;
+	}
 	if ("default_relative_to_root" in fd) {
 		const rtr = fd.default_relative_to_root;
 		opts.default = relativeToRoot(rtr.env_var, ...(rtr.parts ?? []));
@@ -211,7 +217,9 @@ function buildFlag(fd) {
 	if ("default" in fd) {
 		const dv = fd.default;
 		if (dv === null) {
-			opts.default = null; // explicitly-optional flag (Go Default(nil))
+			// Still expressible on the case side, as the input the null-default
+			// redirect error (§12.12) is asserted against.
+			opts.default = null;
 		} else if (Array.isArray(dv)) {
 			opts.default = dv.map((el) => convertScalar(elemType, el));
 		} else {
@@ -275,8 +283,10 @@ function flagMapOf(flagDefs, dupMessage) {
 function buildArg(ad) {
 	const atype = ad.type ?? "str";
 	const opts = { help: ad.help };
-	if ("required" in ad) {
-		opts.required = ad.required;
+	// The arg surface takes the same three-way declaration; `required` is
+	// deleted from the case schema rather than retained beside it (§23.3).
+	if ("presence" in ad) {
+		opts.presence = ad.presence;
 	}
 	if ("default" in ad) {
 		opts.default = ad.default === null ? null : convertScalar(atype, ad.default);
