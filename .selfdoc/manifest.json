@@ -2019,6 +2019,58 @@
       ]
     },
     {
+      "path": "mcp-confirmation.md",
+      "title": "Consequential Confirmation over MCP",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Consequential Confirmation over MCP",
+          "anchor": "consequential-confirmation-over-mcp"
+        },
+        {
+          "level": 2,
+          "text": "What the server declares",
+          "anchor": "what-the-server-declares"
+        },
+        {
+          "level": 2,
+          "text": "What a client must declare",
+          "anchor": "what-a-client-must-declare"
+        },
+        {
+          "level": 2,
+          "text": "The dialogue",
+          "anchor": "the-dialogue"
+        },
+        {
+          "level": 3,
+          "text": "Every other answer",
+          "anchor": "every-other-answer"
+        },
+        {
+          "level": 2,
+          "text": "The state, and what it is protected against",
+          "anchor": "the-state-and-what-it-is-protected-against"
+        },
+        {
+          "level": 2,
+          "text": "What is not asked about",
+          "anchor": "what-is-not-asked-about"
+        },
+        {
+          "level": 2,
+          "text": "The handshake era",
+          "anchor": "the-handshake-era"
+        },
+        {
+          "level": 2,
+          "text": "One process, both eras",
+          "anchor": "one-process-both-eras"
+        }
+      ]
+    },
+    {
       "path": "process-trace-store.md",
       "title": "Process Trace Store",
       "type": "doc",
@@ -4189,6 +4241,11 @@
         },
         {
           "level": 3,
+          "text": "`_mcp_principal_of`",
+          "anchor": "_mcp_principal_of"
+        },
+        {
+          "level": 3,
           "text": "`_MCPContinuation`",
           "anchor": "_mcpcontinuation"
         },
@@ -4219,6 +4276,36 @@
         },
         {
           "level": 3,
+          "text": "`_MCPLegacySession`",
+          "anchor": "_mcplegacysession"
+        },
+        {
+          "level": 4,
+          "text": "`open`",
+          "anchor": "open"
+        },
+        {
+          "level": 3,
+          "text": "`_MCPChannel`",
+          "anchor": "_mcpchannel"
+        },
+        {
+          "level": 4,
+          "text": "`next_line`",
+          "anchor": "next_line"
+        },
+        {
+          "level": 4,
+          "text": "`write`",
+          "anchor": "write-1"
+        },
+        {
+          "level": 4,
+          "text": "`await_response`",
+          "anchor": "await_response"
+        },
+        {
+          "level": 3,
           "text": "`_mcp_handle_initialize`",
           "anchor": "_mcp_handle_initialize"
         },
@@ -4244,6 +4331,11 @@
         },
         {
           "level": 3,
+          "text": "`_mcp_declares_form_elicitation`",
+          "anchor": "_mcp_declares_form_elicitation"
+        },
+        {
+          "level": 3,
           "text": "`_mcp_confirmation_request`",
           "anchor": "_mcp_confirmation_request"
         },
@@ -4261,6 +4353,11 @@
           "level": 3,
           "text": "`_mcp_confirmation_exchange`",
           "anchor": "_mcp_confirmation_exchange"
+        },
+        {
+          "level": 3,
+          "text": "`_mcp_legacy_confirmation`",
+          "anchor": "_mcp_legacy_confirmation"
         },
         {
           "level": 3,
@@ -7796,21 +7893,6 @@
         },
         {
           "level": 3,
-          "text": "`MCP_PROTOCOL_VERSION`",
-          "anchor": "mcp_protocol_version"
-        },
-        {
-          "level": 3,
-          "text": "`MCP_META_PROTOCOL_VERSION`",
-          "anchor": "mcp_meta_protocol_version"
-        },
-        {
-          "level": 3,
-          "text": "`MCP_META_CLIENT_CAPABILITIES`",
-          "anchor": "mcp_meta_client_capabilities"
-        },
-        {
-          "level": 3,
           "text": "`serveMcp`",
           "anchor": "servemcp"
         },
@@ -8537,6 +8619,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-13T22:54:07.636441+00:00",
+  "last_gen": "2026-08-14T00:04:54.403939+00:00",
   "theme": "minimal"
 }
