@@ -26,7 +26,7 @@ import strictcli
 app = strictcli.App("greet", version="1.0.0", help="A greeting app")
 
 @app.command("hello", help="Say hello", effect="read_only")
-@strictcli.flag("name", type=str, help="Who to greet")
+@strictcli.flag("name", type=str, help="Who to greet", presence="required")
 @strictcli.flag("loud", type=bool, default=False, help="Shout it")
 def hello(ctx, name, loud):
     msg = f"Hello, {name}!"
@@ -72,44 +72,68 @@ def migrate(ctx):
 
 Invoked as `myapp db schema migrate`.
 
+### The presence declaration
+
+Every flag and every positional argument declares **exactly one** of three facts about itself. Declaring none of them does not register; declaring two does not register.
+
+| Fact | Spelling | Delivered when nothing supplies a value |
+|------|----------|------------------------------------------|
+| required | `presence="required"` | nothing -- the parse fails with `flag '--x' is required` |
+| optional | `presence="optional"` | `None` |
+| default | `default=<value>` | the declared value |
+
+```python
+@strictcli.flag("target", type=str, help="Deploy target", presence="required")
+@strictcli.flag("note", type=str, help="A note", presence="optional")
+@strictcli.flag("retries", type=int, help="Retry count", default=3)
+```
+
+Nothing about presence is inferred. A bool with no declaration is not "false by default", a `list[T]` with no declaration is not "empty by default" -- an empty collection is declared with `default=[]` or `default={}` -- and `default=None` is not a spelling of optionality: it is refused at registration with a redirect to `presence="optional"`, which is what delivers `None`.
+
+Requiredness is satisfied by any source that supplies a value: a command-line token, an environment variable, a config file, or an `Implies` injection. An optional flag makes real tri-state bools possible (`--x` true, `--no-x` false, absent absent), and it makes `""` a value again instead of an absence sentinel.
+
+`ctx.provided(name)` answers whether the **invocation** caused a value: true for `cli`, `env`, `config` and `implied`, false for `default` and `infra`. `ctx.source(name)` still answers the narrower question of which origin it was.
+
+A mutex group member declares `optional` or a default -- never `required`, since the group's own requirement is what makes the choice mandatory. A handler parameter bound to an optional flag or argument must default to `None` if it defaults to anything, so the sentinel the declaration removed cannot come back one line later.
+
 ### Four flag types
 
 `str`, `bool`, `int`, and `float`. No magic coercion -- parse errors are clear and immediate.
 
 ```python
-@strictcli.flag("port", type=int, help="Port number")
-@strictcli.flag("threshold", type=float, help="Score threshold")
+@strictcli.flag("port", type=int, help="Port number", presence="required")
+@strictcli.flag("threshold", type=float, help="Score threshold", presence="optional")
 @strictcli.flag("cache", type=bool, default=True, help="Reuse the build cache")
 @strictcli.flag("output", type=str, help="Output path", default="out.txt")
 ```
 
-Bool flags support `--flag` / `--no-flag` negation (disable with `negatable=False`) and have **no implicit default**: without `default=` they are required and the user must pass `--flag` or `--no-flag` explicitly. Float parsing rejects NaN and Inf.
+Bool flags support `--flag` / `--no-flag` negation (disable with `negatable=False`). A bool declared `presence="required"` must be passed as `--flag` or `--no-flag`; one declared `presence="optional"` is real tri-state. Float parsing rejects NaN and Inf.
 
 ### Compound types
 
 `list[T]` and `dict[str, T]` for collecting multiple values.
 
 ```python
-@strictcli.flag("tags", type=list[str], help="Tags to apply", unique=True)
-@strictcli.flag("env", type=dict[str, str], help="Environment variables")
+@strictcli.flag("tags", type=list[str], help="Tags to apply", unique=True, default=[])
+@strictcli.flag("env", type=dict[str, str], help="Environment variables", default={})
 ```
 
 List flags accept `--tags a --tags b`. Dict flags accept `--env KEY=VALUE` pairs or JSON objects.
 
 ### Positional arguments
 
-Two equivalent declaration forms. Arguments can be required, optional (with `required=False`), or variadic.
+Two equivalent declaration forms. Every argument declares its presence exactly as a flag does: `presence="required"`, `presence="optional"`, or a `default=`. A variadic argument always delivers a list, so it declares `required` (at least one value) or `optional` (possibly none) and never a default.
 
 ```python
 # Decorator form
 @app.command("show", help="Show a file", effect="read_only")
-@strictcli.arg("path", help="File to show")
+@strictcli.arg("path", help="File to show", presence="required")
 def show(ctx, path): ...
 
 # Inline form
 @app.command("copy", help="Copy files", effect="mutating", args=[
-    strictcli.Arg(name="src", help="Source"),
-    strictcli.Arg(name="dst", help="Destination"),
+    strictcli.Arg(name="src", help="Source", presence="required"),
+    strictcli.Arg(name="dst", help="Destination", presence="required"),
 ])
 def copy(ctx, src, dst): ...
 ```
@@ -161,8 +185,8 @@ Exactly one flag from the group must be provided.
 ```python
 @app.command("log", help="Show logs", effect="read_only", mutex=[
     strictcli.MutexGroup(flags=[
-        strictcli.Flag(name="since", type=str, help="Show logs since a timestamp"),
-        strictcli.Flag(name="tail", type=int, help="Show the last N lines"),
+        strictcli.Flag(name="since", type=str, help="Show logs since a timestamp", presence="optional"),
+        strictcli.Flag(name="tail", type=int, help="Show the last N lines", presence="optional"),
     ]),
 ])
 def log(ctx, since, tail): ...
@@ -182,8 +206,8 @@ Three relationship types, all passed via `dependencies=[...]`:
     strictcli.Requires(flag="trace", depends_on="output"),
     strictcli.Implies(flag="trace", implies="log-output", value=True),
 ])
-@strictcli.flag("output", type=str, default=None, help="Output path")
-@strictcli.flag("format", type=str, default=None, help="Output format")
+@strictcli.flag("output", type=str, presence="optional", help="Output path")
+@strictcli.flag("format", type=str, presence="optional", help="Output format")
 @strictcli.flag("trace", type=bool, default=False, help="Emit a trace")
 @strictcli.flag("log-output", type=bool, default=False, help="Log the output path")
 def export(ctx, output, format, trace, log_output): ...
@@ -225,7 +249,7 @@ are forwarded to the child byte-for-byte, so `myapp run deploy --dry-run` passes
 Flags that accumulate values across multiple occurrences. Requires explicit `unique=True` or `unique=False`.
 
 ```python
-@strictcli.flag("tag", type=str, help="Add a tag", repeatable=True, unique=True)
+@strictcli.flag("tag", type=str, help="Add a tag", repeatable=True, unique=True, default=[])
 ```
 
 ### Choices
@@ -233,7 +257,7 @@ Flags that accumulate values across multiple occurrences. Requires explicit `uni
 Restrict flag values to an allowed set.
 
 ```python
-@strictcli.flag("format", type=str, help="Output format", choices=["json", "csv", "xml"])
+@strictcli.flag("format", type=str, help="Output format", choices=["json", "csv", "xml"], presence="required")
 ```
 
 ### Custom validation
@@ -241,7 +265,7 @@ Restrict flag values to an allowed set.
 Per-flag validation functions.
 
 ```python
-@strictcli.flag("port", type=int, help="Port number", validate=lambda v: 1 <= v <= 65535)
+@strictcli.flag("port", type=int, help="Port number", validate=lambda v: 1 <= v <= 65535, presence="required")
 ```
 
 ### Deprecated commands
@@ -438,8 +462,8 @@ paths have no TTY contract, so a consequential command is dispatched directly.
 | Decorator | Description |
 |-----------|-------------|
 | `@app.command(name, help=..., effect=...)` | Register a command (`effect` is mandatory) |
-| `@strictcli.flag(name, type=, help=...)` | Declare a flag |
-| `@strictcli.arg(name, help=...)` | Declare a positional argument |
+| `@strictcli.flag(name, type=, help=..., presence=/default=)` | Declare a flag (presence is mandatory) |
+| `@strictcli.arg(name, help=..., presence=/default=)` | Declare a positional argument (presence is mandatory) |
 | `@app.error_check(name)` / `@app.warn_check(name)` | Register a check handler |
 
 ### App methods
