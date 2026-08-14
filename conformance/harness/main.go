@@ -559,6 +559,19 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 	if v, ok := fd["short"]; ok {
 		opts = append(opts, strictcli.Short(v.(string)))
 	}
+	// The presence declaration (contract §23). "required" and "optional" have
+	// their own spellings; "default" IS Default(v) in Go, so it is emitted by
+	// the default block below. Each key is honoured independently so a case can
+	// spell an illegal combination -- two declarations, or none -- and assert
+	// the registration error it produces.
+	if v, ok := fd["presence"]; ok {
+		switch v.(string) {
+		case "required":
+			opts = append(opts, strictcli.Required())
+		case "optional":
+			opts = append(opts, strictcli.Optional())
+		}
+	}
 	if v, ok := fd["default_relative_to_root"]; ok {
 		rtr := v.(map[string]interface{})
 		var parts []string
@@ -698,8 +711,15 @@ func buildArg(ad map[string]interface{}) strictcli.Arg {
 		opts = append(opts, strictcli.ArgType(strictcli.TypeFloat))
 	}
 
-	if v, ok := ad["required"]; ok {
-		opts = append(opts, strictcli.ArgRequired(v.(bool)))
+	// The presence declaration, arg side (contract §23.3). "default" is spelled
+	// by ArgDefault(v) itself, below.
+	if v, ok := ad["presence"]; ok {
+		switch v.(string) {
+		case "required":
+			opts = append(opts, strictcli.ArgRequired())
+		case "optional":
+			opts = append(opts, strictcli.ArgOptional())
+		}
 	}
 	if v, ok := ad["default"]; ok {
 		if v == nil {
