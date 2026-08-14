@@ -40,7 +40,7 @@ func main() {
         },
         strictcli.WithEffect(strictcli.EffectReadOnly),
         strictcli.WithFlags(
-            strictcli.StringFlag("name", "Who to greet"),
+            strictcli.StringFlag("name", "Who to greet", strictcli.Required()),
             strictcli.BoolFlag("loud", "Shout it", strictcli.Default(false)),
         ),
     )
@@ -90,6 +90,39 @@ schema.Command("migrate", "Run migrations",
 
 Invoked as `myapp db schema migrate`.
 
+### The presence declaration
+
+Every flag declares EXACTLY ONE of three facts about itself, and every
+positional arg does the same. Nothing is inferred from the shape of another
+declaration.
+
+| Fact | Flag | Arg |
+|------|------|-----|
+| a value must be supplied | `Required()` | `ArgRequired()` |
+| absence is legal, and is delivered as absence | `Optional()` | `ArgOptional()` |
+| the framework supplies this value when nothing else does | `Default(v)` | `ArgDefault(v)` |
+
+Declaring none is a registration-time hard error, and so is declaring two.
+`Default(nil)` is refused with a message redirecting to `Optional()`: a
+null-valued default is not a spelling of optionality, and optionality has
+exactly one spelling.
+
+```go
+strictcli.StringFlag("target", "Where to deploy", strictcli.Required()),
+strictcli.StringFlag("note", "An optional note", strictcli.Optional()),
+strictcli.IntFlag("retries", "How many retries", strictcli.Default(3)),
+```
+
+Requiredness is satisfied by ANY source that provides a value -- a command-line
+token, an env var, a config file, or an `Implies` injection -- not by a typed
+token specifically. A `Flag` STRUCT LITERAL passes through no option, so it
+declares no presence and does not register; build flags through the
+constructors.
+
+`ctx.Provided(name)` answers the question the declaration makes askable: true
+when the invocation caused the value (`cli`, `env`, `config`, `implied`), false
+when the declaration did (`default`, `infra`).
+
 ### Four flag types
 
 `StringFlag`, `BoolFlag`, `IntFlag`, `FloatFlag`. No magic coercion -- parse errors are clear and immediate.
@@ -97,34 +130,36 @@ Invoked as `myapp db schema migrate`.
 ```go
 strictcli.StringFlag("output", "Output path", strictcli.Default("out.txt")),
 strictcli.BoolFlag("cache", "Reuse the build cache", strictcli.Default(true)),
-strictcli.IntFlag("port", "Port number"),
-strictcli.FloatFlag("threshold", "Score threshold"),
+strictcli.IntFlag("port", "Port number", strictcli.Required()),
+strictcli.FloatFlag("threshold", "Score threshold", strictcli.Optional()),
 ```
 
-Bool flags support `--flag` / `--no-flag` negation (disable with `NegatableOpt(false)`) and have no implicit default: without `Default(...)` they are required and must be passed explicitly as `--flag` or `--no-flag`. Float parsing rejects NaN and Inf.
+Bool flags support `--flag` / `--no-flag` negation (disable with `NegatableOpt(false)`). A required bool must be passed explicitly as `--flag` or `--no-flag`; an optional one is a real tri-state -- `--flag` is true, `--no-flag` is false, absent is nil. Float parsing rejects NaN and Inf.
 
 ### Compound types
 
 `ListFlag` and `DictFlag` for collecting multiple values.
 
 ```go
-strictcli.ListFlag(strictcli.TypeStr, "tags", "Tags to apply", strictcli.Unique(true)),
-strictcli.DictFlag(strictcli.TypeStr, "env", "Environment variables", strictcli.Unique(false)),
+strictcli.ListFlag(strictcli.TypeStr, "tags", "Tags to apply", strictcli.Unique(true), strictcli.Optional()),
+strictcli.DictFlag(strictcli.TypeStr, "env", "Environment variables", strictcli.Unique(false), strictcli.Default(map[string]interface{}{})),
 ```
 
 List flags accept `--tags a --tags b`. Dict flags accept `--env KEY=VALUE` pairs or JSON objects. Both are always repeatable and therefore require an explicit `Unique(true)` or `Unique(false)`.
 
+Compound flags declare presence like everything else: `Optional()` delivers nil when nothing arrives, `Default([]interface{}{})` / `Default(map[string]interface{}{})` declares an empty collection, and `Required()` demands at least one value from some source. There is no silent empty default.
+
 ### Positional arguments
 
-Required by default. Support optional (`ArgRequired(false)`), default values (`ArgDefault(v)`), and variadic (`Variadic()`).
+Every arg declares exactly one of `ArgRequired()`, `ArgOptional()` or `ArgDefault(v)`, and can be variadic (`Variadic()`). An optional arg delivers a present key holding nil, never key-absence. A variadic arg always delivers a list, so `ArgRequired()` means at least one value, `ArgOptional()` means possibly none, and `ArgDefault(v)` on one is a registration error.
 
 ```go
 app.Command("copy", "Copy files",
     handler,
     strictcli.WithEffect(strictcli.EffectMutating),
     strictcli.WithArgs(
-        strictcli.NewArg("src", "Source path"),
-        strictcli.NewArg("dst", "Destination path"),
+        strictcli.NewArg("src", "Source path", strictcli.ArgRequired()),
+        strictcli.NewArg("dst", "Destination path", strictcli.ArgRequired()),
     ),
 )
 ```
@@ -174,15 +209,15 @@ app.Command("deploy", "Deploy", handler,
 
 ### Mutually exclusive flag groups
 
-Exactly one flag from the group must be provided.
+Exactly one flag from the group must be provided. A member declares `Optional()` or a default -- never `Required()`, since the group's own requirement is what makes the choice mandatory.
 
 ```go
 app.Command("log", "Show logs", handler,
     strictcli.WithEffect(strictcli.EffectReadOnly),
     strictcli.WithMutex(strictcli.MutexGroup{
         Flags: []strictcli.Flag{
-            strictcli.StringFlag("since", "Show logs since a timestamp"),
-            strictcli.IntFlag("tail", "Show the last N lines"),
+            strictcli.StringFlag("since", "Show logs since a timestamp", strictcli.Optional()),
+            strictcli.IntFlag("tail", "Show the last N lines", strictcli.Optional()),
         },
     }),
 )
@@ -200,8 +235,8 @@ Three relationship types, all passed via `WithDependencies(...)`:
 app.Command("export", "Export data", handler,
     strictcli.WithEffect(strictcli.EffectMutating),
     strictcli.WithFlags(
-        strictcli.StringFlag("output", "Output path", strictcli.Default(nil)),
-        strictcli.StringFlag("format", "Output format", strictcli.Default(nil)),
+        strictcli.StringFlag("output", "Output path", strictcli.Optional()),
+        strictcli.StringFlag("format", "Output format", strictcli.Optional()),
         strictcli.BoolFlag("trace", "Emit a trace", strictcli.Default(false)),
         strictcli.BoolFlag("log-output", "Log the output path", strictcli.Default(false)),
     ),
@@ -247,7 +282,7 @@ app.Passthrough("run", "Run a script",
 Flags that accumulate values across multiple occurrences. Requires explicit `Unique(true)` or `Unique(false)`.
 
 ```go
-strictcli.StringFlag("tag", "Add a tag", strictcli.Repeatable(), strictcli.Unique(true)),
+strictcli.StringFlag("tag", "Add a tag", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional()),
 ```
 
 ### Choices
@@ -255,7 +290,7 @@ strictcli.StringFlag("tag", "Add a tag", strictcli.Repeatable(), strictcli.Uniqu
 Restrict flag values to an allowed set.
 
 ```go
-strictcli.StringFlag("format", "Output format", strictcli.Choices("json", "csv", "xml")),
+strictcli.StringFlag("format", "Output format", strictcli.Choices("json", "csv", "xml"), strictcli.Required()),
 ```
 
 ### Custom validation
@@ -270,6 +305,7 @@ strictcli.IntFlag("port", "Port number",
         }
         return nil
     }),
+    strictcli.Required(),
 ),
 ```
 
@@ -390,7 +426,7 @@ Checks are declared in TOML and registered in code -- both must agree. Registrat
 
 ### Context
 
-`Context` is constructed by the framework for every dispatch and passed as the first argument to every handler. It provides structured output methods -- `Info(msg)` (stdout, suppressed under `--quiet`), `Warn(msg)` (stderr), `Debug(msg)` (stdout, shown only under `--verbose`), `Error(msg)` (stderr) -- plus provenance: `Source(name)` returns where a flag's value came from (`"cli"`, `"env"`, `"config"`, `"default"`, `"implied"`, or `"infra"`), and `InfraValue(envVar)` reads a declared infrastructure env var.
+`Context` is constructed by the framework for every dispatch and passed as the first argument to every handler. It provides structured output methods -- `Info(msg)` (stdout, suppressed under `--quiet`), `Warn(msg)` (stderr), `Debug(msg)` (stdout, shown only under `--verbose`), `Error(msg)` (stderr) -- plus provenance: `Source(name)` returns where a flag's value came from (`"cli"`, `"env"`, `"config"`, `"default"`, `"implied"`, or `"infra"`), `Provided(name)` reports whether the invocation caused the value rather than the declaration, and `InfraValue(envVar)` reads a declared infrastructure env var.
 
 It also carries the reserved quartet and the effects handle: `DryRun()`,
 `ApproveConsequential()`, `Quiet()`, `Verbose()`, and `Effects()`.
@@ -501,7 +537,9 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | Function | Description |
 |----------|-------------|
 | `Short(s)` | Single-character alias |
-| `Default(v)` | Default value (omit for required) |
+| `Required()` | A value must be supplied, from any source |
+| `Optional()` | Absence is legal and is delivered as nil |
+| `Default(v)` | The value the framework supplies when nothing else does |
 | `Env(varName)` | Environment variable name |
 | `Prefixed(b)` | Control env prefix validation |
 | `Choices(vals...)` | Restrict to allowed values |
@@ -514,8 +552,9 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 
 | Function | Description |
 |----------|-------------|
-| `ArgRequired(b)` | Whether the arg is required |
-| `ArgDefault(v)` | Default value for optional args |
+| `ArgRequired()` | A value must be supplied |
+| `ArgOptional()` | Absence is legal and is delivered as nil |
+| `ArgDefault(v)` | The value supplied when the arg is absent |
 | `Variadic()` | Collect remaining positional values |
 
 ### Command options
@@ -594,6 +633,7 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 - **Four types only.** `str`, `bool`, `int`, `float` -- plus compound `list` and `dict`. No magic type coercion.
 - **One handler contract.** `func(ctx *Context, kwargs map[string]interface{}) Outcome`, with kwargs keyed by parameter name (hyphens become underscores), exit codes flowing only through `Exit`, and structured output only through `ctx.Payload` against a declared `PayloadSchema`.
 - **Effect classification is mandatory.** Every command declares `EffectReadOnly` or `EffectMutating`. There is no default and no inference.
+- **Presence is mandatory.** Every flag and arg declares required, optional, or a value default. Zero declarations and two declarations are both registration-time errors, and requiredness is never derived from whether a default happens to exist.
 - **Registration-time errors.** Misconfigurations panic loud and early, not at parse time.
 - **Minimal dependencies.** One dependency ([go-toml-edit](https://github.com/smm-h/go-toml-edit)) for TOML support.
 
