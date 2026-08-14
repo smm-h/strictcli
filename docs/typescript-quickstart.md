@@ -1,6 +1,6 @@
 ---
 title: TypeScript Quickstart
-description: "Build TypeScript CLIs with strictcli: command factories, typed flags, args, groups, payloads under --json, and consequential consent on CLI, call and MCP."
+description: "Build TypeScript CLIs with strictcli: command factories, the presence-discriminated flag and arg options, typed flags, args, groups, payloads under --json, and consequential consent on CLI, call and MCP."
 nav_group: "Guides"
 nav_order: 0
 ---
@@ -80,7 +80,7 @@ app.command(
   defineReadOnlyCommand("greet", {
     help: "Greet someone by name",
     flags: {
-      name: flag("name", t.str, { help: "Who to greet" }),
+      name: flag("name", t.str, { help: "Who to greet", presence: "required" }),
     },
     handler: (args, ctx) => {
       ctx.info(`Hello, ${args.name}!`);
@@ -150,47 +150,103 @@ inference for handler arguments without manual annotations.
 | Carrier | CLI syntax | TypeScript type | Notes |
 |---------|-----------|----------------|-------|
 | `t.str` | `--name value` | `string` | |
-| `t.bool` | `--cache` / `--no-cache` | `boolean` | Requires a default; negation via `--no-` prefix |
+| `t.bool` | `--cache` / `--no-cache` | `boolean` | Negation via `--no-` prefix; `presence: "optional"` makes it a real tri-state |
 | `t.int` | `--count 42` | `bigint` | Strict parsing: no leading zeros, 64-bit signed bounds |
 | `t.float` | `--rate 3.14` | `number` | Rejects NaN and Inf |
 | `t.list(t.str)` | `--tag a --tag b` | `string[]` | Repeat the flag for each element |
 | `t.list(t.int)` | `--id 1 --id 2` | `bigint[]` | |
 | `t.dict(t.str)` | `--header key=val` | `Map<string, string>` | Key=value pairs; keys are always strings |
 
+## Presence: required, optional, or a default
+
+`FlagOpts` is a **discriminated union on `presence`**, and `ArgOpts` is the same
+union. Every flag and every positional arg declares exactly one of three facts
+about itself, and nothing is inferred from the shape of another declaration:
+
+| Fact | Spelling | The handler receives |
+|------|----------|----------------------|
+| **required** | `{ presence: "required" }` | the supplied value; the parse fails if nothing supplies one |
+| **optional** | `{ presence: "optional" }` | the supplied value, or `undefined` when nothing supplied one |
+| **default** | `{ presence: "default", default: <value> }` | the supplied value, or the declared default |
+
+```typescript
+flags: {
+  target: flag("target", t.str, { help: "Deploy target", presence: "required" }),
+  region: flag("region", t.str, {
+    help: "AWS region",
+    presence: "default",
+    default: "us-east-1",
+  }),
+  tag: flag("tag", t.str, { help: "Release tag", presence: "optional" }),
+}
+```
+
+A `default` outside the `"default"` member does not type-check, and the
+`"default"` member's `default` is not optional. Declaring none of the three, or
+more than one, throws at registration:
+
+```
+Flag "target": presence is undeclared: declare exactly one of presence: "required", presence: "optional", or presence: "default" with default: <value>
+```
+
+`default: null` is **not** a spelling of optionality. It fails the type check and
+is refused at registration too, because a widened option object can reach the
+factory with a `null` the compiler never saw:
+
+```
+Flag "tag": default: null does not declare optionality: use presence: "optional" (it delivers undefined when the flag is absent)
+```
+
+The type-level consequence is part of the promise. `FlagKeyIsOptional` reads
+`presence`, so the inferred handler-args type follows the declaration by
+construction -- which is what fixed the mutex-member key that used to be typed
+as always-present while the parser handed it `undefined`.
+
+Every flag and arg renders exactly one presence part in help output:
+`[required]`, `[optional]`, or `[default: <value>]`. A declared empty collection
+renders `[default: []]` / `[default: {}]`, and a required positional renders
+`[required]`.
+
+### `ctx.provided` -- was this supplied?
+
+`ctx.provided(name)` answers whether the **invocation** caused a value, so no
+handler reconstructs that boolean out of a sentinel:
+
+| Source | `provided` |
+|--------|-----------|
+| `cli`, `env`, `config`, `implied` | **true** -- the invocation caused the value |
+| `default`, `infra` | **false** -- the declaration caused it |
+
+An optional flag that received nothing carries source `default` and reports
+`false`. An unknown name throws exactly as `ctx.source` does. The same predicate
+decides presence for `coRequired`, `requires` and `implies`, so a declared
+default never satisfies a dependency.
+
 ### Boolean Flags
 
-Bool flags must have an explicit `default` value (either `true` or `false`) or
-be left without a default to make them required (the user must pass `--flag` or
-`--no-flag`). They support `--no-` negation by default, which can be disabled
-by setting `negatable: false` for pure presence flags.
+Bool flags declare presence like every other flag. A `presence: "required"` bool
+must be answered (`--flag` or `--no-flag`); a `presence: "optional"` bool is a
+real tri-state where `--flag` is `true`, `--no-flag` is `false`, and absence is
+`undefined`. They support `--no-` negation by default, which can be disabled by
+setting `negatable: false` for pure presence flags.
 
 ```typescript
 flags: {
   cache: flag("cache", t.bool, {
     help: "Reuse the build cache",
+    presence: "default",
     default: true,
   }),
   watch: flag("watch", t.bool, {
     help: "Watch mode",
+    presence: "default",
     default: false,
     negatable: false, // disables --no-watch
   }),
-}
-```
-
-### String Flags
-
-A flag without a `default` is required -- the user must provide it on every
-invocation. Provide a default to make it optional. Setting `default: null`
-creates an explicitly-optional flag whose handler key becomes `?: string |
-undefined` in the TypeScript type, distinguishing "not provided" from "provided
-with an empty string."
-
-```typescript
-flags: {
-  target: flag("target", t.str, { help: "Deploy target" }), // required
-  region: flag("region", t.str, { help: "AWS region", default: "us-east-1" }),
-  tag: flag("tag", t.str, { help: "Release tag", default: null }), // optional, may be absent
+  color: flag("color", t.bool, {
+    help: "Colorize output",
+    presence: "optional", // true, false, or absent
+  }),
 }
 ```
 
@@ -203,37 +259,57 @@ bounds.
 
 ```typescript
 flags: {
-  replicas: flag("replicas", t.int, { help: "Replica count", default: 3n }),
-  rate: flag("rate", t.float, { help: "Request rate", default: 1.0 }),
+  replicas: flag("replicas", t.int, {
+    help: "Replica count",
+    presence: "default",
+    default: 3n,
+  }),
+  rate: flag("rate", t.float, {
+    help: "Request rate",
+    presence: "default",
+    default: 1.0,
+  }),
 }
 ```
 
 ### Repeatable Flags (Lists)
 
 Use `t.list(elem)` for repeatable flags where each `--flag value` occurrence
-appends an element to the resulting array. Repeatable flags are never required
-and default to an empty array. The element type must be `t.str`, `t.int`, or
-`t.float` -- boolean elements are not supported.
+appends an element to the resulting array. A list flag declares presence like
+every other flag -- there is no silent empty-array default. The element type
+must be `t.str`, `t.int`, or `t.float` -- boolean elements are not supported.
 
 ```typescript
 flags: {
-  tag: flag("tag", t.list(t.str), { help: "Tags to apply" }),
-  port: flag("port", t.list(t.int), { help: "Ports to expose" }),
+  // An empty array when nothing is passed -- declared, not assumed
+  tag: flag("tag", t.list(t.str), {
+    help: "Tags to apply",
+    presence: "default",
+    default: [],
+  }),
+  // Absent when nothing is passed: undefined, not []
+  port: flag("port", t.list(t.int), { help: "Ports to expose", presence: "optional" }),
 }
 ```
 
-Usage: `--tag alpha --tag beta` produces `["alpha", "beta"]`. Zero occurrences gives an empty array.
+Usage: `--tag alpha --tag beta` produces `["alpha", "beta"]`. With the
+declaration above, zero occurrences gives `[]` for `tag` and `undefined` for
+`port`.
 
 ### Dict Flags
 
 Use `t.dict(elem)` for key=value pair flags where each occurrence adds a new
 entry to the resulting `Map`. Keys are always strings and duplicate keys are
 rejected. Dict flags cannot be combined with `repeatable`, `unique`, `choices`,
-or `envSeparator`.
+or `envSeparator`. The empty-map declaration is `default: new Map()`.
 
 ```typescript
 flags: {
-  header: flag("header", t.dict(t.str), { help: "HTTP headers" }),
+  header: flag("header", t.dict(t.str), {
+    help: "HTTP headers",
+    presence: "default",
+    default: new Map(),
+  }),
 }
 ```
 
@@ -249,14 +325,21 @@ match the flag's declared type, and bool flags cannot have choices.
 flags: {
   format: flag("format", t.str, {
     help: "Output format",
+    presence: "required",
     choices: ["text", "json", "csv"],
   }),
   level: flag("level", t.int, {
     help: "Log level",
+    presence: "default",
+    default: 0n,
     choices: [0n, 1n, 2n],
   }),
 }
 ```
+
+A declared `default` value must be in the choices list, checked at registration.
+`presence: "optional"` declares no value, so nothing is checked at registration
+and absence is never matched against `choices` at parse time.
 
 ### Short Aliases
 
@@ -270,11 +353,13 @@ flags: {
   recursive: flag("recursive", t.bool, {
     help: "Recurse into subdirectories",
     short: "r",
+    presence: "default",
     default: false,
   }),
   output: flag("output", t.str, {
     help: "Output file",
     short: "o",
+    presence: "required",
   }),
 }
 ```
@@ -304,6 +389,7 @@ app.command(
       target: flag("target", t.str, {
         help: "Deploy target",
         env: "MYTOOL_TARGET",
+        presence: "default",
         default: "staging",
       }),
     },
@@ -314,7 +400,10 @@ app.command(
 );
 ```
 
-Precedence: CLI flag > environment variable > config file > default.
+Precedence: CLI flag > environment variable > config file > default. An env- or
+config-supplied value satisfies a `presence: "required"` declaration and makes
+the flag *provided*, so `ctx.provided("target")` is `true` with source `"env"` or
+`"config"`.
 
 For repeatable flags with env vars, an `envSeparator` is required so the single env string can be split into elements.
 
@@ -324,6 +413,8 @@ flags: {
     help: "Tags",
     env: "MYTOOL_TAGS",
     envSeparator: ",",
+    presence: "default",
+    default: [],
   }),
 }
 ```
@@ -332,8 +423,9 @@ flags: {
 
 Positional args use scalar carriers and are declared separately from flags in
 the `args` array of a command definition. They are consumed in declaration order
-after all flags have been parsed. Each arg requires a name, type carrier, and
-help text.
+after all flags have been parsed. Each arg requires a name, type carrier, help
+text, and the same three-way `presence` declaration a flag carries -- `ArgOpts`
+is the same discriminated union as `FlagOpts`. There is no `required?: boolean`.
 
 ```typescript
 import { arg } from "strictcli";
@@ -342,8 +434,8 @@ app.command(
   defineMutatingCommand("copy", {
     help: "Copy a file",
     args: [
-      arg("src", t.str, { help: "Source file" }),
-      arg("dst", t.str, { help: "Destination file" }),
+      arg("src", t.str, { help: "Source file", presence: "required" }),
+      arg("dst", t.str, { help: "Destination file", presence: "required" }),
     ],
     handler: (args, ctx) => {
       ctx.info(`Copying ${args.src} to ${args.dst}`);
@@ -352,11 +444,14 @@ app.command(
 );
 ```
 
-Args are required by default. Set `required: false` to make an arg optional (it can then have a `default`).
+An optional arg delivers `undefined` and its inferred type keeps `?:`, while the
+runtime args object carries the property -- absence is a present key, never an
+omitted one.
 
 ```typescript
 args: [
-  arg("path", t.str, { help: "Project directory", required: false }),
+  arg("path", t.str, { help: "Project directory", presence: "optional" }),
+  arg("mode", t.str, { help: "Run mode", presence: "default", default: "fast" }),
 ]
 ```
 
@@ -364,13 +459,19 @@ args: [
 
 A variadic arg collects all remaining positional tokens into an array. It must
 be the last arg in the command's declaration, and only one variadic arg is
-allowed per command. Use a scalar carrier with `variadic: true`. A variadic arg
-with the default required setting needs at least one value to be provided.
+allowed per command. Use a scalar carrier with `variadic: true`. Because it
+always delivers a list, `presence: "required"` means *at least one value* and
+`presence: "optional"` means *possibly none*; a default on a variadic arg is a
+registration error.
 
 ```typescript
 args: [
-  arg("target", t.str, { help: "Deploy target" }),
-  arg("files", t.str, { help: "Files to process", variadic: true }),
+  arg("target", t.str, { help: "Deploy target", presence: "required" }),
+  arg("files", t.str, {
+    help: "Files to process",
+    variadic: true,
+    presence: "optional",
+  }),
 ]
 ```
 
@@ -385,8 +486,12 @@ directly, including type checking, env var binding, and constraint validation.
 import { flagSet } from "strictcli";
 
 const pagination = flagSet("pagination", {
-  page: flag("page", t.int, { help: "Page number", default: 1n }),
-  per_page: flag("per-page", t.int, { help: "Items per page", default: 20n }),
+  page: flag("page", t.int, { help: "Page number", presence: "default", default: 1n }),
+  per_page: flag("per-page", t.int, {
+    help: "Items per page",
+    presence: "default",
+    default: 20n,
+  }),
 });
 
 app.command(
@@ -404,10 +509,16 @@ app.command(
 ## Mutex Groups
 
 `mutexGroup` declares flags where at most one may have a value from an explicit
-source (CLI, env, or config). If no flag in the group has a value and no
-defaults exist, a "one of ... is required" error is produced. Unset members
-are `undefined` in the handler args, allowing the handler to branch on which
-flag was provided.
+source (CLI, env, or config). If no flag in the group is elected, a "one of ...
+is required" error is produced.
+
+Each member declares its own presence: `presence: "optional"` is the ordinary
+declaration and makes the handler key `undefined` when the member is not
+elected, a `default` is legal (an unelected member delivers it), and
+`presence: "required"` throws at registration -- the group's own requirement is
+what makes the choice mandatory. The inferred handler-args type follows that
+declaration, so an optional member's key is typed `| undefined` exactly as the
+parser delivers it.
 
 ```typescript
 import { mutexGroup } from "strictcli";
@@ -417,8 +528,8 @@ app.command(
     help: "Fetch data from a source",
     mutex: [
       mutexGroup({
-        file: flag("file", t.str, { help: "Read from file", default: null }),
-        url: flag("url", t.str, { help: "Read from URL", default: null }),
+        file: flag("file", t.str, { help: "Read from file", presence: "optional" }),
+        url: flag("url", t.str, { help: "Read from URL", presence: "optional" }),
       }),
     ],
     handler: (args, ctx) => {
@@ -446,10 +557,18 @@ app.command(
   defineMutatingCommand("deploy", {
     help: "Deploy the service",
     flags: {
-      target: flag("target", t.str, { help: "Deploy target" }),
-      region: flag("region", t.str, { help: "AWS region" }),
-      canary: flag("canary", t.bool, { help: "Canary rollout first", default: false }),
-      wait: flag("wait", t.bool, { help: "Block until settled", default: false }),
+      target: flag("target", t.str, { help: "Deploy target", presence: "optional" }),
+      region: flag("region", t.str, { help: "AWS region", presence: "optional" }),
+      canary: flag("canary", t.bool, {
+        help: "Canary rollout first",
+        presence: "default",
+        default: false,
+      }),
+      wait: flag("wait", t.bool, {
+        help: "Block until settled",
+        presence: "default",
+        default: false,
+      }),
     },
     dependencies: [
       // --target requires --region to also be provided
@@ -465,6 +584,12 @@ app.command(
   }),
 );
 ```
+
+All three read presence through the same predicate `ctx.provided` uses -- a flag
+counts as present when the invocation caused its value. A declared default never
+satisfies a `requires`, never completes a `coRequired` group, and never fires an
+`implies` trigger. That includes a `relativeToRoot` default with the `infra`
+source label: it is still the declaration deciding.
 
 ## Command Groups
 
@@ -497,7 +622,7 @@ zone.command(
   defineMutatingCommand("create", {
     help: "Create a new DNS zone",
     flags: {
-      name: flag("name", t.str, { help: "Zone name" }),
+      name: flag("name", t.str, { help: "Zone name", presence: "required" }),
     },
     handler: (args, ctx) => {
       ctx.info(`Creating zone: ${args.name}`);
@@ -551,10 +676,12 @@ const app = createApp({
   flags: {
     color: flag("color", t.bool, {
       help: "Colorize output",
+      presence: "default",
       default: true,
     }),
     settings: flag("settings", t.str, {
       help: "Settings file path",
+      presence: "default",
       default: "/etc/mytool/config.json",
     }),
   },
@@ -612,8 +739,12 @@ conversion for handler args.
 ```typescript
 // The flag map key is the underscore form of the flag name
 flags: {
-  log_file: flag("log-file", t.str, { help: "Log file path", default: null }),
-  force_overwrite: flag("force-overwrite", t.bool, { help: "Force overwrite", default: false }),
+  log_file: flag("log-file", t.str, { help: "Log file path", presence: "optional" }),
+  force_overwrite: flag("force-overwrite", t.bool, {
+    help: "Force overwrite",
+    presence: "default",
+    default: false,
+  }),
 }
 ```
 
@@ -632,9 +763,9 @@ a mutex group:
 
 ```typescript
 // Every one of these throws at registration time:
-flag("dry-run", t.bool, { help: "Simulate the run", default: false });
-flag("verbose", t.bool, { help: "Be verbose", default: false });
-flag("quiet", t.bool, { help: "Be quiet", default: false });
+flag("dry-run", t.bool, { help: "Simulate the run", presence: "default", default: false });
+flag("verbose", t.bool, { help: "Be verbose", presence: "default", default: false });
+flag("quiet", t.bool, { help: "Be quiet", presence: "default", default: false });
 ```
 
 The message is `flag name 'dry-run' is reserved by the framework (dry-run,
@@ -698,7 +829,7 @@ app.command(
   defineMutatingCommand("destroy", {
     help: "Destroy the cluster",
     consequential: true,
-    args: [arg("cluster", t.str, { help: "Cluster to destroy" })],
+    args: [arg("cluster", t.str, { help: "Cluster to destroy", presence: "required" })],
     handler: (args, ctx) => {
       ctx.info(`Destroying ${args.cluster}`);
     },
@@ -867,25 +998,33 @@ app.command(
   defineMutatingCommand("deploy", {
     help: "Deploy the service",
     flags: {
-      target: flag("target", t.str, { help: "Deploy target" }),
-      replicas: flag("replicas", t.int, { help: "Replica count" }),
-      canary: flag("canary", t.bool, { help: "Canary first", default: false }),
-      tag: flag("tag", t.str, { help: "Tag", default: null }),
+      target: flag("target", t.str, { help: "Deploy target", presence: "required" }),
+      replicas: flag("replicas", t.int, { help: "Replica count", presence: "required" }),
+      canary: flag("canary", t.bool, {
+        help: "Canary first",
+        presence: "default",
+        default: false,
+      }),
+      tag: flag("tag", t.str, { help: "Tag", presence: "optional" }),
     },
-    args: [arg("service", t.str, { help: "Service name" })],
+    args: [arg("service", t.str, { help: "Service name", presence: "required" })],
     handler: (args) => {
       // TypeScript knows the exact type of args:
-      //   args.target    -> string         (required)
-      //   args.replicas  -> bigint         (required)
-      //   args.canary    -> boolean        (has default)
-      //   args.tag       -> string | undefined  (default: null = optional)
-      //   args.service   -> string         (positional arg)
+      //   args.target    -> string         (presence: "required")
+      //   args.replicas  -> bigint         (presence: "required")
+      //   args.canary    -> boolean        (presence: "default")
+      //   args.tag       -> string | undefined  (presence: "optional")
+      //   args.service   -> string         (positional arg, presence: "required")
     },
   }),
 );
 ```
 
 The type carriers (`t.str`, `t.int`, etc.) carry phantom types that flow through the generic machinery in the twin factories and `flag`/`arg`, so the output types are correct without casts. Flags from `flagSets` and `mutexGroup` entries are also merged into the handler args type.
+
+Optionality in that type comes from the `presence` discriminant and nothing
+else, so the type a handler sees and the value the parser hands it can no longer
+disagree.
 
 The classification also flows into the type system. Because
 `defineReadOnlyCommand` narrows its handler's `ctx` to `ReadOnlyContext`, a
@@ -925,6 +1064,7 @@ const app = createApp({
   flags: {
     color: flag("color", t.bool, {
       help: "Colorize output",
+      presence: "default",
       default: true,
     }),
   },
@@ -934,6 +1074,7 @@ const common = flagSet("common", {
   region: flag("region", t.str, {
     help: "Cloud region",
     env: "DEPLOY_REGION",
+    presence: "required",
     choices: ["us-east-1", "eu-west-1", "ap-south-1"],
   }),
 });
@@ -942,11 +1083,19 @@ app.command(
   defineMutatingCommand("run", {
     help: "Deploy a service",
     flags: {
-      replicas: flag("replicas", t.int, { help: "Number of replicas", default: 1n }),
-      tag: flag("tag", t.list(t.str), { help: "Tags for the deployment" }),
+      replicas: flag("replicas", t.int, {
+        help: "Number of replicas",
+        presence: "default",
+        default: 1n,
+      }),
+      tag: flag("tag", t.list(t.str), {
+        help: "Tags for the deployment",
+        presence: "default",
+        default: [],
+      }),
     },
     flagSets: [common],
-    args: [arg("service", t.str, { help: "Service to deploy" })],
+    args: [arg("service", t.str, { help: "Service to deploy", presence: "required" })],
     payloadSchema: { type: "object" },
     handler: (args, ctx) => {
       ctx.info(`Deploying ${args.service} to ${args.region}`);
@@ -977,8 +1126,11 @@ infra.command(
     help: "View infrastructure logs",
     mutex: [
       mutexGroup({
-        service: flag("service", t.str, { help: "Filter by service", default: null }),
-        node: flag("node", t.str, { help: "Filter by node", default: null }),
+        service: flag("service", t.str, {
+          help: "Filter by service",
+          presence: "optional",
+        }),
+        node: flag("node", t.str, { help: "Filter by node", presence: "optional" }),
       }),
     ],
     handler: (args, ctx) => {
