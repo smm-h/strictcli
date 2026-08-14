@@ -1312,6 +1312,17 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 			}
 		}
 
+		// Substitute {provided:name} references via ctx.Provided(): true when
+		// the invocation caused the value, false when the declaration did
+		// (contract §23.6).
+		for _, fd := range allFlags {
+			name := fd["name"].(string)
+			providedKey := "{provided:" + name + "}"
+			if strings.Contains(out, providedKey) {
+				out = strings.ReplaceAll(out, providedKey, strconv.FormatBool(ctx.Provided(name)))
+			}
+		}
+
 		// Substitute flags.
 		for _, fd := range allFlags {
 			name := fd["name"].(string)

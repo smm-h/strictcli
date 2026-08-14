@@ -1,0 +1,362 @@
+[
+  {
+    "name": "validate on default: a declared default the validator would refuse parses clean",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "the mode",
+              "presence": "default",
+              "default": "forbidden",
+              "validate": {
+                "rejects": [
+                  "forbidden"
+                ],
+                "message": "that value is refused"
+              }
+            }
+          ],
+          "handler_prints": "mode={mode} provided={provided:mode}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "mode=forbidden provided=false"
+    }
+  },
+  {
+    "name": "validate on default: the same value supplied on the command line is still refused",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "the mode",
+              "presence": "default",
+              "default": "forbidden",
+              "validate": {
+                "rejects": [
+                  "forbidden"
+                ],
+                "message": "that value is refused"
+              }
+            }
+          ],
+          "handler_prints": "mode={mode}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--mode",
+      "forbidden"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --mode: that value is refused\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "validate on default: an accepted value supplied beside a refused default parses clean",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "the mode",
+              "presence": "default",
+              "default": "forbidden",
+              "validate": {
+                "rejects": [
+                  "forbidden"
+                ],
+                "message": "that value is refused"
+              }
+            }
+          ],
+          "handler_prints": "mode={mode} provided={provided:mode}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--mode",
+      "fine"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "mode=fine provided=true"
+    }
+  },
+  {
+    "name": "validate on default: an optional flag that received nothing never reaches its validator",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "the mode",
+              "presence": "optional",
+              "validate": {
+                "rejects": [
+                  "forbidden"
+                ],
+                "message": "that value is refused"
+              }
+            }
+          ],
+          "handler_prints": "mode={mode}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "mode=None"
+    }
+  },
+  {
+    "name": "validate on default: an env-supplied value still validates",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "the mode",
+              "presence": "default",
+              "default": "forbidden",
+              "env": "MYAPP_MODE",
+              "validate": {
+                "rejects": [
+                  "forbidden"
+                ],
+                "message": "that value is refused"
+              }
+            }
+          ],
+          "handler_prints": "mode={mode}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_MODE": "forbidden"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --mode: that value is refused\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "validate on default: a config-supplied value still validates",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "the mode",
+              "presence": "default",
+              "default": "ok",
+              "validate": {
+                "rejects": [
+                  "forbidden"
+                ],
+                "message": "that value is refused"
+              }
+            }
+          ],
+          "handler_prints": "mode={mode}"
+        }
+      ],
+      "config": true,
+      "config_content": "{\"mode\": \"forbidden\"}"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --mode: that value is refused\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "validate on default: an infra-rooted default never reaches its validator",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "store",
+              "help": "the store",
+              "presence": "default",
+              "default_relative_to_root": {
+                "env_var": "MYAPP_ROOT",
+                "parts": [
+                  "store"
+                ]
+              },
+              "validate": {
+                "rejects": [
+                  "/opt/myapp/store"
+                ],
+                "message": "that value is refused"
+              }
+            }
+          ],
+          "handler_prints": "provided={provided:store}"
+        }
+      ],
+      "infra_root": {
+        "MYAPP_ROOT": "/opt/myapp"
+      }
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "provided=false"
+    }
+  },
+  {
+    "name": "validate on default: a repeatable flag validates each supplied element",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "tag",
+              "help": "a tag",
+              "presence": "optional",
+              "repeatable": true,
+              "unique": false,
+              "validate": {
+                "rejects": [
+                  "forbidden"
+                ],
+                "message": "that value is refused"
+              }
+            }
+          ],
+          "handler_prints": "tag={tag}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--tag",
+      "ok",
+      "--tag",
+      "forbidden"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --tag: that value is refused\ntry 'myapp cmd --help'"
+    }
+  },
+  {
+    "name": "validate on default: a declared list default the validator would refuse parses clean",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "tags",
+              "type": "list[str]",
+              "help": "tags",
+              "presence": "default",
+              "default": [
+                "forbidden"
+              ],
+              "unique": false,
+              "validate": {
+                "rejects": [
+                  "forbidden"
+                ],
+                "message": "that value is refused"
+              }
+            }
+          ],
+          "handler_prints": "tags={tags}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=forbidden"
+    }
+  }
+]

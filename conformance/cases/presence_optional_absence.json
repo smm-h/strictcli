@@ -1,0 +1,647 @@
+[
+  {
+    "name": "optional absence: a plain optional flag omitted delivers absence to the handler",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "target",
+              "help": "the target",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "target=None"
+    }
+  },
+  {
+    "name": "optional absence: a supplied optional flag delivers its value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "target",
+              "help": "the target",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--target",
+      "prod"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "target=prod"
+    }
+  },
+  {
+    "name": "optional absence: an optional flag delivers the empty string as a value, not as absence",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "target",
+              "help": "the target",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "target=[{target}]"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--target",
+      ""
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "target=[]"
+    }
+  },
+  {
+    "name": "optional absence: an optional bool is a real tri-state",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "chatter",
+              "type": "bool",
+              "help": "chatter",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "chatter={chatter}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "chatter=None"
+    }
+  },
+  {
+    "name": "optional absence: an optional bool passed positively is true",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "chatter",
+              "type": "bool",
+              "help": "chatter",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "chatter={chatter}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--chatter"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "chatter=true"
+    }
+  },
+  {
+    "name": "optional absence: an optional bool negated is false, which is not absence",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "chatter",
+              "type": "bool",
+              "help": "chatter",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "chatter={chatter} provided={provided:chatter}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--no-chatter"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "chatter=false provided=true"
+    }
+  },
+  {
+    "name": "optional absence: an optional int omitted delivers absence, not a zero value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "port",
+              "type": "int",
+              "help": "port",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "port={port}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "port=None"
+    }
+  },
+  {
+    "name": "optional absence: an optional float omitted delivers absence, not a zero value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "rate",
+              "type": "float",
+              "help": "rate",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "rate={rate}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "rate=None"
+    }
+  },
+  {
+    "name": "optional absence: an optional list omitted delivers absence, not an empty list",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "tags",
+              "type": "list[str]",
+              "help": "tags",
+              "presence": "optional",
+              "unique": false
+            }
+          ],
+          "handler_prints": "tags={tags}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=None"
+    }
+  },
+  {
+    "name": "optional absence: a declared empty list default delivers the empty list",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "tags",
+              "type": "list[str]",
+              "help": "tags",
+              "presence": "default",
+              "default": [],
+              "unique": false
+            }
+          ],
+          "handler_prints": "tags=[{tags}]"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tags=[]"
+    }
+  },
+  {
+    "name": "optional absence: an optional dict omitted delivers absence, not an empty map",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "hdrs",
+              "type": "dict[str,str]",
+              "help": "headers",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "hdrs={hdrs}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "hdrs=None"
+    }
+  },
+  {
+    "name": "optional absence: an optional repeatable flag omitted delivers absence",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "tag",
+              "help": "a tag",
+              "presence": "optional",
+              "repeatable": true,
+              "unique": false
+            }
+          ],
+          "handler_prints": "tag={tag}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "tag=None"
+    }
+  },
+  {
+    "name": "optional absence: an optional arg omitted delivers absence as a present key",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "file",
+              "help": "the file",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "file={file}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "file=None"
+    }
+  },
+  {
+    "name": "optional absence: an optional arg after a required one omitted delivers absence",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "src",
+              "help": "source",
+              "presence": "required"
+            },
+            {
+              "name": "dst",
+              "help": "destination",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "src={src} dst={dst}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "a"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "src=a dst=None"
+    }
+  },
+  {
+    "name": "optional absence: an optional flag-set member omitted delivers absence",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flag_sets": [
+            {
+              "name": "output",
+              "flags": [
+                {
+                  "name": "format",
+                  "help": "the format",
+                  "presence": "optional"
+                },
+                {
+                  "name": "width",
+                  "type": "int",
+                  "help": "the width",
+                  "presence": "default",
+                  "default": 80
+                }
+              ]
+            }
+          ],
+          "handler_prints": "format={format} width={width}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "format=None width=80"
+    }
+  },
+  {
+    "name": "optional absence: an optional global flag omitted delivers absence",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "profile",
+          "help": "the profile",
+          "presence": "optional"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "profile={profile}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "profile=None"
+    }
+  },
+  {
+    "name": "optional absence: an optional flag with choices is never matched against them when absent",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "the mode",
+              "presence": "optional",
+              "choices_str": [
+                "fast",
+                "slow"
+              ]
+            }
+          ],
+          "handler_prints": "mode={mode}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "mode=None"
+    }
+  },
+  {
+    "name": "optional absence: an optional flag declaring env with the variable unset is absent",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "level",
+              "help": "the level",
+              "presence": "optional",
+              "env": "MYAPP_LEVEL"
+            }
+          ],
+          "handler_prints": "level={level}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "level=None"
+    }
+  },
+  {
+    "name": "optional absence: a required flag omitted is still the required error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "target",
+              "help": "the target",
+              "presence": "required"
+            }
+          ],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag '--target' is required"
+    }
+  },
+  {
+    "name": "optional absence: a required list flag omitted is the required error, not an empty list",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "tags",
+              "type": "list[str]",
+              "help": "tags",
+              "presence": "required",
+              "unique": false
+            }
+          ],
+          "handler_prints": "tags={tags}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "flag '--tags' is required"
+    }
+  }
+]

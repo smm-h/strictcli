@@ -784,7 +784,7 @@
         },
         "handler_prints": {
           "type": "string",
-          "description": "Template string. {name} is replaced with the value of the arg/flag named 'name'; {source:name} is replaced with the provenance source label via ctx.source(name)."
+          "description": "Template string. {name} is replaced with the value of the arg/flag named 'name'; {source:name} is replaced with the provenance source label via ctx.source(name). A '{provided:name}' reference resolves through ctx.provided(name), rendering 'true' or 'false' (contract §23.6)."
         },
         "handler_exit_code": {
           "type": "integer",
@@ -859,6 +859,13 @@
           "items": {
             "$ref": "#/$defs/dependency"
           }
+        },
+        "handler_param_defaults": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Per-parameter defaults written into the generated Python handler's signature, as {parameter name: literal string default}. The ONLY way a case can spell the re-sentinelization the handler-parameter check refuses (contract §12.12, §23.3) -- a handler bound to an optional flag whose parameter is written `target=\"\"`. Python-only by construction: Go and TypeScript handlers receive one kwargs map / one args object, so there is no per-parameter default to write, which is why cases using this key declare targets: [\"python\"]."
         }
       },
       "if": {

@@ -271,12 +271,15 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
     for f in all_flags:
         flag_types[f["name"]] = f.get("type", "str")
 
-    # Provenance references: {source:name} -> ctx.source(name).
+    # Provenance references: {source:name} -> ctx.source(name), and
+    # {provided:name} -> ctx.provided(name), the dedicated "was this supplied?"
+    # accessor (contract §23.6).
     source_refs = sorted(set(re.findall(r"\{source:([^}]+)\}", template)))
+    provided_refs = sorted(set(re.findall(r"\{provided:([^}]+)\}", template)))
 
     # Build a format expression
     params = _collect_params(cmd_def, global_flags)
-    if not params and not source_refs:
+    if not params and not source_refs and not provided_refs:
         return f"    print({template!r})"
 
     # We build the output using string concatenation to handle type formatting
@@ -284,6 +287,11 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
     lines.append("    _parts = {}")
     for name in source_refs:
         lines.append(f"    _parts[{('source:' + name)!r}] = ctx.source({name!r})")
+    for name in provided_refs:
+        lines.append(
+            f"    _parts[{('provided:' + name)!r}] = "
+            f"'true' if ctx.provided({name!r}) else 'false'"
+        )
     for f in all_flags:
         pname = _flag_param(f["name"])
         ftype = f.get("type", "str")
@@ -816,8 +824,18 @@ def _emit_command_registration(
     # bare parameters are emitted first and the `=None` ones after. Declaration
     # order carries no meaning here: the framework passes every declared value
     # as a keyword argument on every dispatch (§23.3's delivery rule).
-    param_strs = [p for p in params if p not in optional_names]
-    param_strs += [f"{p}=None" for p in params if p in optional_names]
+    # A case may override a parameter's default outright, which is the only
+    # way to spell the re-sentinelization the handler-parameter check refuses
+    # (§23.3): `def h(ctx, target="")` bound to an optional `--target`.
+    overrides = cmd_def.get("handler_param_defaults", {})
+    param_strs = [
+        p for p in params if p not in optional_names and p not in overrides
+    ]
+    param_strs += [
+        f"{p}={overrides[p]!r}" if p in overrides else f"{p}=None"
+        for p in params
+        if p in optional_names or p in overrides
+    ]
     # Handlers are ctx-first under the unified contract.
     sig_params = ", ".join(["ctx"] + param_strs)
     fn_name = f"{cmd_def['name'].replace('-', '_')}_handler"

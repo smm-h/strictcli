@@ -1,0 +1,227 @@
+[
+  {
+    "name": "dump-schema presence: every flag entry carries presence, and default exactly when presence is default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "a1",
+              "help": "required arg",
+              "presence": "required"
+            },
+            {
+              "name": "a2",
+              "help": "optional arg",
+              "presence": "optional"
+            },
+            {
+              "name": "a3",
+              "help": "defaulted arg",
+              "presence": "default",
+              "default": "out.txt"
+            }
+          ],
+          "flags": [
+            {
+              "name": "req",
+              "help": "required flag",
+              "presence": "required"
+            },
+            {
+              "name": "opt",
+              "help": "optional flag",
+              "presence": "optional"
+            },
+            {
+              "name": "lvl",
+              "help": "level",
+              "presence": "default",
+              "default": "info"
+            },
+            {
+              "name": "flagged",
+              "type": "bool",
+              "help": "a bool",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "zero",
+              "type": "int",
+              "help": "an int",
+              "presence": "default",
+              "default": 0
+            },
+            {
+              "name": "blank",
+              "help": "a blank string",
+              "presence": "default",
+              "default": ""
+            }
+          ],
+          "handler_prints": "x"
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_command_keys": {
+        "cmd": {
+          "flags": [
+            {
+              "name": "req",
+              "type": "str",
+              "help": "required flag",
+              "presence": "required"
+            },
+            {
+              "name": "opt",
+              "type": "str",
+              "help": "optional flag",
+              "presence": "optional"
+            },
+            {
+              "name": "lvl",
+              "type": "str",
+              "help": "level",
+              "presence": "default",
+              "default": "info"
+            },
+            {
+              "name": "flagged",
+              "type": "bool",
+              "help": "a bool",
+              "presence": "default",
+              "default": false,
+              "negatable": true
+            },
+            {
+              "name": "zero",
+              "type": "int",
+              "help": "an int",
+              "presence": "default",
+              "default": 0
+            },
+            {
+              "name": "blank",
+              "type": "str",
+              "help": "a blank string",
+              "presence": "default",
+              "default": ""
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "dump-schema presence: every arg entry carries presence and no required key",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "a1",
+              "help": "required arg",
+              "presence": "required"
+            },
+            {
+              "name": "a2",
+              "help": "optional arg",
+              "presence": "optional"
+            },
+            {
+              "name": "a3",
+              "help": "defaulted arg",
+              "presence": "default",
+              "default": "out.txt"
+            }
+          ],
+          "flags": [
+            {
+              "name": "req",
+              "help": "required flag",
+              "presence": "required"
+            },
+            {
+              "name": "opt",
+              "help": "optional flag",
+              "presence": "optional"
+            },
+            {
+              "name": "lvl",
+              "help": "level",
+              "presence": "default",
+              "default": "info"
+            },
+            {
+              "name": "flagged",
+              "type": "bool",
+              "help": "a bool",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "zero",
+              "type": "int",
+              "help": "an int",
+              "presence": "default",
+              "default": 0
+            },
+            {
+              "name": "blank",
+              "help": "a blank string",
+              "presence": "default",
+              "default": ""
+            }
+          ],
+          "handler_prints": "x"
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_command_keys": {
+        "cmd": {
+          "args": [
+            {
+              "name": "a1",
+              "help": "required arg",
+              "presence": "required"
+            },
+            {
+              "name": "a2",
+              "help": "optional arg",
+              "presence": "optional"
+            },
+            {
+              "name": "a3",
+              "help": "defaulted arg",
+              "presence": "default",
+              "default": "out.txt"
+            }
+          ]
+        }
+      }
+    }
+  }
+]

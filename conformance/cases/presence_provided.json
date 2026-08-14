@@ -1,0 +1,289 @@
+[
+  {
+    "name": "ctx.provided: a CLI value was provided by the invocation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "level",
+              "help": "the level",
+              "presence": "required"
+            }
+          ],
+          "handler_prints": "{source:level}:{provided:level}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--level",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "cli:true"
+    }
+  },
+  {
+    "name": "ctx.provided: an env value was provided by the invocation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "level",
+              "help": "the level",
+              "presence": "optional",
+              "env": "MYAPP_LEVEL"
+            }
+          ],
+          "handler_prints": "{source:level}:{provided:level}"
+        }
+      ]
+    },
+    "argv": [
+      "run"
+    ],
+    "env": {
+      "MYAPP_LEVEL": "hi"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "env:true"
+    }
+  },
+  {
+    "name": "ctx.provided: a config value was provided by the invocation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"level\": \"hi\"}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "level",
+              "help": "the level",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "{source:level}:{provided:level}"
+        }
+      ]
+    },
+    "argv": [
+      "run"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "config:true"
+    }
+  },
+  {
+    "name": "ctx.provided: an implied value was provided by the invocation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "trigger",
+              "type": "bool",
+              "help": "the trigger",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "target",
+              "type": "bool",
+              "help": "the target",
+              "presence": "optional"
+            }
+          ],
+          "dependencies": [
+            {
+              "type": "implies",
+              "flag": "trigger",
+              "implies": "target",
+              "value": true
+            }
+          ],
+          "handler_prints": "{source:target}:{provided:target}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--trigger"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "implied:true"
+    }
+  },
+  {
+    "name": "ctx.provided: a declared default was provided by the declaration, not the invocation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "level",
+              "help": "the level",
+              "presence": "default",
+              "default": "info"
+            }
+          ],
+          "handler_prints": "{source:level}:{provided:level}"
+        }
+      ]
+    },
+    "argv": [
+      "run"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "default:false"
+    }
+  },
+  {
+    "name": "ctx.provided: an infra-rooted default was provided by the declaration",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "infra_root": {
+        "MYAPP_ROOT": "/opt/myapp"
+      },
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "store",
+              "help": "the store",
+              "presence": "default",
+              "default_relative_to_root": {
+                "env_var": "MYAPP_ROOT",
+                "parts": [
+                  "store"
+                ]
+              }
+            }
+          ],
+          "handler_prints": "{source:store}:{provided:store}"
+        }
+      ]
+    },
+    "argv": [
+      "run"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "infra:false"
+    }
+  },
+  {
+    "name": "ctx.provided: an optional flag that received nothing carries source default and is not provided",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "level",
+              "help": "the level",
+              "presence": "optional"
+            }
+          ],
+          "handler_prints": "{level}:{source:level}:{provided:level}"
+        }
+      ]
+    },
+    "argv": [
+      "run"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "None:default:false"
+    }
+  },
+  {
+    "name": "ctx.provided: an unelected mutex member is not provided",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "mutex": [
+            {
+              "flags": [
+                {
+                  "name": "file",
+                  "help": "from a file",
+                  "presence": "optional"
+                },
+                {
+                  "name": "url",
+                  "help": "from a url",
+                  "presence": "optional"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "{provided:file}:{provided:url}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--file",
+      "x"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "true:false"
+    }
+  }
+]

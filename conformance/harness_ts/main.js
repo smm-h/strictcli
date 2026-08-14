@@ -594,6 +594,16 @@ function makeHandler(cmdDef, globalFlags) {
 			}
 		}
 
+		// {provided:name} references resolve via ctx.provided() -- true when
+		// the invocation caused the value, false when the declaration did
+		// (contract §23.6).
+		for (const fd of allFlags) {
+			const providedKey = `{provided:${fd.name}}`;
+			if (out.includes(providedKey)) {
+				out = subst(out, providedKey, ctx.provided(fd.name) ? "true" : "false");
+			}
+		}
+
 		// Flags: values arrive under the underscore key (globals included).
 		for (const fd of allFlags) {
 			out = subst(out, `{${fd.name}}`, render(args[underscore(fd.name)]));

@@ -1,0 +1,225 @@
+[
+  {
+    "name": "presence help: every flag renders exactly one presence part, last on the line",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "target",
+              "help": "the target",
+              "presence": "required"
+            }
+          ],
+          "flags": [
+            {
+              "name": "req",
+              "help": "required flag",
+              "presence": "required"
+            },
+            {
+              "name": "opt",
+              "help": "optional flag",
+              "presence": "optional"
+            },
+            {
+              "name": "lvl",
+              "help": "level",
+              "presence": "default",
+              "default": "info"
+            },
+            {
+              "name": "onoff",
+              "type": "bool",
+              "help": "a bool",
+              "presence": "default",
+              "default": true
+            },
+            {
+              "name": "offon",
+              "type": "bool",
+              "help": "another bool",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "tags",
+              "type": "list[str]",
+              "help": "tags",
+              "presence": "default",
+              "default": [],
+              "unique": false
+            },
+            {
+              "name": "hdrs",
+              "type": "dict[str,str]",
+              "help": "headers",
+              "presence": "default",
+              "default": {}
+            },
+            {
+              "name": "pairs",
+              "type": "dict[str,int]",
+              "help": "pairs",
+              "presence": "default",
+              "default": {
+                "b": 2,
+                "a": 1
+              }
+            },
+            {
+              "name": "nums",
+              "type": "list[int]",
+              "help": "nums",
+              "presence": "default",
+              "default": [
+                1,
+                2
+              ],
+              "unique": false
+            }
+          ],
+          "handler_prints": "x"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp cmd -- a command\n\nArguments:\n  target    the target [required]\n\nFlags:\n  --req <str>            required flag [required]\n  --opt <str>            optional flag [optional]\n  --lvl <str>            level [default: info]\n  --onoff, --no-onoff    a bool [default: true]\n  --offon, --no-offon    another bool [default: false]\n  --tags <str>           tags [list] [default: []]\n  --hdrs <key=str>       headers [dict] [default: {}]\n  --pairs <key=int>      pairs [dict] [default: a=1, b=2]\n  --nums <int>           nums [list] [default: 1, 2]"
+    }
+  },
+  {
+    "name": "presence help: every arg renders exactly one presence part",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "a1",
+              "help": "required arg",
+              "presence": "required"
+            },
+            {
+              "name": "a2",
+              "help": "optional arg",
+              "presence": "optional"
+            },
+            {
+              "name": "a3",
+              "help": "defaulted arg",
+              "presence": "default",
+              "default": "out.txt"
+            },
+            {
+              "name": "a4",
+              "type": "bool",
+              "help": "bool arg",
+              "presence": "default",
+              "default": true
+            }
+          ],
+          "handler_prints": "x"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp cmd -- a command\n\nArguments:\n  a1    required arg [required]\n  a2    optional arg [optional]\n  a3    defaulted arg [default: out.txt]\n  a4    bool arg [type: bool] [default: true]"
+    }
+  },
+  {
+    "name": "presence help: the app-level global flags summary carries no bracketed metadata",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "gopt",
+          "help": "a global",
+          "presence": "optional"
+        },
+        {
+          "name": "greq",
+          "help": "another global",
+          "presence": "required"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "x"
+        }
+      ]
+    },
+    "argv": [
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp v1.0.0 -- test app\n\nCommands:\n  cmd    a command\n\nGlobal flags:\n  --gopt    a global\n  --greq    another global\n\nUse 'myapp <command> --help' for more information."
+    }
+  },
+  {
+    "name": "presence help: an infra-rooted default renders as a default part",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "infra_root": {
+        "MYAPP_ROOT": "/opt/myapp"
+      },
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "store",
+              "help": "the store",
+              "presence": "default",
+              "default_relative_to_root": {
+                "env_var": "MYAPP_ROOT",
+                "parts": [
+                  "store"
+                ]
+              }
+            }
+          ],
+          "handler_prints": "x"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "[default: "
+    }
+  }
+]
