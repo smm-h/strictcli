@@ -1,6 +1,6 @@
 ---
 title: Go Quickstart
-description: "Build Go CLIs with strictcli: apps, WithEffect classification, flags, args, groups, payloads under --json, and consequential consent on CLI, Call and MCP."
+description: "Build Go CLIs with strictcli: apps, WithEffect classification, the Required/Optional/Default presence declaration, flags, args, groups, payloads under --json, and consequential consent on CLI, Call and MCP."
 nav_group: "Guides"
 nav_order: 1
 ---
@@ -119,40 +119,53 @@ app.Command("greet", "Greet someone", func(ctx *strictcli.Context, kwargs map[st
     ctx.Info(msg)
     return strictcli.Exit(0)
 }, strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.WithFlags(
-    strictcli.StringFlag("name", "Who to greet"),
-    strictcli.BoolFlag("loud", "Shout the greeting", strictcli.Default(false)),
+    strictcli.StringFlag("name", "Who to greet", strictcli.Required()),
+    strictcli.BoolFlag("loud", "Shout the greeting", strictcli.Optional()),
 ))
 ```
 
-`Get[T]` panics if the key is absent, nil, or the wrong type. `GetOpt[T]` returns `(zero, false)` when the value is nil (not provided).
+`Get[T]` panics if the key is absent, nil, or the wrong type. `GetOpt[T]` returns
+`(zero, false)` when the value is nil, which is what an `Optional()` declaration
+delivers when nothing supplied a value. To ask whether the *invocation* caused a
+value rather than the declaration, use `ctx.Provided("loud")`.
 
 ## Flags
 
 strictcli provides 4 scalar flag constructors: `StringFlag`, `BoolFlag`,
 `IntFlag`, and `FloatFlag`. The first 2 arguments (name and help) are always
-required, and additional options like `Default()`, `Short()`, `Env()`, and
-`Choices()` are passed as functional options. There are 7 available option
-functions in total. A flag without a `Default()` is required -- the user must
-provide it on every invocation.
+required, and additional options like `Short()`, `Env()`, and `Choices()` are
+passed as functional options.
+
+Every flag must also apply **exactly one** of the three sibling presence
+options -- `Required()`, `Optional()`, or `Default(v)` (see
+[Presence](#presence-required-optional-or-a-default)). A flag that applies none
+of them does not register, and neither does one that applies two.
 
 ### StringFlag
 
 ```go
-strictcli.StringFlag("output", "Output file path")
+strictcli.StringFlag("output", "Output file path", strictcli.Required())
 strictcli.StringFlag("format", "Output format", strictcli.Default("json"))
-strictcli.StringFlag("format", "Output format", strictcli.Choices("json", "yaml", "csv"))
+strictcli.StringFlag("tag", "Release tag", strictcli.Optional())
+strictcli.StringFlag("mode", "Run mode", strictcli.Required(), strictcli.Choices("json", "yaml", "csv"))
 ```
 
-A StringFlag with no `Default()` is required -- the user must provide it.
+`Required()` means some source -- a CLI token, a bound env var, a config entry,
+or an `Implies` injection -- must supply a value. `Optional()` delivers `nil`
+when nothing does.
 
 ### BoolFlag
 
 ```go
 strictcli.BoolFlag("cache", "Reuse the build cache", strictcli.Default(true))
-strictcli.BoolFlag("watch", "Watch for changes")
+strictcli.BoolFlag("watch", "Watch for changes", strictcli.Required())
+strictcli.BoolFlag("color", "Colorize output", strictcli.Optional())
 ```
 
-Bool flags are negatable by default: `--cache` sets true, `--no-cache` sets false. A BoolFlag with no `Default()` is required -- the user must pass either `--flag` or `--no-flag` explicitly.
+Bool flags are negatable by default: `--cache` sets true, `--no-cache` sets
+false. A `Required()` bool must be answered -- the user passes either `--flag` or
+`--no-flag`. An `Optional()` bool is a real tri-state: `--flag` is true,
+`--no-flag` is false, and absence arrives as `nil`.
 
 Note that `verbose` and `quiet` are not available as flag names: they belong to
 the [reserved quartet](#the-reserved-flag-quartet) and arrive on `ctx` instead.
@@ -161,7 +174,7 @@ the [reserved quartet](#the-reserved-flag-quartet) and arrive on `ctx` instead.
 
 ```go
 strictcli.IntFlag("port", "Server port", strictcli.Default(8080))
-strictcli.IntFlag("retries", "Number of retries")
+strictcli.IntFlag("retries", "Number of retries", strictcli.Required())
 ```
 
 Integers are parsed strictly: no leading/trailing whitespace, 64-bit signed bounds, no leading zeros.
@@ -170,7 +183,7 @@ Integers are parsed strictly: no leading/trailing whitespace, 64-bit signed boun
 
 ```go
 strictcli.FloatFlag("threshold", "Score threshold", strictcli.Default(0.5))
-strictcli.FloatFlag("rate", "Rate limit")
+strictcli.FloatFlag("rate", "Rate limit", strictcli.Required())
 ```
 
 Float parsing rejects NaN and Inf.
@@ -184,10 +197,10 @@ available options:
 
 ```go
 strictcli.StringFlag("output", "Output file path",
-    strictcli.Default("out.json"),   // Default value
-    strictcli.Short("o"),            // -o shorthand
-    strictcli.Env("MYTOOL_OUTPUT"),  // Read from env var
-    strictcli.Choices("a", "b"),     // Restrict to choices
+    strictcli.Default("out.json"),              // Presence: a declared default value
+    strictcli.Short("o"),                       // -o shorthand
+    strictcli.Env("MYTOOL_OUTPUT"),             // Read from env var
+    strictcli.Choices("out.json", "out.yaml"),  // Restrict to choices
 )
 ```
 
@@ -195,51 +208,142 @@ Available options:
 
 | Option | Description |
 |--------|-------------|
-| `Default(v)` | Set default value. `Default(nil)` makes the flag optional with no value (displays `[optional]` in help). |
+| `Required()` | Presence: a value must be supplied, from any source. One of the three; exactly one is mandatory. |
+| `Optional()` | Presence: absence is legal and delivers `nil`. |
+| `Default(v)` | Presence: the framework supplies `v` when nothing else does. `Default(nil)` is a registration error -- use `Optional()`. |
 | `Short(s)` | Single-character short form (e.g., `Short("o")` for `-o`). |
 | `Env(name)` | Environment variable to read from. Precedence: CLI > env > config > default. |
 | `Choices(vals...)` | Restrict to specific values. Not available on bool flags. |
 | `Prefixed(b)` | Whether env var prefix validation is applied (default: true). |
 | `NegatableOpt(b)` | Override negation for bool flags (default: true for bool). |
-| `ValidateFn(fn)` | Custom validation function. |
+| `ValidateFn(fn)` | Custom validation function. Runs on supplied values only -- never on a declared `Default(v)`. |
+| `Repeatable()` | Accept multiple occurrences, collecting into a list. |
+| `Unique(b)` | Reject (or allow) duplicate values on a repeatable flag. Mandatory when `Repeatable()` is applied. |
+| `EnvSeparator(s)` | Character splitting an env var value into elements of a repeatable flag. |
 
-### Default(nil) for Optional Flags
+### Presence: required, optional, or a default
 
-Use `Default(nil)` when a flag is optional but has no meaningful default value.
-This is distinct from omitting `Default()` entirely (which makes the flag
-required) and from `Default("")` (which gives it an empty string default). In
-help output, `Default(nil)` displays as `[optional]` instead of showing a
-concrete default value:
+Every flag and every positional argument declares **exactly one** of three facts
+about itself. Nothing is inferred from the shape of another declaration:
 
-```go
-strictcli.StringFlag("config-path", "Override config location", strictcli.Default(nil))
+| Fact | Flag option | Arg option | The handler receives |
+|------|-------------|-----------|----------------------|
+| **required** | `Required()` | `ArgRequired()` | the supplied value; the parse fails if nothing supplies one |
+| **optional** | `Optional()` | `ArgOptional()` | the supplied value, or `nil` when nothing supplied one |
+| **default** | `Default(v)` | `ArgDefault(v)` | the supplied value, or the declared default |
+
+Declaring none of the three, or more than one, panics at registration:
+
+```
+Flag "output": presence is undeclared: declare exactly one of Required(), Optional(), or Default(<value>)
+Flag "output": presence is declared twice: Required() and Default(out.json) cannot be combined; declare exactly one
 ```
 
-In help output, this displays as `[optional]` rather than `[default: <nil>]`.
+A `Flag` **struct literal** that never passes through these option constructors
+declares no presence and therefore does not register. That closes a trap the
+struct literal used to carry: an exported `Default` field set directly on a
+literal left the flag's internal `hasDefault` false and was silently ignored at
+parse time. Now the flag does not register at all, so the value cannot be
+dropped silently.
+
+### `Default(nil)` is a registration error
+
+`Default(nil)` used to be how a Go flag said "optional with no value". It is now
+refused, because optionality has exactly one spelling and the value-shaped one
+is not it:
+
+```
+Flag "config-path": Default(nil) does not declare optionality: use Optional() (it delivers nil when the flag is absent)
+```
+
+Write `Optional()` instead. It delivers exactly the `nil` the old spelling did:
+
+```go
+strictcli.StringFlag("config-path", "Override config location", strictcli.Optional())
+```
+
+In help output this renders `[optional]`. The same redirect applies to args, as
+`ArgDefault(nil)` pointing at `ArgOptional()`.
+
+### Presence in help output
+
+Every flag and every arg renders exactly one presence part, and it is the last
+bracketed part of the line:
+
+| Declared | Rendered |
+|----------|----------|
+| `Required()` | `[required]` |
+| `Optional()` | `[optional]` |
+| `Default(v)` | `[default: v]` |
+
+A declared empty collection renders `[default: []]` / `[default: {}]`, a
+required positional renders `[required]`, and a `RelativeToRoot` default renders
+as the declaration that produced it -- `[default: RelativeToRoot('MYTOOL_HOME', 'store')]` --
+never as the resolved machine-specific path.
+
+### Repeatable flags declare presence too
+
+There is no silent empty-list default. A repeatable flag declares which of the
+three it is, like anything else:
+
+```go
+// An empty list when nothing is passed -- declared, not assumed
+strictcli.StringFlag("tag", "Tags to apply",
+    strictcli.Repeatable(), strictcli.Unique(false), strictcli.Default([]interface{}{}))
+
+// Absent when nothing is passed: the handler receives nil, not an empty slice
+strictcli.StringFlag("only", "Restrict to these",
+    strictcli.Repeatable(), strictcli.Unique(false), strictcli.Optional())
+
+// At least one occurrence must arrive from some source
+strictcli.StringFlag("host", "Hosts to contact",
+    strictcli.Repeatable(), strictcli.Unique(true), strictcli.Required())
+```
+
+### `ctx.Provided` -- was this supplied?
+
+`ctx.Provided(name)` answers whether the **invocation** caused a value, so no
+handler reconstructs that boolean out of a sentinel:
+
+| Source | `Provided` |
+|--------|-----------|
+| `cli`, `env`, `config`, `implied` | **true** -- the invocation caused the value |
+| `default`, `infra` | **false** -- the declaration caused it |
+
+An `Optional()` flag that received nothing carries source `default` and reports
+false. An unknown name panics exactly as `ctx.Source` does. The same predicate
+decides presence for `CoRequired`, `Requires` and `Implies`, so a declared
+default never satisfies a dependency.
 
 ## Positional Arguments
 
 Use `NewArg` to declare positional arguments passed via `WithArgs()`. Arguments
-are required by default and are consumed in declaration order after all flags
-have been parsed. Optional arguments use `ArgRequired(false)` and may declare a
-default value via `ArgDefault()`.
+are consumed in declaration order after all flags have been parsed, and each one
+applies **exactly one** presence option -- `ArgRequired()`, `ArgOptional()`, or
+`ArgDefault(v)`. There is no `ArgRequired(bool)`: it took a boolean, which made
+a required arg the implicit default, and spelled one fact across two options.
 
 ```go
 app.Command("deploy", "Deploy to an environment", handler,
     strictcli.WithEffect(strictcli.EffectMutating),
     strictcli.WithArgs(
-        strictcli.NewArg("environment", "Target environment"),
-        strictcli.NewArg("version", "Version to deploy", strictcli.ArgRequired(false), strictcli.ArgDefault("latest")),
+        strictcli.NewArg("environment", "Target environment", strictcli.ArgRequired()),
+        strictcli.NewArg("version", "Version to deploy", strictcli.ArgDefault("latest")),
+        strictcli.NewArg("note", "An optional note", strictcli.ArgOptional()),
     ),
 )
 ```
+
+An optional arg delivers absence as a **present kwargs key** holding `nil`,
+exactly as an optional flag does -- the key is never omitted.
 
 Arg options:
 
 | Option | Description |
 |--------|-------------|
-| `ArgRequired(b)` | Whether the argument is required (default: true). |
-| `ArgDefault(v)` | Default value (only valid on non-required args). |
+| `ArgRequired()` | Presence: a value must be supplied. One of the three; exactly one is mandatory. |
+| `ArgOptional()` | Presence: absence is legal and delivers `nil`. |
+| `ArgDefault(v)` | Presence: the framework supplies `v` when the arg is absent. `ArgDefault(nil)` is a registration error -- use `ArgOptional()`. |
 | `ArgType(t)` | Type (default: `TypeStr`). Accepts `TypeStr`, `TypeBool`, `TypeInt`, `TypeFloat`. |
 | `ArgChoices(vals...)` | Restrict to specific values. |
 | `Variadic()` | Collect all remaining positional values (must be the last arg). |
@@ -248,16 +352,24 @@ Arg options:
 
 A variadic argument collects all remaining positional values into a slice. It
 must be the last argument in the command's declaration, and only one variadic
-argument is allowed per command. A variadic argument with the default required
-setting needs at least one value to be provided.
+argument is allowed per command. Because it always delivers a list,
+`ArgRequired()` means *at least one value* and `ArgOptional()` means *possibly
+none*.
 
 ```go
 app.Command("process", "Process files", handler,
     strictcli.WithEffect(strictcli.EffectReadOnly),
     strictcli.WithArgs(
-        strictcli.NewArg("files", "Files to process", strictcli.Variadic()),
+        strictcli.NewArg("files", "Files to process", strictcli.Variadic(), strictcli.ArgRequired()),
     ),
 )
+```
+
+A default on a variadic arg panics at registration -- the empty case is spelled
+once, as `ArgOptional()`:
+
+```
+Arg "files": a variadic arg cannot declare ArgDefault(): it always delivers a list, so declare ArgRequired() for at least one value or ArgOptional() for possibly none
 ```
 
 Only one variadic argument is allowed, and it must be the last.
@@ -437,7 +549,7 @@ prompt -- a plain mutating command never does.
 app.Command("destroy", "Destroy the cluster", destroyHandler,
     strictcli.WithEffect(strictcli.EffectMutating),
     strictcli.WithConsequential(),
-    strictcli.WithArgs(strictcli.NewArg("cluster", "Cluster to destroy")),
+    strictcli.WithArgs(strictcli.NewArg("cluster", "Cluster to destroy", strictcli.ArgRequired())),
 )
 ```
 
@@ -522,16 +634,21 @@ users always have access to meaningful help for every flag and command.
 
 Declare mutually exclusive flags using `WithMutex` and `MutexGroup`. At most
 one flag in the group may have a value from an explicit source (CLI, env, or
-config). If no flag in the group has a value and no defaults exist, a "one of
-... is required" error is produced:
+config). If no flag in the group is elected, a "one of ... is required" error is
+produced.
+
+Each member declares its own presence: `Optional()` is the ordinary declaration,
+`Default(v)` is legal (an unelected member delivers it), and `Required()` is a
+registration error -- the group's own requirement is what makes the choice
+mandatory:
 
 ```go
 app.Command("output", "Produce output", handler,
     strictcli.WithEffect(strictcli.EffectReadOnly),
     strictcli.WithMutex(strictcli.MutexGroup{
         Flags: []strictcli.Flag{
-            strictcli.StringFlag("file", "Write to file"),
-            strictcli.BoolFlag("stdout", "Write to stdout"),
+            strictcli.StringFlag("file", "Write to file", strictcli.Optional()),
+            strictcli.BoolFlag("stdout", "Write to stdout", strictcli.Optional()),
         },
     }),
 )
@@ -548,8 +665,8 @@ trigger is provided):
 app.Command("deploy", "Deploy the app", handler,
     strictcli.WithEffect(strictcli.EffectMutating),
     strictcli.WithFlags(
-        strictcli.StringFlag("target", "Deploy target"),
-        strictcli.StringFlag("region", "Target region"),
+        strictcli.StringFlag("target", "Deploy target", strictcli.Optional()),
+        strictcli.StringFlag("region", "Target region", strictcli.Optional()),
         strictcli.BoolFlag("canary", "Roll out to the canary fleet first", strictcli.Default(false)),
         strictcli.BoolFlag("wait", "Block until the rollout settles", strictcli.Default(false)),
     ),
@@ -566,6 +683,12 @@ app.Command("deploy", "Deploy the app", handler,
 
 Dependencies cannot reference the reserved quartet: `dry-run` is not a flag you
 declare, so it cannot be a `Requires` target or an `Implies` subject.
+
+All three read presence through the same predicate `ctx.Provided` uses -- a flag
+counts as present when the invocation caused its value. A declared default never
+satisfies a `Requires`, never completes a `CoRequired` group, and never fires an
+`Implies` trigger. That includes a `RelativeToRoot` default with the `infra`
+source label: it is still the declaration deciding.
 
 ## WithConfig -- Config File Support
 
@@ -671,7 +794,7 @@ func TestGreet(t *testing.T) {
         ctx.Info("Hello, " + name + "!")
         return strictcli.Exit(0)
     }, strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.WithFlags(
-        strictcli.StringFlag("name", "Who to greet"),
+        strictcli.StringFlag("name", "Who to greet", strictcli.Required()),
     ))
 
     r := app.Test([]string{"greet", "--name", "Alice"})
@@ -761,7 +884,7 @@ func main() {
         return strictcli.Exit(0)
     }, strictcli.WithEffect(strictcli.EffectMutating), strictcli.WithConsequential(),
         strictcli.WithFlags(
-            strictcli.StringFlag("name", "Service name"),
+            strictcli.StringFlag("name", "Service name", strictcli.Required()),
             strictcli.IntFlag("timeout", "Shutdown timeout in seconds", strictcli.Default(30)),
         ))
 
