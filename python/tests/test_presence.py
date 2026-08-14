@@ -112,6 +112,34 @@ class TestPresenceDeclaredTwice:
             "default=. cannot be combined; declare exactly one"
         )
 
+    def test_the_two_are_named_in_canonical_order_not_written_order(self):
+        """Canonical order is required, optional, default -- always.
+
+        Python spells presence with one keyword carrying one of two words, so
+        `presence=` and `default=` are the only pair that can co-occur and all
+        three at once is unwritable: the required/optional pair Go can be
+        handed does not exist here. What remains to pin is that writing the
+        default first does not put it first in the message.
+        """
+        with pytest.raises(ValueError) as exc:
+            strictcli.Flag(
+                name="port", type=int, help="the port",
+                default=8080, presence="required",
+            )
+        assert str(exc.value) == (
+            'Flag "port": presence is declared twice: presence="required" and '
+            "default=8080 cannot be combined; declare exactly one"
+        )
+        with pytest.raises(ValueError) as exc:
+            strictcli.Arg(
+                name="path", help="the path",
+                default=".", presence="required",
+            )
+        assert str(exc.value) == (
+            'Arg "path": presence is declared twice: presence="required" and '
+            "default=. cannot be combined; declare exactly one"
+        )
+
 
 class TestNullValuedDefault:
     def test_flag_default_none_redirects_to_optional(self):
@@ -773,6 +801,98 @@ class TestHelpMarkers:
             pass
 
         assert "[optional]" in self._help(app)
+
+    @pytest.mark.parametrize(
+        "declared_type,value,rendered",
+        [
+            (bool, True, "true"),
+            (bool, False, "false"),
+            (int, 7, "7"),
+            (float, 1.5, "1.5"),
+            (float, 1e-7, "1e-7"),
+            (float, 2.0, "2.0"),
+            (str, "prod", "prod"),
+        ],
+    )
+    def test_the_same_default_renders_the_same_on_an_arg_and_a_flag(
+        self, declared_type, value, rendered,
+    ):
+        """One value, one rendering, whichever surface declared it (§23.8).
+
+        The positional side used to render a bool default through ``str()``,
+        so `[default: True]` faced a flag's `[default: true]` on the same
+        help page.
+        """
+        app = _app()
+
+        @app.command(
+            "cmd", effect="read_only", help="a command",
+            args=[
+                strictcli.Arg(
+                    name="pos", help="the positional",
+                    type=declared_type, default=value,
+                ),
+            ],
+        )
+        @strictcli.flag(
+            "opt", type=declared_type, help="the flag", default=value,
+        )
+        def cmd(ctx, pos, opt):
+            pass
+
+        lines = self._help(app).splitlines()
+        arg_line = next(ln for ln in lines if ln.strip().startswith("pos "))
+        flag_line = next(ln for ln in lines if "--opt" in ln)
+        assert arg_line.endswith(f"[default: {rendered}]")
+        assert flag_line.endswith(f"[default: {rendered}]")
+
+    def test_a_dict_default_renders_sorted_pairs_inside_the_marker(self):
+        """The whole bracketed part, not just the pairs (§23.8)."""
+        app = _app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.flag(
+            "header", type=dict[str, int], help="headers",
+            default={"zebra": 3, "apple": 1, "mango": 2},
+        )
+        def cmd(ctx, header):
+            pass
+
+        line = next(
+            ln for ln in self._help(app).splitlines() if "--header" in ln
+        )
+        assert line.endswith("[default: apple=1, mango=2, zebra=3]")
+
+    def test_a_list_default_renders_its_elements_inside_the_marker(self):
+        app = _app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.flag(
+            "tag", type=list[str], help="tags", default=["x", "y"], unique=False,
+        )
+        def cmd(ctx, tag):
+            pass
+
+        line = next(ln for ln in self._help(app).splitlines() if "--tag" in ln)
+        assert line.endswith("[default: x, y]")
+
+    def test_declared_empty_collections_render_the_whole_marker(self):
+        """`[default: []]` / `[default: {}]`, brackets included (§23.8)."""
+        app = _app()
+
+        @app.command("cmd", effect="read_only", help="a command")
+        @strictcli.flag("tag", type=list[str], help="tags", default=[], unique=False)
+        @strictcli.flag("header", type=dict[str, str], help="headers", default={})
+        def cmd(ctx, tag, header):
+            pass
+
+        lines = self._help(app).splitlines()
+        assert next(
+            ln for ln in lines if "--tag" in ln
+        ).endswith("[default: []]")
+        assert next(
+            ln for ln in lines if "--header" in ln
+        ).endswith("[default: {}]")
 
 
 # ---------------------------------------------------------------------------

@@ -10811,22 +10811,31 @@ def _format_presence_for_help(presence: str, decl: "Flag | Arg") -> str:
         return "required"
     if presence == _PRESENCE_OPTIONAL:
         return "optional"
+    return f"default: {_format_declared_default_for_help(decl)}"
+
+
+def _format_declared_default_for_help(decl: "Flag | Arg") -> str:
+    """The declared default's value, rendered the same way on both surfaces.
+
+    A flag and a positional arg declaring the same value render it
+    identically -- the branches below select on the SHAPE of the declaration
+    (only a flag can be repeatable or a dict), never on which surface declared
+    it. The arg side used to render its value through ``str`` alone, which put
+    a bool's `True` next to a flag's `true` in the same help output.
+    """
     value = decl.default
     compound = getattr(decl, "compound", "scalar")
     if compound == "dict":
         if not value:
-            return "default: {}"
-        return f"default: {_format_default_for_help(value)}"
-    if isinstance(decl, Flag):
-        if decl.repeatable:
-            if not value:
-                return "default: []"
-            return "default: " + ", ".join(
-                _format_value_for_error(elem) for elem in value
-            )
-        if decl.type is bool and compound == "scalar":
-            return f"default: {'true' if value else 'false'}"
-    return f"default: {_format_default_for_help(value)}"
+            return "{}"
+        return _format_default_for_help(value)
+    if getattr(decl, "repeatable", False):
+        if not value:
+            return "[]"
+        return ", ".join(_format_value_for_error(elem) for elem in value)
+    if decl.type is bool and compound == "scalar":
+        return "true" if value else "false"
+    return _format_default_for_help(value)
 
 
 def _format_dry_run_section(cmd: Command) -> list[str]:
