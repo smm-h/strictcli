@@ -1141,6 +1141,113 @@ test("help: a token-spelled selector renders an indented block", async () => {
 	);
 });
 
+/**
+ * A defaulted selector's presence part is its COMPLETE elected value (§24.5,
+ * §18.19 item 215): the choice, then its own scalar fields in declaration
+ * order. Go and TypeScript read the values off the named choice's declared
+ * scope defaults, which completeness is what makes the same values Python
+ * reads off its default instance.
+ */
+function defaultedApp(scope: "fields" | "empty" | "nested"): App {
+	const app = makeApp();
+	const webhook =
+		scope === "fields"
+			? choice({
+					help: "post the notification to a URL",
+					flags: {
+						url: flag("url", t.str, {
+							help: "the endpoint",
+							presence: "default",
+							default: "https://example.test/hook",
+						}),
+						retries: flag("retries", t.int, {
+							help: "how many times to retry",
+							presence: "default",
+							default: 5n,
+						}),
+						// An optional field supplies no value, and `null` is not a
+						// declarable default, so it is omitted from the rendering.
+						tag: flag("tag", t.str, {
+							help: "an optional tag",
+							presence: "optional",
+						}),
+					},
+				})
+			: scope === "nested"
+				? choice({
+						help: "post the notification to a URL",
+						flags: {
+							url: flag("url", t.str, {
+								help: "the endpoint",
+								presence: "default",
+								default: "https://example.test/hook",
+							}),
+							auth: choiceFlag(
+								"auth",
+								{
+									none: choice({ help: "no authentication" }),
+									token: choice({ help: "a bearer token" }),
+								},
+								{
+									help: "how to authenticate",
+									presence: "default",
+									default: "none",
+								},
+							),
+						},
+					})
+				: choice({ help: "post the notification to a URL" });
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send one notification",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						webhook,
+						shout: choice({ help: "deliver by shouting" }),
+					},
+					{ help: "delivery channel", presence: "default", default: "webhook" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("help: a defaulted selector renders its complete elected value", async () => {
+	const r = await defaultedApp("fields").test(["send", "--help"]);
+	assert.ok(
+		r.stdout.includes(
+			"delivery channel [default: webhook (url=https://example.test/hook, retries=5)]",
+		),
+		r.stdout,
+	);
+});
+
+test("help: a defaulted selector with an empty scope renders the choice alone", async () => {
+	const r = await defaultedApp("empty").test(["send", "--help"]);
+	assert.ok(
+		r.stdout.includes("delivery channel [default: webhook]\n"),
+		r.stdout,
+	);
+	assert.ok(!r.stdout.includes("[default: webhook ("), r.stdout);
+});
+
+test("help: a nested selector in a defaulted scope states its own default", async () => {
+	// It is not expanded into the parenthesized list: it opens its own line in
+	// the block, where its own presence part states its own default.
+	const r = await defaultedApp("nested").test(["send", "--help"]);
+	assert.ok(
+		r.stdout.includes(
+			"delivery channel [default: webhook (url=https://example.test/hook)]",
+		),
+		r.stdout,
+	);
+	assert.ok(r.stdout.includes("how to authenticate [default: none]"), r.stdout);
+});
+
 test("help: a value flag keeps the one-line form until an entry carries help", async () => {
 	const mk = (withHelp: boolean): App => {
 		const app = makeApp();
@@ -1183,6 +1290,95 @@ test("help: a value flag keeps the one-line form until an entry carries help", a
 			"  --mode <str>    the mode [required]",
 			"    fast          go fast",
 			"    slow          go slow",
+			"",
+		].join("\n"),
+	);
+});
+
+/**
+ * §24.10's block rule is content-keyed, never surface-keyed (§18.19 item 218):
+ * a positional arg whose `choices` entries carry help renders the same block a
+ * flag's do, inside the `Arguments:` section and against that section's own
+ * alignment column.
+ */
+function argChoicesApp(withHelp: boolean): App {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("add", {
+			help: "add an entry",
+			args: [
+				arg("kind", t.str, {
+					help: "the kind of entry",
+					presence: "required",
+					choices: withHelp
+						? [
+								{ value: "feature", help: "a user-facing feature" },
+								{ value: "fix", help: "a user-facing fix" },
+							]
+						: [{ value: "feature" }, { value: "fix" }],
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("help: a positional arg with helped choices renders an indented block", async () => {
+	assert.equal(
+		(await argChoicesApp(true).test(["add", "--help"])).stdout,
+		[
+			"myapp add -- add an entry",
+			"",
+			"Arguments:",
+			"  kind         the kind of entry [required]",
+			"    feature    a user-facing feature",
+			"    fix        a user-facing fix",
+			"",
+		].join("\n"),
+	);
+});
+
+test("help: an arg whose entries carry no help keeps the one-line form", async () => {
+	assert.equal(
+		(await argChoicesApp(false).test(["add", "--help"])).stdout,
+		[
+			"myapp add -- add an entry",
+			"",
+			"Arguments:",
+			"  kind    the kind of entry [choices: feature, fix] [required]",
+			"",
+		].join("\n"),
+	);
+});
+
+test("help: an arg block entry with no help renders the value alone", async () => {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("add", {
+			help: "add an entry",
+			args: [
+				arg("kind", t.str, {
+					help: "the kind of entry",
+					presence: "required",
+					choices: [
+						{ value: "feature", help: "a user-facing feature" },
+						{ value: "fix" },
+					],
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
+	assert.equal(
+		(await app.test(["add", "--help"])).stdout,
+		[
+			"myapp add -- add an entry",
+			"",
+			"Arguments:",
+			"  kind         the kind of entry [required]",
+			"    feature    a user-facing feature",
+			"    fix",
 			"",
 		].join("\n"),
 	);

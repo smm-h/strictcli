@@ -408,10 +408,13 @@ test("help: a member-spelled selector renders as one indented block", async () =
 			handler: ok,
 		}),
 	);
-	// A member-spelled selector has no token to render, so its own line
-	// carries its help, the `(exactly one of the following)` clause and its
-	// presence part, with the member flags two columns beneath it. One
-	// alignment column spans the whole block (contract §24.10).
+	// A member-spelled selector has no token to render, so its LEFT column
+	// carries its bare name and its right column carries its help, the
+	// `(exactly one of the following)` clause and its presence part, in that
+	// order, with the member flags two columns beneath it as ordinary flag
+	// lines -- each ending with exactly one presence part of its own, because a
+	// member is required once elected. One alignment column spans the whole
+	// block (contract §24.10, §18.19 item 215's neighbours).
 	assert.equal(
 		(await app.test(["cmd", "--help"])).stdout,
 		[
@@ -419,9 +422,9 @@ test("help: a member-spelled selector renders as one indented block", async () =
 			"",
 			"Flags:",
 			"  --name <str>    your name [default: anon]",
-			"  --volume        output volume (exactly one of the following) [required]",
-			"    --chatter     chatter output",
-			"    --muted       muted output",
+			"  volume          output volume (exactly one of the following) [required]",
+			"    --chatter     chatter output [required]",
+			"    --muted       muted output [required]",
 			"",
 		].join("\n"),
 	);

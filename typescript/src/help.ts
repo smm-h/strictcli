@@ -19,6 +19,7 @@
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import {
 	type AnyArg,
+	type AnyChoice,
 	type AnyChoiceFlag,
 	type AnyDecl,
 	type AnyFlag,
@@ -320,23 +321,62 @@ function declBlockRows(decl: AnyDecl, depth: number): FlagBlockRow[] {
 	return rows;
 }
 
+/**
+ * The one presence part a selector's line carries (§23.8, §24.10).
+ *
+ * A DEFAULTED selector renders its complete elected value, because that is
+ * what a default is (§24.5): `[default: <choice> (<field>=<value>, ...)]`, the
+ * elected choice's own scalar fields in declaration order, joined by `, `. A
+ * choice whose scope is empty -- or whose fields are all nested selectors --
+ * renders `[default: <choice>]` with no parenthesized part at all, never an
+ * empty `()`. A nested selector is not expanded inline: it opens its own line
+ * in the block and states its own default there (§18.19 item 215).
+ */
+function selectorPresenceMeta(sel: AnyChoiceFlag): string {
+	if (sel.opts.presence === "required") {
+		return "required";
+	}
+	const elected = sel.opts.default as string;
+	const parts: string[] = [];
+	for (const sub of Object.values(sel.choices[elected]?.flags ?? {})) {
+		// A nested selector has its own line; a field with no declared value has
+		// nothing to render, and `null` is not a declarable default anywhere in
+		// the framework, so an omission is unambiguous.
+		if (sub.kind !== "flag") {
+			continue;
+		}
+		const o = flagOpts(sub);
+		if (o.presence !== "default") {
+			continue;
+		}
+		parts.push(`${sub.name}=${formatDefaultForHelp(o.default)}`);
+	}
+	return `default: ${elected}${parts.length === 0 ? "" : ` (${parts.join(", ")})`}`;
+}
+
+/** The left-column spec of one member flag under member spelling. */
+function buildMemberSpec(choiceName: string, c: AnyChoice): string {
+	// A payload-less member and a bool-payload member are both typed as a bare
+	// flag; only a value-carrying member renders the value it takes.
+	const payload = c.value;
+	return payload === undefined || payload.schema === "bool"
+		? `--${choiceName}`
+		: `--${choiceName} <${payload.schema}>`;
+}
+
 /** The selector block: its own line, then one line per choice, then each scope. */
 function selectorBlockRows(sel: AnyChoiceFlag, depth: number): FlagBlockRow[] {
 	const pad = SCOPE_INDENT.repeat(depth);
 	const rows: FlagBlockRow[] = [];
-	const presence = presenceMeta(
-		sel.opts.presence,
-		sel.opts.default,
-		"scalar",
-		"str",
-	);
+	const presence = selectorPresenceMeta(sel);
 	if (sel.electBy === "member-flags") {
-		// A member-spelled selector has no token to render, so its own line
-		// carries its help, the clause `(exactly one of the following)` and its
-		// presence part, with the member flags rendered as ordinary flag lines
-		// two columns beneath it.
+		// A member-spelled selector has NO token to render, so its left column
+		// carries its bare name -- the handler's key and the noun errors use,
+		// never something a user types -- and its right column carries its help,
+		// the clause `(exactly one of the following)` and its presence part, in
+		// that order (§24.10).
 		rows.push({
-			left: `${pad}--${sel.name}`,
+			left: `${pad}${sel.name}`,
 			right: `${sel.opts.help} (exactly one of the following) [${presence}]`,
 		});
 	} else {
@@ -350,11 +390,17 @@ function selectorBlockRows(sel: AnyChoiceFlag, depth: number): FlagBlockRow[] {
 		});
 	}
 	for (const [choiceName, c] of Object.entries(sel.choices)) {
-		const spec =
+		// A member flag is an ordinary flag line, so §23.8's presence invariant
+		// holds on it too: it ends with exactly one presence part, and a member
+		// is required once elected (item 161).
+		rows.push(
 			sel.electBy === "member-flags"
-				? `--${choiceName}${c.value === undefined ? "" : ` <${c.value.schema}>`}`
-				: choiceName;
-		rows.push({ left: `${pad}${SCOPE_INDENT}${spec}`, right: c.help });
+				? {
+						left: `${pad}${SCOPE_INDENT}${buildMemberSpec(choiceName, c)}`,
+						right: `${c.help} [required]`,
+					}
+				: { left: `${pad}${SCOPE_INDENT}${choiceName}`, right: c.help },
+		);
 		for (const sub of Object.values(c.flags)) {
 			rows.push(...declBlockRows(sub, depth + 2));
 		}
@@ -368,10 +414,18 @@ function selectorBlockRows(sel: AnyChoiceFlag, depth: number): FlagBlockRow[] {
  * column everywhere on the page (§24.10).
  */
 function flagBlock(decls: readonly AnyDecl[]): string[] {
-	const rows = decls.flatMap((d) => declBlockRows(d, 0));
+	return renderBlock(decls.flatMap((d) => declBlockRows(d, 0)));
+}
+
+/**
+ * Renders block rows against ONE alignment column, deepest entry included. A
+ * row whose right column is empty (a choice entry declaring no help) keeps no
+ * trailing padding.
+ */
+function renderBlock(rows: readonly FlagBlockRow[]): string[] {
 	const maxLen = Math.max(...rows.map((r) => r.left.length));
-	return rows.map(
-		(r) => `  ${r.left}${" ".repeat(maxLen - r.left.length + 4)}${r.right}`,
+	return rows.map((r) =>
+		`  ${r.left}${" ".repeat(maxLen - r.left.length + 4)}${r.right}`.trimEnd(),
 	);
 }
 
@@ -379,16 +433,52 @@ function argDisplayName(a: AnyArg): string {
 	return a.opts.variadic === true ? `${a.name}...` : a.name;
 }
 
+/** An arg's declared `choices` entries, or undefined when it declares none. */
+function argChoices(a: AnyArg): readonly ChoiceRecordView[] | undefined {
+	return (a.opts as { readonly choices?: readonly ChoiceRecordView[] }).choices;
+}
+
+/**
+ * Every line the `Arguments:` section renders, as block rows: the arg's own
+ * line, and -- when any of its `choices` entries carries help -- one indented
+ * line per entry, value first and help second (§24.10, §18.19 item 218).
+ *
+ * The block rule is content-keyed, never surface-keyed: an arg cannot own a
+ * scope (§24.7), so help on an entry is the only thing that can promote it,
+ * and an arg whose entries carry no help keeps the one-line form unchanged.
+ */
+function argBlockRows(args: readonly AnyArg[]): FlagBlockRow[] {
+	const rows: FlagBlockRow[] = [];
+	for (const a of args) {
+		rows.push({
+			left: argDisplayName(a),
+			right: `${a.opts.help}${argMeta(a)}`,
+		});
+		const choices = argChoices(a);
+		if (choices === undefined || !anyChoiceHasHelp(choices)) {
+			continue;
+		}
+		for (const c of choices) {
+			rows.push({
+				left: `${SCOPE_INDENT}${formatValueForError(c.value)}`,
+				right: c.help ?? "",
+			});
+		}
+	}
+	return rows;
+}
+
 function argMeta(a: AnyArg): string {
 	const metaParts: string[] = [];
 	if (a.schema !== "str") {
 		metaParts.push(`type: ${a.schema}`);
 	}
-	const opts = a.opts as {
-		readonly choices?: readonly ChoiceRecordView[];
-	} & AnyArg["opts"];
-	if (opts.choices !== undefined && !anyChoiceHasHelp(opts.choices)) {
-		metaParts.push(`choices: ${formatChoices(choiceValues(opts.choices))}`);
+	const choices = argChoices(a);
+	// The one-line `[choices: a, b, c]` form survives only while the arg
+	// renders as one line: once any entry carries help, the entries render as
+	// the block above instead.
+	if (choices !== undefined && !anyChoiceHasHelp(choices)) {
+		metaParts.push(`choices: ${formatChoices(choiceValues(choices))}`);
 	}
 	// Args carry the same single presence part flags do -- a required
 	// positional renders `[required]` where nothing was rendered before, since
@@ -440,10 +530,9 @@ export function formatCommandHelp(
 	const def = cmd.def;
 
 	if (def.args.length > 0) {
-		const rows = def.args.map(
-			(a) => [argDisplayName(a), `${a.opts.help}${argMeta(a)}`] as const,
-		);
-		lines.push("", "Arguments:", ...twoColumn(rows));
+		// The `Arguments:` section computes its own alignment column, deepest
+		// entry included; it never shares the flag block's (§24.10).
+		lines.push("", "Arguments:", ...renderBlock(argBlockRows(def.args)));
 	}
 
 	// One `Flags:` section for every declaration, in declaration order. The

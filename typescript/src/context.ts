@@ -158,6 +158,10 @@ export class Context implements MutatingContext {
 	// settable only on a command that declared a payload schema.
 	private readonly commandName: string;
 	private readonly payloadSchema: Readonly<Record<string, unknown>> | null;
+	// Read back through the widened cast in readPayload/emitPayload below,
+	// which the linter cannot follow -- the slot is private on purpose, so the
+	// framework's own two readers are the only way to it.
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: read via the widened cast in readPayload
 	private payloadValue: unknown = undefined;
 	private payloadSet = false;
 	/**
