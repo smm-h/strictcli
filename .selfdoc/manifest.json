@@ -4221,6 +4221,11 @@
         },
         {
           "level": 3,
+          "text": "`_b64url_canonical`",
+          "anchor": "_b64url_canonical"
+        },
+        {
+          "level": 3,
           "text": "`_b64url_decode`",
           "anchor": "_b64url_decode"
         },
@@ -8619,6 +8624,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-14T00:04:54.403939+00:00",
+  "last_gen": "2026-08-14T02:15:19.833286+00:00",
   "theme": "minimal"
 }

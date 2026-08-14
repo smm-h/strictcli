@@ -1,24 +1,24 @@
 {
   "_hash_version": 3,
   "en/architecture.md": {
-    "content": "1e1ef778ae9678bf953b4db0c6d81f5a292b12998f1fa44eec02266cb3cdc97f",
-    "description": "41d9d797eec63a9fa35f6ecba944148da61725bb479e989eea1d373176e12644"
+    "content": "1d8f788e7690420e2c6679c77a04dcac33c866d1f5e2e6e73a6fef89c0fb34bb",
+    "description": "ca260eacd6a69d905989e8047efc42fa1c33f5344f7356c8a65f753ca69c8d5a"
   },
   "en/conformance.md": {
     "content": "c003e77e5c7f68b3a7bb50db91aa2ea9b01dfadf3a3a9418cc39894a4e3d566e",
     "description": "1dc672fe860817f8c23deada722096353b8def5ae7d1f4a224b9292037484ff2"
   },
   "en/flag-system.md": {
-    "content": "61a3b75cdb914b145a31dec3f4437f93df711743bddf4741c1a4c2661326c8ed",
-    "description": "2370545aed1406b973ae60936138fc6698c0acc52197ce9df273e3f4443cde34"
+    "content": "b710b41298b03e1b059d97f1ae140d6d3005cd4ef382f20f2e47109d740acb49",
+    "description": "0fee816babf22b1cacf10080e19b891572a9816e3ec057d47c79861aea15dc85"
   },
   "en/gen-index.md": {
     "content": "b152ec9cc4a5a38eb7528488ada3bc83f58f20fc61e676dae94f8cf484c78e7d",
     "description": "de421ec712350fd2336eb5ecdb2b218864da7af30526828f1b7c7f55293aa31b"
   },
   "en/go-quickstart.md": {
-    "content": "e25f6694520255fd4fc740711443bf4632fc1a2acf3f80b6008446db500e2f33",
-    "description": "2c46cacc748f39f609d7904c4db957d98dd2b8dbccd1e72fe67abe76b9a3bfcd"
+    "content": "877be6ba688cde1edb263babb39067f0b69ac89e1b81e26b5a3f61072e0d7fab",
+    "description": "8478878100cb2e80e05f0af6e307c1cbee3f4cbb292855d4879f1708f392837e"
   },
   "en/go-strictcli-testdata-noncomparable.md": {
     "content": "3e51fdc0997f38707db188e2cce1590da01f17bdcd6361a5dc8e805303ac7af0",
@@ -36,16 +36,16 @@
     "description": "94d574a2a66aac827af424bf4d09653d35222521c9d44e063e8ca2beed10a769"
   },
   "en/mcp-confirmation.md": {
-    "content": "0873c198225d7cf2e963a72ce46a2831538821595caa61430786a22368972afa",
-    "description": "11f69fc46ce5edc916974f2d3d26a52f04a5a6d42b2e6577a46934afbda2333e"
+    "content": "a9a1065413384efade9e20688bc5a5536113971047899b49c7675388c5a6ab1e",
+    "description": "a1fac5030fab2d974d8b3a379cd046e262d8ab5cb00a75bc5160e4099316889f"
   },
   "en/process-trace-store.md": {
     "content": "9ddfb43e0c7b1c4f0a9636dda323bdca71d65042ea25b6628c072a8d7b2a6bf1",
     "description": "70bfdba9b524dd0d01ed386281d43243f71b63b87c54551fe0ee9f7109ce3e73"
   },
   "en/python-quickstart.md": {
-    "content": "90af605a0415b8914a414f15bf5d1d039ed379be59387f60217352b93a4d830f",
-    "description": "c4a49bc242fbc852dffbabef0e02e5675be23f5dbf9cf8ba56f87259496da748"
+    "content": "3aecd06cafb6c29807752c22334595998e6b0702c9981d10dec1dd65ed684b00",
+    "description": "a0630caab1fb7c5a18a7c545a493c1f2f739187bbb8a012a7aa7a571b83a6011"
   },
   "en/python-strictcli.md": {
     "content": "6f1b6e55f543e1bfc7464a15348000471faada959c6686d2ed797541d3d806f7",
@@ -53,8 +53,8 @@
     "source_docstring": "869d760f17632ede6f9b09aa15d41ddd3e3626fd1471d84ece919e2402507969"
   },
   "en/typescript-quickstart.md": {
-    "content": "212b1a327ca15e7f7df5903aa7c299d1c6b0cc33ccc69eee8324000f3bae72a1",
-    "description": "5b40e6eeff15a50d4c56b65baecf398288f6547b1f5a0cef63b8a6e2da1e8bae"
+    "content": "2b3d24acbe024b89f22a923fc4063cb435311d83b85d76d461a5bf914266d104",
+    "description": "49b4e6809378b25bd398a33f754c036b711b1e57a212acd2710553b35d1a79ed"
   },
   "en/typescript-src-app.md": {
     "content": "b3a7b96dc80757525ecf75be7b79145d23b295e3225f88200eaf98dec991d7a5",
@@ -178,7 +178,7 @@
   },
   "en/typescript-src-mcp.md": {
     "content": "c63c97d975acb74a5fb7658fd295458bd7e926ac0caecd731dcc806dc9457def",
-    "description": "74a8c6e5a577c6140e27748a14811a9b7a385f071331cf64272f32aa6838b60b",
+    "description": "ddd7e41e26f348d7dd5eba8b171f8bd5c57374bccbc12d63496feeb007129ef5",
     "source_docstring": "ad683c883cae5f941eaef898c1d6548ee027f4171494301c1ac2745704ff1893"
   },
   "en/typescript-src-outcome.md": {

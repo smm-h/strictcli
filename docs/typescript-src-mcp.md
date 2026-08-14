@@ -1,6 +1,6 @@
 ---
 title: typescript/src/mcp
-description: "MCP (Model Context Protocol) server: a line-delimited JSON-RPC 2.0 loop over stdin/stdout handling initialize, tools/list, and tools/call."
+description: "MCP server: a line-delimited JSON-RPC 2.0 loop on stdio serving server/discover, tools/list and tools/call under 2026-07-28, plus the initialize era."
 generated: true
 nav_group: "API Reference"
 nav_order: 25

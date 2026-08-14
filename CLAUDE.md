@@ -145,7 +145,7 @@ When adding a feature to one implementation, add it to all implementations and a
 - Config file support -- `App(config=True)` (Python) / `WithConfig()` (Go). Format is JSON (default) or TOML (`config_format="toml"` / `WithConfigFormat("toml")`). Reads `~/.config/{name}/config.json` (or `.toml`). Precedence: CLI > env > config > default. Auto-registers `config show/set/path/edit/init` subcommands.
 - `--dump-schema` -- auto-injected flag on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups).
 - `--help` / `-h` is recognized anywhere in argv, not just at token boundaries.
-- The reserved quartet (`--dry-run`, `--approve-consequential`, `--quiet`, `--verbose`) is likewise recognized anywhere in argv -- `myapp cmd --dry-run` and `myapp --dry-run cmd` are equivalent -- with two boundaries: a bare `--` (everything after it is data) and a passthrough command's name (its args are forwarded to the child byte-for-byte). `--hermetic`, `--config`, `--dump-schema` and `--mcp` stay pre-command-only.
+- The reserved quartet (`--dry-run`, `--approve-consequential`, `--quiet`, `--verbose`) is likewise recognized anywhere in argv -- `myapp cmd --dry-run` and `myapp --dry-run cmd` are equivalent -- with two boundaries: a bare `--` (everything after it is data) and a passthrough command's name (its args are forwarded to the child byte-for-byte). `--json` is delivered by those same rules without joining the quartet. `--hermetic`, `--config`, `--dump-schema` and `--mcp` stay pre-command-only.
 - `Default(nil)` fix (Go only) -- flags with `Default(nil)` display `[optional]` in help instead of `[default: <nil>]`.
 - Check system -- first-class check/validation framework with double-entry security. See below.
 
