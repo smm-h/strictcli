@@ -2953,6 +2953,55 @@ classes in declaration order joined by ` | ` (plus nothing else -- a selector is
 §24.5), and `<written>` is the annotation as written, rendered by the same value formatter the rest
 of the family uses.
 
+### 12.14 The schema-v2 declaration guard
+
+Added 2026-08-14 (schema-v2 round, §18.16). One condition on two surfaces, **registration-time**, in
+§12.10's and §12.12's class. It is the only new template the round needs: everything else v2 changes
+is a serialization rule, and a serialization rule has no message.
+
+A `choices=` entry whose value is an integer of magnitude greater than 2^53 cannot survive the
+fragment that publishes it. §25.2's `value_schema` carries the declared values as a JSON Schema
+`enum`, and a reader that parses JSON numbers as IEEE-754 doubles -- which every reader of a
+`.strictcli/schema.json` is entitled to be -- reads back a **different integer**. The framework
+refuses the declaration rather than publishing a fragment it already knows will be misread:
+
+```
+Flag "<name>": choice <v>: the number's magnitude exceeds 2^53 (declare a big identifier as a string)
+```
+
+```
+Arg "<name>": choice <v>: the number's magnitude exceeds 2^53 (declare a big identifier as a string)
+```
+
+`errFlagChoiceMagnitude(name, value)` and `errArgChoiceMagnitude(name, value)` (Go and TypeScript).
+Python raises both inline from `Flag.__post_init__` and `Arg.__post_init__`, beside the existing
+choices guards they join (`choices must be a non-empty list`, `choices is incompatible with
+type=bool`), which is the shape those neighbours already have and the first of the two shapes
+§12's preamble lets the extractor see.
+
+**The clause after the colon is reused byte-for-byte** from the payload regime:
+`_PDETAIL_MAGNITUDE` / `pdetailMagnitude` (§19.5's decision-16 guard,
+`the number's magnitude exceeds 2^53 (declare a big identifier as a string)`). The two are the same
+condition at two boundaries -- there, a value being written into the envelope; here, a value being
+written into the schema file -- and a second wording for one fact is what §12.13's reuse table
+exists to prevent. The prefix is each surface's own existing one, so the sentence reads as a member
+of the choices family rather than as an import from another section.
+
+`<v>` renders as the integer's decimal digits, with a leading `-` when negative and no separators of
+any kind. Python's `repr` of an `int`, Go's `%d` and TypeScript's `String(bigint)` coincide there,
+so this template needs no per-language value formatter and no `<...-spelling>` row.
+
+**Float choices are deliberately exempt**, and the asymmetry is the point rather than an oversight.
+A float choice is published through the canonical float form (§25.8), which is by construction the
+shortest string that round-trips to the identical double -- so a double-parsing reader recovers the
+declared value exactly. An integer above 2^53 has no such string: the value is simply not
+representable in the reader's number type. The guard therefore fires on the case where information
+is lost and stays silent on the case where none is.
+
+**Category.** Registration-time, so the coverage rule that binds `parse` templates does not reach
+it; it is asserted **per target** in a conformance case, the way `conformance/cases/
+presence_registration.json` asserts §12.12's guards.
+
 ---
 
 ## 13. Schema fields
@@ -3109,6 +3158,62 @@ exclusion rationale.
 > in Python's projection and excluded from Go's and TypeScript's on the reasoning that "bool flags
 > always have a default", which §23 makes false by construction. Required bools now appear in all
 > three, which is what Python already did.
+
+> **Amendment (2026-08-14, schema-v2 round): the dumped schema becomes `schema_version: 2`, and the
+> flag and arg entries' value keys are superseded by §25.** The full v2 format -- the fragment
+> subset, the arity rule, the choices and selector encodings, the byte canon, the key order, the
+> rewritten defaults block and the behavioral-completeness keys -- is **§25**, which is the normative
+> record for all of it. This box records only what §13's own text stops saying, so that no reader of
+> this section is left with a v1 sentence that v2 contradicts.
+>
+> - **`schema_version` becomes `2`** at both sites that emit it in every implementation: the
+>   top-level key and the copy inside the `defaults` block (Python `_dump_schema_core` and
+>   `_build_schema_defaults`, Go `dumpSchemaCore` and `buildSchemaDefaults`, TypeScript
+>   `dumpSchemaCore` and `buildSchemaDefaults`). One version covers the whole migration; §25.1 states
+>   why it is one and not three.
+> - **The flag and arg entries' `type` key is deleted** and replaced by `value_schema`, a real JSON
+>   Schema fragment from the closed four-keyword subset (§25.2). The three v1 spellings of one fact
+>   -- Python's `{"type": "array", "items": {"type": "str"}}` with strictcli type names, Go's
+>   `"list[str]"`, TypeScript's `"list[str]"` / `"dict[str,str]"` carrier strings -- all go with it.
+> - **The flag entry's `repeatable` key is deleted** (§25.3): the fragment carries the arity, so the
+>   key was a second spelling of a fact the value shape already states. `conformance/
+>   check_schema_parity.py`'s `_canonicalize_repeatable` normalization (and its call from
+>   `_normalize_schema`) is deleted with it.
+> - **The `constraints` array loses its `mutex` subtype**, because `MutexGroup` is deleted (§24.4,
+>   item 178). The surviving subtypes are `co_required`, `requires` and `implies`, catalogued in
+>   §25.7.
+> - **Everything else §13 pins stands unchanged**: `effect`, `consequential`, the dry-run pair,
+>   `grants`, `forwarding`, `payload_schema`, `owns_stdout`, app-level `proc_observe_allowlist`, and
+>   the presence box's `presence` / `default` rules on every flag and arg entry. v2 changes how a
+>   value's *shape* is published, not which command-entry facts are published.
+>
+> **The conformance case schema** (`conformance/schema.json`) follows on the input side, where these
+> are what a case *declares*: `$defs/flag` and `$defs/arg` lose `type`'s v1 spelling in favour of the
+> declaration surfaces §25 names, `$defs/flag` loses `repeatable`, `$defs/mutex_group` is deleted
+> with the construct, and `$defs/config_field_def`'s `type` enum is replaced per §25.7.
+> `check_schema_parity.py` gains the byte-equality mode §25.8 requires and keeps the `presence`
+> assertion the box above added.
+
+> **Amendment (2026-08-14, schema-v2 round): the app and command entries gain the behavioral keys
+> the dump was blind to, and the `defaults` block is rewritten.** Also §25's, and recorded here for
+> the same reason as the box above.
+>
+> **On the app entry:** `config_format`, `config_path` and `config_conflict_mode`, each omitted at
+> its baseline (§25.11). Until v2 an app could relocate every user's config file, or switch it from
+> JSON to TOML, while its dumped schema stayed byte-identical -- the schema described a surface it
+> could not see.
+>
+> **On every command entry:** `flag_sets`, recording the grouping that v1 discarded when it merged a
+> set's flags into the command's flag list.
+>
+> **On every flag entry:** `prefixed`, omitted when true.
+>
+> **The `defaults` block** stops documenting a field that does not exist (`defaults.flag.hidden`: no
+> implementation has a flag-level `hidden`, and no serializer has ever emitted one), drops the
+> `default: null` entries the presence round left behind on both the flag and the arg baselines
+> (`default` has had no baseline since presence became the authority -- it is emitted exactly when
+> `presence` is `"default"`), and gains baselines for the entities it never covered. §25.10 is the
+> block, written out.
 
 ---
 
@@ -5137,6 +5242,209 @@ bool, 14 with the present-false hole, 8 carrying hand-written no-choice guards, 
      constraint families, the update-command construct, nested config-file layout for scoped flags,
      `Requires` / `Implies` semantics at root scope, and the consumer migration itself.
 
+### 18.16 Amendments made at the schema-v2 round (2026-08-14)
+
+This round is the third phase of the declaration-regime campaign. It adds §25 and §12.14, and
+supersedes §13's flag-entry, arg-entry and defaults-block text through two boxes there. Numbering
+continues §18.15's, for the reason §18.14 gave: the same campaign's ledger.
+
+**Origin tags**, per §18.14's preamble. `[%%]` marks a ruling adopted from a recommendation --
+trust rather than deliberate intent, and **freely reversible**. The campaign's decision record
+states that S17's rulings are `[%%]` throughout, so every item tracing to S17 carries it. Untagged
+items are authored spellings in the §18.3 class: the mechanical remainder the ruling left open,
+decided here so implementors have nothing left to decide.
+
+**Written before any implementation**, the discipline this campaign adopted explicitly. Anything the
+implementations surface later continues this numbering as a sweep, exactly as items 151-159 did.
+
+**The evidence behind the round** is the working tree, read at authoring time rather than taken from
+the todos' line anchors (which had drifted). Six findings shaped items below and none of them came
+from a design discussion: Go's schema writer marshals through `encoding/json` and therefore never
+touches Go's own canonical float formatter; the `repeatable` normalization in
+`check_schema_parity.py` is the last compensation layer standing between three implementations and
+byte equality; the same `enum`-at-the-root bug exists in all three MCP projections, with two extra
+arity defects in Python's alone; the dumped `checks` block is a function of process history rather
+than of the declaration in two of three implementations; rlsbl re-encodes every dumped schema at
+release time with Python's encoder; and selfdoc's arg table still reads a key the **presence round
+deleted**, so it labels every positional arg required today.
+
+180. **[%%] `schema_version` becomes 2, once, for the whole migration (§25.1, §13's first box).**
+     Emitted at both existing sites in all three implementations -- the top-level key and the copy
+     inside `defaults`. Three strands collapse into it: S17's value-shape work, the canonical-
+     serialization and behavioral-completeness items of strictcli's own schema-v2 todo, and the
+     byte-level encoding canon of the canonical-encoding todo. Authored with it: the correction that
+     **the globals redesign is not part of v2**. That todo named it as the third strand; it has since
+     shipped (its todo is in `todo/.done/`, and `effect`, `consequential`, the dry-run pair,
+     `grants`, `forwarding` and `proc_observe_allowlist` are emitted by all three serializers at
+     version 1), so v2 collapses two items rather than three and carries no globals work.
+
+181. **[%%] Flag and arg value shapes become real JSON Schema fragments under `value_schema`
+     (§25.2).** A closed subset of four keywords -- `type`, `items`, `additionalProperties`, `enum`
+     -- with **JSON Schema's** type names. The v1 `type` key dies with its three spellings, one of
+     which (Python's) was already JSON-Schema-shaped and wrong in exactly one way: `"str"` is not a
+     JSON Schema type name. Authored: the fragment table, one row per carrier; the intra-fragment
+     key order; that a dict's keys need no expression because they are structurally `string` in all
+     three implementations (Python refuses a non-`str` key type, Go's dict carriers do not
+     parameterize the key, TypeScript has only the three `dict[str,...]` carriers); and that an
+     **optional flag emits the plain type with no `null`** -- presence is the sole authority on
+     absence, and a nullable fragment would restore the two-keys-one-fact shape §13's presence box
+     ended.
+
+182. **[%%] Arity is a property of the value, and `repeatable` dies (§25.3, §13's first box).** A
+     repeatable scalar flag and a `list[T]` flag publish the identical array fragment, and the
+     `repeatable` key -- which restated a fact the shape already carried -- is deleted. With it goes
+     `check_schema_parity.py`'s `_canonicalize_repeatable` and its call in `_normalize_schema`: the
+     last normalization rule, and therefore the last place a real divergence could be absorbed as
+     serialization noise. Authored: that **`variadic` survives** on the arg entry, because it names a
+     token-consumption rule (this arg takes every remaining positional, and only the last arg may)
+     rather than a value shape, and a consumer needs it to render `<files>...`.
+
+183. **[%%] Compound args are unified rather than banned (§25.4).** One published fragment for every
+     arg that collects a typed list, whichever spelling declared it. Per language, verified on disk
+     rather than taken from the ruling's summary: **TypeScript** gains `list[T]` variadic args (its
+     registration refusal of a list carrier is deleted; the element-carrier spelling stays legal and
+     stays idiomatic); **Go's `ArgType` validation already exists** in `NewArg` -- list types require
+     variadic, item types are scalar-only, dict is refused, the scalar set is closed -- so the
+     ruling's Go clause names work already done; **Python** needs no registration change. Authored
+     as the consequence nobody had noticed: Go must **delete
+     `errArgChoicesIncompatibleListType`**, because once the two spellings are one declaration, a
+     choices ban that fires on one and not the other is two rules for one fact (item 149's rule).
+
+184. **[%%] An int choice beyond ±2^53 is a registration error (§12.14).** The fragment publishes
+     choices as a JSON `enum`, and a reader that parses JSON numbers as doubles reads a different
+     integer back. Authored: both surfaces (`Flag "<name>":` and `Arg "<name>":` prefixes), the
+     reuse of §19.5's existing magnitude clause **byte-for-byte** rather than a second wording for
+     one fact, the `<v>` rendering (decimal digits, leading `-`, no separators -- where Python's
+     `repr`, Go's `%d` and TypeScript's `String(bigint)` coincide, so the template needs no
+     per-language spelling row), and that **float choices are exempt** because the canonical float
+     form is by construction the shortest string that round-trips to the identical double, so
+     nothing is lost there.
+
+185. **[%%] Choices split across two keys, and the sibling key keeps the name `choices` (§25.5).**
+     The `enum` lives in the fragment -- **inside `items`** for an array-shaped carrier, at the root
+     for a scalar one -- and item 164's value-plus-help records live beside it. Authored: the sibling
+     key's name (`choices`, the name the fact has always had, rather than a new one) and its shape
+     (`{"value": ..., "help": ...}` in declaration order, `value` emitted with its own type and never
+     stringified), plus the emission rule that makes the two spellings of "no help" produce identical
+     bytes: **`help` is omitted when empty**, since Go spells no-help as `""` for lack of optional
+     parameters and an empty string must not out-diff an absent one.
+
+186. **A selector carries a native encoding and no fragment (§25.6, §24.11's requirement).**
+     Authored in full, because §24.11 pinned the requirements and left the encoding blank: the
+     `choices` array of choice objects (`name`, `help`, `flags`), each scoped entry a **full flag
+     entry** with its own fragment and presence -- which is what makes recursion free and what makes
+     the encoding satisfy the requirement rather than gesture at it; `elect_by` carrying §24.12's own
+     two-value vocabulary (`"selector-token"` / `"member-flags"`) rather than a second pair of names
+     for one fact; the **presence of `elect_by` as the discriminator** between a selector's choice
+     objects and a value flag's choice records; a member payload as the first `flags` entry under the
+     reserved name `value` with `presence: "required"`, mirroring item 169's flat delivery map; and a
+     selector's `default` published in that same flat map form (`{"choice": ..., <fields>}`, fields
+     with no value omitted, which is unambiguous because `null` is not a declarable default), the one
+     encoding that spans item 167's two mechanisms without either language borrowing the other's.
+     Recorded as considered and rejected: a `selector` wrapper key, which would rename a fact that
+     already has a name and provide a discriminator `elect_by` already provides.
+
+187. **[%%] Config-field entries move to fragments; check entries have nothing to move (§25.7).**
+     A config field's `type` (three spellings again) becomes `value_schema`, always a scalar row --
+     verified scalar-only in all three implementations. Authored: that the config field's `required`
+     key **stays**, because it is not §23's presence declaration under another name (a config field
+     has no CLI surface and no three-way declaration; `required` there means the file must contain
+     it), and that a **check entry carries no value shape at all**, so the ruling's clause about
+     check entries resolves to a verified nothing. What v2 does reach in the `checks` block is a real
+     defect found in the tree: TypeScript filters provider-sourced names and Python and Go do not, so
+     in two of three implementations the block is a function of process history rather than of the
+     declaration. The exclusion becomes structural in all three.
+
+188. **[%%] The byte canon (§25.8).** One dumper-independent encoding, the float canon's precedent
+     extended from one value type to the whole document. Authored: escape exactly what JSON mandates
+     and nothing else (§19.5's own sentence, applied document-wide) -- no `\uXXXX` for non-ASCII
+     (Python must pass `ensure_ascii=False`), no HTML escaping (Go must turn `encoding/json`'s off),
+     no escaped `/`, and a lone surrogate escaped as `\uDXXX` as the single non-mandated escape,
+     because the alternative is invalid UTF-8; two-space indent, `": "`, one member per line, empty
+     containers inline, exactly one trailing newline; integers as bare tokens. And the finding that
+     grounds the ruling's Go clause: **Go's writer bypasses Go's own canonical float formatter**,
+     marshalling the committed document through `encoding/json` while `formatFloatCanonical` sits
+     unused beside it.
+
+189. **The canonical key order, per entity (§25.9).** Authored in full: the top-level order, the
+     flag, arg, command, group, choice, config-field, check, grant, infra and constraint orders, and
+     the **two rules for keyed objects** -- `commands` / `groups` / `config_fields` in declaration
+     order, which all three retain, and `checks` / `deprecated` / `tag_contracts` sorted by key,
+     because Go retains no declaration order for two of them and a canon no implementation can
+     produce is not a canon. Recorded with it: every key in the sorted positions is ASCII by
+     registration rule, so byte, code-point and UTF-16 order coincide and no collation needs
+     specifying. Derived from Python's insertion order, the format's dominant serializer (TypeScript
+     documents that it follows Python; Go pins content, not order), with two authored deviations
+     named as such -- the value key takes a uniform position across flag and arg entries, and the
+     env-related keys are grouped.
+
+190. **The `defaults` block, rewritten (§25.10, §13's second box).** Deleted: `flag.hidden`, the
+     phantom the todo named and the tree confirms (no implementation has a flag-level `hidden`);
+     `flag.default` and `arg.default`, leftovers the presence round did not sweep, which now state
+     something false because `default`'s emission is governed by `presence` rather than by a
+     baseline; `flag.repeatable` and `arg.type`, whose keys are gone. Added: baselines for the
+     entities the block never covered (`config_field`, `check`, `infra`), the app-level config keys,
+     the command-level effects keys, and `flag_sets`. Authored: that keys with **no** baseline stay
+     absent from the block on purpose, and that the "constraint subtypes" gap the todo lists is
+     closed by §25.7's catalogue rather than by the block, because a subtype catalogue is not an
+     omission baseline and the block is defined as the omission map.
+
+191. **[%%] Behavioral completeness: the dump stops being blind (§25.11).** `config_format`,
+     `config_path` and `config_conflict_mode` on the app; `prefixed` on the flag; `flag_sets` on the
+     command -- each omitted at its baseline, so a departure from framework behavior is exactly what
+     makes a key appear. Until v2 an app could relocate every user's config file, or switch its
+     format, with a byte-identical schema. Authored: that **`config_path` publishes the declaration
+     and never the resolution** (a declared literal as declared, exactly as an infra root's `default`
+     already is; a `RelativeToRoot` in §13's machine-stable marker shape), which costs Python a
+     change because it resolves the marker eagerly at construction and overwrites the declaration;
+     `flag_sets`' shape (`{"name", "flags"}` in declaration order, members keeping their ordinary
+     entries, so a grouping is added without duplicating a declaration); and that publishing the
+     app-level conflict mode is what finally makes a per-flag `conflict_mode: null` resolvable.
+
+192. **[%%] Fragment validity is one Python-side conformance check (§25.12).** `schema-fragments`,
+     in `conformance/check_schema_fragments.py`, reading all three targets' dumps and validating
+     every fragment -- at every depth, including inside a selector's scopes -- with the framework's
+     own registration-time payload-schema validator, plus its own narrower four-keyword assertion.
+     One check over three dumps, never three implementations asserting about themselves. Recorded as
+     a dependency between two items: **item 184 is what makes this validation sound**,
+     because the payload validator scans `enum` members with the magnitude guard, so without the
+     registration refusal the framework would emit a document its own validator rejects. Authored:
+     the check's name, file, registration, tags and the assertion that an entry which must carry a
+     fragment does -- an agreed absence must never read as agreement, which is the presence round's
+     lesson applied one key over.
+
+193. **[%%] The MCP projections' `enum` root-placement bug is fixed in all three (§25.13).** For an
+     array-shaped parameter, `enum` belongs inside `items`; all three place it at the property root
+     today, which says the array itself must equal one of the choices. Recorded with it, from the
+     tree rather than the ruling: **two arity defects in Python's projection alone** -- a repeatable
+     scalar flag and a variadic scalar arg both project as scalars, where Go reads `f.Repeatable` /
+     `a.IsVariadic` and TypeScript reads `a.opts.variadic` and both project arrays. After this round
+     every projection derives its parameter shape from the same arity rule the fragment states, so a
+     tool schema and a dumped schema cannot disagree.
+
+194. **The `mutex` constraint subtype is deleted (§25.7, §13's first box).** It goes with
+     `MutexGroup` (item 178), leaving `co_required`, `requires` and `implies` as the closed
+     catalogue, in the case schema as well as the dump. Untagged: it is the consequence of item 178,
+     not a separate decision.
+
+195. **[%%] Consumer ordering is a contract note, not an implementation detail (§25.14).** rlsbl's
+     release-time re-serializer is fixed and released **before** any fleet re-dump: it reads the
+     freshly dumped file with `json.load` and rewrites it whole with Python's encoder to patch one
+     key, so a Go- or TypeScript-written schema is re-escaped by a Python encoder at every release
+     and the byte canon survives only until publication. selfdoc's reader updates in the consumer
+     window between the strictcli release and the fleet re-dump -- two named sites, one of which is
+     **already broken today** because it reads the `required` key the presence round deleted and
+     therefore labels every positional arg required. The single-release pin with §24 is
+     cross-referenced from §24.11 and item 179 rather than restated.
+
+196. **The boundary is declared, not left to inference (§25.15).** No fifth keyword and no `oneOf`
+     in the fragment subset -- a selector's variant is encoded natively instead, and the tool
+     schema's `oneOf` stays §24.11's recorded future upgrade. No v1 compatibility path of any kind:
+     the version key tells a reader which format it holds, and pre-stable projects carry no
+     compatibility surfaces. No new declaration surface beyond the one widening the unification
+     ruling requires (TypeScript's list-carrier variadic arg). Nothing about `presence` or `default`,
+     which the presence round settled and this round republishes unchanged.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -7048,3 +7356,597 @@ Stated so the boundary is a decision rather than an omission:
 - **Consumer migration**, which is the campaign's own pass: every mutex group, every choices flag,
   and the handler code -- the unreachable mutex branches, the "nothing was chosen" guards, the
   "required exactly when user-facing" checks -- that this construct deletes.
+
+---
+
+## 25. The schema format, version 2
+
+Added 2026-08-14 (schema-v2 round, §18.16). This is the third phase of the declaration-regime
+campaign, and it is the **normative record of the whole v2 format**: everything `--dump-schema`
+writes, how it is spelled, in what order, and in what bytes. §13 keeps pinning which command-entry
+facts exist; this section pins the format they are published in, and the two boxes at the end of §13
+mark exactly where v1's text stops applying.
+
+The round implements ruling **S17** of the campaign's third-round decisions, together with the two
+strictcli todos S17 folds into it (`todo/schema-v2-single-migration.md`,
+`todo/schema-dump-canonical-encoding.md`), and it authors the selector encoding §24.11 deliberately
+left to it.
+
+### 25.1 One version, one migration
+
+`schema_version` becomes **`2`**, emitted at both existing sites in every implementation -- the
+top-level key and the copy inside the `defaults` block. There is no intermediate version and no
+per-change bump.
+
+**What the single version covers**, collapsed per the fleet's collapse-multi-pass rule:
+
+| Strand | Where it came from |
+|---|---|
+| Real JSON Schema fragments, the arity rule, unified compound args, the 2^53 refusal, the selector encoding | S17 |
+| Canonical serialization: one spelling per construct, declared key order, omit-empty everywhere | `schema-v2-single-migration.md`, problem 1 |
+| Behavioral completeness: the config keys, `flag_sets`, `prefixed`, the rewritten `defaults` block, the phantom key | `schema-v2-single-migration.md`, problem 2 |
+| The byte canon: escaping, separators, numbers, trailing newline | `schema-dump-canonical-encoding.md` |
+
+**The globals redesign is not part of v2**, and this is a correction to the schema-v2 todo's own
+premise. That todo listed three in-flight schema-format changes and named the globals redesign as
+the third, possibly forcing a version bump on its own. It has since **shipped**: its todo sits in
+`todo/.done/globals-redesign-design-a.md`, and the schema surface it named is on disk in all three
+serializers today -- command-level `effect`, `consequential`, the dry-run pair, `grants`,
+`forwarding` and app-level `proc_observe_allowlist`, all pinned by §13 and all emitted at
+`schema_version: 1`. v2 therefore collapses **two** items, not three, and carries no globals work.
+
+**Why one version rather than three.** Each bump ripples through three implementations, the
+conformance corpus, the case schema, the parity checker and every consumer that reads a dumped
+schema. Three bumps pay that cost three times and leave two intermediate formats that nothing will
+ever read again. The rejected alternatives are recorded with the todo's reasons: three separate
+bumps (tripled cost), and canonicalizing without extending (the blind spots become permanent
+doctrine).
+
+### 25.2 `value_schema`: a real fragment from a closed subset
+
+**Every flag entry and every arg entry carries a `value_schema`** -- a JSON Schema fragment
+describing the shape of the value the declaration delivers. It replaces the v1 `type` key, which
+had three spellings for one fact:
+
+| Implementation | v1 spelling of a `list[str]` flag |
+|---|---|
+| Python | `"type": {"type": "array", "items": {"type": "str"}}` -- JSON-Schema-shaped, but with strictcli's type names inside it |
+| Go | `"type": "list[str]"` |
+| TypeScript | `"type": "list[str]"` (and `"dict[str,str]"`, where Go writes `"dict[str]"`) |
+
+Python's form was already most of the way there and wrong in the one way that stopped it being a
+JSON Schema: `"str"` is not a JSON Schema type name. v2 finishes the job.
+
+**The subset is closed at four keywords** -- `type`, `items`, `additionalProperties`, `enum` -- and
+the type names are **JSON Schema's**: `string`, `boolean`, `integer`, `number`, `array`, `object`.
+Nothing else may appear in a fragment. The subset is a strict subset of §19.5's declared-payload
+subset, which is what makes §25.12's validation possible at all.
+
+**The fragment table.** This is the authority; a carrier not in it has no fragment because it cannot
+be declared.
+
+| Carrier | `value_schema` |
+|---|---|
+| `str` scalar | `{"type": "string"}` |
+| `bool` scalar | `{"type": "boolean"}` |
+| `int` scalar | `{"type": "integer"}` |
+| `float` scalar | `{"type": "number"}` |
+| `list[T]` flag, and a repeatable scalar `T` flag | `{"type": "array", "items": {"type": "<T>"}}` |
+| `dict[str, T]` flag | `{"type": "object", "additionalProperties": {"type": "<T>"}}` |
+| variadic arg of element type `T`, in either spelling | `{"type": "array", "items": {"type": "<T>"}}` |
+| any scalar carrier with `choices` | `{"type": "<T>", "enum": [<values>]}` |
+| any array-shaped carrier with `choices` | `{"type": "array", "items": {"type": "<T>", "enum": [<values>]}}` |
+| a config field (always scalar) | the matching scalar row |
+| a **selector** flag | **none** -- the key is absent (§25.6) |
+
+`<T>` is always the JSON Schema name of the element type, never strictcli's.
+
+**Keys inside a fragment are emitted in the order `type`, `items`, `additionalProperties`, `enum`**,
+which covers every row above without a second rule.
+
+**A dict's keys are `string` structurally, in every implementation, and the fragment says so by
+having nothing to say.** Python refuses any `dict[K, V]` whose `K` is not `str` at registration
+(`dict key type must be str`); Go's dict carriers are `TypeDictStr` / `TypeDictInt` /
+`TypeDictFloat`, whose name refers to the **value** type and whose key type is not a parameter at
+all; TypeScript's dict carriers are `dict[str,str]` / `dict[str,int]` / `dict[str,float]`, the only
+three that exist. A JSON object's keys are strings by definition, so `additionalProperties` carrying
+the value type is a complete description -- there is no `propertyNames` in the subset and none is
+needed.
+
+**An optional flag emits the plain type. There is no `null` in any fragment**, and no type list.
+Presence is the sole authority on absence (§23), and a fragment that added `null` would be a second
+statement about the same fact -- the exact erasure-and-duplication pair §13's presence box ended.
+The fragment describes the shape of a value when there is one; whether there is one is `presence`'s
+question, and the reader that wants both reads both keys.
+
+### 25.3 Arity is value shape
+
+**`repeatable` is deleted from the flag entry.** A repeatable scalar flag delivers a list, so its
+`value_schema` is the array fragment -- identical to the one a `list[T]` carrier produces. The two
+declaration spellings converge on one published shape, which is what the ruling means by arity being
+a property of the **value** rather than of the spelling.
+
+This deletes the only remaining normalization layer in the parity checker.
+`conformance/check_schema_parity.py`'s `_canonicalize_repeatable` existed precisely because Python
+and Go published `{type: "T", repeatable: true, default: []}` where TypeScript published
+`{type: "list[T]"}`; it rewrote one into the other before comparing, and its call site in
+`_normalize_schema` is deleted with it. After v2, `_normalize_schema` removes `project_id` and
+nothing else, and the comparison becomes **byte equality** (§25.8).
+
+A normalization layer is not a neutral convenience: every rule in it is a place where a real
+divergence can be absorbed as serialization noise. The presence round found one such erasure
+already; this round removes the machinery that could hide the next.
+
+**`variadic` survives on the arg entry**, and the asymmetry with `repeatable` is deliberate.
+`repeatable` restated a value shape two other spellings also produced; `variadic` names a
+**token-consumption rule** -- this arg takes every remaining positional token, and only the last arg
+may -- which the value shape implies today only because list-typed args are required to be variadic.
+The key that a consumer needs to render `<files>...` in a usage line stays.
+
+### 25.4 Compound args, unified
+
+The three implementations disagreed about how a positional arg that collects a typed list is
+spelled, and the ruling's answer is to **unify rather than ban**. The published fragment is the
+array row for every such arg, in every implementation, whichever spelling declared it. What each
+language must add:
+
+- **TypeScript gains `list[T]` variadic args.** Today `arg(...)` refuses a list carrier outright
+  (`variadic args take a scalar element type, not a list type`) and requires the element carrier
+  plus `variadic: true`. That refusal is deleted: both spellings register, both deliver the same
+  `Out[]`, and both publish the same fragment. The element-carrier spelling stays legal and stays
+  the idiomatic one -- this widens the surface, it does not replace it.
+- **Go's `ArgType` validation is already on disk**, and the ruling's clause names work that exists:
+  `NewArg` refuses a list type on a non-variadic arg, refuses a non-scalar list item type, refuses
+  a dict type outright, and closes the scalar set. Verified rather than assumed; nothing is added to
+  Go here except the fragment itself, plus the deletion below.
+- **Go must delete `errArgChoicesIncompatibleListType`.** A Go variadic arg declared with a scalar
+  type may carry `ArgChoices`; the same arg declared with the list-typed spelling may not. Once the
+  two spellings are one declaration with one published shape, a ban that fires on one of them and
+  not the other is two rules for one fact -- item 149's rule applies, and the template is deleted
+  rather than reworded. Python and TypeScript already accept choices on both.
+- **Python needs no registration change**; its list-typed arg already requires `variadic=True` and
+  already restricts item types to the non-bool scalars.
+
+Dict-typed args stay refused everywhere, unchanged. That refusal is not a spelling divergence: no
+implementation has ever accepted one.
+
+### 25.5 Choices: the enum in the fragment, the records in the sibling key
+
+A value flag's `choices=` declaration now produces **two** keys, and each carries the half it is
+good at:
+
+- **`value_schema`** carries the values as an `enum`, in declaration order, **inside `items`** for
+  an array-shaped carrier and at the fragment root for a scalar one (§25.2's last two rows). This is
+  the machine-readable half: a validator can use it as-is.
+- **`choices`** carries the value-plus-help records item 164 made the only entry spelling. This is
+  the human-readable half, and JSON Schema has no vocabulary for it.
+
+The sibling key **keeps the name `choices`** -- it is the same fact under the same name it has always
+had, with the shape the record ruling gives it:
+
+```json
+"choices": [
+  {"value": "head", "help": "the current commit only"},
+  {"value": "branches"}
+]
+```
+
+- entries in **declaration order**, one per declared choice;
+- `value` is the declared value, emitted with its own type (a string, an integer or a float token
+  per §25.8) -- never stringified;
+- `help` is **omitted when the entry declares none**. Go spells "no help" as `""` for lack of
+  optional parameters (item 164), and an empty string and an absent one must not produce different
+  bytes for the same declaration, so the empty string is omitted rather than emitted.
+
+A `bool` flag never has choices, and a `dict` flag is refused them at registration in every
+implementation, so the array row applies to list carriers, repeatable scalars and variadic args
+only.
+
+### 25.6 The selector encoding
+
+§24.11 stated the requirement and left the encoding to this round: the dump must carry the nested
+choices and scopes, each choice's help, each scoped entry's `presence` and `default` on §13's terms,
+and the spelling -- and a dump that flattens a selector away is an illegal intermediate state, not a
+tolerable one.
+
+**A selector flag has no `value_schema`, and its absence is the declaration.** A selector's value is
+a **variant** -- one tagged record chosen from several, each with a different set of fields -- and
+the closed four-keyword subset cannot express a variant. It could only be expressed by opening the
+subset to `oneOf`, which is the door the closed subset was built to shut (§24.11 records that
+`oneOf` in the *MCP tool schema* is a future upgrade behind a measurement; the fragment subset is a
+separate closure and this round does not open it either). Publishing a **wrong** fragment -- the
+selector's own token type, say -- would be worse than publishing none: a reader would validate
+against it and be told a record is invalid.
+
+So the selector entry carries a framework-native encoding **beside** the fragments its scopes'
+entries carry, under two keys:
+
+```json
+{
+  "name": "via",
+  "help": "delivery channel",
+  "short": "v",
+  "presence": "required",
+  "choices": [
+    {
+      "name": "email",
+      "help": "deliver the notification as an email message",
+      "flags": [
+        {"name": "subject", "help": "subject line of the message",
+         "value_schema": {"type": "string"}, "presence": "required"},
+        {"name": "recipient", "help": "destination email address",
+         "value_schema": {"type": "string"}, "presence": "required"}
+      ]
+    },
+    {"name": "webhook", "help": "post the notification to a URL",
+     "flags": [
+       {"name": "retries", "help": "delivery attempts before giving up",
+        "value_schema": {"type": "integer"}, "presence": "default", "default": 3}
+     ]}
+  ],
+  "elect_by": "selector-token"
+}
+```
+
+- **`choices`** is an array of choice objects in declaration order. A choice object's keys, in
+  order: `name`, `help` (mandatory on a choice, so always emitted), `flags` (omitted when the scope
+  is empty).
+- **each scoped entry is a full flag entry**, with its own `value_schema`, `presence`, `default` and
+  everything else this section pins. That is what makes the encoding satisfy §24.11 rather than
+  merely gesture at it, and it is what makes recursion free: a **nested selector** is an entry
+  inside a `flags` array carrying its own `choices` and `elect_by`, to any depth.
+- **`elect_by`** marks the spelling, with §24.12's own two-value vocabulary: `"selector-token"` or
+  `"member-flags"`. The dump reuses the strings the contract already pins rather than minting a
+  second pair of names for one fact; Go and TypeScript spell the declaration as twin constructors
+  rather than a keyword, but the *fact* the dump publishes is the same one Python's keyword names.
+- **the presence of `elect_by` is the discriminator.** An entry with `elect_by` is a selector: it has
+  no `value_schema`, and its `choices` entries are choice objects. An entry without it is an ordinary
+  flag: it has a `value_schema`, and its `choices` entries (if any) are §25.5's value records. A
+  reader never has to guess which shape it is holding.
+- **a member-spelled choice's payload** appears as the first entry of that choice's `flags` array,
+  under the reserved name `value`, with `"presence": "required"` -- the payload is supplied by
+  electing the member (§24.12), and required-once-elected is exactly what the member flag's own
+  presence means (item 161). This mirrors the delivery record's flat map `{"choice": ..., <fields>}`
+  (item 169), where `value` sits beside the scoped fields under the same reserved name. A
+  payload-less member has no `value` entry.
+- **a selector's `default`** is published in that same flat map form: `{"choice": "<name>", "<field>":
+  <value>, ...}`, the choice's name under the reserved key `choice` followed by each field that has
+  a value in the default selection, in declaration order. A field with no value is omitted, which is
+  unambiguous because `null` is not a declarable default anywhere in the framework (§12.12's
+  redirect). This is the one encoding that spans item 167's two mechanisms: Python's default is a
+  choice instance whose fields may carry values, Go's and TypeScript's names a choice whose scope
+  can only be complete, and the flat map publishes both without either language needing the other's
+  mechanism.
+
+**A `selector` wrapper key was considered and rejected.** Nesting `{elect_by, choices}` under one
+`selector` key would keep the `choices` key monomorphic and make the missing `value_schema` visually
+obvious. It was rejected because it renames a fact that already has a name -- the alternatives a
+flag offers are its choices in both constructs, and §24.2's whole point is that the two constructs
+are one machinery -- and because the discriminator it would provide is one `elect_by` already
+provides. Recorded because a future reader will have the same idea.
+
+### 25.7 Config fields, check entries, and the constraint catalogue
+
+**Config-field entries move to fragments.** The v1 `type` key (Python `cf.type.__name__`, Go
+`flagTypeName[cf.Type]`, TypeScript `cf.schema` -- three spellings again) becomes `value_schema`,
+carrying the matching scalar row from §25.2's table. Config fields are **scalar-only** in all three
+implementations, verified: Python refuses anything but `str`/`bool`/`int`/`float`, Go's
+`ConfigField` takes a scalar `FlagType`, TypeScript's `ConfigFieldSpec` takes a `ScalarSchema`
+carrier. No config field can produce an array or object fragment today, and a fragment that could
+would come from a declaration surface this round does not add.
+
+The config-field entry's **`required` key stays**. It is not §23's presence declaration wearing
+another name: a config field has no CLI surface, no three-way declaration and no `presence` key, and
+`required` there means "the config file must contain it". The presence round deliberately did not
+reach config fields, and this round does not either.
+
+**Check entries carry no value shape, so nothing converts.** Verified against all three serializers:
+a check entry is `tags`, `severity`, `fast`, `pure`, `needs_network`, `depends_on` and an optional
+`scope` -- no key describes a value's type, and `severity`'s two-value vocabulary is a closed enum
+of the framework's own, not a declared payload shape. What v2 does reach in the `checks` block is
+its **purity**, which is a real defect:
+
+> **The dumped `checks` block must be a function of the declaration alone.** TypeScript's serializer
+> skips provider-sourced names explicitly (`app.checks.providerSourcedNames`); Python's and Go's
+> iterate the whole registry (`app._check_defs`, `app.checkDefs`), which contains only TOML-declared
+> checks *until a provider materializes into it*. Both implementations' own comments state that
+> provider-sourced checks are excluded because providers materialize lazily per-cwd; the code does
+> not enforce it. A dump taken after a check run in the same process therefore differs from a dump
+> taken before it, in two of three implementations. v2 makes the exclusion structural in all three:
+> the serializer filters provider-sourced names by name, as TypeScript already does.
+
+**The constraint catalogue** is closed, and `mutex` is gone with `MutexGroup` (item 178):
+
+| `type` | Keys, in order |
+|---|---|
+| `co_required` | `type`, `flags` |
+| `requires` | `type`, `flag`, `depends_on` |
+| `implies` | `type`, `flag`, `implies`, `value` |
+
+The todo listed "constraint subtypes" among the `defaults` block's gaps. They are closed **here**
+rather than there, because the `defaults` block is defined as the map of what an omitted key means
+and a subtype catalogue is not an omission baseline. `conformance/schema.json`'s `$defs` carries the
+same three and drops `$defs/mutex_group`.
+
+### 25.8 The byte canon
+
+The committed `.strictcli/schema.json` must be **dumper-independent**: a repository whose file is
+written sometimes by a Go binary and sometimes by a Python one must see a diff exactly when
+something changed. The float canon (SCF) is the precedent -- one form, defined once, implemented
+three times, enforced by a conformance check -- and this extends it from one value type to the whole
+document.
+
+**Numbers.**
+
+- Every float is written in the **strictcli canonical float form** already owned by the repo
+  (`formatFloatCanonical` in Go's `float.go`, its Python and TypeScript twins, and the vectors at
+  `conformance/float_vectors.json`).
+- **Go's schema writer currently bypasses Go's own formatter**, and this is the concrete defect the
+  ruling names. `writeSchema` marshals the whole document with `encoding/json`'s
+  `json.MarshalIndent`, so every float in a dumped Go schema is `encoding/json`'s rendering, not
+  SCF -- Go owns the canonical formatter and does not use it where the bytes are committed.
+  TypeScript's writer already routes numbers through `formatFloatCanonical` (which is why it is a
+  hand-written writer at all), and Python's `json.dumps` renders floats through `repr`, which
+  coincides with SCF.
+- Integers are bare integer tokens: no decimal point, no exponent, no separators. TypeScript's
+  writer already emits `bigint` this way; the type-level distinction it needs to tell an integer
+  from a float is a TypeScript concern the other two do not have.
+
+**Escaping.** Escape exactly what JSON mandates and emit everything else literally -- the same
+sentence §19.5 already pins for one string, applied to the whole document:
+
+- `"` and `\` are escaped; control characters below U+0020 use JSON's short escapes
+  (`\b`, `\f`, `\n`, `\r`, `\t`) where one exists and `\u00XX` otherwise;
+- **non-ASCII is never escaped**: raw UTF-8, no `\uXXXX`. Python's writer must pass
+  `ensure_ascii=False`, which it does not today;
+- **HTML-significant characters are never escaped**: `<`, `>` and `&` are literal. Go's writer must
+  disable `encoding/json`'s HTML escaping, which is on by default and is why a Go-written schema
+  and a Python-written one churn against each other today;
+- `/` is never escaped;
+- a lone surrogate -- reachable only from a TypeScript string literal -- is escaped as `\uDXXX`.
+  It is the one escape not mandated by the character itself, and the alternative is emitting invalid
+  UTF-8.
+
+**Layout.** Two-space indent; one member or element per line; `": "` between a key and its value;
+`,` then a newline between siblings; empty containers as `{}` and `[]` on a single line; **exactly
+one trailing newline** at end of file. This is `json.dumps(..., indent=2)`'s shape, which
+TypeScript's writer already reproduces byte-for-byte and which Go's must now produce without a map
+marshal.
+
+**After v2, `schema-parity` compares bytes.** The structural comparator's tolerance and the
+normalization layer are deleted, and the conformance corpus gains byte-identical-dump cases over a
+shared fixture app on all three targets. The committed artifact becomes readable in a diff, fleet-
+wide, and a serialization change can no longer hide inside a structural comparison.
+
+### 25.9 Canonical key order
+
+Object keys are emitted in a **declared order**, identical in all three implementations. No
+implementation may sort them at serialization time; Go's map marshal (which sorts, and is why a
+Go-emitted schema starts with `commands` while a Python-emitted one starts with `schema_version`)
+is replaced by an ordered writer.
+
+**The order is derived from Python's insertion order**, which is the format's dominant serializer:
+TypeScript's writer already documents that it follows Python's key order deliberately, and Go pins
+content rather than order, so Python is the only one of the three that has ever expressed an order
+to follow. Two deviations from it are authored here and named as such: the value key moves to a
+uniform position across the flag and arg entries, and the env-related keys are grouped.
+
+**Top level:** `schema_version`, `defaults`, `project_id`, `name`, `version`, `help`, `env_prefix`,
+`config`, `config_format`, `config_path`, `config_conflict_mode`, `proc_observe_allowlist`,
+`global_flags`, `commands`, `groups`, `deprecated`, `tag_contracts`, `checks`, `config_fields`,
+`infra`.
+
+`project_id` stays immediately after `defaults`, where Python and TypeScript already place it, so
+that removing it leaves the CWD-free core dict byte-identical.
+
+**Flag entry:** `name`, `help`, `value_schema`, `short`, `presence`, `default`, `env`,
+`env_separator`, `prefixed`, `choices`, `elect_by`, `unique`, `conflict_mode`, `negatable`.
+
+**Arg entry:** `name`, `help`, `value_schema`, `presence`, `default`, `variadic`, `choices`.
+
+**Choice object** (selector): `name`, `help`, `flags`. **Choice record** (value flag): `value`,
+`help`.
+
+**Command entry:** `name`, `help`, `effect`, `consequential`, `dry_run_supported`,
+`dry_run_unsupported_reason`, `payload_schema`, `owns_stdout`, `passthrough`, `flags`, `flag_sets`,
+`args`, `tags`, `constraints`, `hidden`, `interactive`, `config_fields`, `grants`, `forwarding`.
+
+**Group entry:** `name`, `help`, `commands`, `groups`, `deprecated`, `tags`, `hidden`.
+
+**Config-field entry:** `value_schema`, `help`, `required`, `default`, `bound_commands`.
+**Check entry:** `tags`, `severity`, `fast`, `pure`, `needs_network`, `depends_on`, `scope`.
+**Grant entry:** `name`, `reason`, `kind`. **Infra block:** `roots`, `handshakes`, `connections`;
+each root is `env_var`, `default` and each handshake or connection is `env_var`, `help`.
+**Constraint entries:** §25.7's table.
+
+**Keyed objects -- the two rules, and why there are two.** `commands`, `groups` and `config_fields`
+are emitted in **declaration order**, which all three implementations retain (Go's `cmdOrder`,
+`groupOrder`, `configFieldOrder`). `checks`, `deprecated` and `tag_contracts` are emitted **sorted
+ascending by key**, because Go retains no declaration order for `deprecated` or `tagContracts` and
+its `checkOrder` is already sorted -- a canon that cannot be produced from what an implementation
+holds is not a canon. Every key in those three positions is ASCII by registration rule (check names
+are `[a-z][a-z0-9-]*`, command and tag names use the flag-name charset), so byte order, code-point
+order and UTF-16 order coincide and the three languages' native comparisons agree without anyone
+having to specify a collation.
+
+**Array order** is always declaration order: flags, args, choices, grants, constraints, config-field
+`bound_commands`, `proc_observe_allowlist` prefixes. `tags` remain sorted, as they are today.
+
+### 25.10 The `defaults` block, rewritten
+
+The block's contract is unchanged: it is the machine-readable map of **what an omitted key means**.
+v2 makes it true.
+
+**Deleted:**
+
+- `flag.hidden` -- the phantom. No implementation has a flag-level `hidden` field, and no serializer
+  has ever emitted one. Verified in all three.
+- `flag.default` and `arg.default` -- leftovers the presence round did not sweep. `default` has had
+  no baseline since presence became the authority: it is emitted exactly when `presence` is
+  `"default"`, and then always, `[]` and `{}` and `""` and `false` and `0` included. A `null`
+  baseline for it now states something false.
+- `flag.repeatable` -- the key is gone (§25.3).
+- `arg.type` -- `value_schema` is always emitted, so there is nothing to reconstruct.
+
+**The v2 block:**
+
+```json
+{
+  "schema_version": 2,
+  "app": {
+    "env_prefix": null, "config": false, "config_format": "json", "config_path": null,
+    "config_conflict_mode": "cli-wins", "proc_observe_allowlist": [], "global_flags": [],
+    "commands": {}, "groups": {}, "deprecated": {}, "tag_contracts": {}, "checks": {},
+    "config_fields": {}, "infra": {}
+  },
+  "flag": {
+    "short": null, "env": null, "env_separator": null, "prefixed": true, "choices": null,
+    "elect_by": null, "unique": false, "conflict_mode": null, "negatable": null
+  },
+  "arg": { "variadic": false, "choices": null },
+  "command": {
+    "consequential": false, "dry_run_supported": true, "dry_run_unsupported_reason": null,
+    "payload_schema": null, "owns_stdout": false, "passthrough": false, "flags": [],
+    "flag_sets": [], "args": [], "tags": [], "constraints": [], "hidden": false,
+    "interactive": false, "config_fields": [], "grants": [], "forwarding": null
+  },
+  "group": { "commands": {}, "groups": {}, "deprecated": {}, "tags": [], "hidden": false },
+  "config_field": { "default": null, "bound_commands": [] },
+  "check": { "scope": null },
+  "infra": { "roots": [], "handshakes": [], "connections": [] }
+}
+```
+
+Keys with **no** baseline are absent from the block on purpose, and the list is exactly the set of
+always-emitted facts: `name`, `help`, `version`, `schema_version`, `project_id`, `effect`,
+`presence`, `value_schema`, a choice's `name` and `help`, a config field's `help` and `required`, and
+a check's six mandatory fields. `default` on a flag or arg is absent for the reason above:
+its emission is governed by another key, not by a baseline.
+
+### 25.11 Behavioral completeness
+
+The v1 dump was blind to declarations that change what a user's installation does. Each key below
+closes one blind spot, and each is omitted at its baseline so that a departure from the framework's
+behavior is exactly what makes a key appear.
+
+| Key | Where | Emission |
+|---|---|---|
+| `config_format` | app | omitted when `"json"` |
+| `config_path` | app | omitted when the app declares none (absence means the framework's XDG path for this app name and format) |
+| `config_conflict_mode` | app | omitted when `"cli-wins"` |
+| `prefixed` | flag | omitted when `true` |
+| `flag_sets` | command | omitted when empty |
+
+**`config_path` publishes the declaration, never the resolution.** A declared literal path is
+emitted as declared -- the same treatment an infra root's `default` already gets, and honest for the
+same reason: it is a committed source-level declaration, not a property of the dumping machine. A
+`RelativeToRoot` declaration is emitted in the machine-stable marker shape §13 already pins
+(`{"relative_to_root": {"env_var": ..., "parts": [...]}}`). The **resolved** absolute path is never
+emitted, which costs Python an implementation change: `App.__post_init__` resolves a
+`RelativeToRoot` config path eagerly and overwrites the declaration with the resolved string, so the
+declared form must be retained alongside it for the serializer to publish.
+
+**`flag_sets`** records the grouping v1 discarded: a command's flag-set members are merged into its
+flag list, and nothing published says which set they came from. The key is an array of
+`{"name": <set>, "flags": [<flag name>, ...]}` in declaration order; the member flags keep their
+ordinary entries in `flags`, so the key adds a grouping without duplicating a declaration. All three
+implementations retain the sets on the command (Python's `Command.flag_sets`, Go's `cmd.flagSets`,
+TypeScript's `flagSets`).
+
+**Per-flag `conflict_mode` becomes resolvable.** Its absence has always meant "inherit the app
+default", and until v2 the app default was not published at all -- so the resolution was
+unreachable from the dump. With `config_conflict_mode` emitted and `conflict_mode: null` documented
+in the `defaults` block as inheritance, a consumer can compute the effective mode for every flag.
+
+### 25.12 Fragment validity: one conformance check
+
+Every fragment in every dump must be a valid document of the closed subset, and the check that
+proves it is **Python-side and singular**: one check reading all three targets' dumps, not three
+implementations each asserting about themselves.
+
+- **Name and home:** `schema-fragments`, implemented in `conformance/check_schema_fragments.py`,
+  registered as `@app.error_check("schema-fragments")` in `conformance/conformance_tool/__init__.py`
+  with a `[checks.schema-fragments]` entry carrying `tags = ["pre-release", "conformance",
+  "parity"]`, `severity = "error"`, `fast = false`, `pure = false`, `needs_network = false`,
+  `depends_on = []`. It produces the three dumps the same way `check_schema_parity.py` does.
+- **What it asserts**, over every `value_schema` in every dump -- flag entries, arg entries, global
+  flags, config fields, and every scoped entry at every depth inside a selector's `choices`:
+  1. the fragment validates under the **in-house payload-schema validator**
+     (`_validate_payload_schema`, the registration-time validator §19.5 already owns), which is
+     sound only because the fragment subset is a strict subset of the payload subset;
+  2. it uses **only** the four keywords, which is narrower than the payload validator's own closure
+     and is therefore the check's own assertion;
+  3. every entry that must carry a fragment does, and a selector entry carries none -- the same
+     shape of assertion the parity checker's `presence` walk added, for the same reason: an
+     agreed-upon absence must never read as agreement.
+- **The 2^53 registration rule is what makes strict validation sound.** The payload validator scans
+  every `enum` member with the magnitude guard, so an int choice above 2^53 produces a fragment the
+  framework's own validator **rejects** -- the framework would be emitting a document it refuses to
+  accept. §12.14's registration error is the closure of that gap, and this check is what would
+  discover it if the error were ever removed.
+
+### 25.13 The MCP projections' shared defect
+
+The same root-placement bug exists in all three MCP projections, and v2 fixes it in the same pass
+because it is the identical rule the fragments now state:
+
+> When a parameter's schema is an **array**, `enum` belongs **inside `items`**, describing the
+> element. All three place it at the property root today (Python `_build_json_schema`, Go
+> `buildJSONSchema`, TypeScript `buildJSONSchema`), which says the *array* must equal one of the
+> choices.
+
+Two arity defects in the same projections go with it, and they are not symmetric -- which is
+precisely the erasure-shaped divergence the round exists to end:
+
+- **Python's projection ignores repeatability.** A repeatable scalar flag projects as its scalar
+  type; Go's projection reads `IsListType(f.Type) || f.Repeatable` and projects an array.
+- **Python's projection ignores variadic args.** A variadic scalar arg projects as its scalar type;
+  Go reads `a.IsVariadic` and TypeScript reads `a.opts.variadic` and both project an array.
+
+After this round, all three MCP projections derive the parameter schema from the **same arity rule**
+the `value_schema` fragment states, so a flag's tool-schema shape and its dumped shape cannot
+disagree.
+
+### 25.14 Consumer ordering, and the release boundary
+
+**One release.** This amendment and §24 ship together, which §24.11 and item 179 already pinned; the
+reason is stated there and is not restated here.
+
+**rlsbl is fixed before any fleet re-dump.** rlsbl re-serializes a dumped schema at release time:
+`_run_strictcli_schema_dump` runs the tool's `--dump-schema`, then `_patch_schema_version`
+(`rlsbl/commands/release/validate.py`) reads the file with `json.load` and rewrites it whole with
+`json.dumps(data, indent=2) + "\n"`. That is Python's encoder with `ensure_ascii=True`, applied to a
+file a Go or TypeScript binary may have written -- so every non-ASCII character in a Go-dumped
+schema is re-escaped, and the byte canon holds only until the release that publishes it. The fix is
+to patch the version **without re-encoding the document**, and it must be released **before** the
+fleet re-dumps, or the fleet re-dump writes files the next release will churn.
+
+**selfdoc updates in the consumer window** -- between the strictcli release and the fleet re-dump.
+Two concrete sites in `selfdoc/strictcli_support.py`: `_flag_table` renders `fl.get("type", "str")`,
+which under v2 finds no `type` key and silently labels every flag `str`; and `_arg_table` renders
+`ar.get("required", True)`, a key the **presence round already deleted**, so it labels every
+positional arg required today. Both read `value_schema` and `presence` after the update. That second
+one is a live defect now, not a v2 consequence -- it is named here because the same pass fixes it.
+
+**Ordering, stated once:** strictcli releases v2; rlsbl's re-serializer fix releases; selfdoc's
+reader updates; then the fleet re-dumps. A consumer that reads a dumped schema and has not been
+updated reads a v1 file until its project re-dumps, which is what the version key is for.
+
+### 25.15 What v2 does not do
+
+Stated so the boundary is a decision rather than an omission:
+
+- **No `oneOf`, and no fifth keyword.** The fragment subset stays at four. A selector's variant is
+  encoded natively (§25.6) rather than by opening the subset, and the MCP tool schema's `oneOf`
+  remains §24.11's recorded future upgrade behind a measurement of client handling.
+- **No v1 compatibility path.** There is no dual-reader, no shim and no negotiated fallback: a
+  reader sees `schema_version` and knows which format it holds. Pre-stable projects do not carry
+  compatibility surfaces (and a v1 file stays readable as exactly what it is -- a v1 file).
+- **No new declaration surface.** Every fact v2 publishes is a fact some implementation already
+  holds; the round adds keys and one registration guard, never a new way to declare something. The
+  one widening is TypeScript's list-carrier variadic arg (§25.4), which the unification ruling
+  requires.
+- **Nothing about `presence` or `default`.** The presence round settled both and this round
+  republishes them unchanged.
+- **No config-field or check declaration changes.** Config fields keep `required` and their scalar-
+  only surface; check entries keep their six mandatory fields. Only their serialization moves.
