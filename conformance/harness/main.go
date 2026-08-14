@@ -545,6 +545,36 @@ func (t groupTarget) Deprecated(name, message string, opts ...strictcli.CmdOptio
 	t.g.Deprecated(name, message, opts...)
 }
 
+// elemTypeOf returns the scalar type inside a compound type name:
+// "list[int]" -> "int", "dict[str,float]" -> "float", "str" -> "str".
+func elemTypeOf(ftype string) string {
+	if strings.HasPrefix(ftype, "list[") {
+		return ftype[5 : len(ftype)-1]
+	}
+	if strings.HasPrefix(ftype, "dict[") {
+		return ftype[9 : len(ftype)-1]
+	}
+	return ftype
+}
+
+// convertScalarDefault converts one JSON scalar into the Go type the named
+// scalar type declares. A value that does not match its declared type carries
+// over unconverted, so the framework mints its own default-type registration
+// error rather than the harness panicking first.
+func convertScalarDefault(scalarType string, v interface{}) interface{} {
+	switch scalarType {
+	case "int":
+		if f, ok := v.(float64); ok {
+			return int(f)
+		}
+	case "float":
+		if f, ok := v.(float64); ok {
+			return f
+		}
+	}
+	return v
+}
+
 // buildFlag constructs a strictcli.Flag from a JSON flag definition.
 func buildFlag(fd map[string]interface{}) strictcli.Flag {
 	name := fd["name"].(string)
@@ -586,38 +616,25 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 		if v == nil {
 			opts = append(opts, strictcli.Default(nil))
 		} else if arr, ok := v.([]interface{}); ok {
-			// Array default (repeatable flags).
+			// List default: the elements carry the flag's ELEMENT type, which
+			// is what sits inside the brackets of "list[int]".
+			elem := elemTypeOf(ftype)
 			converted := make([]interface{}, len(arr))
-			for i, elem := range arr {
-				switch ftype {
-				case "int":
-					converted[i] = int(elem.(float64))
-				case "float":
-					converted[i] = elem.(float64)
-				default: // str
-					converted[i] = elem.(string)
-				}
+			for i, e := range arr {
+				converted[i] = convertScalarDefault(elem, e)
+			}
+			opts = append(opts, strictcli.Default(converted))
+		} else if m, ok := v.(map[string]interface{}); ok {
+			// Dict default (contract §23.5's dict row): Go's dict flags take a
+			// map[string]interface{} whose values carry the element type.
+			elem := elemTypeOf(ftype)
+			converted := make(map[string]interface{}, len(m))
+			for k, e := range m {
+				converted[k] = convertScalarDefault(elem, e)
 			}
 			opts = append(opts, strictcli.Default(converted))
 		} else {
-			switch ftype {
-			case "bool":
-				opts = append(opts, strictcli.Default(v.(bool)))
-			case "int":
-				if f, ok := v.(float64); ok {
-					opts = append(opts, strictcli.Default(int(f)))
-				} else {
-					opts = append(opts, strictcli.Default(v))
-				}
-			case "float":
-				if f, ok := v.(float64); ok {
-					opts = append(opts, strictcli.Default(f))
-				} else {
-					opts = append(opts, strictcli.Default(v))
-				}
-			default: // str
-				opts = append(opts, strictcli.Default(v.(string)))
-			}
+			opts = append(opts, strictcli.Default(convertScalarDefault(ftype, v)))
 		}
 	}
 	if v, ok := fd["env"]; ok {

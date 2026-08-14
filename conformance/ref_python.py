@@ -72,6 +72,58 @@ def _flag_param(name: str) -> str:
     return result
 
 
+def _presence_parts(decl: dict) -> list[str]:
+    """Emit the `presence=` keyword a declaration carries, if any.
+
+    The case encoding names all three facts through one `presence` key, because
+    TypeScript's discriminated union needs the discriminant beside the value.
+    Python spells the third fact with `default=<value>` itself (contract §23.2),
+    and `presence="default"` is a value it refuses -- so the key is dropped here
+    and the `default=` emission below carries the declaration.
+
+    A case that omits `presence` entirely is asserting the undeclared-presence
+    registration error, and a case carrying a value that is neither fact is
+    asserting Python's own bad-value error; both are emitted verbatim.
+    """
+    if "presence" not in decl:
+        return []
+    presence = decl["presence"]
+    if presence == "default":
+        return []
+    return [f"presence={presence!r}"]
+
+
+def _emit_default_value(value: object, ftype: str) -> str:
+    """Render a declared default as a Python literal of the flag's own type.
+
+    JSON has one number type, so an int-valued element of a `list[float]` or
+    `dict[str, float]` default must be widened here -- the framework's
+    element-type check is exact.
+    """
+    elem = ftype[5:-1] if ftype.startswith("list[") else (
+        ftype[9:-1] if ftype.startswith("dict[") else ftype
+    )
+
+    def _scalar(v: object) -> object:
+        if isinstance(v, bool):
+            return v
+        if elem == "float" and isinstance(v, (int, float)):
+            return float(v)
+        if elem == "int" and isinstance(v, float) and v.is_integer():
+            return int(v)
+        return v
+
+    if isinstance(value, list):
+        return repr([_scalar(v) for v in value])
+    if isinstance(value, dict):
+        return repr({k: _scalar(v) for k, v in value.items()})
+    if isinstance(value, bool):
+        return repr(value)
+    if ftype == "float" and isinstance(value, (int, float)):
+        return repr(float(value))
+    return repr(value)
+
+
 def _emit_flag(flag_def: dict, indent: str = "") -> str:
     """Emit a strictcli.Flag(...) expression from a flag JSON definition."""
     parts = [
@@ -93,26 +145,14 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
     if "short" in flag_def:
         parts.append(f"short={flag_def['short']!r}")
 
-    # The presence declaration (contract §23). A case states exactly one of
-    # presence and default; `default: null` is the input the redirect error is
-    # asserted against, so it is still emitted verbatim.
-    if "presence" in flag_def:
-        parts.append(f"presence={flag_def['presence']!r}")
+    parts.extend(_presence_parts(flag_def))
 
     if "default_relative_to_root" in flag_def:
         rtr = flag_def["default_relative_to_root"]
         rtr_args = ", ".join([repr(rtr["env_var"])] + [repr(p) for p in rtr.get("parts", [])])
         parts.append(f"default=strictcli.RelativeToRoot({rtr_args})")
     elif "default" in flag_def:
-        default = flag_def["default"]
-        if default is None:
-            parts.append("default=None")
-        elif isinstance(default, bool):
-            parts.append(f"default={default}")
-        elif isinstance(default, (int, float)):
-            parts.append(f"default={default}")
-        else:
-            parts.append(f"default={default!r}")
+        parts.append(f"default={_emit_default_value(flag_def['default'], ftype)}")
 
     if "env" in flag_def:
         parts.append(f"env={flag_def['env']!r}")
@@ -510,10 +550,9 @@ def _emit_command_registration(
                 if atype != "str":
                     type_map = {"bool": "bool", "int": "int", "float": "float"}
                     aparts.append(f"type={type_map[atype]}")
-                if "presence" in a:
-                    aparts.append(f"presence={a['presence']!r}")
+                aparts.extend(_presence_parts(a))
                 if "default" in a:
-                    aparts.append(f"default={a['default']!r}")
+                    aparts.append(f"default={_emit_default_value(a['default'], atype)}")
                 if a.get("variadic", False):
                     aparts.append("variadic=True")
                 if "choices_str" in a:
@@ -573,6 +612,13 @@ def _emit_command_registration(
             if ftype != "str":
                 fd_parts.append(f"type={ftype}")
             fd_parts.append(f"help={f['help']!r}")
+            # Presence is mandatory on every flag (§23.1), including one
+            # declared on a passthrough command purely to reach the
+            # passthrough-cannot-have-flags error: without it the presence
+            # error fires first and the case asserts the wrong line.
+            fd_parts.extend(_presence_parts(f))
+            if "default" in f:
+                fd_parts.append(f"default={_emit_default_value(f['default'], ftype)}")
             flag_decorators.append(
                 f"{indent}@strictcli.flag({', '.join(fd_parts)})"
             )
@@ -603,10 +649,9 @@ def _emit_command_registration(
             if atype != "str":
                 type_map = {"bool": "bool", "int": "int", "float": "float"}
                 aparts.append(f"type={type_map[atype]}")
-            if "presence" in a:
-                aparts.append(f"presence={a['presence']!r}")
+            aparts.extend(_presence_parts(a))
             if "default" in a:
-                aparts.append(f"default={a['default']!r}")
+                aparts.append(f"default={_emit_default_value(a['default'], atype)}")
             if a.get("variadic", False):
                 aparts.append("variadic=True")
             if "choices_str" in a:
@@ -694,22 +739,13 @@ def _emit_command_registration(
         fd_parts.append(f"help={f['help']!r}")
         if "short" in f:
             fd_parts.append(f"short={f['short']!r}")
-        if "presence" in f:
-            fd_parts.append(f"presence={f['presence']!r}")
+        fd_parts.extend(_presence_parts(f))
         if "default_relative_to_root" in f:
             rtr = f["default_relative_to_root"]
             rtr_args = ", ".join([repr(rtr["env_var"])] + [repr(p) for p in rtr.get("parts", [])])
             fd_parts.append(f"default=strictcli.RelativeToRoot({rtr_args})")
         elif "default" in f:
-            default = f["default"]
-            if default is None:
-                fd_parts.append("default=None")
-            elif isinstance(default, bool):
-                fd_parts.append(f"default={default}")
-            elif isinstance(default, (int, float)):
-                fd_parts.append(f"default={default}")
-            else:
-                fd_parts.append(f"default={default!r}")
+            fd_parts.append(f"default={_emit_default_value(f['default'], ftype)}")
         if "env" in f:
             fd_parts.append(f"env={f['env']!r}")
         if "prefixed" in f:

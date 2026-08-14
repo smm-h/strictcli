@@ -222,6 +222,12 @@ function buildFlag(fd) {
 			opts.default = null;
 		} else if (Array.isArray(dv)) {
 			opts.default = dv.map((el) => convertScalar(elemType, el));
+		} else if (isDict && typeof dv === "object") {
+			// Dict default (contract §23.5's dict row): the TS dict carrier is
+			// Map-backed, so the case's JSON object becomes a Map here.
+			opts.default = new Map(
+				Object.entries(dv).map(([k, val]) => [k, convertScalar(elemType, val)]),
+			);
 		} else {
 			opts.default = convertScalar(ftype, dv);
 		}
