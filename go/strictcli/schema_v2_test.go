@@ -766,6 +766,23 @@ depends_on = []
 	}
 }
 
+// An app whose only checks are provider-sourced publishes no block at all
+// rather than an empty one, which is the baseline the `defaults` block states.
+func TestTheChecksBlockIsOmittedWhenEveryCheckIsProviderSourced(t *testing.T) {
+	app := schemaTestApp(t)
+	app.RegisterCheckProvider(func() []CheckSpec {
+		return []CheckSpec{NewErrorCheckSpec(
+			CheckSpecMeta{Name: "provided-one", Tags: []string{"pre-release"}, Severity: "error"},
+			func(ctx CheckContext, r *ErrorReporter) CheckOutcome { return r.Passed("ok") },
+		)}
+	})
+	app.SetCheckContext(func() CheckContext { return &testCheckContext{root: t.TempDir()} })
+	app.Test([]string{"check", "--all"})
+	if _, present := dumpJSON(t, app)["checks"]; present {
+		t.Fatalf("an all-provider app published a checks block")
+	}
+}
+
 // --- §12.14: the 2^53 registration guard ---
 
 func TestAnIntChoiceBeyond2To53IsRefusedOnAFlag(t *testing.T) {
