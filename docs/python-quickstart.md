@@ -1,6 +1,6 @@
 ---
 title: Python Quickstart
-description: "Build Python CLIs with strictcli: apps, effect classification, flags, args, groups, payloads under --json, and consequential consent on CLI, call and MCP."
+description: "Build Python CLIs with strictcli: apps, effect classification, the required/optional/default presence declaration, flags, args, groups, payloads under --json, and consequential consent on CLI, call and MCP."
 nav_group: "Guides"
 nav_order: 2
 ---
@@ -103,7 +103,7 @@ Data](#returning-structured-data)).
 
 ```python
 @app.command("greet", help="Greet someone", effect="read_only")
-@strictcli.flag("name", type=str, help="Who to greet")
+@strictcli.flag("name", type=str, presence="required", help="Who to greet")
 @strictcli.flag("loud", type=bool, default=False, help="Shout the greeting")
 def greet(ctx, name, loud):
     msg = f"Hello, {name}!"
@@ -124,6 +124,7 @@ def greet(ctx, name, loud):
 | `ctx.error(msg)` | stderr | Errors (never suppressed) |
 | `ctx.debug(msg)` | stdout | Debug output (shown only under `--verbose`) |
 | `ctx.source(name)` | -- | Provenance of a flag value (`"cli"`, `"env"`, `"config"`, `"default"`, `"implied"`, `"infra"`) |
+| `ctx.provided(name)` | -- | Whether the *invocation* caused the value: `True` for `cli`/`env`/`config`/`implied`, `False` for `default`/`infra` |
 
 ### Context Properties
 
@@ -167,34 +168,44 @@ $ mytool status --json
 
 Flags are declared with the `@strictcli.flag()` decorator, which attaches flag
 metadata to the handler function before command registration. The `name` and
-`help` arguments are always required. strictcli supports four scalar types:
-`str` (default), `bool`, `int`, and `float`, plus compound types `list[T]` and
-`dict[str, T]` for repeatable and key-value flags.
+`help` arguments are always required, and so is a **presence declaration** --
+exactly one of `presence="required"`, `presence="optional"`, or
+`default=<value>` (see [Presence](#presence-required-optional-or-a-default)).
+strictcli supports four scalar types: `str` (default), `bool`, `int`, and
+`float`, plus compound types `list[T]` and `dict[str, T]` for repeatable and
+key-value flags.
 
 ### String Flags
 
 ```python
 @app.command("build", help="Build the project", effect="mutating")
-@strictcli.flag("output", type=str, help="Output file path")
+@strictcli.flag("output", type=str, presence="required", help="Output file path")
 @strictcli.flag("format", type=str, default="json", help="Output format")
 def build(ctx, output, format):
     ctx.info(f"Building to {output} as {format}")
 ```
 
-A string flag with no `default` is required -- the user must provide it.
+`presence="required"` means some source -- a CLI token, a bound env var, a config
+entry, or an `Implies` injection -- must supply a value.
 
 ### Bool Flags
 
 ```python
 @app.command("deploy", help="Deploy the app", effect="mutating")
 @strictcli.flag("cache", type=bool, default=True, help="Reuse the build cache")
-@strictcli.flag("watch", type=bool, help="Watch for changes")
-def deploy(ctx, cache, watch):
+@strictcli.flag("watch", type=bool, presence="required", help="Watch for changes")
+@strictcli.flag("color", type=bool, presence="optional", help="Colorize output")
+def deploy(ctx, cache, watch, color):
     if not cache:
         ctx.info("Cache disabled")
+    if color is None:
+        ctx.info("Color decision inherited from the environment")
 ```
 
-Bool flags are negatable by default: `--cache` sets `True`, `--no-cache` sets `False`. A bool flag with no `default` is required -- the user must pass either `--flag` or `--no-flag` explicitly.
+Bool flags are negatable by default: `--cache` sets `True`, `--no-cache` sets
+`False`. A `presence="required"` bool must be answered -- the user passes either
+`--flag` or `--no-flag`. A `presence="optional"` bool is a real tri-state:
+`--flag` is `True`, `--no-flag` is `False`, and absence arrives as `None`.
 
 Note that `verbose` and `quiet` are **not** available as flag names: they belong
 to the [reserved quartet](#the-reserved-flag-quartet) and arrive on `ctx`
@@ -204,7 +215,7 @@ instead.
 
 ```python
 @strictcli.flag("port", type=int, default=8080, help="Server port")
-@strictcli.flag("retries", type=int, help="Number of retries")
+@strictcli.flag("retries", type=int, presence="required", help="Number of retries")
 ```
 
 Integers are parsed strictly: no leading/trailing whitespace, 64-bit signed bounds, no leading zeros.
@@ -213,7 +224,7 @@ Integers are parsed strictly: no leading/trailing whitespace, 64-bit signed boun
 
 ```python
 @strictcli.flag("threshold", type=float, default=0.5, help="Score threshold")
-@strictcli.flag("rate", type=float, help="Rate limit")
+@strictcli.flag("rate", type=float, presence="required", help="Rate limit")
 ```
 
 Float parsing rejects NaN and Inf.
@@ -221,17 +232,19 @@ Float parsing rejects NaN and Inf.
 ### Flag Options
 
 All available `@strictcli.flag()` parameters are listed below. The `name` and
-`help` parameters are always required and must be non-empty strings. The
-remaining parameters control type, defaults, choices, environment variable
-binding, short aliases, custom validation callbacks, and repeat semantics
-including uniqueness enforcement and env var splitting for repeatable flags:
+`help` parameters are always required and must be non-empty strings, and exactly
+one of `presence=` / `default=` must be supplied. The remaining parameters
+control type, choices, environment variable binding, short aliases, custom
+validation callbacks, and repeat semantics including uniqueness enforcement and
+env var splitting for repeatable flags:
 
 | Parameter | Description |
 |-----------|-------------|
 | `name` | Flag name (required). Becomes `--name` on the CLI. |
 | `help` | Help text (required). Must be non-empty. |
 | `type` | Value type: `str`, `bool`, `int`, or `float` (default: `str`). |
-| `default` | Default value. Omit for required flags. |
+| `presence` | `"required"` or `"optional"`. Mutually exclusive with `default`; exactly one of the two must be declared. |
+| `default` | The declared default value -- the third presence spelling. `default=None` is a registration error redirecting to `presence="optional"`. |
 | `short` | Single-character short form (e.g., `short="o"` for `-o`). |
 | `env` | Environment variable name. Precedence: CLI > env > config > default. |
 | `choices` | List of allowed values. Not available on bool flags. |
@@ -243,7 +256,7 @@ including uniqueness enforcement and env var splitting for repeatable flags:
 ### Short Flags
 
 ```python
-@strictcli.flag("output", short="o", type=str, help="Output file")
+@strictcli.flag("output", short="o", type=str, presence="required", help="Output file")
 @strictcli.flag("recursive", short="r", type=bool, default=False, help="Recurse into subdirectories")
 ```
 
@@ -256,9 +269,13 @@ the choices list produce a parse error listing all allowed values. All choice
 values must match the declared flag type, and bool flags cannot have choices:
 
 ```python
-@strictcli.flag("format", type=str, choices=["json", "yaml", "csv"], help="Output format")
-@strictcli.flag("level", type=int, choices=[1, 2, 3], help="Compression level")
+@strictcli.flag("format", type=str, default="json", choices=["json", "yaml", "csv"], help="Output format")
+@strictcli.flag("level", type=int, presence="required", choices=[1, 2, 3], help="Compression level")
 ```
+
+A declared `default` value must be in the choices list, checked at registration.
+`presence="optional"` declares no value, so nothing is checked at registration
+and absence is never matched against `choices` at parse time.
 
 ### Environment Variables
 
@@ -268,31 +285,76 @@ cascade (CLI > env > config > default), and are skipped entirely under
 `--hermetic` mode:
 
 ```python
-@strictcli.flag("token", type=str, env="MYTOOL_TOKEN", help="API token")
+@strictcli.flag("token", type=str, presence="required", env="MYTOOL_TOKEN", help="API token")
 ```
 
-Precedence: CLI > env > config > default. Boolean env values accept `1|true|yes` / `0|false|no` (case-insensitive).
+Precedence: CLI > env > config > default. Boolean env values accept `1|true|yes`
+/ `0|false|no` (case-insensitive). An env- or config-supplied value satisfies a
+`presence="required"` declaration and makes the flag *provided* --
+`ctx.provided("token")` is `True` with source `"env"` or `"config"`.
 
-### Required vs Optional
+### Presence: required, optional, or a default
 
-- **Required**: omit the `default` parameter. The user must provide the flag.
-- **Optional with default**: set `default=value`.
+Every flag and every positional argument declares **exactly one** of three facts
+about itself. Nothing is inferred from the shape of another declaration:
+
+| Fact | Spelling | The handler receives |
+|------|----------|----------------------|
+| **required** | `presence="required"` | the supplied value; the parse fails if nothing supplies one |
+| **optional** | `presence="optional"` | the supplied value, or `None` when nothing supplied one |
+| **default** | `default=<value>` | the supplied value, or the declared default |
 
 ```python
-@strictcli.flag("target", type=str, help="Deploy target")           # required
-@strictcli.flag("region", type=str, default="us-east", help="AWS region")  # optional
+@strictcli.flag("target", type=str, presence="required", help="Deploy target")
+@strictcli.flag("region", type=str, default="us-east", help="AWS region")
+@strictcli.flag("tag", type=str, presence="optional", help="Release tag")
 ```
+
+Declaring none of the three, or more than one, is a registration-time error:
+
+```
+Flag "target": presence is undeclared: declare exactly one of presence="required", presence="optional", or default=<value>
+Flag "target": presence is declared twice: presence="required" and default=x cannot be combined; declare exactly one
+```
+
+`default=None` is **not** a spelling of optionality. It is refused, with a
+redirect to the one spelling optionality has:
+
+```
+Flag "tag": default=None does not declare optionality: use presence="optional" (it delivers None when the flag is absent)
+```
+
+A handler parameter bound to an optional flag or arg must either declare no
+default at all or default to `None` -- anything else re-introduces at the
+handler boundary the sentinel the declaration just removed:
+
+```python
+# Both are fine
+def publish(ctx, tag): ...
+def publish(ctx, tag=None): ...
+
+# Registration error:
+#   command "publish": handler parameter 'tag' is bound to optional flag '--tag' and must default to None
+def publish(ctx, tag=""): ...
+```
+
+To ask whether the invocation supplied a value rather than the declaration, use
+`ctx.provided(name)` -- `True` for `cli`, `env`, `config` and `implied`, `False`
+for `default` and `infra`.
+
+In help output, every flag and arg renders exactly one presence part:
+`[required]`, `[optional]`, or `[default: <value>]`.
 
 ### Repeatable Flags
 
 A repeatable flag can appear multiple times on the command line, collecting
-values into a list. Repeatable flags are never required and default to an empty
-list. The `unique` parameter is mandatory: set `unique=True` to reject duplicate
-values, or `unique=False` to allow them:
+values into a list. It declares presence like every other flag -- there is no
+silent empty-list default. The `unique` parameter is mandatory: set
+`unique=True` to reject duplicate values, or `unique=False` to allow them:
 
 ```python
 @app.command("process", help="Process records", effect="read_only")
-@strictcli.flag("record", type=str, help="A record to process", repeatable=True, unique=False)
+@strictcli.flag("record", type=str, default=[], help="A record to process", repeatable=True, unique=False)
 def process(ctx, record):
     for r in record:
         ctx.info(f"Processing: {r}")
@@ -305,27 +367,56 @@ Processing: beta
 Processing: gamma
 ```
 
-When no occurrences are provided, the default is an empty list. The `unique` parameter is mandatory on repeatable flags: set `unique=True` to reject duplicate values, or `unique=False` to allow them.
+`default=[]` declares the empty list explicitly and renders `[default: []]` in
+help. The alternatives are `presence="optional"`, where zero occurrences deliver
+`None` rather than `[]`, and `presence="required"`, where at least one
+occurrence must arrive from some source.
 
 You can also use `list[T]` as the type, which is equivalent to `repeatable=True` with the appropriate item type:
 
 ```python
-@strictcli.flag("port", type=list[int], help="Ports to listen on", unique=False)
+@strictcli.flag("port", type=list[int], default=[], help="Ports to listen on", unique=False)
+```
+
+A dict flag declares presence the same way, with `default={}` as the explicit
+empty declaration:
+
+```python
+@strictcli.flag("label", type=dict[str, str], default={}, help="key=value labels")
 ```
 
 ## Positional Arguments
 
 Use `@strictcli.arg()` to declare positional arguments that are consumed in
-declaration order after all flags have been parsed. Arguments are required by
-default. Optional arguments use `required=False` and may declare a default
-value.
+order after all flags have been parsed. An argument declares presence with the
+same three spellings a flag uses -- `presence="required"`, `presence="optional"`,
+or `default=<value>`. There is no `required=` parameter.
+
+Pass `args=[...]` on `@app.command()` when a command has more than one
+positional, so the order is the list's order:
 
 ```python
-@app.command("deploy", help="Deploy to an environment", effect="mutating")
-@strictcli.arg("environment", help="Target environment")
-@strictcli.arg("version", help="Version to deploy", required=False, default="latest")
+@app.command(
+    "deploy",
+    help="Deploy to an environment",
+    effect="mutating",
+    args=[
+        strictcli.Arg(name="environment", help="Target environment", presence="required"),
+        strictcli.Arg(name="version", help="Version to deploy", default="latest"),
+    ],
+)
 def deploy(ctx, environment, version):
     ctx.info(f"Deploying {version} to {environment}")
+```
+
+An optional arg delivers absence as a present keyword argument (`None`), exactly as an
+optional flag does:
+
+```python
+@app.command("greet", help="Greet someone", effect="read_only")
+@strictcli.arg("title", help="An honorific", presence="optional")
+def greet(ctx, title):
+    ctx.info("Hello!" if title is None else f"Hello, {title}!")
 ```
 
 ### Arg Parameters
@@ -334,8 +425,8 @@ def deploy(ctx, environment, version):
 |-----------|-------------|
 | `name` | Argument name (required). |
 | `help` | Help text (required). |
-| `required` | Whether the argument is required (default: `True`). |
-| `default` | Default value (only valid on non-required args). |
+| `presence` | `"required"` or `"optional"`. Mutually exclusive with `default`; exactly one of the two must be declared. |
+| `default` | The declared default value -- the third presence spelling. `default=None` is a registration error redirecting to `presence="optional"`. |
 | `type` | Type: `str`, `bool`, `int`, or `float` (default: `str`). |
 | `variadic` | If `True`, collects all remaining positional values. Must be the last arg. |
 | `choices` | List of allowed values. |
@@ -344,12 +435,13 @@ def deploy(ctx, environment, version):
 
 A variadic argument collects all remaining positional values into a list. It
 must be the last positional argument in the command's declaration, and only one
-variadic argument is allowed per command. A variadic arg with `required=True`
-(the default) requires at least one value:
+variadic argument is allowed per command. Because it always delivers a list,
+`presence="required"` means *at least one value* and `presence="optional"` means
+*possibly none*:
 
 ```python
 @app.command("process", help="Process files", effect="read_only")
-@strictcli.arg("files", help="Files to process", variadic=True)
+@strictcli.arg("files", help="Files to process", variadic=True, presence="required")
 def process(ctx, files):
     for f in files:
         ctx.info(f"Processing: {f}")
@@ -360,6 +452,13 @@ $ mytool process a.txt b.txt c.txt
 Processing: a.txt
 Processing: b.txt
 Processing: c.txt
+```
+
+A `default` on a variadic arg is a registration error -- the empty case is
+spelled once, as `presence="optional"`:
+
+```
+Arg "files": a variadic arg cannot declare default=: it always delivers a list, so declare presence="required" for at least one value or presence="optional" for possibly none
 ```
 
 Only one variadic argument is allowed, and it must be the last. You can also use `list[T]` as the type for typed variadic args (e.g., `type=list[int], variadic=True`).
@@ -411,7 +510,7 @@ def dns_list(ctx):
     ctx.info("Listing records...")
 
 @dns.command("create", help="Create a DNS record", effect="mutating")
-@strictcli.flag("name", type=str, help="Record name")
+@strictcli.flag("name", type=str, presence="required", help="Record name")
 def dns_create(ctx, name):
     ctx.info(f"Creating record: {name}")
 
@@ -422,7 +521,7 @@ def zone_list(ctx):
     ctx.info("Listing zones...")
 
 @zone.command("delete", help="Delete a zone", effect="mutating", consequential=True)
-@strictcli.flag("name", type=str, help="Zone name")
+@strictcli.flag("name", type=str, presence="required", help="Zone name")
 def zone_delete(ctx, name):
     ctx.info(f"Deleting zone: {name}")
 ```
@@ -558,7 +657,7 @@ prompt -- a plain `mutating` command never does.
 
 ```python
 @app.command("destroy", help="Destroy the cluster", effect="mutating", consequential=True)
-@strictcli.arg("cluster", help="Cluster to destroy")
+@strictcli.arg("cluster", help="Cluster to destroy", presence="required")
 def destroy(ctx, cluster):
     ctx.info(f"Destroying {cluster}")
 ```
@@ -644,13 +743,15 @@ have access to meaningful help for every flag and command.
 
 Declare mutually exclusive flags using `MutexGroup` via the `mutex` parameter.
 At most one flag in the group may have a value from an explicit source (CLI, env,
-or config). A mutex group must contain at least 2 flags, and flags in a mutex
-group with no default get `None` instead of being required:
+or config). A mutex group must contain at least 2 flags, and each member
+declares its own presence -- `presence="optional"` is the ordinary declaration,
+a `default` is legal, and `presence="required"` is a registration error because
+the group's own requirement is what makes the choice mandatory:
 
 ```python
 @app.command("output", help="Produce output", effect="read_only", mutex=[
     strictcli.MutexGroup(flags=[
-        strictcli.Flag(name="file", type=str, help="Write to file"),
+        strictcli.Flag(name="file", type=str, presence="optional", help="Write to file"),
         strictcli.Flag(name="stdout-only", type=bool, default=False, help="Write to stdout"),
     ]),
 ])
@@ -680,8 +781,8 @@ flag when a trigger is provided):
     # --canary implies --wait=True
     strictcli.Implies(flag="canary", implies="wait", value=True),
 ])
-@strictcli.flag("target", type=str, help="Deploy target")
-@strictcli.flag("region", type=str, help="Target region")
+@strictcli.flag("target", type=str, presence="optional", help="Deploy target")
+@strictcli.flag("region", type=str, presence="optional", help="Target region")
 @strictcli.flag("canary", type=bool, default=False, help="Roll out to the canary fleet first")
 @strictcli.flag("wait", type=bool, default=False, help="Block until the rollout settles")
 def deploy(ctx, target, region, canary, wait):
@@ -690,6 +791,11 @@ def deploy(ctx, target, region, canary, wait):
 
 Dependencies cannot reference the reserved quartet: `dry-run` is not a flag you
 declare, so it cannot be a `Requires` target or an `Implies` subject.
+
+All three read presence through the same predicate `ctx.provided` uses -- a flag
+counts as present when the invocation caused its value. A declared default never
+satisfies a `Requires`, never completes a `CoRequired` group, and never fires an
+`Implies` trigger.
 
 | Dependency | Behavior |
 |------------|----------|
@@ -706,7 +812,7 @@ binding, and constraint validation:
 
 ```python
 auth_flags = strictcli.FlagSet(name="auth", flags=[
-    strictcli.Flag(name="token", type=str, env="MYTOOL_TOKEN", help="API token"),
+    strictcli.Flag(name="token", type=str, presence="required", env="MYTOOL_TOKEN", help="API token"),
     strictcli.Flag(name="region", type=str, default="us-east", help="API region"),
 ])
 
@@ -716,7 +822,7 @@ def list_cmd(ctx, token, region):
 
 @app.command("delete", help="Delete a resource", effect="mutating",
              consequential=True, flag_sets=[auth_flags])
-@strictcli.flag("resource-id", type=str, help="Resource to delete")
+@strictcli.flag("resource-id", type=str, presence="required", help="Resource to delete")
 def delete_cmd(ctx, token, region, resource_id):
     ctx.info(f"Deleting {resource_id}")
 ```
@@ -807,6 +913,12 @@ app.config_field("serve.host", type=str, help="Bind address", default="localhost
 app.config_field("api_key", type=str, help="API key")  # required -- no default
 ```
 
+A config field is **not** a CLI declaration and does not take a `presence=`
+argument: it has no presence on a command line, no help marker, and no
+`ctx.provided` question, so it is still required exactly when it declares no
+default. A field that collides with a flag inherits the flag's
+handling, which is the declared one.
+
 ### Hermetic mode
 
 `--hermetic` is a reserved global flag on every app. It skips config file loading and env var resolution entirely. Values come only from CLI tokens, declared defaults, and infrastructure roots.
@@ -844,7 +956,7 @@ def test_greet():
     app = strictcli.App(name="mytool", version="0.1.0", help="test app")
 
     @app.command("greet", help="Say hello", effect="read_only")
-    @strictcli.flag("name", type=str, help="Who to greet")
+    @strictcli.flag("name", type=str, presence="required", help="Who to greet")
     def greet(ctx, name):
         ctx.info(f"Hello, {name}!")
 
@@ -956,7 +1068,7 @@ def status(ctx, color, environment):
 svc = app.group("service", help="Service management")
 
 @svc.command("restart", help="Restart a service", effect="mutating", consequential=True)
-@strictcli.flag("name", type=str, help="Service name")
+@strictcli.flag("name", type=str, presence="required", help="Service name")
 @strictcli.flag("timeout", type=int, default=30, help="Shutdown timeout in seconds")
 def restart(ctx, color, name, timeout):
     ctx.info(f"Restarting {name} (timeout: {timeout}s)")
