@@ -776,7 +776,7 @@
         "deprecated": {
           "type": "boolean",
           "default": false,
-          "description": "If true, this is a deprecated command. It must have deprecated_message and must NOT have handler_prints, handler_exit_code, flags, args, flag_sets, mutex, dependencies, passthrough, or passthrough_handler_prints."
+          "description": "If true, this is a deprecated command. It must have deprecated_message and must NOT have handler_prints, handler_exit_code, flags, args, flag_sets, dependencies, passthrough, or passthrough_handler_prints."
         },
         "deprecated_message": {
           "type": "string",
@@ -848,12 +848,6 @@
             "$ref": "#/$defs/flag_set"
           }
         },
-        "mutex": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/mutex_group"
-          }
-        },
         "dependencies": {
           "type": "array",
           "items": {
@@ -910,7 +904,6 @@
           "flags": false,
           "args": false,
           "flag_sets": false,
-          "mutex": false,
           "dependencies": false,
           "passthrough": false,
           "passthrough_handler_prints": false,
@@ -1190,25 +1183,112 @@
         "choices_str": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "required": [
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "help": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           },
-          "description": "Choices for str-type args."
+          "description": "Choices for str-type args, in the record spelling (contract §24.2): every entry is a value plus OPTIONAL help. The bare-value entry is deleted -- an entry that may carry help and an entry that carries none would be two spellings of one fact. The split by type survives because its reason is the input side's alone: JSON cannot tell an integer choice from a float one, and each harness must know which typed constructor to call."
         },
         "choices_int": {
           "type": "array",
           "items": {
-            "type": "integer"
+            "type": "object",
+            "required": [
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "integer"
+              },
+              "help": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           },
-          "description": "Choices for int-type args."
+          "description": "Choices for int-type args, in the record spelling (contract §24.2): every entry is a value plus OPTIONAL help. The bare-value entry is deleted -- an entry that may carry help and an entry that carries none would be two spellings of one fact. The split by type survives because its reason is the input side's alone: JSON cannot tell an integer choice from a float one, and each harness must know which typed constructor to call."
         },
         "choices_float": {
           "type": "array",
           "items": {
-            "type": "number"
+            "type": "object",
+            "required": [
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "number"
+              },
+              "help": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           },
-          "description": "Choices for float-type args."
+          "description": "Choices for float-type args, in the record spelling (contract §24.2): every entry is a value plus OPTIONAL help. The bare-value entry is deleted -- an entry that may carry help and an entry that carries none would be two spellings of one fact. The split by type survives because its reason is the input side's alone: JSON cannot tell an integer choice from a float one, and each harness must know which typed constructor to call."
         }
       }
+    },
+    "choice": {
+      "type": "object",
+      "required": [
+        "name",
+        "help"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The choice's name. Under member spelling it IS the electing flag's own name (contract §24.4)."
+        },
+        "help": {
+          "type": "string",
+          "description": "Mandatory on a choice -- which is what makes a selector always render as a help block (§24.10), and what errChoiceHelpEmpty refuses."
+        },
+        "value": {
+          "type": "object",
+          "required": [
+            "type",
+            "help"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "str",
+                "int",
+                "float"
+              ]
+            },
+            "help": {
+              "type": "string"
+            }
+          },
+          "description": "A member-spelled choice's own payload (§24.4). It is the choice object's own KEY here, and NOT the first entry of `flags` the way the dump places it (§25.6): a case spelling it the dump's way would be indistinguishable from a case declaring a scoped flag named `value`, which is the input errScopedNameValueReserved is asserted against. It declares no presence, because electing the member supplies the value. Spellable on a token-spelled choice too -- that is the input errTokenChoiceCarriesPayload is asserted against."
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/flag"
+          },
+          "description": "The choice's scope: the flags that exist only while it is elected. Recursion costs the schema nothing -- a nested selector is an ordinary flag entry carrying its own `elect_by` and `choices`, to any depth -- and presence stays mandatory at every depth through the `required` list the ref already carries."
+        }
+      },
+      "description": "One choice of a selector (contract §24.1, §13's item-207 box): a name, mandatory help, an optional member payload, and the scope it owns."
     },
     "flag": {
       "type": "object",
@@ -1258,6 +1338,57 @@
                     "default_relative_to_root"
                   ]
                 }
+              ]
+            }
+          }
+        },
+        {
+          "$comment": "Contract §13 (item 207): `elect_by` is the input-side discriminator, exactly as it is the dump's (§25.6). An entry carrying it is a selector -- it declares `choices` and none of the value-flag keys; an entry not carrying it is an ordinary flag and declares no `choices`. A case that spells an illegal combination (to assert a registration error) declares skip_schema_validation.",
+          "if": {
+            "required": [
+              "elect_by"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "type"
+                  ]
+                },
+                {
+                  "required": [
+                    "choices_str"
+                  ]
+                },
+                {
+                  "required": [
+                    "choices_int"
+                  ]
+                },
+                {
+                  "required": [
+                    "choices_float"
+                  ]
+                },
+                {
+                  "required": [
+                    "repeatable"
+                  ]
+                },
+                {
+                  "required": [
+                    "validate"
+                  ]
+                }
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "choices"
               ]
             }
           }
@@ -1326,7 +1457,7 @@
             },
             {
               "type": "object",
-              "$comment": "A dict flag's declared default (contract §23.5's dict row). Values are scalars matching the flag's value type.",
+              "$comment": "A dict flag's declared default (contract §23.5's dict row), and a SELECTOR's defaulted selection, which is the same flat map §25.6 publishes: the choice's name under the reserved key `choice` followed by each field that has a value.",
               "additionalProperties": {
                 "oneOf": [
                   {
@@ -1334,6 +1465,9 @@
                   },
                   {
                     "type": "number"
+                  },
+                  {
+                    "type": "boolean"
                   }
                 ]
               }
@@ -1375,23 +1509,62 @@
         "choices_str": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "object",
+            "required": [
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "help": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           },
-          "description": "Choices for str-type flags."
+          "description": "Choices for str-type flags, in the record spelling (contract §24.2): every entry is a value plus OPTIONAL help. The bare-value entry is deleted -- an entry that may carry help and an entry that carries none would be two spellings of one fact. The split by type survives because its reason is the input side's alone: JSON cannot tell an integer choice from a float one, and each harness must know which typed constructor to call."
         },
         "choices_int": {
           "type": "array",
           "items": {
-            "type": "integer"
+            "type": "object",
+            "required": [
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "integer"
+              },
+              "help": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           },
-          "description": "Choices for int-type flags."
+          "description": "Choices for int-type flags, in the record spelling (contract §24.2): every entry is a value plus OPTIONAL help. The bare-value entry is deleted -- an entry that may carry help and an entry that carries none would be two spellings of one fact. The split by type survives because its reason is the input side's alone: JSON cannot tell an integer choice from a float one, and each harness must know which typed constructor to call."
         },
         "choices_float": {
           "type": "array",
           "items": {
-            "type": "number"
+            "type": "object",
+            "required": [
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "number"
+              },
+              "help": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           },
-          "description": "Choices for float-type flags."
+          "description": "Choices for float-type flags, in the record spelling (contract §24.2): every entry is a value plus OPTIONAL help. The bare-value entry is deleted -- an entry that may carry help and an entry that carries none would be two spellings of one fact. The split by type survives because its reason is the input side's alone: JSON cannot tell an integer choice from a float one, and each harness must know which typed constructor to call."
         },
         "repeatable": {
           "type": "boolean",
@@ -1444,6 +1617,21 @@
             }
           },
           "description": "A custom validation callback (ValidateFn / validate=), expressed as a closed vocabulary a JSON case can carry: the listed values are rejected with the given message, everything else passes. Each harness builds the same callable, so the resulting `--<flag>: <message>` parse error is byte-identical across targets. Contract §23.5's validate row -- it runs on a supplied value only, never on a declared default."
+        },
+        "elect_by": {
+          "type": "string",
+          "enum": [
+            "selector-token",
+            "member-flags"
+          ],
+          "description": "Declares this flag a SELECTOR and names its spelling (contract §24.12's own two strings, the same pair §25.6 publishes). `selector-token` is `--via email`; `member-flags` spells each choice as its own flag and never types the selector's name."
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/choice"
+          },
+          "description": "A selector's choices, in declaration order. On a flag entry `choices` always means choice objects and `choices_<T>` always means value records -- which is what lets the two constructs share one flag entry without collision."
         }
       }
     },
@@ -1463,22 +1651,6 @@
           "items": {
             "$ref": "#/$defs/flag"
           }
-        }
-      }
-    },
-    "mutex_group": {
-      "type": "object",
-      "required": [
-        "flags"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "flags": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/flag"
-          },
-          "minItems": 2
         }
       }
     },
