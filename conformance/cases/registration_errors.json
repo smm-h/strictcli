@@ -199,8 +199,12 @@
               "help": "be chatter",
               "presence": "default",
               "choices_str": [
-                "yes",
-                "no"
+                {
+                  "value": "yes"
+                },
+                {
+                  "value": "no"
+                }
               ],
               "default": false
             }
@@ -222,8 +226,7 @@
     }
   },
   {
-    "name": "registration: mutex group with one flag",
-    "skip_schema_validation": true,
+    "name": "registration: a choice flag with one choice",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -233,14 +236,16 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
                 {
-                  "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "optional"
+                  "name": "email",
+                  "help": "deliver as an email message"
                 }
               ]
             }
@@ -254,8 +259,8 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "at least 2",
-      "stderr_equals": "error: command \"cmd\": mutex group must have at least 2 flags, got 1"
+      "stderr_contains": "at least two choices",
+      "stderr_equals": "error: Flag \"via\": a choice flag must declare at least two choices"
     }
   },
   {
@@ -506,8 +511,12 @@
               "help": "output format",
               "presence": "default",
               "choices_str": [
-                "json",
-                "csv"
+                {
+                  "value": "json"
+                },
+                {
+                  "value": "csv"
+                }
               ],
               "default": "xml"
             }
@@ -529,8 +538,7 @@
     }
   },
   {
-    "name": "registration: flag in multiple mutex groups",
-    "skip_schema_validation": true,
+    "name": "registration: a name reused by simultaneously electable scopes",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -540,36 +548,52 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "format",
+              "help": "output format",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
                 {
-                  "name": "as-json",
-                  "type": "bool",
-                  "help": "output as json",
-                  "presence": "optional"
+                  "name": "table",
+                  "help": "a rendered table",
+                  "flags": [
+                    {
+                      "name": "width",
+                      "help": "column width",
+                      "type": "int",
+                      "presence": "required"
+                    }
+                  ]
                 },
                 {
-                  "name": "csv",
-                  "type": "bool",
-                  "help": "output as csv",
-                  "presence": "optional"
+                  "name": "raw",
+                  "help": "unrendered output"
                 }
               ]
             },
             {
-              "flags": [
+              "name": "sink",
+              "help": "where output goes",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
                 {
-                  "name": "csv",
-                  "type": "bool",
-                  "help": "output as csv",
-                  "presence": "optional"
+                  "name": "file",
+                  "help": "write to a file",
+                  "flags": [
+                    {
+                      "name": "width",
+                      "help": "line width",
+                      "type": "int",
+                      "presence": "required"
+                    }
+                  ]
                 },
                 {
-                  "name": "xml",
-                  "type": "bool",
-                  "help": "output as xml",
-                  "presence": "optional"
+                  "name": "stdout",
+                  "help": "write to stdout"
                 }
               ]
             }
@@ -583,8 +607,8 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "appears in multiple mutex groups",
-      "stderr_equals": "error: command \"cmd\": flag \"csv\" appears in multiple mutex groups"
+      "stderr_contains": "simultaneously electable scopes may not reuse a flag name",
+      "stderr_equals": "error: command \"cmd\": flag '--width' is declared under '--format table' and under '--sink file', which can be elected at the same time: simultaneously electable scopes may not reuse a flag name"
     }
   },
   {

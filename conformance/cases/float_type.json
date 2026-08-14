@@ -286,9 +286,15 @@
               "help": "the rate",
               "presence": "required",
               "choices_float": [
-                1.5,
-                2.5,
-                3.5
+                {
+                  "value": 1.5
+                },
+                {
+                  "value": 2.5
+                },
+                {
+                  "value": 3.5
+                }
               ]
             }
           ],
@@ -324,9 +330,15 @@
               "help": "the rate",
               "presence": "required",
               "choices_float": [
-                1.5,
-                2.5,
-                3.5
+                {
+                  "value": 1.5
+                },
+                {
+                  "value": 2.5
+                },
+                {
+                  "value": 3.5
+                }
               ]
             }
           ],
@@ -453,7 +465,7 @@
     }
   },
   {
-    "name": "float: unelected float mutex member delivers None",
+    "name": "float: an unelected member contributes nothing to the delivered record",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -463,25 +475,33 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "source",
+              "help": "where the value comes from",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "rate",
-                  "type": "float",
                   "help": "the rate",
-                  "presence": "optional"
+                  "value": {
+                    "type": "float",
+                    "help": "the rate"
+                  }
                 },
                 {
                   "name": "preset",
-                  "type": "str",
                   "help": "a named preset",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "a named preset"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "rate={rate} preset={preset}"
+          "handler_prints": "source={source}"
         }
       ]
     },
@@ -492,7 +512,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "rate=None preset=fast"
+      "stdout_equals": "source=preset(value=fast)"
     }
   },
   {

@@ -533,8 +533,12 @@
               "help": "the mode",
               "presence": "optional",
               "choices_str": [
-                "fast",
-                "slow"
+                {
+                  "value": "fast"
+                },
+                {
+                  "value": "slow"
+                }
               ]
             }
           ],

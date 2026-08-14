@@ -346,7 +346,7 @@
     }
   },
   {
-    "name": "effects_reserved_flags: a mutex-group flag named verbose is rejected",
+    "name": "effects_reserved_flags: a SCOPED flag named verbose is rejected",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -357,20 +357,28 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "ok",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "mode",
+              "help": "output mode",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
                 {
-                  "name": "verbose",
-                  "type": "bool",
-                  "help": "should be rejected",
-                  "presence": "optional"
+                  "name": "loud",
+                  "help": "say more",
+                  "flags": [
+                    {
+                      "name": "verbose",
+                      "type": "bool",
+                      "help": "should be rejected",
+                      "presence": "optional"
+                    }
+                  ]
                 },
                 {
                   "name": "terse",
-                  "type": "bool",
-                  "help": "the other side",
-                  "presence": "optional"
+                  "help": "the other side"
                 }
               ]
             }

@@ -10,10 +10,10 @@ writes JSON test cases to conformance/cases/pairwise.json.
 
 The matrix the presence round asks for (campaign phase L1.8) is
 {required, defaulted, optional} x {str, int, float, bool, list, dict} x
-{plain, choices, env, validate, mutex-member, co-required, implies}. It is
+{plain, choices, env, validate, scoped, co-required, implies}. It is
 spelled here as independent axes rather than one three-column table, so the
 2-way covering array also reaches the pairs the older matrix already covered
-(short x type, negatable x mutex, choices x env, repeatable x anything):
+(short x type, negatable x scoped, choices x env, repeatable x anything):
 
   - type: str, bool, int, float, list, dict
   - presence: required, defaulted, optional     <- the round's new dimension
@@ -21,15 +21,21 @@ spelled here as independent axes rather than one three-column table, so the
   - env: present, absent
   - choices: present, absent
   - negatable: true, false, na (bool only)
-  - mutex: yes, no
+  - selector: yes, no                           <- the scoped-selector axis
   - constraint: plain, validate, co_required, implies
   - repeatable: yes, no, na (scalar str/int/float only)
+
+**A `selector=yes` row declares the subject flag inside a CHOICE'S SCOPE**
+(contract §24.1), elected by a command-line token. A scope is not a presence
+declaration and never supplies one, so the whole matrix survives one level
+down: type, presence, short, env, choices, repeatability, negation and
+`validate` all mean at depth exactly what they mean at root, which is the
+property §24.7 states per level and this axis is what proves.
 
 **Presence drives how the value is supplied**, which is what makes the axis
 mean something at parse time rather than only at registration:
 
-  - a mutex member is always elected by a command-line token (see below);
-  - otherwise a flag declaring `env` is supplied through the environment,
+  - a flag declaring `env` is supplied through the environment,
     which is what §23.5's env row promises satisfies requiredness;
   - otherwise a `required` flag is supplied on the command line;
   - otherwise nothing supplies it, so a `default` flag delivers its declared
@@ -41,9 +47,9 @@ Invalid combinations filtered:
   - non-bool + negatable in (true, false)  [forced to "na"]
   - list/dict + repeatable in (yes, no)    [forced to "na"]
   - list/dict + choices=present            [choices are a scalar declaration]
-  - mutex=yes + presence=required          [§23.5's mutex row: registration error]
-  - mutex=yes + constraint in (co_required, implies)  [a member of a group that
-    also demands co-presence contradicts the group's exactly-one requirement]
+  - selector=yes + constraint in (co_required, implies)  [§24.8: a constraint
+    naming a scoped flag is a registration error -- the scope already IS the
+    constraint]
   - constraint=validate + type in (bool, dict): the corpus's validator compares
     the value through each language's own default formatting, which agrees for
     strings, ints, floats and their list elements, and does NOT agree for a
@@ -69,7 +75,7 @@ SHORT_OPTS = ["yes", "no"]
 ENV_OPTS = ["present", "absent"]
 CHOICES_OPTS = ["present", "absent"]
 NEGATABLE_OPTS = ["true", "false", "na"]
-MUTEX_OPTS = ["yes", "no"]
+SELECTOR_OPTS = ["yes", "no"]
 CONSTRAINT_OPTS = ["plain", "validate", "co_required", "implies"]
 REPEATABLE_OPTS = ["yes", "no", "na"]
 
@@ -80,7 +86,7 @@ PARAMETERS = [
     ENV_OPTS,         # 3: env
     CHOICES_OPTS,     # 4: choices
     NEGATABLE_OPTS,   # 5: negatable
-    MUTEX_OPTS,       # 6: mutex
+    SELECTOR_OPTS,    # 6: selector
     CONSTRAINT_OPTS,  # 7: constraint
     REPEATABLE_OPTS,  # 8: repeatable
 ]
@@ -122,15 +128,11 @@ def is_valid_combination(row: list) -> bool:
             return False
         if flag_type != "bool" and negatable != "na":
             return False
-    if len(row) > 6:
-        mutex = row[6]
-        presence = row[1]
-        # A mutex member cannot declare requiredness (contract §23.5's mutex
-        # row): the group's own requirement is what makes the choice mandatory.
-        if mutex == "yes" and presence == "required":
-            return False
     if len(row) > 7:
         constraint = row[7]
+        # A constraint naming a scoped flag is a registration error (§24.8):
+        # the scope already IS the constraint, and expressing one fact in two
+        # mechanisms is how the two disagree later.
         if row[6] == "yes" and constraint in ("co_required", "implies"):
             return False
         if constraint == "validate" and flag_type in ("bool", "dict"):
@@ -277,7 +279,7 @@ def generate_test_case(row_idx: int, row: list) -> dict:
     has_env = row[3] == "present"
     has_choices = row[4] == "present"
     is_negatable = row[5] == "true"  # only meaningful when type=bool
-    is_mutex = row[6] == "yes"
+    is_scoped = row[6] == "yes"
     constraint = row[7]
     is_repeatable = row[8] == "yes"
 
@@ -293,6 +295,7 @@ def generate_test_case(row_idx: int, row: list) -> dict:
     # (§23.5's Implies-target row). For every other type the implication runs
     # beside it, because an Implies trigger must be a bool flag.
     subject_is_implied = constraint == "implies" and flag_type == "bool"
+    sel_name = f"sel{row_idx}"
 
     features = [f"type={flag_type}", f"presence={presence}"]
     if has_short:
@@ -305,8 +308,8 @@ def generate_test_case(row_idx: int, row: list) -> dict:
         features.append("repeatable")
     if flag_type == "bool":
         features.append(f"negatable={row[5]}")
-    if is_mutex:
-        features.append("mutex")
+    if is_scoped:
+        features.append("scoped")
     if constraint != "plain":
         features.append(constraint)
     name = f"pairwise: {', '.join(features)}"
@@ -333,7 +336,9 @@ def generate_test_case(row_idx: int, row: list) -> dict:
         if has_env:
             flag_def["env_separator"] = ","
     if has_choices:
-        flag_def[f"choices_{flag_type}"] = _choices(flag_type)
+        flag_def[f"choices_{flag_type}"] = [
+            {"value": v} for v in _choices(flag_type)
+        ]
     if flag_type == "bool":
         flag_def["negatable"] = is_negatable
     if constraint == "validate":
@@ -345,21 +350,20 @@ def generate_test_case(row_idx: int, row: list) -> dict:
 
     # --- how the value is supplied -----------------------------------------
     #
-    # Mutex members are the exception, and it is a hard one: under the election
-    # rules (§21) only a command-line token elects a member, and a bool member
-    # elects only when it resolves to TRUE. So a mutex row can neither test
-    # `--no-<name>` (that DECLINES, leaving the group unsatisfied -- a parse
-    # error, not the exit-0 this generator asserts) nor supply the value through
-    # env or a default (neither elects). Every mutex row therefore supplies an
-    # electing CLI token; the decline semantics are pinned by mutex.json.
+    # A scoped row supplies its value exactly as a root-scope row does: the
+    # scope is elected first, and everything inside it then resolves by the
+    # ordinary rules (§24.3's fourth phase). An env var bound to a scoped flag
+    # is a CONDITIONAL BINDING (§24.6), consulted because its scope IS elected
+    # here -- which is the property this axis pairs against every other one.
     argv = ["cmd"]
     env_dict: dict[str, str] = {}
     test_negation = False
 
+    if is_scoped:
+        argv.extend([f"--{sel_name}", "on"])
+
     if subject_is_implied:
         supply = "implied"
-    elif is_mutex:
-        supply = "cli"
     elif has_env:
         supply = "env"
     elif presence == "required":
@@ -368,7 +372,7 @@ def generate_test_case(row_idx: int, row: list) -> dict:
         supply = "none"
 
     if supply == "cli":
-        test_negation = flag_type == "bool" and is_negatable and not is_mutex
+        test_negation = flag_type == "bool" and is_negatable
         if test_negation:
             argv.append(f"--no-{flag_name}")
         else:
@@ -394,25 +398,24 @@ def generate_test_case(row_idx: int, row: list) -> dict:
     flags: list[dict] = []
     dependencies: list[dict] = []
 
-    if is_mutex:
-        companion_name = f"alt{row_idx}"
-        companion: dict = {
-            "name": companion_name,
-            "type": JSON_TYPE[flag_type],
-            "help": f"mutex companion {row_idx}",
-            "presence": "optional",
-        }
-        if flag_type == "bool":
-            companion["negatable"] = is_negatable
-        if kind in ("repeat", "list"):
-            companion["unique"] = False
-            if is_repeatable:
-                companion["repeatable"] = True
-        command["mutex"] = [{"flags": [flag_def, companion]}]
-        # The companion is never elected, and an `optional` member delivers
-        # absence rather than a type zero value (§21.3 as amended).
-        handler_parts.append(f"{companion_name}={{{companion_name}}}")
-        expected_parts.append(f"{companion_name}=None")
+    if is_scoped:
+        # The subject flag lives in the scope of the elected choice; the sibling
+        # scope declares nothing, which is the degenerate choice §24.2 says the
+        # construct subsumes. The selector's own key is what the handler reads,
+        # and the field is reached THROUGH it -- sub-flags are never top-level
+        # handler arguments at any depth (§24.1).
+        flags.append({
+            "name": sel_name,
+            "help": f"scope selector {row_idx}",
+            "presence": "required",
+            "elect_by": "selector-token",
+            "choices": [
+                {"name": "on", "help": "the scope that owns the subject flag",
+                 "flags": [flag_def]},
+                {"name": "off", "help": "the sibling scope, which owns nothing"},
+            ],
+        })
+        handler_parts[0] = f"{flag_name}={{{sel_name}.{flag_name}}}"
     else:
         flags.append(flag_def)
 

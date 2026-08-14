@@ -1,6 +1,6 @@
 [
   {
-    "name": "composition: mutex + env, a value set via env elects nothing",
+    "name": "composition: member spelling + env, an env value elects nothing",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -11,27 +11,33 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "source",
+              "help": "where to read from",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "file",
-                  "type": "str",
                   "help": "read from file",
-                  "presence": "optional",
-                  "env": "MYAPP_FILE"
+                  "value": {
+                    "type": "str",
+                    "help": "the path"
+                  }
                 },
                 {
                   "name": "url",
-                  "type": "str",
                   "help": "read from URL",
-                  "presence": "optional",
-                  "env": "MYAPP_URL"
+                  "value": {
+                    "type": "str",
+                    "help": "the url"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "file={file} url={url}"
+          "handler_prints": "source={source}"
         }
       ]
     },
@@ -52,7 +58,7 @@
     }
   },
   {
-    "name": "composition: mutex + env, both set via env is still an unsatisfied group",
+    "name": "composition: member spelling + env, both set via env still elects nothing",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -63,22 +69,28 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "source",
+              "help": "where to read from",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "file",
-                  "type": "str",
                   "help": "read from file",
-                  "presence": "optional",
-                  "env": "MYAPP_FILE"
+                  "value": {
+                    "type": "str",
+                    "help": "the path"
+                  }
                 },
                 {
                   "name": "url",
-                  "type": "str",
                   "help": "read from URL",
-                  "presence": "optional",
-                  "env": "MYAPP_URL"
+                  "value": {
+                    "type": "str",
+                    "help": "the url"
+                  }
                 }
               ]
             }
@@ -105,7 +117,7 @@
     }
   },
   {
-    "name": "composition: mutex + env, an env value beside a CLI election is suppressed",
+    "name": "composition: member spelling + env, an env value beside a CLI election is suppressed",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -116,27 +128,33 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "source",
+              "help": "where to read from",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "file",
-                  "type": "str",
                   "help": "read from file",
-                  "presence": "optional",
-                  "env": "MYAPP_FILE"
+                  "value": {
+                    "type": "str",
+                    "help": "the path"
+                  }
                 },
                 {
                   "name": "url",
-                  "type": "str",
                   "help": "read from URL",
-                  "presence": "optional",
-                  "env": "MYAPP_URL"
+                  "value": {
+                    "type": "str",
+                    "help": "the url"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "file={file} url={url}"
+          "handler_prints": "source={source}"
         }
       ]
     },
@@ -150,7 +168,7 @@
     },
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "file=None url=http://example.com"
+      "stdout_equals": "source=url(value=http://example.com)"
     }
   },
   {
@@ -166,8 +184,12 @@
           "help": "output format",
           "presence": "default",
           "choices_str": [
-            "text",
-            "json"
+            {
+              "value": "text"
+            },
+            {
+              "value": "json"
+            }
           ],
           "default": "text"
         }
@@ -204,8 +226,12 @@
           "help": "output format",
           "presence": "default",
           "choices_str": [
-            "text",
-            "json"
+            {
+              "value": "text"
+            },
+            {
+              "value": "json"
+            }
           ],
           "default": "text"
         }
@@ -243,8 +269,12 @@
           "help": "output format",
           "presence": "default",
           "choices_str": [
-            "text",
-            "json"
+            {
+              "value": "text"
+            },
+            {
+              "value": "json"
+            }
           ],
           "default": "text",
           "env": "MYAPP_FORMAT"
@@ -346,7 +376,7 @@
     }
   },
   {
-    "name": "composition: nesting + mutex, one provided is ok",
+    "name": "composition: nesting + member spelling, one elected is ok",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -361,25 +391,25 @@
               "name": "set",
               "help": "set a config value",
               "effect": "read_only",
-              "mutex": [
+              "flags": [
                 {
-                  "flags": [
+                  "name": "scope",
+                  "help": "which config to set",
+                  "presence": "required",
+                  "elect_by": "member-flags",
+                  "choices": [
                     {
                       "name": "local",
-                      "type": "bool",
-                      "help": "set local config",
-                      "presence": "optional"
+                      "help": "set local config"
                     },
                     {
                       "name": "system",
-                      "type": "bool",
-                      "help": "set system config",
-                      "presence": "optional"
+                      "help": "set system config"
                     }
                   ]
                 }
               ],
-              "handler_prints": "local={local} system={system}"
+              "handler_prints": "scope={scope}"
             }
           ]
         }
@@ -392,11 +422,11 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "local=true system=None"
+      "stdout_equals": "scope=local"
     }
   },
   {
-    "name": "composition: nesting + mutex, both provided is error",
+    "name": "composition: nesting + member spelling, two elections are mutually exclusive",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -411,20 +441,20 @@
               "name": "set",
               "help": "set a config value",
               "effect": "read_only",
-              "mutex": [
+              "flags": [
                 {
-                  "flags": [
+                  "name": "scope",
+                  "help": "which config to set",
+                  "presence": "required",
+                  "elect_by": "member-flags",
+                  "choices": [
                     {
                       "name": "local",
-                      "type": "bool",
-                      "help": "set local config",
-                      "presence": "optional"
+                      "help": "set local config"
                     },
                     {
                       "name": "system",
-                      "type": "bool",
-                      "help": "set system config",
-                      "presence": "optional"
+                      "help": "set system config"
                     }
                   ]
                 }
@@ -555,9 +585,15 @@
                   "help": "output format",
                   "presence": "required",
                   "choices_str": [
-                    "text",
-                    "json",
-                    "csv"
+                    {
+                      "value": "text"
+                    },
+                    {
+                      "value": "json"
+                    },
+                    {
+                      "value": "csv"
+                    }
                   ]
                 }
               ]
@@ -598,9 +634,15 @@
                   "help": "output format",
                   "presence": "required",
                   "choices_str": [
-                    "text",
-                    "json",
-                    "csv"
+                    {
+                      "value": "text"
+                    },
+                    {
+                      "value": "json"
+                    },
+                    {
+                      "value": "csv"
+                    }
                   ]
                 }
               ]
@@ -686,10 +728,18 @@
               "presence": "required",
               "repeatable": true,
               "choices_str": [
-                "debug",
-                "info",
-                "warn",
-                "error"
+                {
+                  "value": "debug"
+                },
+                {
+                  "value": "info"
+                },
+                {
+                  "value": "warn"
+                },
+                {
+                  "value": "error"
+                }
               ],
               "env": "MYAPP_LEVEL",
               "unique": false,
@@ -731,10 +781,18 @@
               "presence": "required",
               "repeatable": true,
               "choices_str": [
-                "debug",
-                "info",
-                "warn",
-                "error"
+                {
+                  "value": "debug"
+                },
+                {
+                  "value": "info"
+                },
+                {
+                  "value": "warn"
+                },
+                {
+                  "value": "error"
+                }
               ],
               "env": "MYAPP_LEVEL",
               "unique": false,

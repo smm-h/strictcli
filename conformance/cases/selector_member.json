@@ -1,6 +1,6 @@
 [
   {
-    "name": "mutex: neither provided is error",
+    "name": "selector member: neither elected is an error",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -10,25 +10,25 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "mode",
+              "help": "how loud to be",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "optional"
+                  "help": "chatter output"
                 },
                 {
                   "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
+                  "help": "muted output"
                 }
               ]
             }
           ],
-          "handler_prints": "chatter={chatter} muted={muted}"
+          "handler_prints": "mode={mode}"
         }
       ]
     },
@@ -40,11 +40,12 @@
       "stderr_contains": [
         "one of",
         "is required"
-      ]
+      ],
+      "stderr_equals": "error: one of --chatter, --muted is required\ntry 'myapp cmd --help'"
     }
   },
   {
-    "name": "mutex: one provided is ok",
+    "name": "selector member: one elected delivers the tagged record",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -54,25 +55,25 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "mode",
+              "help": "how loud to be",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "optional"
+                  "help": "chatter output"
                 },
                 {
                   "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
+                  "help": "muted output"
                 }
               ]
             }
           ],
-          "handler_prints": "chatter={chatter} muted={muted}"
+          "handler_prints": "mode={mode}"
         }
       ]
     },
@@ -82,15 +83,12 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": [
-        "chatter=true",
-        "muted=None"
-      ],
-      "stdout_equals": "chatter=true muted=None"
+      "stdout_contains": "mode=chatter",
+      "stdout_equals": "mode=chatter"
     }
   },
   {
-    "name": "mutex: both provided is error",
+    "name": "selector member: both elected is mutually exclusive",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -100,20 +98,20 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "mode",
+              "help": "how loud to be",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "optional"
+                  "help": "chatter output"
                 },
                 {
                   "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
+                  "help": "muted output"
                 }
               ]
             }
@@ -138,99 +136,7 @@
     }
   },
   {
-    "name": "mutex: required group, none provided is error",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test app",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "mutex": [
-            {
-              "flags": [
-                {
-                  "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "optional"
-                },
-                {
-                  "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
-                }
-              ]
-            }
-          ],
-          "handler_prints": "ok"
-        }
-      ]
-    },
-    "argv": [
-      "cmd"
-    ],
-    "expect": {
-      "exit_code": 1,
-      "stderr_contains": [
-        "--chatter",
-        "--muted",
-        "required"
-      ],
-      "stderr_equals": "error: one of --chatter, --muted is required\ntry 'myapp cmd --help'"
-    }
-  },
-  {
-    "name": "mutex: required group, one provided is ok",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test app",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "mutex": [
-            {
-              "flags": [
-                {
-                  "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "optional"
-                },
-                {
-                  "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
-                }
-              ]
-            }
-          ],
-          "handler_prints": "chatter={chatter} muted={muted}"
-        }
-      ]
-    },
-    "argv": [
-      "cmd",
-      "--muted"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_contains": [
-        "chatter=None",
-        "muted=true"
-      ],
-      "stdout_equals": "chatter=None muted=true"
-    }
-  },
-  {
-    "name": "mutex: str flags, one provided is ok",
+    "name": "selector member: str members, one elected is ok",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -240,25 +146,33 @@
           "name": "fetch",
           "help": "fetch data",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "source",
+              "help": "where to read from",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "file",
-                  "type": "str",
                   "help": "read from file",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "read from file"
+                  }
                 },
                 {
                   "name": "url",
-                  "type": "str",
                   "help": "read from URL",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "read from URL"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "file={file} url={url}"
+          "handler_prints": "source={source}"
         }
       ]
     },
@@ -269,12 +183,12 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_contains": "file=data.txt",
-      "stdout_equals": "file=data.txt url=None"
+      "stdout_contains": "source=file(value=data.txt)",
+      "stdout_equals": "source=file(value=data.txt)"
     }
   },
   {
-    "name": "mutex: str flags, both provided is error",
+    "name": "selector member: str members, both elected is mutually exclusive",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -284,20 +198,28 @@
           "name": "fetch",
           "help": "fetch data",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "source",
+              "help": "where to read from",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "file",
-                  "type": "str",
                   "help": "read from file",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "read from file"
+                  }
                 },
                 {
                   "name": "url",
-                  "type": "str",
                   "help": "read from URL",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "read from URL"
+                  }
                 }
               ]
             }
@@ -324,7 +246,7 @@
     }
   },
   {
-    "name": "mutex: help shows mutually exclusive section",
+    "name": "selector member: help renders the selector's own line and its members beneath it",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -341,22 +263,20 @@
               "help": "your name",
               "presence": "default",
               "default": "anon"
-            }
-          ],
-          "mutex": [
+            },
             {
-              "flags": [
+              "name": "mode",
+              "help": "how loud to be",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "optional"
+                  "help": "chatter output"
                 },
                 {
                   "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
+                  "help": "muted output"
                 }
               ]
             }
@@ -372,60 +292,16 @@
     "expect": {
       "exit_code": 0,
       "stdout_contains": [
-        "Flags (mutually exclusive):",
+        "(exactly one of the following)",
         "--chatter",
         "--muted",
-        "Flags:",
         "--name"
       ],
-      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [optional]\n  --muted, --no-muted        muted output [optional]"
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>                 your name [default: anon]\n  mode                         how loud to be (exactly one of the following) [required]\n    --chatter                  chatter output [required]\n    --muted                    muted output [required]"
     }
   },
   {
-    "name": "mutex: required group shown in help",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test app",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "mutex": [
-            {
-              "flags": [
-                {
-                  "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "optional"
-                },
-                {
-                  "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
-                }
-              ]
-            }
-          ],
-          "handler_prints": "ok"
-        }
-      ]
-    },
-    "argv": [
-      "cmd",
-      "--help"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_contains": "Flags (mutually exclusive):",
-      "stdout_equals": "myapp cmd -- a command\n\nFlags (mutually exclusive):\n  --chatter, --no-chatter    chatter output [optional]\n  --muted, --no-muted        muted output [optional]"
-    }
-  },
-  {
-    "name": "mutex A1: a negated bool member elects nothing",
+    "name": "selector member A1: a negated bool member elects nothing",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -435,31 +311,33 @@
           "name": "run",
           "help": "run it",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "profile",
-                  "type": "str",
                   "help": "a profile",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "a profile"
+                  }
                 },
                 {
                   "name": "all-profiles",
-                  "type": "bool",
-                  "help": "every profile",
-                  "presence": "optional"
+                  "help": "every profile"
                 },
                 {
                   "name": "current-profile",
-                  "type": "bool",
-                  "help": "the current profile",
-                  "presence": "optional"
+                  "help": "the current profile"
                 }
               ]
             }
           ],
-          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+          "handler_prints": "target={target}"
         }
       ]
     },
@@ -477,7 +355,7 @@
     }
   },
   {
-    "name": "mutex A1: a true bool member still elects",
+    "name": "selector member A1: a true bool member still elects",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -487,31 +365,33 @@
           "name": "run",
           "help": "run it",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "profile",
-                  "type": "str",
                   "help": "a profile",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "a profile"
+                  }
                 },
                 {
                   "name": "all-profiles",
-                  "type": "bool",
-                  "help": "every profile",
-                  "presence": "optional"
+                  "help": "every profile"
                 },
                 {
                   "name": "current-profile",
-                  "type": "bool",
-                  "help": "the current profile",
-                  "presence": "optional"
+                  "help": "the current profile"
                 }
               ]
             }
           ],
-          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+          "handler_prints": "target={target}"
         }
       ]
     },
@@ -521,11 +401,11 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "profile=None all=true current=None"
+      "stdout_equals": "target=all-profiles"
     }
   },
   {
-    "name": "mutex A1: every member declined is an unsatisfied group",
+    "name": "selector member A1: every member declined is an unsatisfied selector",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -535,31 +415,33 @@
           "name": "run",
           "help": "run it",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "profile",
-                  "type": "str",
                   "help": "a profile",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "a profile"
+                  }
                 },
                 {
                   "name": "all-profiles",
-                  "type": "bool",
-                  "help": "every profile",
-                  "presence": "optional"
+                  "help": "every profile"
                 },
                 {
                   "name": "current-profile",
-                  "type": "bool",
-                  "help": "the current profile",
-                  "presence": "optional"
+                  "help": "the current profile"
                 }
               ]
             }
           ],
-          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+          "handler_prints": "target={target}"
         }
       ]
     },
@@ -574,7 +456,7 @@
     }
   },
   {
-    "name": "mutex A2: a string member elects on the empty string",
+    "name": "selector member A2: a string member elects on the empty string",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -584,31 +466,33 @@
           "name": "run",
           "help": "run it",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "profile",
-                  "type": "str",
                   "help": "a profile",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "a profile"
+                  }
                 },
                 {
                   "name": "all-profiles",
-                  "type": "bool",
-                  "help": "every profile",
-                  "presence": "optional"
+                  "help": "every profile"
                 },
                 {
                   "name": "current-profile",
-                  "type": "bool",
-                  "help": "the current profile",
-                  "presence": "optional"
+                  "help": "the current profile"
                 }
               ]
             }
           ],
-          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+          "handler_prints": "target={target}"
         }
       ]
     },
@@ -619,11 +503,11 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "profile= all=None current=None"
+      "stdout_equals": "target=profile(value=)"
     }
   },
   {
-    "name": "mutex A3: no teaching clause when nothing was declined",
+    "name": "selector member A3: no teaching clause when nothing was declined",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -633,31 +517,33 @@
           "name": "run",
           "help": "run it",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "profile",
-                  "type": "str",
                   "help": "a profile",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "a profile"
+                  }
                 },
                 {
                   "name": "all-profiles",
-                  "type": "bool",
-                  "help": "every profile",
-                  "presence": "optional"
+                  "help": "every profile"
                 },
                 {
                   "name": "current-profile",
-                  "type": "bool",
-                  "help": "the current profile",
-                  "presence": "optional"
+                  "help": "the current profile"
                 }
               ]
             }
           ],
-          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+          "handler_prints": "target={target}"
         }
       ]
     },
@@ -670,7 +556,7 @@
     }
   },
   {
-    "name": "mutex A4: a redundant negation beside an election is a parse error",
+    "name": "selector member A4: a redundant negation beside an election is a parse error",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -680,31 +566,33 @@
           "name": "run",
           "help": "run it",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "profile",
-                  "type": "str",
                   "help": "a profile",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "a profile"
+                  }
                 },
                 {
                   "name": "all-profiles",
-                  "type": "bool",
-                  "help": "every profile",
-                  "presence": "optional"
+                  "help": "every profile"
                 },
                 {
                   "name": "current-profile",
-                  "type": "bool",
-                  "help": "the current profile",
-                  "presence": "optional"
+                  "help": "the current profile"
                 }
               ]
             }
           ],
-          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+          "handler_prints": "target={target}"
         }
       ]
     },
@@ -724,7 +612,7 @@
     }
   },
   {
-    "name": "mutex A4: every declined member is named, in declaration order",
+    "name": "selector member A4: every declined member is named, in declaration order",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -734,31 +622,33 @@
           "name": "run",
           "help": "run it",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "profile",
-                  "type": "str",
                   "help": "a profile",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "a profile"
+                  }
                 },
                 {
                   "name": "all-profiles",
-                  "type": "bool",
-                  "help": "every profile",
-                  "presence": "optional"
+                  "help": "every profile"
                 },
                 {
                   "name": "current-profile",
-                  "type": "bool",
-                  "help": "the current profile",
-                  "presence": "optional"
+                  "help": "the current profile"
                 }
               ]
             }
           ],
-          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+          "handler_prints": "target={target}"
         }
       ]
     },
@@ -775,7 +665,7 @@
     }
   },
   {
-    "name": "mutex: two elections are still mutually exclusive",
+    "name": "selector member: two elections are still mutually exclusive",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -785,31 +675,33 @@
           "name": "run",
           "help": "run it",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "profile",
-                  "type": "str",
                   "help": "a profile",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "a profile"
+                  }
                 },
                 {
                   "name": "all-profiles",
-                  "type": "bool",
-                  "help": "every profile",
-                  "presence": "optional"
+                  "help": "every profile"
                 },
                 {
                   "name": "current-profile",
-                  "type": "bool",
-                  "help": "the current profile",
-                  "presence": "optional"
+                  "help": "the current profile"
                 }
               ]
             }
           ],
-          "handler_prints": "profile={profile} all={all-profiles} current={current-profile}"
+          "handler_prints": "target={target}"
         }
       ]
     },
@@ -825,7 +717,7 @@
     }
   },
   {
-    "name": "mutex A5: a config-file value elects nothing",
+    "name": "selector member A5: a config-file value elects nothing",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -837,25 +729,33 @@
           "name": "fetch",
           "help": "fetch data",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "source",
+              "help": "where to read from",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "file",
-                  "type": "str",
                   "help": "read from file",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "read from file"
+                  }
                 },
                 {
                   "name": "url",
-                  "type": "str",
                   "help": "read from URL",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "read from URL"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "file={file} url={url}"
+          "handler_prints": "source={source}"
         }
       ]
     },
@@ -868,7 +768,7 @@
     }
   },
   {
-    "name": "mutex A5: a config-file value beside a CLI election is suppressed",
+    "name": "selector member A5: a config-file value beside a CLI election is suppressed",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -880,25 +780,33 @@
           "name": "fetch",
           "help": "fetch data",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "source",
+              "help": "where to read from",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "file",
-                  "type": "str",
                   "help": "read from file",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "read from file"
+                  }
                 },
                 {
                   "name": "url",
-                  "type": "str",
                   "help": "read from URL",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "read from URL"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "file={file} url={url} file_source={source:file}"
+          "handler_prints": "source={source} source_of={source:source}"
         }
       ]
     },
@@ -909,7 +817,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "file=None url=http://example.com file_source=default"
+      "stdout_equals": "source=url(value=http://example.com) source_of=cli"
     }
   }
 ]

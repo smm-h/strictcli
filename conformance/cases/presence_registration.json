@@ -825,7 +825,7 @@
     ]
   },
   {
-    "name": "presence registration: a mutex member cannot declare requiredness (python)",
+    "name": "presence registration: a member flag must declare requiredness (go)",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -835,87 +835,47 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
-                  "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "required"
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  },
+                  "presence": "optional"
                 },
                 {
-                  "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
                 }
               ]
             }
           ],
-          "handler_prints": "chatter={chatter} muted={muted}"
+          "handler_prints": "target={target}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--chatter"
+      "--all-profiles"
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_equals": "error: Flag \"chatter\": a mutex member cannot declare presence=\"required\": the group's own requirement is what makes the choice mandatory"
-    },
-    "targets": [
-      "python"
-    ]
-  },
-  {
-    "name": "presence registration: a mutex member cannot declare requiredness (go)",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test app",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "mutex": [
-            {
-              "flags": [
-                {
-                  "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "required"
-                },
-                {
-                  "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
-                }
-              ]
-            }
-          ],
-          "handler_prints": "chatter={chatter} muted={muted}"
-        }
-      ]
-    },
-    "argv": [
-      "cmd",
-      "--chatter"
-    ],
-    "expect": {
-      "exit_code": 1,
-      "stderr_equals": "error: Flag \"chatter\": a mutex member cannot declare Required(): the group's own requirement is what makes the choice mandatory"
+      "stderr_equals": "error: Choice \"profile\" of \"target\": a member flag must declare Required(), read as required once this member is elected"
     },
     "targets": [
       "go"
     ]
   },
   {
-    "name": "presence registration: a mutex member cannot declare requiredness (typescript)",
+    "name": "presence registration: a member flag must declare requiredness (typescript)",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -925,35 +885,40 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
-                  "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "required"
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  },
+                  "presence": "optional"
                 },
                 {
-                  "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
                 }
               ]
             }
           ],
-          "handler_prints": "chatter={chatter} muted={muted}"
+          "handler_prints": "target={target}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--chatter"
+      "--all-profiles"
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_equals": "error: Flag \"chatter\": a mutex member cannot declare presence: \"required\": the group's own requirement is what makes the choice mandatory"
+      "stderr_equals": "error: Choice \"profile\" of \"target\": a member flag must declare presence: \"required\", read as required once this member is elected"
     },
     "targets": [
       "typescript"

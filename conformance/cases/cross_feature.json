@@ -1,6 +1,6 @@
 [
   {
-    "name": "cross_feature: required bool in mutex group, only string provided",
+    "name": "cross_feature: a bool member beside a payload-carrying one, the payload elected",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -10,25 +10,29 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "mode",
+              "help": "how to run",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "force-mode",
-                  "type": "bool",
-                  "help": "force mode",
-                  "presence": "optional"
+                  "help": "force mode"
                 },
                 {
                   "name": "target",
-                  "type": "str",
                   "help": "target name",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "target name"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "force-mode={force-mode} target={target}"
+          "handler_prints": "mode={mode}"
         }
       ]
     },
@@ -39,11 +43,11 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "force-mode=None target=prod"
+      "stdout_equals": "mode=target(value=prod)"
     }
   },
   {
-    "name": "cross_feature: required bool in mutex group, neither provided is error",
+    "name": "cross_feature: a bool member beside a payload-carrying one, neither elected is an error",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -53,25 +57,29 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "mode",
+              "help": "how to run",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "force-mode",
-                  "type": "bool",
-                  "help": "force mode",
-                  "presence": "optional"
+                  "help": "force mode"
                 },
                 {
                   "name": "target",
-                  "type": "str",
                   "help": "target name",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "target name"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "force-mode={force-mode} target={target}"
+          "handler_prints": "mode={mode}"
         }
       ]
     },
@@ -83,11 +91,12 @@
       "stderr_contains": [
         "one of",
         "is required"
-      ]
+      ],
+      "stderr_equals": "error: one of --force-mode, --target is required\ntry 'myapp cmd --help'"
     }
   },
   {
-    "name": "cross_feature: required bool in mutex group, bool provided",
+    "name": "cross_feature: a bool member beside a payload-carrying one, the bool elected",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -97,25 +106,29 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "mode",
+              "help": "how to run",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "force-mode",
-                  "type": "bool",
-                  "help": "force mode",
-                  "presence": "optional"
+                  "help": "force mode"
                 },
                 {
                   "name": "target",
-                  "type": "str",
                   "help": "target name",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "target name"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "force-mode={force-mode} target={target}"
+          "handler_prints": "mode={mode}"
         }
       ]
     },
@@ -125,7 +138,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "force-mode=true target=None"
+      "stdout_equals": "mode=force-mode"
     }
   },
   {

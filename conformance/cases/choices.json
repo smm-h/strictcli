@@ -17,8 +17,12 @@
               "help": "output format",
               "presence": "required",
               "choices_str": [
-                "text",
-                "json"
+                {
+                  "value": "text"
+                },
+                {
+                  "value": "json"
+                }
               ]
             }
           ],
@@ -54,8 +58,12 @@
               "help": "output format",
               "presence": "required",
               "choices_str": [
-                "text",
-                "json"
+                {
+                  "value": "text"
+                },
+                {
+                  "value": "json"
+                }
               ]
             }
           ],
@@ -97,8 +105,12 @@
               "help": "output format",
               "presence": "default",
               "choices_str": [
-                "text",
-                "json"
+                {
+                  "value": "text"
+                },
+                {
+                  "value": "json"
+                }
               ],
               "default": "text"
             }
@@ -135,9 +147,15 @@
               "help": "the port",
               "presence": "required",
               "choices_int": [
-                80,
-                443,
-                8080
+                {
+                  "value": 80
+                },
+                {
+                  "value": 443
+                },
+                {
+                  "value": 8080
+                }
               ]
             }
           ],
@@ -173,9 +191,15 @@
               "help": "the port",
               "presence": "required",
               "choices_int": [
-                80,
-                443,
-                8080
+                {
+                  "value": 80
+                },
+                {
+                  "value": 443
+                },
+                {
+                  "value": 8080
+                }
               ]
             }
           ],
@@ -216,8 +240,12 @@
               "help": "output format",
               "presence": "default",
               "choices_str": [
-                "text",
-                "json"
+                {
+                  "value": "text"
+                },
+                {
+                  "value": "json"
+                }
               ],
               "default": "text",
               "env": "MYAPP_FORMAT"
@@ -257,8 +285,12 @@
               "help": "output format",
               "presence": "default",
               "choices_str": [
-                "text",
-                "json"
+                {
+                  "value": "text"
+                },
+                {
+                  "value": "json"
+                }
               ],
               "default": "text",
               "env": "MYAPP_FORMAT"
@@ -300,8 +332,12 @@
               "help": "target env",
               "presence": "optional",
               "choices_str": [
-                "dev",
-                "prod"
+                {
+                  "value": "dev"
+                },
+                {
+                  "value": "prod"
+                }
               ]
             }
           ],
@@ -334,8 +370,12 @@
               "help": "target env",
               "presence": "optional",
               "choices_str": [
-                "dev",
-                "prod"
+                {
+                  "value": "dev"
+                },
+                {
+                  "value": "prod"
+                }
               ]
             }
           ],
@@ -368,8 +408,12 @@
               "help": "target env",
               "presence": "optional",
               "choices_str": [
-                "dev",
-                "prod"
+                {
+                  "value": "dev"
+                },
+                {
+                  "value": "prod"
+                }
               ]
             }
           ],
@@ -391,7 +435,7 @@
     }
   },
   {
-    "name": "choices: unset mutex flag with choices not validated",
+    "name": "choices: a choices flag in an unelected scope is never validated",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -401,40 +445,62 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "sink",
+              "help": "where output goes",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
                 {
-                  "name": "format",
-                  "type": "str",
-                  "help": "output format",
-                  "presence": "optional",
-                  "choices_str": [
-                    "text",
-                    "json"
+                  "name": "rendered",
+                  "help": "a rendered document",
+                  "flags": [
+                    {
+                      "name": "format",
+                      "type": "str",
+                      "help": "output format",
+                      "presence": "optional",
+                      "choices_str": [
+                        {
+                          "value": "text"
+                        },
+                        {
+                          "value": "json"
+                        }
+                      ]
+                    }
                   ]
                 },
                 {
-                  "name": "output",
-                  "type": "str",
-                  "help": "output path",
-                  "presence": "optional"
+                  "name": "path",
+                  "help": "a file on disk",
+                  "flags": [
+                    {
+                      "name": "output",
+                      "type": "str",
+                      "help": "output path",
+                      "presence": "optional"
+                    }
+                  ]
                 }
               ]
             }
           ],
-          "handler_prints": "format={format} output={output}"
+          "handler_prints": "sink={sink}"
         }
       ]
     },
     "argv": [
       "cmd",
+      "--sink",
+      "path",
       "--output",
       "out.txt"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "format=None output=out.txt"
+      "stdout_equals": "sink=path(output=out.txt)"
     }
   }
 ]

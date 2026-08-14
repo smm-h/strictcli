@@ -345,7 +345,7 @@
     }
   },
   {
-    "name": "int: unelected int mutex member delivers None",
+    "name": "int: an elected int member delivers its payload under the reserved name value",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -355,36 +355,44 @@
           "name": "cmd",
           "help": "a command",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "listen",
+              "help": "where to listen",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "port",
-                  "type": "int",
                   "help": "the port",
-                  "presence": "optional"
+                  "value": {
+                    "type": "int",
+                    "help": "the port"
+                  }
                 },
                 {
                   "name": "socket",
-                  "type": "str",
                   "help": "the socket path",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "the socket path"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "port={port} socket={socket}"
+          "handler_prints": "listen={listen} value={listen.value}"
         }
       ]
     },
     "argv": [
       "cmd",
-      "--socket",
-      "/tmp/s.sock"
+      "--port",
+      "8080"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "port=None socket=/tmp/s.sock"
+      "stdout_equals": "listen=port(value=8080) value=8080"
     }
   },
   {

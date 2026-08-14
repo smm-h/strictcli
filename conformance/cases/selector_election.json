@@ -1,0 +1,731 @@
+[
+  {
+    "name": "selector election: a token elects its choice and opens its scope",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--subject",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=email(subject=hi)"
+    }
+  },
+  {
+    "name": "selector election: order independence -- the scoped flag may precede the election",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--subject",
+      "hi",
+      "--via",
+      "email"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=email(subject=hi)"
+    }
+  },
+  {
+    "name": "selector election: a value naming no declared choice reuses the existing invalid-choice text",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "carrier-pigeon"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --via: invalid value 'carrier-pigeon', must be one of: email, sms\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector election: a required token-spelled selector that elected nothing is the ordinary required-flag error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--via' is required\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector election: electing twice names both values in command-line order",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--via",
+      "sms"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --via: elected more than once, as 'email' and 'sms'\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector election: a token-spelled selector elects from an env var",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "env": "NOTIFY_VIA",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via} source={source:via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--subject",
+      "hi"
+    ],
+    "env": {
+      "NOTIFY_VIA": "email"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=email(subject=hi) source=env"
+    }
+  },
+  {
+    "name": "selector election: a command-line election beats the env one",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "env": "NOTIFY_VIA",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via} source={source:via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "sms",
+      "--phone-number",
+      "+15550100"
+    ],
+    "env": {
+      "NOTIFY_VIA": "email"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=sms(phone_number=+15550100) source=cli"
+    }
+  },
+  {
+    "name": "selector election: a token-spelled selector elects from a config key",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via} source={source:via}"
+        }
+      ],
+      "config_content": "{\"via\": \"sms\"}"
+    },
+    "argv": [
+      "send",
+      "--phone-number",
+      "+15550100"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=sms(phone_number=+15550100) source=config"
+    }
+  },
+  {
+    "name": "selector election: a member flag elects and carries its payload",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "operate on profiles",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  },
+                  "flags": [
+                    {
+                      "name": "create-missing",
+                      "help": "create the profile when absent",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    }
+                  ]
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--profile",
+      "work",
+      "--create-missing"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "target=profile(value=work, create_missing=true)"
+    }
+  },
+  {
+    "name": "selector election: a payload-less member elects on its own",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "operate on profiles",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  },
+                  "flags": [
+                    {
+                      "name": "create-missing",
+                      "help": "create the profile when absent",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    }
+                  ]
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "target={target} choice={target.choice}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--all-profiles"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "target=all-profiles choice=all-profiles"
+    }
+  },
+  {
+    "name": "selector election: member spelling is command line only -- an env var elects nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "operate on profiles",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "target={target}"
+        }
+      ]
+    },
+    "argv": [
+      "run"
+    ],
+    "env": {
+      "MYAPP_PROFILE": "work"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: one of --profile, --all-profiles is required\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "selector election: a nested selector elects inside its parent's scope",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "publish",
+          "help": "publish one entry",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "visibility",
+              "help": "who the entry is for",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "internal",
+                  "help": "not published to users"
+                },
+                {
+                  "name": "user-facing",
+                  "help": "published to users",
+                  "flags": [
+                    {
+                      "name": "type",
+                      "help": "the kind of change",
+                      "presence": "required",
+                      "elect_by": "selector-token",
+                      "choices": [
+                        {
+                          "name": "feature",
+                          "help": "a new capability",
+                          "flags": [
+                            {
+                              "name": "description",
+                              "help": "what it does for users",
+                              "type": "str",
+                              "presence": "required"
+                            }
+                          ]
+                        },
+                        {
+                          "name": "fix",
+                          "help": "a corrected defect",
+                          "flags": [
+                            {
+                              "name": "symptom",
+                              "help": "the user-visible symptom",
+                              "type": "str",
+                              "presence": "required"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "visibility={visibility} inner={visibility.type.choice}"
+        }
+      ]
+    },
+    "argv": [
+      "publish",
+      "--visibility",
+      "user-facing",
+      "--type",
+      "feature",
+      "--description",
+      "scoped selectors"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "visibility=user-facing(type=feature(description=scoped selectors)) inner=feature"
+    }
+  }
+]

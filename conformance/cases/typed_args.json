@@ -250,9 +250,15 @@
               "presence": "required",
               "type": "int",
               "choices_int": [
-                0,
-                1,
-                2
+                {
+                  "value": 0
+                },
+                {
+                  "value": 1
+                },
+                {
+                  "value": 2
+                }
               ]
             }
           ],
@@ -287,9 +293,15 @@
               "presence": "required",
               "type": "int",
               "choices_int": [
-                0,
-                1,
-                2
+                {
+                  "value": 0
+                },
+                {
+                  "value": 1
+                },
+                {
+                  "value": 2
+                }
               ]
             }
           ],
@@ -327,9 +339,15 @@
               "help": "a color",
               "presence": "required",
               "choices_str": [
-                "red",
-                "green",
-                "blue"
+                {
+                  "value": "red"
+                },
+                {
+                  "value": "green"
+                },
+                {
+                  "value": "blue"
+                }
               ]
             }
           ],
@@ -363,9 +381,15 @@
               "help": "a color",
               "presence": "required",
               "choices_str": [
-                "red",
-                "green",
-                "blue"
+                {
+                  "value": "red"
+                },
+                {
+                  "value": "green"
+                },
+                {
+                  "value": "blue"
+                }
               ]
             }
           ],

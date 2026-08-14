@@ -404,49 +404,6 @@
     }
   },
   {
-    "name": "passthrough: with mutex only is registration error",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test app",
-      "commands": [
-        {
-          "name": "checkout",
-          "help": "checkout a branch",
-          "effect": "read_only",
-          "passthrough": true,
-          "passthrough_handler_prints": "{name}:{args}",
-          "mutex": [
-            {
-              "flags": [
-                {
-                  "name": "chatter",
-                  "type": "bool",
-                  "help": "chatter output",
-                  "presence": "optional"
-                },
-                {
-                  "name": "muted",
-                  "type": "bool",
-                  "help": "muted output",
-                  "presence": "optional"
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    "argv": [
-      "checkout"
-    ],
-    "expect": {
-      "exit_code": 1,
-      "stderr_contains": "passthrough",
-      "stderr_equals": "error: command \"checkout\": passthrough commands cannot have mutex groups"
-    }
-  },
-  {
     "name": "passthrough: in group works",
     "app": {
       "name": "myapp",

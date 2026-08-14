@@ -246,7 +246,7 @@
     }
   },
   {
-    "name": "ctx.provided: an unelected mutex member is not provided",
+    "name": "ctx.provided: a selector's own key answers as any flag does",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -256,23 +256,33 @@
           "name": "run",
           "help": "run it",
           "effect": "read_only",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "source",
+              "help": "where to read from",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
                 {
                   "name": "file",
                   "help": "from a file",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "the path"
+                  }
                 },
                 {
                   "name": "url",
                   "help": "from a url",
-                  "presence": "optional"
+                  "value": {
+                    "type": "str",
+                    "help": "the url"
+                  }
                 }
               ]
             }
           ],
-          "handler_prints": "{provided:file}:{provided:url}"
+          "handler_prints": "{provided:source}:{source:source}"
         }
       ]
     },
@@ -283,7 +293,7 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "true:false"
+      "stdout_equals": "true:cli"
     }
   }
 ]

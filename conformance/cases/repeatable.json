@@ -163,9 +163,15 @@
               "presence": "required",
               "repeatable": true,
               "choices_str": [
-                "alpha",
-                "beta",
-                "gamma"
+                {
+                  "value": "alpha"
+                },
+                {
+                  "value": "beta"
+                },
+                {
+                  "value": "gamma"
+                }
               ],
               "unique": false
             }
@@ -205,8 +211,12 @@
               "presence": "required",
               "repeatable": true,
               "choices_str": [
-                "alpha",
-                "beta"
+                {
+                  "value": "alpha"
+                },
+                {
+                  "value": "beta"
+                }
               ],
               "unique": false
             }

@@ -98,7 +98,7 @@
     }
   },
   {
-    "name": "machine_mode: a mutex-group flag named json is rejected",
+    "name": "machine_mode: a SCOPED flag named json is rejected",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -109,20 +109,28 @@
           "help": "a command",
           "effect": "read_only",
           "handler_prints": "ok",
-          "mutex": [
+          "flags": [
             {
-              "flags": [
+              "name": "mode",
+              "help": "output mode",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
                 {
-                  "name": "json",
-                  "type": "bool",
-                  "help": "should be rejected",
-                  "presence": "optional"
+                  "name": "structured",
+                  "help": "machine output",
+                  "flags": [
+                    {
+                      "name": "json",
+                      "type": "bool",
+                      "help": "should be rejected",
+                      "presence": "optional"
+                    }
+                  ]
                 },
                 {
                   "name": "text",
-                  "type": "bool",
-                  "help": "text output",
-                  "presence": "optional"
+                  "help": "text output"
                 }
               ]
             }
