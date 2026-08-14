@@ -4100,6 +4100,20 @@ the correction that made the promise true.
      blob. A blob whose exchange never started (a non-consequential command, a client that
      declared no elicitation) is never minted and so has nothing to spend.
 
+135. **The blob's base64url spelling is validated, not left to three decoders (§22.4).** §22.4
+     says unpadded base64url and §22.2 says the refusals are byte-identical; both were true of
+     the *messages* and false of the *verdicts*. Each language was reading the segments with its
+     own stock decoder, and those accept different texts: a `requestState` with one `=` appended
+     was refused by Go and **accepted by Python and TypeScript, which then ran the command**. The
+     audit found that one; writing the vector set found three more, all of them shared by
+     languages the audit had cleared -- an embedded newline (Go's decoder skips them), a
+     character outside the alphabet (Node's decoder skips them), and a final character whose
+     ignored trailing bits are non-zero, which every one of the three accepted as an alias for
+     the canonical blob. The correction is one predicate, written the same way in all three:
+     alphabet only, no padding, no length one past a multiple of four, zero trailing bits, run on
+     each segment before the decode. A canonically-spelled blob is unaffected -- no encoder emits
+     anything else -- so this only narrows what a client can hand back.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -4803,6 +4817,14 @@ requestState has already been used
 ```
 
 Spent ids are pruned once they are past their own expiry, so the set cannot grow without bound.
+
+**The spelling is checked before the decode** (corrected 2026-08-14, §18.13 item 135). "Unpadded
+base64url" is a set of texts, and the three languages' stock decoders do not agree on which:
+Python's ignores stray characters and accepts padding, Node's ignores anything outside the
+alphabet, Go's skips newlines, and all three ignore the trailing bits of a final character that
+does not fill a byte. Each segment is therefore validated as canonical -- alphabet only, no
+padding, a length a byte string can produce, zero trailing bits -- before any decoder sees it, so
+the three refuse exactly the same texts, with `requestState failed verification`.
 
 #### 22.4a The principal, stated honestly
 
