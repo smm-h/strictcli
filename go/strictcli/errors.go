@@ -121,18 +121,6 @@ func errArgChoiceTypeMismatch(name string, c interface{}, typeName string) strin
 	return fmt.Sprintf("Arg %q: choice %v is not of type %s", name, c, typeName)
 }
 
-func errArgListDefaultMustBeList(name string) string {
-	return fmt.Sprintf("Arg %q: list arg default must be a list", name)
-}
-
-func errArgExplicitEmptyDefaultRedundantList(name string) string {
-	return fmt.Sprintf("Arg %q: explicit empty default is redundant for list args, omit the default", name)
-}
-
-func errArgDefaultElementTypeMismatch(name string, i int, typeName string) string {
-	return fmt.Sprintf("Arg %q: default element %d is not of type %s", name, i, typeName)
-}
-
 func errArgStrDefaultTypeMismatch(name string, gotType string) string {
 	return fmt.Sprintf("Arg %q: type=str requires a str default, got '%s'", name, gotType)
 }

@@ -1262,38 +1262,11 @@ func NewArg(name, help string, opts ...ArgOption) Arg {
 			}
 		}
 	}
-	// Validate default type matches declared type
-	if a.hasDefault && a.Default != nil && IsListType(a.Type) {
-		slice, ok := a.Default.([]interface{})
-		if !ok {
-			panic(errArgListDefaultMustBeList(a.Name))
-		}
-		if len(slice) == 0 {
-			panic(errArgExplicitEmptyDefaultRedundantList(a.Name))
-		}
-		elemType := ItemType(a.Type)
-		typeName := map[FlagType]string{TypeStr: "str", TypeInt: "int", TypeFloat: "float"}[elemType]
-		for i, elem := range slice {
-			valid := false
-			switch elemType {
-			case TypeStr:
-				_, valid = elem.(string)
-			case TypeInt:
-				_, valid = elem.(int)
-			case TypeFloat:
-				if intVal, isInt := elem.(int); isInt {
-					// Auto-coerce int to float64, mirroring list flag defaults
-					slice[i] = float64(intVal)
-					valid = true
-				} else {
-					_, valid = elem.(float64)
-				}
-			}
-			if !valid {
-				panic(errArgDefaultElementTypeMismatch(a.Name, i, typeName))
-			}
-		}
-	} else if a.hasDefault && a.Default != nil {
+	// Validate default type matches declared type. There is no list branch:
+	// a list-typed arg must be variadic (refused just above otherwise), and a
+	// variadic arg cannot declare a default at all (resolveArgPresence), so an
+	// arg default is always a scalar.
+	if a.hasDefault && a.Default != nil {
 		switch a.Type {
 		case TypeStr:
 			if _, ok := a.Default.(string); !ok {
