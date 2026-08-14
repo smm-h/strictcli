@@ -1,0 +1,355 @@
+---
+title: Language Idioms
+description: "Why strictcli's Python, Go, and TypeScript declaration surfaces are deliberately different, what parity actually binds (semantics and pinned sentences), and how strictness serves each language's own idea of clean code."
+nav_group: "Guides"
+nav_order: 5
+---
+
+# Language Idioms
+
+strictcli ships three first-class implementations, and the first thing most
+readers assume about them is wrong. They assume the goal is one API rendered in
+three syntaxes -- that a Python declaration and a Go declaration should look as
+alike as the two languages will permit, and that every place they read
+differently is a seam waiting to be closed.
+
+That is not the design. The three declaration surfaces are deliberately
+different, and each is different in the direction its own language pulls. What
+is held identical is **behavior**: the semantics of every declaration, the exact
+sentence of every error, the bytes of every help screen, the fields of the
+dumped schema, the exit codes. Not the spelling you write to get there.
+
+This is not a compromise the project tolerates. It is the point. You should be
+able to build your CLI in whichever of the three languages you actually want to
+work in, using that language's own idioms and its own ways of writing clean
+code -- and get a framework that makes the best way the only way in *that*
+language, rather than one that flattens all three into whatever shape they
+happen to share.
+
+## One semantic, three surfaces
+
+The clearest case is the newest one: **the presence declaration**. Every flag
+and every positional argument declares exactly one of three facts about itself
+-- that a value must be supplied, that absence is legal and delivered as
+absence, or a default value the framework supplies when nothing else does.
+Declaring none of the three does not register. Declaring two does not register.
+Nothing about presence is inferred from the shape of another declaration.
+
+That is one semantic, pinned once. Here is what you write.
+
+**Python** -- a keyword argument on the `flag()` decorator, beside the
+`default=` it has always had:
+
+```python
+@app.command("deploy", help="Deploy the app", effect="mutating")
+@strictcli.flag("target", type=str, presence="required", help="Where to deploy")
+@strictcli.flag("tag", type=str, presence="optional", help="Optional release tag")
+@strictcli.flag("cache", type=bool, default=True, help="Reuse the build cache")
+def deploy(ctx, target, tag=None, cache=True):
+    ...
+```
+
+**Go** -- three sibling functional options, exactly like every other option the
+package takes:
+
+```go
+strictcli.WithFlags(
+    strictcli.StringFlag("target", "Where to deploy", strictcli.Required()),
+    strictcli.StringFlag("tag", "Optional release tag", strictcli.Optional()),
+    strictcli.BoolFlag("cache", "Reuse the build cache", strictcli.Default(true)),
+)
+```
+
+Positional args take the same three facts through their own trio:
+`ArgRequired()`, `ArgOptional()`, `ArgDefault(v)`.
+
+**TypeScript** -- a discriminated union on the options object, mirroring the
+three-shape union `ArgOpts` has carried since the port:
+
+```ts
+flags: {
+    target: flag("target", t.str, { help: "Where to deploy", presence: "required" }),
+    tag: flag("tag", t.str, { help: "Optional release tag", presence: "optional" }),
+    cache: flag("cache", t.bool, {
+        help: "Reuse the build cache",
+        presence: "default",
+        default: true,
+    }),
+}
+```
+
+Three surfaces. No two of them would be recognizable as translations of each
+other, and a shared spelling could not have been any of them: Python has no
+functional options, Go has no keyword arguments, and a keyword-shaped Python
+surface expressed in TypeScript would have thrown away the discriminated union
+that makes the whole thing type-check.
+
+## What each surface bought
+
+The divergence is not merely tolerated for style. In every case the language's
+own form bought an enforcement the other two cannot express, and every one of
+those is a gain that reaches exactly one language.
+
+### Go: an unexported field closes a trap the exported one left open
+
+`Required()`, `Optional()` and `Default(v)` all write the same **unexported**
+`presenceBits` field on the `Flag` struct (`go/strictcli/strictcli.go`). A
+`Flag` **struct literal** -- written directly, passing through none of the
+option constructors -- therefore declares no presence, and does not register:
+
+```go
+app.GlobalFlag(strictcli.Flag{Name: "level", Type: strictcli.TypeStr, Help: "verbosity"})
+// panics: Flag "level": presence is undeclared: declare exactly one of
+// Required(), Optional(), or Default(<value>)
+```
+
+That refusal closed a pre-existing trap as a side effect. `Flag` has an
+exported `Default` field, and setting it on a literal left the unexported
+`hasDefault` bookkeeping false, so the value was accepted at registration and
+then **silently ignored at parse time**. After the presence round that flag does
+not register at all, so the value can no longer be quietly dropped. The
+registration-error tests for it are in `go/strictcli/presence_test.go`
+(`TestFlagStructLiteralWithDefaultFieldDoesNotRegister`, and its flag-set,
+mutex-group and arg twins).
+
+Nothing in Python or TypeScript corresponds to this, because neither has a
+struct literal that can bypass a constructor. The trap only ever existed in Go,
+and only Go's idiomatic surface could close it.
+
+### TypeScript: the type system carries the declaration
+
+`FlagOpts` is a union of three members, and the two value-less members declare
+`default?: never`:
+
+```ts
+export type FlagOpts<Out, S extends Schema> =
+    | (FlagCommonOpts<Out, S> & { readonly presence: "required"; readonly default?: never })
+    | (FlagCommonOpts<Out, S> & { readonly presence: "optional"; readonly default?: never })
+    | (FlagCommonOpts<Out, S> & { readonly presence: "default"; readonly default: Out | InfraRootPath });
+```
+
+A `default` written beside `presence: "required"` does not compile. A
+`presence: "default"` without a `default` does not compile. The `flag()` factory
+takes **const type parameters** (`const N extends string`, `const O extends
+FlagOpts<Out, S>`), so the literal options object keeps its literal type all the
+way through, and `infer.ts` reads the declaration back out of it:
+
+```ts
+/** A flag key is optional iff the flag declares `presence: "optional"`. */
+```
+
+That single line fixed a real unsoundness. `FlagKeyIsOptional` used to test
+`opts extends { default: null }`, which typed a mutex member declared without a
+default as an always-present, non-nullable key -- while the parser handed the
+handler `undefined` through an exemption that no longer exists. The handler-args
+type now follows the declaration by construction.
+
+The other two languages get the same guarantee at registration time, as a hard
+error. TypeScript gets it at registration time **and** in the editor, before the
+program is run. That is not a divergence to be apologized for.
+
+### Python: the framework can see the handler's parameters
+
+Python handlers name their parameters, so Python -- alone of the three -- can
+check the boundary where a declaration is received:
+
+```python
+@app.command("c", help="h", effect="read_only")
+@strictcli.flag("target", type=str, presence="optional", help="h")
+def c(ctx, target=""):
+    ...
+# ValueError: command "c": handler parameter 'target' is bound to optional flag
+# '--target' and must default to None
+```
+
+A written `target=""` re-introduces at the handler boundary exactly the sentinel
+the presence declaration just removed -- an empty string standing in for "not
+supplied", which destroys `""` as a real value. The check reads narrowly: it
+fires only when the parameter **has** a default and that default is not `None`.
+A bare `def c(ctx, target)` is legal, because the framework passes every declared
+value as a keyword argument on every dispatch, so the parameter receives the
+framework's `None` and no second value competes with it.
+
+Go and TypeScript have no such check, and its absence is not a gap. Their
+handlers receive one `map[string]interface{}` / one args object; there is no
+per-parameter default for a handler author to re-sentinelize with. There is no
+site to check -- not a check that was skipped.
+
+## What parity actually binds
+
+Parity is not API sameness. It binds four things, and the presence round
+exercises all four.
+
+**Semantics.** An optional declaration delivers absence as a *present key* in
+every implementation -- `None` / `nil` / `undefined` -- rather than omitting the
+key. Optional bools are a real tri-state in all three. A compound flag gets no
+silent `[]` or `{}` in any of them. A variadic arg refuses a default everywhere.
+
+**Rendered bytes.** Help renders exactly one presence part per line, and the
+three implementations emit the same characters:
+
+```
+greet hello -- Say hello
+
+Flags:
+  --name <str>         Who to greet [required]
+  --tag <str>          Optional tag [optional]
+  --loud, --no-loud    Shout it [default: false]
+```
+
+**Schema fields.** `--dump-schema` emits `presence` on every flag and arg entry
+in every implementation, which is what stopped schema parity from passing by
+erasure -- the dumped schema previously carried no requiredness at all.
+
+**Pinned sentences.** This is the subtle one, and it is where the whole design
+becomes legible.
+
+## One sentence, each language's spellings inside
+
+An error message names things the user wrote. When the thing it names is a
+*spelling*, and the three languages spell it differently, a byte-identical
+message across all three is impossible -- and faking one would mean telling a Go
+developer to write `presence="required"`.
+
+So the contract pins the **sentence**, and substitutes each language's own
+spellings inside it:
+
+| Impl | Text |
+|---|---|
+| Python | `Flag "x": presence is undeclared: declare exactly one of presence="required", presence="optional", or default=<value>` |
+| Go | `Flag "target": presence is undeclared: declare exactly one of Required(), Optional(), or Default(<value>)` |
+| TypeScript | `Flag "x": presence is undeclared: declare exactly one of presence: "required", presence: "optional", or presence: "default" with default: <value>` |
+
+Same sentence, word for word, with three spellings substituted into it. The same
+rule governs the whole family -- the declared-twice error, the mutex-member
+error, the variadic-default error, and the null-default redirect, whose
+parenthetical also substitutes its noun (`Flag` messages say "when the flag is
+absent", `Arg` messages say "when the arg is absent").
+
+This has a consequence for how conformance is run. The cross-language
+error-parity check compares templates across implementations, so a template that
+carries a per-language spelling cannot be compared that way: each of the three
+carries only its own, and the other two record it as an `excluded:` entry in
+`conformance/check_error_parity.py` with the rationale written out. The
+assertion still happens -- it just happens **per target**, in
+`conformance/cases/presence_registration.json`, where every implementation is
+required to produce its own exact line.
+
+## Errors only one language can produce
+
+Two members of the presence family exist in exactly one implementation each, and
+not because two implementations skipped them.
+
+**Python only.** Python spells the declaration as a keyword taking a string, so
+`presence="defualt"` and `presence=3` are writable:
+
+```
+Flag "x": presence must be "required" or "optional", got 'defualt'; a default value is declared with default=<value>
+```
+
+Go's three sibling options and TypeScript's discriminated union have no input
+that could carry a bad presence value. There is nothing to mistype.
+
+**TypeScript only.** TypeScript is the only language whose default spelling has
+two parts, so a widened options object can reach the factory carrying the
+discriminant and not the value:
+
+```
+Flag "x": presence: "default" requires a default value: declare default: <value>, or presence: "optional" for no value
+```
+
+Python's `default=<value>` and Go's `Default(v)` *are* the value; a half-written
+default declaration is inexpressible there.
+
+Each of these names a state only one language's spelling can reach. A sibling
+has no input that could produce the message, and asserting parity over it would
+be asserting that two implementations carry text no code path can print. Their
+absence elsewhere is a consequence of the spelling, not a parity defect -- and
+the conformance suite records it as such.
+
+## The same shape, elsewhere in the framework
+
+Presence is the richest example, not the only one.
+
+**Effect classification** is mandatory on every command, and each language
+declares it its own way. Python takes a closed-enum keyword,
+`effect="read_only"` or `effect="mutating"`. Go takes a functional option with a
+typed constant, `WithEffect(EffectReadOnly)`. TypeScript takes neither -- it has
+**twin factories**, `defineReadOnlyCommand` and `defineMutatingCommand`, which
+is what lets the classification reach the type system: `defineReadOnlyCommand`
+narrows the handler's `ctx` to a `ReadOnlyContext` whose `effects` member
+exposes only `run`, so a `.write()` inside a read-only command is a **compile**
+error. The fixtures that pin it live in `typescript/tests/negative/` and are
+compiled through `tsc` by `typescript/tests/negative_types.test.ts`.
+
+Every implementation still carries the runtime seal regardless -- a plain-JS
+consumer bypasses the type system entirely -- so the semantics are identical and
+TypeScript simply catches it earlier. One language got a compile-time
+enforcement out of its own idiomatic surface. That is a pro.
+
+**Go got the mirror image of that trade.** The four `Unsettled`-family effect
+carriers each begin with a `_ [0]func()` field whose only purpose is to make the
+struct non-comparable, so `a == b` on a carrier is a compile error rather than a
+silently wrong answer. No runtime test can observe that field -- deleting it
+changes no behavior -- so the pin is a compile-FAIL package,
+`go/strictcli/testdata/noncomparable/`, which `carrier_noncomparable_test.go`
+compiles on purpose and asserts one diagnostic per fixture, naming the field
+verbatim:
+
+```
+invalid operation: a == b (struct containing [0]func() cannot be compared)
+```
+
+The comment on the Go test says where the idea came from: it is modelled on the
+TypeScript sibling. Techniques travel between the implementations. Spellings do
+not have to.
+
+## The best way, the only way
+
+None of this is an argument for looseness. It is the opposite. Each
+implementation is strict in its own language's terms, and the strictness is what
+makes the idiom worth having.
+
+- **No implicit defaults.** Presence is declared three ways and derived zero
+  ways. Before the round, the shape of a `default=` declaration was silently
+  read as a statement about requiredness in three mutually incompatible ways;
+  now the declaration says it, in every language, or the program does not
+  register.
+- **Help text is mandatory** on every app, group, command, flag and arg. Empty
+  help is a registration-time error, in all three.
+- **Four types only** -- `str`, `bool`, `int`, `float` -- parsed strictly, with
+  NaN and Inf rejected.
+- **Registration-time hard errors**, in each language's own failure idiom:
+  `ValueError` in Python, a panic in Go, a throw in TypeScript. The failure
+  happens where the mistake was written, not on the day a user types the flag.
+- **Named-and-banned flag names.** `--yes` is banned outright, with a message
+  pointing at `--approve-consequential`, so a private confirmation skip cannot
+  be reintroduced under a different spelling. A bare `--force` is refused with a
+  redirect to a qualified name (`--force-overwrite`, `--force-delete`), because
+  "force" alone never says what is being forced.
+- **No escape hatches.** The consent flag `--approve-consequential` answers the
+  confirmation in advance and does nothing else; there is no flag that turns a
+  registration error into a warning, and none should ever be added.
+
+A framework that made these rules optional in order to keep three languages
+easy to synchronize would be worse in all three. Making the best way the only
+way is what each of the three surfaces is *for*.
+
+## If you are extending strictcli
+
+The rule for new surface follows from everything above: design **three
+idiomatic forms** for one pinned semantic. Ask what a Python developer, a Go
+developer and a TypeScript developer would each expect to write, and write those
+three. Do not pick one language's shape and transliterate it into the other two,
+and do not reach for a lowest-common-denominator spelling because it is easier
+to keep in step.
+
+Parity work then binds the semantics, the rendered bytes, the schema fields, and
+the sentence of every message -- with each language's own spellings substituted
+inside it. When a mis-declaration is expressible in only one language, that
+language gets an error template the others do not have, recorded as an
+`excluded:` entry with its rationale and asserted per target in a conformance
+case.
+
+A difference in what you type is not a defect to be filed. A difference in what
+happens is.

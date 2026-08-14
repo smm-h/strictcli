@@ -10,6 +10,8 @@ A strict CLI framework with three first-class implementations -- Python, Go, and
 
 Declare everything, infer nothing. Help text is mandatory on every app, group, command, flag, and argument. Types are limited to `str`, `bool`, `int`, and `float`, parsed strictly. Every command declares its effect on the world, and the framework derives consent and previewing from that declaration.
 
+Build in whichever of the three languages you prefer, writing it the way that language is written: Python keyword arguments and decorators, Go functional options, TypeScript discriminated unions and full type inference. Lockstep binds behavior -- semantics, help bytes, schema fields, and the sentence of every error -- not the spelling you type. See [Language idioms](language-idioms.md).
+
 ## Start here
 
 - [Python quickstart](python-quickstart.md)
@@ -18,6 +20,7 @@ Declare everything, infer nothing. Help text is mandatory on every app, group, c
 
 ## Guides
 
+- [Language idioms](language-idioms.md) -- why the three declaration surfaces are deliberately different, and what parity actually binds
 - [Architecture and internals](architecture.md) -- the parse pipeline, registration-time validation, and the schema format
 - [Flag system](flag-system.md) -- flags, arguments, dependencies, mutex groups, and the reserved quartet
 - [Conformance](conformance.md) -- how the three implementations are proven identical
