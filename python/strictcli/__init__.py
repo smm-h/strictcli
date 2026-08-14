@@ -217,11 +217,18 @@ class _SourcedStore:
         self._entries.pop(name, None)
 
     def is_present_for_deps(self, name: str) -> bool:
-        """Present for deps (CoRequired, Requires): everything except default."""
+        """Present for deps (CoRequired, Requires, Implies): the invocation
+        caused the value.
+
+        This is the single definition of "was this supplied" (contract §23.6):
+        `cli`, `env`, `config` and `implied` count; `default` and `infra` do
+        not, both being the declaration deciding rather than the invocation.
+        ``ctx.provided`` answers off the same predicate.
+        """
         e = self._entries.get(name)
         if e is None:
             return False
-        return e.source != _Source.DEFAULT
+        return e.source not in (_Source.DEFAULT, _Source.INFRA)
 
     def __contains__(self, name: str) -> bool:
         return name in self._entries
@@ -427,6 +434,19 @@ class Context:
         if name in self._sources:
             return self._sources[name]
         raise KeyError(f"no source info for flag {name!r}")
+
+    def provided(self, name: str) -> bool:
+        """Return True when the INVOCATION caused this flag's value.
+
+        `cli`, `env`, `config` and `implied` are provided; `default` and `infra`
+        are not -- those are the declaration deciding (contract §23.6). An
+        optional flag that received nothing carries source `default`, so it
+        reports False.
+
+        Accepts dashed or underscored names and raises the same ``KeyError`` as
+        :meth:`source` for an unknown name: one condition, one message.
+        """
+        return self.source(name) in _PROVIDED_SOURCES
 
     def infra_value(self, env_var: str) -> tuple[str | None, bool]:
         """Return the value of a declared infrastructure env var.
@@ -3096,7 +3116,7 @@ def _resolve_flag_show_source(f: "Flag", config_data: dict) -> tuple[object, str
     if param in config_data:
         return config_data[param], "config"
     # Default
-    if f.default is not None:
+    if f.presence == PRESENCE_DEFAULT:
         return f.default, "default"
     return None, "default"
 
@@ -3356,7 +3376,7 @@ def _generate_config_template_toml(
         if cf_collide is not None:
             comment += f" -- {cf_collide.help}"
         lines.append(comment)
-        if f.default is not None:
+        if f.presence == PRESENCE_DEFAULT:
             lines.append(f"{param} = {_toml_format_scalar(f.default)}")
         else:
             lines.append(f"# {param} =")
@@ -3432,7 +3452,7 @@ def _generate_config_template_json(
     # Flag-backed keys
     for f in flags:
         param = _flag_param_name(f.name)
-        if f.default is not None:
+        if f.presence == PRESENCE_DEFAULT:
             data[param] = f.default
         else:
             data[param] = None
@@ -3506,7 +3526,7 @@ def _values_equal_for_conflict(cli_val: object, config_val: object, flag: "Flag"
 
 
 def _check_flag_configfield_default(
-    flag_name: str, flag_default: object, cf: "ConfigField"
+    flag_name: str, flag_presence: str, flag_default: object, cf: "ConfigField"
 ) -> None:
     """Raise ValueError when a colliding flag and config field have conflicting
     explicit defaults.
@@ -3514,10 +3534,10 @@ def _check_flag_configfield_default(
     A ConfigField whose name equals a flag's param name is a validation-only
     declaration -- it annotates the flag. Their defaults must agree. The matrix:
     both absent OK; equal OK; both present unequal = error; one absent OK (the
-    flag's default wins for rendering). A flag default of None means "no
-    default" (absent); a ConfigField default of _MISSING means absent.
+    flag's default wins for rendering). A flag has a default exactly when its
+    declared presence is "default"; a ConfigField default of _MISSING is absent.
     """
-    flag_has_default = flag_default is not None
+    flag_has_default = flag_presence == PRESENCE_DEFAULT
     cf_has_default = not isinstance(cf.default, _MissingSentinel)
     if flag_has_default and cf_has_default and flag_default != cf.default:
         raise ValueError(
@@ -4204,6 +4224,171 @@ def _raise_arg_name_consent_reserved():
     )
 
 
+# ---------------------------------------------------------------------------
+# The presence declaration (contract §23)
+# ---------------------------------------------------------------------------
+
+# The three facts every flag and every positional arg declares about itself.
+# These are the RESOLVED values carried on Flag.presence / Arg.presence and
+# published by --dump-schema; the declaration surface is `presence="required"`,
+# `presence="optional"` and `default=<value>` (contract §23.2, §23.3).
+PRESENCE_REQUIRED = "required"
+PRESENCE_OPTIONAL = "optional"
+PRESENCE_DEFAULT = "default"
+
+# The two facts spellable through the `presence=` keyword. The third is spelled
+# by `default=` itself: one spelling per fact, which is why `presence="default"`
+# is not accepted and `default=None` is refused (contract §23.1).
+_PRESENCE_DECLARABLE = (PRESENCE_REQUIRED, PRESENCE_OPTIONAL)
+
+# The per-language noun phrases §12.12 pins for Python. The sentences that carry
+# them are byte-identical across the three implementations; only these vary.
+_PRESENCE_SPELLING = {
+    PRESENCE_REQUIRED: 'presence="required"',
+    PRESENCE_OPTIONAL: 'presence="optional"',
+}
+
+# The `default=` spelling without its value clause, used where the message is
+# about the spelling being inapplicable rather than about a value (§12.12).
+_DEFAULT_SPELLING_BARE = "default="
+
+# The `default=` spelling in a message that has no concrete value to render.
+_DEFAULT_SPELLING_ABSTRACT = "default=<value>"
+
+
+def _default_spelling(value: object) -> str:
+    """The `default=<value>` spelling with a concrete value, rendered by the
+    same formatter every other declaration guard uses (§12.12)."""
+    return f"default={_format_value_for_error(value)}"
+
+
+def _raise_flag_presence_undeclared(name: str):
+    """Message template: a flag declared none of the three presence facts."""
+    raise ValueError(
+        f'Flag "{name}": presence is undeclared: declare exactly one of '
+        f'presence="required", presence="optional", or default=<value>'
+    )
+
+
+def _raise_arg_presence_undeclared(name: str):
+    """Message template: an arg declared none of the three presence facts."""
+    raise ValueError(
+        f'Arg "{name}": presence is undeclared: declare exactly one of '
+        f'presence="required", presence="optional", or default=<value>'
+    )
+
+
+def _raise_flag_presence_declared_twice(name: str, first: str, second: str):
+    """Message template: a flag declared two of the three presence facts."""
+    raise ValueError(
+        f'Flag "{name}": presence is declared twice: {first} and {second} '
+        f"cannot be combined; declare exactly one"
+    )
+
+
+def _raise_arg_presence_declared_twice(name: str, first: str, second: str):
+    """Message template: an arg declared two of the three presence facts."""
+    raise ValueError(
+        f'Arg "{name}": presence is declared twice: {first} and {second} '
+        f"cannot be combined; declare exactly one"
+    )
+
+
+def _raise_flag_default_null_not_optional(name: str):
+    """Message template: `default=None` is not a spelling of optionality.
+
+    The parenthetical is not decoration: the value the reader wanted is exactly
+    what the redirected spelling delivers (contract §12.12).
+    """
+    raise ValueError(
+        f'Flag "{name}": default=None does not declare optionality: use '
+        f'presence="optional" (it delivers None when the flag is absent)'
+    )
+
+
+def _raise_arg_default_null_not_optional(name: str):
+    """Message template: the arg twin of the null-default redirect."""
+    raise ValueError(
+        f'Arg "{name}": default=None does not declare optionality: use '
+        f'presence="optional" (it delivers None when the arg is absent)'
+    )
+
+
+def _raise_flag_mutex_member_required(name: str):
+    """Message template: a mutex member cannot declare requiredness (§23.5)."""
+    raise ValueError(
+        f'Flag "{name}": a mutex member cannot declare presence="required": '
+        f"the group's own requirement is what makes the choice mandatory"
+    )
+
+
+def _raise_arg_variadic_default(name: str):
+    """Message template: a variadic arg cannot declare a default (§23.3)."""
+    raise ValueError(
+        f'Arg "{name}": a variadic arg cannot declare default=: it always '
+        f'delivers a list, so declare presence="required" for at least one '
+        f'value or presence="optional" for possibly none'
+    )
+
+
+def _raise_presence_value_invalid(surface: str, name: str, value: object):
+    """Message template: `presence=` carried something other than the two facts
+    it can spell.
+
+    Authored (not pinned by §12.12): the pinned family covers zero, two and the
+    null-valued default, none of which describes `presence="default"` or a
+    typo. The redirect names the third spelling for the same reason the
+    null-default redirect does.
+    """
+    raise ValueError(
+        f'{surface} "{name}": presence must be "required" or "optional", got '
+        f"{value!r}; a default value is declared with default=<value>"
+    )
+
+
+def _resolve_presence(
+    surface: str, name: str, presence: object, default: object,
+) -> str:
+    """Resolve the three-way presence declaration, or raise (contract §23.1).
+
+    Exactly one of `presence="required"`, `presence="optional"` and
+    `default=<value>` must be supplied. Zero and two are registration-time hard
+    errors, and `default=None` is refused with a redirect to the optional
+    spelling rather than accepted as a second spelling of the same fact.
+
+    ``surface`` is ``"Flag"`` or ``"Arg"`` and selects the message family.
+    """
+    is_flag = surface == "Flag"
+    has_presence = not isinstance(presence, _MissingSentinel)
+    has_default = not isinstance(default, _MissingSentinel)
+    if has_presence and presence not in _PRESENCE_DECLARABLE:
+        _raise_presence_value_invalid(surface, name, presence)
+    if has_default and default is None:
+        if is_flag:
+            _raise_flag_default_null_not_optional(name)
+        _raise_arg_default_null_not_optional(name)
+    if has_presence and has_default:
+        # Canonical order (required, optional, default) regardless of the order
+        # they were written in, so the line is deterministic.
+        first = _PRESENCE_SPELLING[presence]
+        second = _default_spelling(default)
+        if is_flag:
+            _raise_flag_presence_declared_twice(name, first, second)
+        _raise_arg_presence_declared_twice(name, first, second)
+    if has_presence:
+        return presence
+    if has_default:
+        return PRESENCE_DEFAULT
+    if is_flag:
+        _raise_flag_presence_undeclared(name)
+    _raise_arg_presence_undeclared(name)
+
+
+# Sources that mean "the invocation caused this value" (contract §23.6). The
+# other two -- `default` and `infra` -- mean the declaration caused it.
+_PROVIDED_SOURCES = frozenset({"cli", "env", "config", "implied"})
+
+
 def _parse_compound_type(
     raw_type: type, context: str,
 ) -> tuple[str, type | None, type | None]:
@@ -4315,7 +4500,11 @@ class Flag:
     type: type
     help: str
     short: str | None = None
-    default: object = None
+    # The presence declaration (contract §23). Exactly one of presence= and
+    # default= is supplied; __post_init__ resolves the pair into one of
+    # "required" / "optional" / "default" and leaves it here.
+    presence: object = _MISSING
+    default: object = _MISSING
     env: str | None = None
     env_separator: str | None = None
     prefixed: bool = True
@@ -4363,6 +4552,13 @@ class Flag:
                 f"reserved for the negation system; use a positive "
                 f"name instead"
             )
+
+        # The presence declaration, resolved before anything reads `default`.
+        # Nothing downstream infers presence from the shape of another
+        # declaration any more (contract §23.1, §23.4).
+        self.presence = _resolve_presence(
+            "Flag", self.name, self.presence, self.default,
+        )
 
         # Parse compound types (list[T], dict[str, T])
         kind, item_t, val_t = _parse_compound_type(
@@ -4467,91 +4663,70 @@ class Flag:
                     raise ValueError(
                         f'Flag "{self.name}": choice {c!r} is not of type {self.type.__name__}'
                     )
-        # Validate defaults for dict flags
+        # Validate defaults for dict flags. An explicit `default={}` is a
+        # declaration like any other (§23.5's compound row): the "explicit empty
+        # default is redundant" refusals died with the silent forced-{} it used
+        # to be redundant against.
         if self.compound == "dict":
-            if not isinstance(self.default, _MissingSentinel):
-                if self.default is not None:
-                    if not isinstance(self.default, dict):
-                        raise ValueError(
-                            f'Flag "{self.name}": dict flag default must be a dict'
-                        )
-                    if len(self.default) == 0:
-                        raise ValueError(
-                            f'Flag "{self.name}": explicit empty default is '
-                            f'redundant for dict flags, omit the default'
-                        )
-                    for k, v in self.default.items():
-                        if not isinstance(k, str):
-                            raise ValueError(
-                                f'Flag "{self.name}": dict default key {k!r} '
-                                f'must be a string'
-                            )
-                        _validate_element_type(
-                            self.name, self.type, v,
-                            f"dict default value for key {k!r}",
-                        )
-        # Validate repeatable flag defaults
-        elif self.repeatable and not isinstance(self.default, _MissingSentinel):
-            if self.default is not None:
-                if not isinstance(self.default, list):
+            if self.presence == PRESENCE_DEFAULT:
+                if not isinstance(self.default, dict):
                     raise ValueError(
-                        f'Flag "{self.name}": repeatable flag default must be a list'
+                        f'Flag "{self.name}": dict flag default must be a dict'
                     )
-                if len(self.default) == 0:
-                    raise ValueError(
-                        f'Flag "{self.name}": explicit empty default is redundant '
-                        f"for repeatable flags, omit the default"
+                for k, v in self.default.items():
+                    if not isinstance(k, str):
+                        raise ValueError(
+                            f'Flag "{self.name}": dict default key {k!r} '
+                            f'must be a string'
+                        )
+                    _validate_element_type(
+                        self.name, self.type, v,
+                        f"dict default value for key {k!r}",
                     )
-                # Validate element types
-                type_name = {str: "str", int: "int", float: "float"}[self.type]
-                for i, elem in enumerate(self.default):
-                    if self.type is str:
-                        if not isinstance(elem, str):
-                            raise ValueError(
-                                f'Flag "{self.name}": default element {i} is not of type {type_name}'
-                            )
-                    elif self.type is int:
-                        if not isinstance(elem, int) or isinstance(elem, bool):
-                            raise ValueError(
-                                f'Flag "{self.name}": default element {i} is not of type {type_name}'
-                            )
-                    elif self.type is float:
-                        if not isinstance(elem, (int, float)) or isinstance(elem, bool):
-                            raise ValueError(
-                                f'Flag "{self.name}": default element {i} is not of type {type_name}'
-                            )
-                        if isinstance(elem, int):
-                            self.default[i] = float(elem)
+        # Validate repeatable flag defaults (`default=[]` likewise legal)
+        elif self.repeatable and self.presence == PRESENCE_DEFAULT:
+            if not isinstance(self.default, list):
+                raise ValueError(
+                    f'Flag "{self.name}": repeatable flag default must be a list'
+                )
+            # Validate element types
+            type_name = {str: "str", int: "int", float: "float"}[self.type]
+            for i, elem in enumerate(self.default):
+                if self.type is str:
+                    if not isinstance(elem, str):
+                        raise ValueError(
+                            f'Flag "{self.name}": default element {i} is not of type {type_name}'
+                        )
+                elif self.type is int:
+                    if not isinstance(elem, int) or isinstance(elem, bool):
+                        raise ValueError(
+                            f'Flag "{self.name}": default element {i} is not of type {type_name}'
+                        )
+                elif self.type is float:
+                    if not isinstance(elem, (int, float)) or isinstance(elem, bool):
+                        raise ValueError(
+                            f'Flag "{self.name}": default element {i} is not of type {type_name}'
+                        )
+                    if isinstance(elem, int):
+                        self.default[i] = float(elem)
         # Validate default type for int flags
-        if self.type is int and not isinstance(self.default, _MissingSentinel) and self.default is not None:
+        if self.type is int and self.presence == PRESENCE_DEFAULT:
             if not self.repeatable and self.compound != "dict" and not isinstance(self.default, int):
                 raise ValueError(
                     f'Flag "{self.name}": type=int requires an int default, '
                     f"got {type(self.default).__name__!r}"
                 )
         # Validate default type for float flags
-        if self.type is float and not isinstance(self.default, _MissingSentinel) and self.default is not None:
+        if self.type is float and self.presence == PRESENCE_DEFAULT:
             if not self.repeatable and self.compound != "dict" and not isinstance(self.default, (int, float)):
                 raise ValueError(
                     f'Flag "{self.name}": type=float requires a float default, '
                     f"got {type(self.default).__name__!r}"
                 )
-        # Resolve _MISSING sentinels based on type
-        if isinstance(self.default, _MissingSentinel) or (
-            self.default is None and (
-                self.compound == "dict" or self.repeatable
-            )
-        ):
-            if self.compound == "dict":
-                self.default = {}
-            elif self.repeatable:
-                self.default = []
-            else:
-                # No default means required (no default) — same for all types
-                # including bool
-                self.default = None
-        # Validate default is in choices (after sentinel resolution)
-        if self.choices is not None and self.default is not None:
+        # Validate default is in choices. The check applies to declared VALUES
+        # only: a required or optional flag has no value to check, and absence
+        # is never matched against choices (§23.5).
+        if self.choices is not None and self.presence == PRESENCE_DEFAULT:
             if not self.repeatable and self.default not in self.choices:
                 raise ValueError(
                     f'Flag "{self.name}": default {self.default!r} is not in choices '
@@ -4570,7 +4745,11 @@ class Arg:
 
     name: str
     help: str
-    required: bool = True
+    # The presence declaration (contract §23.3), same three facts and same
+    # one-spelling rule as a flag's. The old `required: bool = True` field is
+    # deleted: it was an implicit default, and it spelled one fact across two
+    # fields with a guard holding the illegal corner shut.
+    presence: object = _MISSING
     default: object = _MISSING
     variadic: bool = False
     type: type = str
@@ -4583,8 +4762,13 @@ class Arg:
         _require_non_empty_str(self.help, "help", "Arg")
         if self.name == _RESERVED_CONSENT_PARAM_NAME:
             _raise_arg_name_consent_reserved()
-        if self.required and not isinstance(self.default, _MissingSentinel):
-            raise ValueError("required arg cannot have a default")
+        self.presence = _resolve_presence(
+            "Arg", self.name, self.presence, self.default,
+        )
+        # A variadic arg always delivers a list, so the empty case is spelled
+        # `optional` and a default has nothing to mean (§23.3).
+        if self.variadic and self.presence == PRESENCE_DEFAULT:
+            _raise_arg_variadic_default(self.name)
 
         # Parse compound types for args (only list[T] is supported)
         origin = get_origin(self.type)
@@ -4639,40 +4823,11 @@ class Arg:
                         f'Arg "{self.name}": choice {c!r} is not of type '
                         f"{self.type.__name__}"
                     )
-        # Validate default type matches declared type
-        if not isinstance(self.default, _MissingSentinel) and self.default is not None:
-            if self.compound == "list":
-                # self.type was normalized to the item type above; the
-                # default itself must be a list of that item type.
-                if not isinstance(self.default, list):
-                    raise ValueError(
-                        f'Arg "{self.name}": list arg default must be a list'
-                    )
-                if len(self.default) == 0:
-                    raise ValueError(
-                        f'Arg "{self.name}": explicit empty default is '
-                        f"redundant for list args, omit the default"
-                    )
-                type_name = {str: "str", int: "int", float: "float"}[self.type]
-                for i, elem in enumerate(self.default):
-                    if self.type is str:
-                        valid = isinstance(elem, str)
-                    elif self.type is int:
-                        valid = isinstance(elem, int) and not isinstance(elem, bool)
-                    else:  # float
-                        valid = (
-                            isinstance(elem, (int, float))
-                            and not isinstance(elem, bool)
-                        )
-                        if valid and isinstance(elem, int):
-                            # Auto-coerce int to float, mirroring list flag defaults
-                            self.default[i] = float(elem)
-                    if not valid:
-                        raise ValueError(
-                            f'Arg "{self.name}": default element {i} '
-                            f"is not of type {type_name}"
-                        )
-            elif self.type is int:
+        # Validate default type matches declared type. A list arg is always
+        # variadic, and a variadic arg cannot declare a default at all, so no
+        # list branch exists here any more (§23.3).
+        if self.presence == PRESENCE_DEFAULT:
+            if self.type is int:
                 if not isinstance(self.default, int) or isinstance(self.default, bool):
                     raise ValueError(
                         f'Arg "{self.name}": type=int requires an int default, '
@@ -4696,8 +4851,8 @@ class Arg:
                         f'Arg "{self.name}": type=str requires a str default, '
                         f"got {type(self.default).__name__!r}"
                     )
-        # Validate default is in choices
-        if self.choices is not None and not isinstance(self.default, _MissingSentinel) and self.default is not None:
+        # Validate default is in choices -- declared VALUES only (§23.5)
+        if self.choices is not None and self.presence == PRESENCE_DEFAULT:
             if self.default not in self.choices:
                 raise ValueError(
                     f'Arg "{self.name}": default {self.default!r} is not in choices '
@@ -4787,6 +4942,31 @@ def _raise_handler_var_keyword_undeclared(name: str):
         f'command "{name}": handler accepts **kwargs but the command does not '
         f'declare forwarding; add forwarding=Forwarding(reason=...) or name '
         f'every parameter explicitly'
+    )
+
+
+def _raise_handler_param_optional_flag_default(
+    name: str, param: str, flag_name: str,
+):
+    """Message template: a handler parameter bound to an optional flag carries
+    a default that is not None (contract §12.12, §23.3).
+
+    Python-only: Go and TypeScript handlers receive one kwargs map / one args
+    object, so no per-parameter default exists there to re-sentinelize with.
+    """
+    raise ValueError(
+        f'command "{name}": handler parameter \'{param}\' is bound to optional '
+        f"flag '--{flag_name}' and must default to None"
+    )
+
+
+def _raise_handler_param_optional_arg_default(
+    name: str, param: str, arg_name: str,
+):
+    """Message template: the positional-arg twin of the check above."""
+    raise ValueError(
+        f'command "{name}": handler parameter \'{param}\' is bound to optional '
+        f"arg '{arg_name}' and must default to None"
     )
 
 
@@ -6246,7 +6426,7 @@ class App:
         # command-builder side instead.
         for f in self._collect_all_flags():
             if _flag_param_name(f.name) == name:
-                _check_flag_configfield_default(f.name, f.default, cf)
+                _check_flag_configfield_default(f.name, f.presence, f.default, cf)
         self._config_fields[name] = cf
         return cf
 
@@ -7462,10 +7642,11 @@ class App:
             effect=EFFECT_MUTATING,
             handler=_config_set_handler,
             args=[
-                Arg(name="key", help="The config key to set, matching a registered flag name"),
+                Arg(name="key", help="The config key to set, matching a registered flag name",
+                    presence="required"),
                 Arg(name="value",
                     help="Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
-                    required=False),
+                    presence="optional"),
             ],
             extra_flags=[
                 Flag(name="clear", type=bool, default=False,
@@ -8348,13 +8529,20 @@ class App:
             if f.name in cli_set:
                 continue
             src_label = "default"
-            if f.repeatable:
-                cli_set[f.name] = list(f.default) if f.default else []
-            elif isinstance(f.default, RelativeToRoot):
-                cli_set[f.name] = _resolve_infra_root_path(f.default, self._infra_roots)
-                src_label = "infra"
-            elif f.default is not None:
-                cli_set[f.name] = f.default
+            if f.presence == PRESENCE_DEFAULT:
+                if isinstance(f.default, RelativeToRoot):
+                    cli_set[f.name] = _resolve_infra_root_path(
+                        f.default, self._infra_roots,
+                    )
+                    src_label = "infra"
+                elif f.compound == "dict":
+                    cli_set[f.name] = dict(f.default)
+                elif f.repeatable:
+                    cli_set[f.name] = list(f.default)
+                else:
+                    cli_set[f.name] = f.default
+            elif f.presence == PRESENCE_OPTIONAL:
+                cli_set[f.name] = None
             else:
                 if f.type is bool and f.negatable:
                     raise _ParseError(
@@ -8759,10 +8947,15 @@ class App:
                 param_name = _flag_param_name(gf.name)
                 if param_name in kwargs:
                     global_values[param_name] = kwargs[param_name]
-                elif isinstance(gf.default, RelativeToRoot):
-                    global_values[param_name] = _resolve_infra_root_path(gf.default, self._infra_roots)
-                elif gf.default is not None:
-                    global_values[param_name] = gf.default
+                elif gf.presence == PRESENCE_DEFAULT:
+                    if isinstance(gf.default, RelativeToRoot):
+                        global_values[param_name] = _resolve_infra_root_path(
+                            gf.default, self._infra_roots,
+                        )
+                    else:
+                        global_values[param_name] = gf.default
+                elif gf.presence == PRESENCE_OPTIONAL:
+                    global_values[param_name] = None
                 else:
                     raise _ParseError(
                         f"global flag '--{gf.name}' is required"
@@ -8849,12 +9042,15 @@ class App:
             if gf.name in _global_cli_set:
                 final_kwargs[_flag_param_name(gf.name)] = _global_cli_set[gf.name]
             elif _flag_param_name(gf.name) not in final_kwargs:
-                # Global flag not provided -- use its default
-                if isinstance(gf.default, RelativeToRoot):
-                    final_kwargs[_flag_param_name(gf.name)] = _resolve_infra_root_path(gf.default, self._infra_roots)
-                    invoke_sources[_flag_param_name(gf.name)] = "infra"
-                elif gf.default is not None:
-                    final_kwargs[_flag_param_name(gf.name)] = gf.default
+                # Global flag not provided -- apply its declared presence
+                if gf.presence == PRESENCE_DEFAULT:
+                    if isinstance(gf.default, RelativeToRoot):
+                        final_kwargs[_flag_param_name(gf.name)] = _resolve_infra_root_path(gf.default, self._infra_roots)
+                        invoke_sources[_flag_param_name(gf.name)] = "infra"
+                    else:
+                        final_kwargs[_flag_param_name(gf.name)] = gf.default
+                elif gf.presence == PRESENCE_OPTIONAL:
+                    final_kwargs[_flag_param_name(gf.name)] = None
 
         # Store sources for function handlers that need provenance info
         self._last_sources = invoke_sources
@@ -9162,13 +9358,10 @@ def _build_json_schema(cmd: Command) -> dict:
 
         properties[param_name] = prop
 
-        # A flag is required if it has no default (None for scalar).
-        # Repeatable/dict flags always have a default (empty list/dict).
-        is_required = (
-            f.compound == "scalar"
-            and f.default is None
-        )
-        if is_required:
+        # Requiredness is read straight off the declaration (contract §13's
+        # presence-round amendment): a parameter is in `required` iff its
+        # declared presence is `required`, flags and args alike, bools included.
+        if f.presence == PRESENCE_REQUIRED:
             required.append(param_name)
 
     for a in cmd.args:
@@ -9187,7 +9380,7 @@ def _build_json_schema(cmd: Command) -> dict:
 
         properties[a.name] = prop
 
-        if a.required:
+        if a.presence == PRESENCE_REQUIRED:
             required.append(a.name)
 
     schema: dict = {
@@ -9331,37 +9524,33 @@ def _validate_and_build_kwargs(
                     f"flag '--{dep.flag}' requires '--{dep.depends_on}'"
                 )
 
-    # Build set of flag names belonging to mutex groups (used in step 5
-    # to suppress "required" errors -- mutex groups handle their own
-    # required semantics)
-    mutex_flag_names: set[str] = set()
-    for mg in cmd.mutex:
-        for mf in mg.flags:
-            mutex_flag_names.add(mf.name)
-
-    # Step 5: apply defaults (SourceDefault)
+    # Step 5: apply the declared presence (contract §23.1). Nothing is derived
+    # here any more: no empty-collection default for compound flags, no
+    # "no default means required" branch, and no mutex-member exemption -- a
+    # member declares `optional` like anything else and the group enforces
+    # cardinality on top of that.
     for f in cmd.flags:
         if store.has(f.name):
             continue
-        if f.compound == "dict":
-            # Dict flags default to {} (never required)
-            store.set(f.name, dict(f.default) if f.default else {}, _Source.DEFAULT)
-        elif f.repeatable:
-            # Repeatable flags default to [] (never required)
-            store.set(f.name, list(f.default) if f.default else [], _Source.DEFAULT)
-        elif isinstance(f.default, RelativeToRoot):
-            # A RelativeToRoot marker resolves through the declared infra roots
-            # and reports source "infra" (distinguishable from a plain default).
-            resolved = _resolve_infra_root_path(f.default, infra_roots or {})
-            store.set(f.name, resolved, _Source.INFRA)
-        elif f.default is not None:
-            store.set(f.name, f.default, _Source.DEFAULT)
-        elif f.name in mutex_flag_names:
-            # Mutex group flags with no default get None instead of being
-            # required -- the mutex group itself enforces required semantics
+        if f.presence == PRESENCE_DEFAULT:
+            if isinstance(f.default, RelativeToRoot):
+                # A RelativeToRoot marker resolves through the declared infra
+                # roots and reports source "infra" (a declared default whose
+                # label says WHICH default it was).
+                resolved = _resolve_infra_root_path(f.default, infra_roots or {})
+                store.set(f.name, resolved, _Source.INFRA)
+            elif f.compound == "dict":
+                store.set(f.name, dict(f.default), _Source.DEFAULT)
+            elif f.repeatable:
+                store.set(f.name, list(f.default), _Source.DEFAULT)
+            else:
+                store.set(f.name, f.default, _Source.DEFAULT)
+        elif f.presence == PRESENCE_OPTIONAL:
+            # Absence is delivered as absence, for every type: a compound flag
+            # that wants an empty collection declares one.
             store.set(f.name, None, _Source.DEFAULT)
         else:
-            # Flag with no default and no value: required
+            # Declared required and nothing supplied it, from any source.
             if f.type is bool and f.negatable:
                 raise _ParseError(
                     f"flag '--{f.name}' must be passed as "
@@ -9378,22 +9567,25 @@ def _validate_and_build_kwargs(
         if store.has(f.name):
             _validate_choices(f.name, store[f.name], f.repeatable, f.choices)
 
-    # Step 5.6: custom validation
+    # Step 5.6: custom validation. It runs on a SUPPLIED value only: never on
+    # absence, and never on a declared default (§23.5's validate row).
     for f in cmd.flags:
-        if f.validate is not None and store.has(f.name):
-            if f.repeatable:
-                for val in store[f.name]:
-                    try:
-                        f.validate(val)
-                    except ValueError as e:
-                        raise _ParseError(f"--{f.name}: {e}")
-            elif store[f.name] is not None:
-                # None means the flag was not passed (an unset mutex flag) --
-                # there is no value to validate.
+        if f.validate is None or not store.is_present_for_deps(f.name):
+            continue
+        value = store[f.name]
+        if value is None:
+            continue
+        if f.repeatable:
+            for val in value:
                 try:
-                    f.validate(store[f.name])
+                    f.validate(val)
                 except ValueError as e:
                     raise _ParseError(f"--{f.name}: {e}")
+        else:
+            try:
+                f.validate(value)
+            except ValueError as e:
+                raise _ParseError(f"--{f.name}: {e}")
 
     # Step 6: resolve positional args
     arg_values: dict[str, object] = {}
@@ -9402,14 +9594,18 @@ def _validate_and_build_kwargs(
     for idx, a in enumerate(fixed_args):
         if idx < len(positionals):
             arg_values[a.name] = _coerce_arg_value(a, positionals[idx])
-        elif a.required:
+        elif a.presence == PRESENCE_REQUIRED:
             raise _ParseError(f"missing required argument '{a.name}'")
-        elif not isinstance(a.default, _MissingSentinel):
+        elif a.presence == PRESENCE_DEFAULT:
             arg_values[a.name] = a.default
+        else:
+            # An optional arg delivers absence as a PRESENT key, never as a
+            # missing kwarg (contract §23.3).
+            arg_values[a.name] = None
     if has_variadic:
         va = cmd.args[-1]
         remaining_positionals = positionals[len(fixed_args):]
-        if va.required and len(remaining_positionals) == 0:
+        if va.presence == PRESENCE_REQUIRED and len(remaining_positionals) == 0:
             raise _ParseError(f"missing required argument '{va.name}'")
         arg_values[va.name] = [
             _coerce_arg_value(va, p) for p in remaining_positionals
@@ -10047,6 +10243,11 @@ def _build_and_validate_command(
                 f'command "{name}": mutex group must have at least 2 flags, '
                 f"got {len(mg.flags)}"
             )
+        for mf in mg.flags:
+            # A member declares `optional` or a default; requiredness would
+            # contradict a group that permits exactly one (§23.5, §12.12).
+            if mf.presence == PRESENCE_REQUIRED:
+                _raise_flag_mutex_member_required(mf.name)
         mutex_flags.extend(mg.flags)
 
     # Validate: mutex flags must not overlap between groups
@@ -10088,7 +10289,7 @@ def _build_and_validate_command(
         for f in all_flags:
             cf = config_fields_ref.get(_flag_param_name(f.name))
             if cf is not None:
-                _check_flag_configfield_default(f.name, f.default, cf)
+                _check_flag_configfield_default(f.name, f.presence, f.default, cf)
 
     # Validate: no duplicate arg names
     seen_arg_names: set[str] = set()
@@ -10181,6 +10382,41 @@ def _build_and_validate_command(
                 f'command "{name}": handler has extra parameter "{extra_name}" '
                 f"not matching any flag or arg"
             )
+
+    # A handler parameter bound to an OPTIONAL flag or arg must itself default
+    # to None (contract §23.3, L1.6). Anything else re-introduces at the handler
+    # boundary the sentinel the declaration just removed, and Python is the only
+    # implementation with per-parameter defaults to check.
+    declared_optional: list[tuple[str, Flag | Arg]] = []
+    for f in all_flags:
+        if f.presence == PRESENCE_OPTIONAL:
+            declared_optional.append((_flag_param_name(f.name), f))
+    if global_flags:
+        for gf in global_flags:
+            if gf.presence == PRESENCE_OPTIONAL:
+                declared_optional.append((_flag_param_name(gf.name), gf))
+    for a in all_args:
+        if a.presence == PRESENCE_OPTIONAL:
+            declared_optional.append((a.name, a))
+    for pname, decl in declared_optional:
+        param = sig.parameters.get(pname)
+        if param is None:
+            # A **kwargs handler (guard v2 forwarding) names no parameter, so
+            # there is no per-parameter default to re-sentinelize with.
+            continue
+        if param.default is inspect.Parameter.empty:
+            # No per-parameter default exists here either -- the same absent
+            # site Go and TypeScript have everywhere. The framework passes the
+            # value as a keyword argument on every dispatch, and requiring
+            # `=None` regardless would force handlers to reorder their
+            # parameters (Python forbids a bare parameter after a defaulted
+            # one) for a hazard that is not present.
+            continue
+        if param.default is None:
+            continue
+        if isinstance(decl, Arg):
+            _raise_handler_param_optional_arg_default(name, pname, decl.name)
+        _raise_handler_param_optional_flag_default(name, pname, decl.name)
 
     # Validate dependencies
     resolved_dependencies = list(dependencies) if dependencies else []
@@ -10300,6 +10536,7 @@ def flag(
     *,
     short: str | None = None,
     type: type = str,
+    presence: object = _MISSING,
     default: object = _MISSING,
     help: str,
     env: str | None = None,
@@ -10321,6 +10558,7 @@ def flag(
             name=name,
             short=short,
             type=type,
+            presence=presence,
             default=default,
             help=help,
             env=env,
@@ -10347,7 +10585,7 @@ def arg(
     name: str,
     *,
     help: str,
-    required: bool = True,
+    presence: object = _MISSING,
     default: object = _MISSING,
     variadic: bool = False,
     type: type = str,
@@ -10357,7 +10595,7 @@ def arg(
 
     def decorator(func: F) -> F:
         a = Arg(
-            name=name, help=help, required=required, default=default,
+            name=name, help=help, presence=presence, default=default,
             variadic=variadic, type=type, choices=choices,
         )
         if not hasattr(func, "_strictcli_args"):
@@ -10564,22 +10802,39 @@ def _build_flag_meta(f: Flag) -> str:
             meta_parts.append(f"env: {f.env} (sep: {f.env_separator})")
         else:
             meta_parts.append(f"env: {f.env}")
-    if f.compound == "dict":
-        # Dict flags are never required; show default only if non-empty
-        if f.default:
-            meta_parts.append(f"default: {_format_default_for_help(f.default)}")
-    elif f.type is bool and f.compound == "scalar" and f.default is not None:
-        meta_parts.append(f"default: {'true' if f.default else 'false'}")
-    elif f.repeatable:
-        # Repeatable flags are never required; show default only if non-empty
-        if f.default:
-            joined = ", ".join(_format_value_for_error(elem) for elem in f.default)
-            meta_parts.append(f"default: {joined}")
-    elif f.default is not None:
-        meta_parts.append(f"default: {_format_default_for_help(f.default)}")
-    else:
-        meta_parts.append("required")
+    # Exactly one presence part, last on the line (contract §23.8).
+    meta_parts.append(_format_presence_for_help(f.presence, f))
     return " [" + "] [".join(meta_parts) + "]"
+
+
+def _format_presence_for_help(presence: str, decl: "Flag | Arg") -> str:
+    """The one bracketed presence part every flag and arg line carries.
+
+    `required` and `optional` render as the bare word; a declared default
+    renders its value. A declared EMPTY collection renders `[]` / `{}` rather
+    than nothing: it is a declaration now, and a declaration that rendered as
+    blank would leave one line in the help output with no presence part.
+    """
+    if presence == PRESENCE_REQUIRED:
+        return "required"
+    if presence == PRESENCE_OPTIONAL:
+        return "optional"
+    value = decl.default
+    compound = getattr(decl, "compound", "scalar")
+    if compound == "dict":
+        if not value:
+            return "default: {}"
+        return f"default: {_format_default_for_help(value)}"
+    if isinstance(decl, Flag):
+        if decl.repeatable:
+            if not value:
+                return "default: []"
+            return "default: " + ", ".join(
+                _format_value_for_error(elem) for elem in value
+            )
+        if decl.type is bool and compound == "scalar":
+            return f"default: {'true' if value else 'false'}"
+    return f"default: {_format_default_for_help(value)}"
 
 
 def _format_dry_run_section(cmd: Command) -> list[str]:
@@ -10625,14 +10880,11 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
             if a.choices is not None:
                 choices_str = ", ".join(str(c) for c in a.choices)
                 meta_parts.append(f"choices: {choices_str}")
-            if not a.required:
-                if not isinstance(a.default, _MissingSentinel):
-                    meta_parts.append(f"default: {_format_default_for_help(a.default)}")
-                else:
-                    meta_parts.append("optional")
-            meta = ""
-            if meta_parts:
-                meta = " [" + "] [".join(meta_parts) + "]"
+            # Exactly one presence part, last on the line. A required
+            # positional now renders `[required]` -- it was previously the one
+            # declaration in the framework whose presence was invisible.
+            meta_parts.append(_format_presence_for_help(a.presence, a))
+            meta = " [" + "] [".join(meta_parts) + "]"
             lines.append(f"  {dn}{' ' * padding}{help_text}{meta}")
 
     # Collect flag names that belong to mutex groups
@@ -11311,19 +11563,20 @@ def _serialize_flag(f: Flag) -> dict:
     }
     if f.short is not None:
         d["short"] = f.short
-    # A RelativeToRoot marker default is serialized machine-stably: only the
-    # declared env var and path parts (no resolved, machine-specific path). This
-    # shape is identical across the Python and Go implementations.
-    if isinstance(f.default, RelativeToRoot):
-        d["default"] = _serialize_marker(f.default)
-    # For dict flags, only emit default if non-empty
-    elif f.compound == "dict":
-        if f.default:
-            d["default"] = f.default
-    elif f.default is not None:
-        # For list (repeatable) flags, only emit if non-empty
-        if f.compound == "list" and isinstance(f.default, list) and not f.default:
-            pass  # omit empty list default
+    # Presence is ALWAYS emitted: it is a mandatory declaration, so there is no
+    # baseline to omit against (contract §13's presence-round amendment). The
+    # requiredness erasure -- a required flag and an optional one serializing
+    # identically -- ends here.
+    d["presence"] = f.presence
+    # `default` is emitted exactly when presence is "default", and then always,
+    # whatever the value: [], {}, "", false and 0 are declarations rather than
+    # the absence of one, so the omit-when-empty rules are gone.
+    if f.presence == PRESENCE_DEFAULT:
+        # A RelativeToRoot marker default is serialized machine-stably: only the
+        # declared env var and path parts (no resolved, machine-specific path).
+        # This shape is identical across the Python and Go implementations.
+        if isinstance(f.default, RelativeToRoot):
+            d["default"] = _serialize_marker(f.default)
         else:
             d["default"] = f.default
     if f.env is not None:
@@ -11368,9 +11621,10 @@ def _serialize_arg(a: Arg) -> dict:
         }
     elif a.type is not str:
         d["type"] = a.type.__name__
-    if not a.required:
-        d["required"] = a.required
-    if not isinstance(a.default, _MissingSentinel):
+    # Same always-emitted presence key as a flag entry; the old `required` key
+    # is deleted rather than kept beside it (contract §13's amendment).
+    d["presence"] = a.presence
+    if a.presence == PRESENCE_DEFAULT:
         d["default"] = a.default
     if a.variadic:
         d["variadic"] = a.variadic
