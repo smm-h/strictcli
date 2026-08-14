@@ -1939,6 +1939,30 @@ func TestMCPLegacyAbortedExchangeConsumesItsState(t *testing.T) {
 		)
 		assertReplayRefused(t, responses[3])
 	})
+	// The exits that always consumed still do, after the reordering.
+	refusals := map[string]interface{}{
+		"decline":   map[string]interface{}{"action": "decline"},
+		"cancel":    map[string]interface{}{"action": "cancel"},
+		"proceedNo": map[string]interface{}{"action": "accept", "content": map[string]interface{}{"proceed": false}},
+	}
+	for name, answer := range refusals {
+		t.Run(name, func(t *testing.T) {
+			session := &mcpSession{app: confirmingApp()}
+			responses := session.run(t,
+				func(seen []map[string]interface{}) map[string]interface{} {
+					return handshakeRequest(true)
+				},
+				func(seen []map[string]interface{}) map[string]interface{} {
+					return legacyCall(2, "release", nil)
+				},
+				func(seen []map[string]interface{}) map[string]interface{} {
+					return answerElicitation(t, seen, answer)
+				},
+				replay,
+			)
+			assertReplayRefused(t, responses[3])
+		})
+	}
 	t.Run("streamEndsUnanswered", func(t *testing.T) {
 		session := &mcpSession{app: confirmingApp()}
 		responses := session.runScript(t,
