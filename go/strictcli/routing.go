@@ -40,8 +40,12 @@ func (a *App) resolveCommand(rest []string) routeResult {
 			lastGroup = grp
 			rest = rest[1:]
 
-			// Check for help at this level
-			if len(rest) == 0 || (len(rest) == 1 && (rest[0] == "--help" || rest[0] == "-h")) {
+			// Help at this level. A --help/-h that LEADS the remaining tokens
+			// requests this group's help whatever follows it -- `myapp db
+			// --help ./m` is help, not an unknown command. Python and
+			// TypeScript route on that leading token alone; requiring it to be
+			// the only token left was Go's divergence.
+			if len(rest) == 0 || rest[0] == "--help" || rest[0] == "-h" {
 				return routeResult{lastGroup: lastGroup, path: path, rest: rest, helpAtGroup: true}
 			}
 

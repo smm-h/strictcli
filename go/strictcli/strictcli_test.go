@@ -1131,6 +1131,92 @@ func TestGroupHelp(t *testing.T) {
 	}
 }
 
+// makeGroupHelpApp builds an app with one group holding a normal command and a
+// passthrough command, used by the group-level help routing tests below.
+func makeGroupHelpApp() *App {
+	app := NewApp("myapp", "1.0.0", "test app")
+	g := app.Group("db", "database commands")
+	g.Command("migrate", "run migrations",
+		func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
+		WithEffect(EffectReadOnly))
+	g.Command("shell", "raw shell",
+		nil,
+		WithPassthrough(func(ctx *Context, name string, args []string, globals map[string]interface{}) int {
+			fmt.Println(name + ":" + strings.Join(args, ","))
+			return 0
+		}),
+		WithEffect(EffectReadOnly))
+	return app
+}
+
+// A --help/-h that LEADS the tokens remaining after a group name requests that
+// group's help no matter what follows it. Python and TypeScript both route on
+// the leading token alone; Go additionally required it to be the only token
+// left, so `myapp db --help ./m` reported an unknown command instead. The
+// three argv rows below are the differential fuzzer's reproducers.
+func TestGroupHelpWithTrailingTokens(t *testing.T) {
+	for _, argv := range [][]string{
+		{"db", "-h", "./m"},
+		{"db", "--help", "./m"},
+		{"db", "--help", "--"},
+		{"db", "--help", "migrate"},
+		{"db", "--help", "nope"},
+		{"db", "-h", "-h"},
+	} {
+		r := makeGroupHelpApp().Test(argv)
+		if r.ExitCode != 0 {
+			t.Fatalf("%v: expected exit 0, got %d; stderr=%q", argv, r.ExitCode, r.Stderr)
+		}
+		if !strings.Contains(r.Stdout, "myapp db -- database commands") {
+			t.Fatalf("%v: expected group help, got %q", argv, r.Stdout)
+		}
+		if !strings.Contains(r.Stdout, "migrate") {
+			t.Fatalf("%v: group help should list subcommands, got %q", argv, r.Stdout)
+		}
+	}
+}
+
+// The two boundaries the help rule declares stay boundaries at group level: a
+// bare `--` after the group name is data (so the token after it is not help),
+// and a passthrough command's own args are forwarded untouched. Verified to
+// match Python and TypeScript byte-for-byte.
+func TestGroupHelpBoundaries(t *testing.T) {
+	// A bare `--` right after the group name is not help and is not a command.
+	r := makeGroupHelpApp().Test([]string{"db", "--", "--help"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d; stdout=%q", r.ExitCode, r.Stdout)
+	}
+	if !strings.Contains(r.Stderr, "unknown command '--' in 'db'") {
+		t.Fatalf("stderr = %q", r.Stderr)
+	}
+
+	// An unknown token before --help is still an unknown command.
+	r = makeGroupHelpApp().Test([]string{"db", "nope", "--help"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d; stdout=%q", r.ExitCode, r.Stdout)
+	}
+	if !strings.Contains(r.Stderr, "unknown command 'nope' in 'db'") {
+		t.Fatalf("stderr = %q", r.Stderr)
+	}
+
+	// A passthrough command inside the group: --help before the boundary is
+	// the command's help, and everything after a bare `--` is forwarded.
+	r = makeGroupHelpApp().Test([]string{"db", "shell", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("passthrough help: expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "myapp db shell -- raw shell") {
+		t.Fatalf("passthrough help = %q", r.Stdout)
+	}
+	r = makeGroupHelpApp().Test([]string{"db", "shell", "--", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("passthrough forwarding: expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "shell:--,--help") {
+		t.Fatalf("passthrough args = %q", r.Stdout)
+	}
+}
+
 func TestGroupNoSubcommandShowsHelp(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	g := app.Group("config", "manage configuration")
