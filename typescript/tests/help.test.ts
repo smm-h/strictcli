@@ -318,6 +318,72 @@ test("help: repeatable list flags show [repeatable] (repeatable.json)", async ()
 	);
 });
 
+// A non-empty dict default renders as sorted `key=value` pairs -- the exact
+// cross-language form Go's formatDictForDisplay and Python's
+// _format_dict_for_display produce, declaration order irrelevant.
+test("help: a non-empty dict default renders sorted key=value pairs", async () => {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				meta: flag("meta", t.dict(t.int), {
+					help: "metadata",
+					presence: "default",
+					default: new Map([
+						["b", 2n],
+						["a", 1n],
+					]),
+				}),
+			},
+			handler: ok,
+		}),
+	);
+	assert.equal(
+		(await app.test(["cmd", "--help"])).stdout,
+		"myapp cmd -- a command\n\nFlags:\n  --meta <key=int>    metadata [dict] [default: a=1, b=2]\n",
+	);
+});
+
+// Bool defaults render lowercase everywhere they render, positionals
+// included: the arg line goes through the same presence renderer the flag
+// line does.
+test("help: bool defaults render lowercase on flags and on positionals", async () => {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				debug: flag("debug", t.bool, {
+					help: "debug mode",
+					presence: "default",
+					default: true,
+				}),
+			},
+			args: [
+				arg("force", t.bool, {
+					help: "force it",
+					presence: "default",
+					default: false,
+				}),
+				arg("trace", t.bool, {
+					help: "trace it",
+					presence: "default",
+					default: true,
+				}),
+			],
+			handler: ok,
+		}),
+	);
+	assert.equal(
+		(await app.test(["cmd", "--help"])).stdout,
+		"myapp cmd -- a command\n\nArguments:\n" +
+			"  force    force it [type: bool] [default: false]\n" +
+			"  trace    trace it [type: bool] [default: true]\n\nFlags:\n" +
+			"  --debug, --no-debug    debug mode [default: true]\n",
+	);
+});
+
 test("help: mutex groups render their own section (mutex.json)", async () => {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
 	app.command(
