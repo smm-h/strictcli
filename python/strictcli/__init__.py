@@ -10219,8 +10219,9 @@ def _build_and_validate_command(
     # Reverse because Python decorators execute bottom-to-top, so the list
     # is in reverse declaration order.
     decorator_flags: list[Flag] = list(reversed(getattr(handler, "_strictcli_flags", [])))
-    # Collect args attached by @strictcli.arg decorators
-    decorator_args: list[Arg] = list(getattr(handler, "_strictcli_args", []))
+    # Collect args attached by @strictcli.arg decorators -- reversed for the
+    # same reason as flags, so positional binding follows declaration order.
+    decorator_args: list[Arg] = list(reversed(getattr(handler, "_strictcli_args", [])))
 
     # Merge explicit args parameter
     all_args = list(args) if args else []
