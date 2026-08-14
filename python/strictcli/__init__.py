@@ -4558,6 +4558,35 @@ def _raise_choices_entry_is_choice_class(
     )
 
 
+def _raise_choice_magnitude(surface: str, name: str, value: int):
+    """Message template: an int choice beyond ±2^53 (contract §12.14).
+
+    The published `value_schema` fragment carries a flag's or arg's choices as
+    a JSON Schema `enum`, and a reader that parses JSON numbers as IEEE-754
+    doubles -- which every reader of a dumped schema is entitled to be -- reads
+    a DIFFERENT integer back. The framework refuses the declaration rather than
+    publishing a fragment it already knows will be misread.
+
+    Float choices are deliberately exempt: the canonical float form is by
+    construction the shortest string that round-trips to the identical double,
+    so nothing is lost there.
+
+    The clause after the colon is reused byte-for-byte from the payload
+    regime's own magnitude guard -- the same condition at a second boundary,
+    and a second wording for one fact is what the reuse rule prevents.
+    """
+    raise ValueError(f'{surface} "{name}": choice {value}: {_PDETAIL_MAGNITUDE}')
+
+
+def _check_choice_magnitudes(surface: str, name: str, values: list) -> None:
+    """Run §12.14's guard over one declaration's resolved choice values."""
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, int):
+            continue
+        if abs(value) > _PAYLOAD_MAX_MAGNITUDE:
+            _raise_choice_magnitude(surface, name, value)
+
+
 def _resolve_choice_records(
     surface: str, name: str, entries: object,
 ) -> tuple[list["Choice"], list]:
@@ -4746,6 +4775,7 @@ class Flag:
                     raise ValueError(
                         f'Flag "{self.name}": choice {c!r} is not of type {self.type.__name__}'
                     )
+            _check_choice_magnitudes("Flag", self.name, self.choices)
         # Validate defaults for dict flags. An explicit `default={}` is a
         # declaration like any other (§23.5's compound row): the "explicit empty
         # default is redundant" refusals died with the silent forced-{} it used
@@ -4909,6 +4939,7 @@ class Arg:
                         f'Arg "{self.name}": choice {c!r} is not of type '
                         f"{self.type.__name__}"
                     )
+            _check_choice_magnitudes("Arg", self.name, self.choices)
         # Validate default type matches declared type. A list arg is always
         # variadic, and a variadic arg cannot declare a default at all, so no
         # list branch exists here any more (§23.3).

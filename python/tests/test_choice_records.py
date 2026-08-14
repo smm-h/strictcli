@@ -358,3 +358,65 @@ def test_one_alignment_column_spans_the_whole_arguments_section():
         "    everything-including-tags    the whole repository\n"
         "    head\n"
     )
+
+
+# ---------------------------------------------------------------------------
+# §12.14 -- an int choice beyond ±2^53 is a registration error
+# ---------------------------------------------------------------------------
+
+
+_MAGNITUDE_CLAUSE = (
+    "the number's magnitude exceeds 2^53 (declare a big identifier as a string)"
+)
+
+
+def test_an_int_choice_beyond_two_to_the_53_is_refused_on_a_flag():
+    with pytest.raises(ValueError) as exc:
+        strictcli.Flag(
+            name="id", type=int, help="the id", presence="required",
+            choices=[Choice(1), Choice(9007199254740993)],
+        )
+    assert str(exc.value) == (
+        f'Flag "id": choice 9007199254740993: {_MAGNITUDE_CLAUSE}'
+    )
+
+
+def test_an_int_choice_beyond_two_to_the_53_is_refused_on_an_arg():
+    with pytest.raises(ValueError) as exc:
+        strictcli.Arg(
+            name="id", type=int, help="the id", presence="required",
+            choices=[Choice(1), Choice(9007199254740993)],
+        )
+    assert str(exc.value) == (
+        f'Arg "id": choice 9007199254740993: {_MAGNITUDE_CLAUSE}'
+    )
+
+
+def test_the_negative_side_is_refused_and_renders_its_sign():
+    with pytest.raises(ValueError) as exc:
+        strictcli.Flag(
+            name="id", type=int, help="the id", presence="required",
+            choices=[Choice(-9007199254740993)],
+        )
+    assert str(exc.value) == (
+        f'Flag "id": choice -9007199254740993: {_MAGNITUDE_CLAUSE}'
+    )
+
+
+def test_exactly_two_to_the_53_registers():
+    """The guard is `exceeds`, not `reaches`: 2^53 itself round-trips."""
+    f = strictcli.Flag(
+        name="id", type=int, help="the id", presence="required",
+        choices=[Choice(9007199254740992), Choice(-9007199254740992)],
+    )
+    assert f.choices == [9007199254740992, -9007199254740992]
+
+
+def test_a_float_choice_of_the_same_magnitude_is_exempt():
+    """The canonical float form is by construction the shortest string that
+    round-trips to the identical double, so nothing is lost."""
+    f = strictcli.Flag(
+        name="ratio", type=float, help="the ratio", presence="required",
+        choices=[Choice(1e300), Choice(0.5)],
+    )
+    assert f.choices == [1e300, 0.5]
