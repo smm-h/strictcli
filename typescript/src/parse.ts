@@ -732,12 +732,14 @@ export function validateAndBuildKwargs(
 		}
 	}
 
-	// Custom validation. An undefined value means the flag was not passed --
-	// an optional declaration delivering absence -- so there is nothing to
-	// validate: `validate` never runs on absence (contract §23.5).
+	// Custom validation. It runs on a SUPPLIED value only (§23.5's validate
+	// row): never on absence, and never on a declared default -- a default is
+	// the declaration's own value, already the author's to get right, and
+	// isPresentForDeps is the one predicate that says the invocation caused
+	// the value.
 	for (const f of cmd.flags) {
 		const validate = flagOpts(f).validate;
-		if (validate === undefined || !store.has(f.name)) {
+		if (validate === undefined || !store.isPresentForDeps(f.name)) {
 			continue;
 		}
 		const val = store.get(f.name);

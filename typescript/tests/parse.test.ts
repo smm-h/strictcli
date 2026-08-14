@@ -27,6 +27,7 @@ import {
 	implies,
 	mutexGroup,
 	readOnlyPassthrough,
+	relativeToRoot,
 	requires,
 	t,
 } from "../src/index.js";
@@ -1519,6 +1520,73 @@ test("dependencies: coRequired both/neither ok, one is exact error", async () =>
 	}
 });
 
+/**
+ * §23.6's one predicate: an `infra` source is a RelativeToRoot default
+ * resolved through a declared root -- still the declaration deciding, so it
+ * never counts as supplied, and a CoRequired group holding such a flag sees
+ * ZERO present members when nothing is typed.
+ *
+ * Two independent things produce that answer today: the predicate excludes
+ * `infra`, and the dependency step runs BEFORE defaults are applied, so the
+ * infra value is not even in the store yet. This test pins the composed rule
+ * (§23.5's CoRequired row) so neither can drift alone; the predicate's own
+ * discriminating case is the validate step, which runs after defaults.
+ */
+function infraCoRequiredApp(out: string[]): AppImpl {
+	const app = makeApp({ infraRoot: { MYAPP_HOME: "/var/lib/myapp" } });
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				db: flag("db", t.str, {
+					help: "database path",
+					presence: "default",
+					default: relativeToRoot("MYAPP_HOME", "db.sqlite"),
+				}),
+				user: flag("user", t.str, {
+					help: "database user",
+					presence: "optional",
+				}),
+			},
+			dependencies: [coRequired(["db", "user"])],
+			handler: (a) => {
+				out.push(`db=${fmt(a.db)} user=${fmt(a.user)}`);
+			},
+		}),
+	);
+	return app;
+}
+
+test("dependencies: an infra default does not count as present for coRequired", async () => {
+	const out: string[] = [];
+	const r = await run(infraCoRequiredApp(out), ["cmd"], out);
+	assert.equal(r.exitCode, 0);
+	assert.equal(r.stderr, "");
+	assert.equal(r.stdout, "db=/var/lib/myapp/db.sqlite user=None");
+	// The store did resolve the default through the declared root -- it is a
+	// present VALUE that is simply not a supplied one.
+	assert.equal(
+		r.outcome.kind === "command" ? r.outcome.sources.db : undefined,
+		"infra",
+	);
+
+	// The other side of the same predicate: typing one member alone is still
+	// a violation, because the infra-defaulted member is not provided.
+	const solo = await run(infraCoRequiredApp([]), ["cmd", "--user", "admin"]);
+	assert.equal(
+		solo.stderr,
+		errOut("flags --db, --user must be used together", "myapp cmd"),
+	);
+	// Both typed satisfies it.
+	const both: string[] = [];
+	const ok = await run(
+		infraCoRequiredApp(both),
+		["cmd", "--db", "/tmp/x.sqlite", "--user", "admin"],
+		both,
+	);
+	assert.equal(ok.stdout, "db=/tmp/x.sqlite user=admin");
+});
+
 test("dependencies: requires enforcement", async () => {
 	const mk = (_out: string[]): AppImpl => {
 		const app = makeApp();
@@ -2337,6 +2405,170 @@ test("validate: list validator runs per element", async () => {
 	assert.equal((await run(app, ["cmd", "--tag", "ok"])).exitCode, 0);
 	const r = await run(app, ["cmd", "--tag", "ok", "--tag", "xbad"]);
 	assert.equal(r.stderr, errOut("--tag: bad tag 'xbad'", "myapp cmd"));
+});
+
+/**
+ * §23.5's validate row: a validator runs on a SUPPLIED value only. A declared
+ * default is the declaration's own value and is never handed to the
+ * validator, so a default the validator would reject still parses -- and the
+ * validator is not called at all.
+ */
+function rejectEverythingApp(calls: unknown[]): AppImpl {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				port: flag("port", t.int, {
+					help: "the port",
+					presence: "default",
+					default: 70000n,
+					env: "MYAPP_PORT",
+					validate: (v) => {
+						calls.push(v);
+						throw new Error("port must be <= 65535");
+					},
+				}),
+			},
+			handler: () => undefined,
+		}),
+	);
+	return app;
+}
+
+test("validate: never runs on the declared default", async () => {
+	const calls: unknown[] = [];
+	const r = await run(rejectEverythingApp(calls), ["cmd"]);
+	assert.equal(r.exitCode, 0);
+	assert.equal(r.stderr, "");
+	assert.deepEqual(calls, []);
+});
+
+test("validate: runs on a supplied value from cli and from env", async () => {
+	const cliCalls: unknown[] = [];
+	const cli = await run(rejectEverythingApp(cliCalls), ["cmd", "--port", "1"]);
+	assert.equal(
+		cli.stderr,
+		errOut("--port: port must be <= 65535", "myapp cmd"),
+	);
+	assert.deepEqual(cliCalls, [1n]);
+
+	const envCalls: unknown[] = [];
+	await withEnv({ MYAPP_PORT: "2" }, async () => {
+		const r = await run(rejectEverythingApp(envCalls), ["cmd"]);
+		assert.equal(
+			r.stderr,
+			errOut("--port: port must be <= 65535", "myapp cmd"),
+		);
+	});
+	assert.deepEqual(envCalls, [2n]);
+});
+
+test("validate: never runs on a list flag's declared default", async () => {
+	const calls: unknown[] = [];
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				tag: flag("tag", t.list(t.str), {
+					help: "a tag",
+					presence: "default",
+					default: ["xbad"],
+					validate: (v) => {
+						calls.push(v);
+						if (v.startsWith("x")) {
+							throw new Error(`bad tag '${v}'`);
+						}
+					},
+				}),
+			},
+			handler: () => undefined,
+		}),
+	);
+	const r = await run(app, ["cmd"]);
+	assert.equal(r.exitCode, 0);
+	assert.deepEqual(calls, []);
+});
+
+test("validate: never runs on a RelativeToRoot infra default", async () => {
+	// The reachable case for the predicate excluding `infra`: the validate
+	// step runs AFTER defaults, so a resolved infra default is sitting in the
+	// store when it runs. It is still the declaration's own value, so the
+	// validator is not called and a value it would reject still parses.
+	const calls: unknown[] = [];
+	const build = (): AppImpl => {
+		const app = makeApp({ infraRoot: { MYAPP_HOME: "/var/lib/myapp" } });
+		app.command(
+			defineReadOnlyCommand("cmd", {
+				help: "a command",
+				flags: {
+					db: flag("db", t.str, {
+						help: "database path",
+						presence: "default",
+						default: relativeToRoot("MYAPP_HOME", "db.sqlite"),
+						validate: (v) => {
+							calls.push(v);
+							throw new Error("no db path is acceptable");
+						},
+					}),
+				},
+				handler: () => undefined,
+			}),
+		);
+		return app;
+	};
+	const r = await run(build(), ["cmd"]);
+	assert.equal(r.exitCode, 0);
+	assert.equal(r.stderr, "");
+	assert.deepEqual(calls, []);
+	// A typed value on the same flag is supplied, so it does validate.
+	const typed = await run(build(), ["cmd", "--db", "/tmp/x"]);
+	assert.equal(
+		typed.stderr,
+		errOut("--db: no db path is acceptable", "myapp cmd"),
+	);
+	assert.deepEqual(calls, ["/tmp/x"]);
+});
+
+test("validate: never runs on an implied flag's fallback default", async () => {
+	// The implied source IS supplied (§23.6), so the injected value validates;
+	// without the trigger the same flag falls back to its default and does not.
+	const calls: unknown[] = [];
+	const build = (): AppImpl => {
+		const app = makeApp();
+		app.command(
+			defineReadOnlyCommand("cmd", {
+				help: "a command",
+				flags: {
+					fast: flag("fast", t.bool, {
+						help: "fast",
+						presence: "default",
+						default: false,
+					}),
+					unsafe: flag("unsafe", t.bool, {
+						help: "unsafe",
+						presence: "default",
+						default: true,
+						validate: (v) => {
+							calls.push(v);
+							throw new Error("no unsafe");
+						},
+					}),
+				},
+				dependencies: [
+					implies({ flag: "fast", implies: "unsafe", value: true }),
+				],
+				handler: () => undefined,
+			}),
+		);
+		return app;
+	};
+	assert.equal((await run(build(), ["cmd"])).exitCode, 0);
+	assert.deepEqual(calls, []);
+	const r = await run(build(), ["cmd", "--fast"]);
+	assert.equal(r.stderr, errOut("--unsafe: no unsafe", "myapp cmd"));
+	assert.deepEqual(calls, [true]);
 });
 
 // =========================================================================
