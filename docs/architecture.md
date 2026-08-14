@@ -1,6 +1,6 @@
 ---
 title: Architecture and Internals
-description: "strictcli internals: the five-stage parse pipeline, its two-region reserved-flag pre-scan, registration-time validation, the schema format, and config."
+description: "strictcli internals: the five-stage parse pipeline, its two-region reserved-flag pre-scan, presence resolution, registration-time validation, the schema format, and config."
 nav_group: "Guides"
 nav_order: 10
 ---
@@ -195,10 +195,13 @@ skipped under `--hermetic`):
    env value as JSON.
 2. **Config file**: for each flag not set by CLI or env, check the loaded config
    data. Config values are coerced to the flag's type.
-3. **Defaults**: for each flag still unset, apply the declared default. Flags
-   with no default and no value from any source produce a "missing required
-   flag" error. Repeatable flags default to an empty list; dict flags default to
-   an empty map.
+3. **Presence resolution**: for each flag still unset, act on its declared
+   presence. A `default` declaration supplies its value (source `default`); an
+   `optional` declaration delivers absence -- `None` / `nil` / `undefined` as a
+   present key, also labelled `default`, since the declaration is what decided;
+   a `required` declaration with no value from any source produces a "missing
+   required flag" error. There is no silent empty-collection default: a
+   repeatable or dict flag that wants `[]` / `{}` declares it.
 4. **InfraRootPath resolution**: if a flag's default is a `RelativeToRoot`
    marker, it is resolved against the declared infrastructure roots at this
    point, and its source is labeled "infra" instead of "default."
@@ -209,8 +212,11 @@ After all values are resolved, constraint validation runs:
   command-line token elects. A bool member elects only when it resolves to
   true, so `--no-x` declines instead of choosing; every other type elects on
   presence with any value. Env- and config-sourced values on a mutex member
-  elect nothing and are dropped, so an unelected member delivers its declared
-  default (or nothing). Two elections are "mutually exclusive", an election
+  elect nothing and are dropped, so an unelected member delivers whatever its
+  own presence declaration says -- its declared default, or absence when it
+  declares `optional`. The group enforces cardinality on top of presence, never
+  instead of it, and a member declaring `required` does not register. Two
+  elections are "mutually exclusive", an election
   beside a declined member is "cannot be combined with", and no election is
   "one of ... is required". See the flag-system page for the full rules.
 - **CoRequired**: all named flags must be present together, or none.
@@ -266,9 +272,13 @@ through to its default. The six source labels are:
 | `cli` | Explicitly passed on the command line |
 | `env` | From an environment variable |
 | `config` | From a config file |
-| `default` | From the flag's declared default value |
+| `default` | From the flag's declared default value -- and the label an `optional` declaration carries when nothing supplied a value |
 | `implied` | Injected by an `Implies` dependency |
 | `infra` | Default resolved through a `RelativeToRoot` infrastructure root |
+
+No seventh label is minted for "declared optional, received nothing": `default`
+already means "the declaration decided", and an optional declaration deciding on
+absence is that.
 
 Provenance is tracked internally by a `SourcedStore` (Go/TypeScript) or
 `_SourcedStore` (Python) that pairs each value with its source label.
@@ -277,13 +287,21 @@ Provenance matters for constraint evaluation:
 - **Mutex election** considers only the `cli` source. A member whose value came
   from `env` or `config` neither elects nor keeps that value: the entry is
   dropped before dependency validation, so the member ends up labeled `default`.
-- **Dependency checks** (`CoRequired`, `Requires`) consider everything except
-  `default`. A flag that got its value from `implied` is considered "present"
-  for dependency purposes; a flag with only a `default` is not.
+- **Dependency checks** (`CoRequired`, `Requires`, and the `Implies` trigger)
+  consider `cli`, `env`, `config` and `implied`, and exclude both `default` and
+  `infra`. A flag that got its value from `implied` is considered "present" for
+  dependency purposes; a flag carrying only a declared default -- including a
+  `RelativeToRoot` default with the `infra` label -- is not.
 
 Handlers access provenance via `ctx.Source(name)` (Go) / `ctx.source(name)`
 (Python) / `ctx.source(name)` (TypeScript). The name can be dashed
 (`dry-run`) or underscored (`dry_run`); both forms are accepted.
+
+For the yes/no question -- *did the invocation cause this value?* -- handlers use
+`ctx.Provided(name)` (Go) / `ctx.provided(name)` (Python and TypeScript), which
+reads the same predicate the dependency checks do, so the framework has one
+definition of "was this supplied" rather than two. An unknown name behaves
+exactly as it does on `ctx.source`, with the same message.
 
 ## Registration-time validation
 
@@ -305,6 +323,11 @@ requiring help text. The bare name `force` is banned to prevent agents from
 taking shortcuts with a generic override flag.
 
 - **Help text is mandatory.** Every flag must have a non-empty help string.
+- **Presence is mandatory.** Every flag declares exactly one of required,
+  optional, or a default value. Declaring none names all three choices;
+  declaring two names the two that were supplied; a null-valued default
+  (`default=None` / `Default(nil)` / `default: null`) is refused with a
+  redirect to the optional spelling.
 - **`force` is banned.** The bare name `force` is reserved. Use a qualified
   name like `force-overwrite` or `force-delete`.
 - **`no-` prefix is reserved.** Flag names cannot start with `no-`. This prefix
@@ -326,6 +349,8 @@ across Python, Go, and TypeScript:
 - Repeatable flags cannot be `bool`.
 - Repeatable flags require explicit `unique` (true or false) -- no implicit
   default.
+- A repeatable or dict flag declares presence like any other flag. An explicit
+  `default=[]` / `default={}` is legal, and so is `optional` or `required`.
 - `unique` requires `repeatable`.
 - Dict flags cannot be combined with `repeatable`, `unique`, `choices`, or
   `env_separator`.
@@ -335,7 +360,10 @@ across Python, Go, and TypeScript:
 ### Arg validation
 
 - Help text is mandatory.
-- Required args cannot have a default.
+- Presence is mandatory, with the same three facts and the same one-spelling
+  rule flags use. There is no `required=` field on an arg.
+- A variadic arg cannot declare a default: it always delivers a list, so the
+  empty case is `optional`.
 - Only scalar types and `list[T]` are allowed. `dict` types are not supported
   on positional args.
 - `list[T]` requires `variadic=true`.
@@ -430,6 +458,13 @@ from `defaults`. For example, if a flag has no `short` key, the consumer uses
 `defaults.flag.short` (which is `null`). This convention keeps the schema
 compact while remaining lossless.
 
+`presence` appears in neither the `flag` nor the `arg` defaults, and that is
+deliberate: it is **always emitted** on every flag and arg entry, so there is no
+default to omit against. Its value is `"required"`, `"optional"` or `"default"`,
+and a `default` key accompanies it exactly when `presence` is `"default"` --
+then always, including for `[]`, `{}`, `""`, `false` and `0`. The arg entry's
+old `required` key is deleted with the derivation behind it.
+
 ```json
 {
   "schema_version": 1,
@@ -455,7 +490,6 @@ compact while remaining lossless.
   },
   "arg": {
     "type": "str",
-    "required": true,
     "default": null,
     "variadic": false,
     "choices": null
@@ -603,9 +637,9 @@ used with `--hermetic` (hard error). This is enforced in the pre-scan: if both
 Every boolean flag in strictcli automatically generates a `--no-{name}`
 negation form, allowing callers to explicitly set a boolean flag to false on the
 command line. This is a core part of strictcli's design philosophy: when a
-boolean flag has no default, the caller must pass either `--flag` or `--no-flag`
-explicitly, eliminating implicit assumptions about flag state. Negation behavior
-is controlled by the `negatable` property:
+boolean flag declares itself required, the caller must pass either `--flag` or
+`--no-flag` explicitly, eliminating implicit assumptions about flag state.
+Negation behavior is controlled by the `negatable` property:
 
 - For `bool` flags, `negatable` defaults to `true`. The framework automatically
   populates the negation lookup table with `--no-{name}` pointing to the same
@@ -642,12 +676,14 @@ because negation is not applicable to them; the schema defaults section
 specifies `null` as the default for `negatable`, which consumers interpret as
 "not applicable to this flag type."
 
-### Required bool flags
+### Bool flags and the presence declaration
 
-Bool flags without a default are required: the user must explicitly pass either
-`--flag` or `--no-flag`. This is a deliberate design choice that forces
-callers to declare their intent rather than relying on implicit defaults. A
-bool flag with `Default(true)` or `Default(false)` is optional.
+A bool flag declaring `required` forces the user to pass either `--flag` or
+`--no-flag`, which is how a caller is made to state intent on a binary decision.
+A bool declaring `Default(true)` or `Default(false)` falls through to that value.
+A bool declaring `optional` is a genuine three-valued flag: `--flag` is true,
+`--no-flag` is false, and absence is delivered as absence -- which is what
+retires the "use a string and treat the empty string as unset" idiom.
 
 ## Error handling philosophy
 
@@ -686,13 +722,16 @@ Error templates are centralized in a single file per implementation:
 ### No implicit defaults
 
 strictcli does not silently fill in default values for configuration that
-affects behavior. If a flag has no default, it is required -- there is no
-fallback. These rules exist to prevent a common class of bugs where a CLI tool
-silently uses a default that the caller did not know about.
+affects behavior, and it does not infer presence either: a flag or arg that
+declares none of required / optional / default does not register at all. These
+rules exist to prevent a common class of bugs where a CLI tool silently uses a
+default that the caller did not know about.
 
-Bool flags without a default must be explicitly passed as `--flag` or
-`--no-flag`. Repeatable flags require explicit `unique` declaration. Env
-separator is mandatory for repeatable flags with env var support.
+A `required` bool must be explicitly passed as `--flag` or `--no-flag`. A
+repeatable or dict flag gets no silent `[]` / `{}` -- it declares one, or
+declares `optional`, or declares `required`. Repeatable flags require explicit
+`unique` declaration. Env separator is mandatory for repeatable flags with env
+var support.
 
 ### No unknown flags
 

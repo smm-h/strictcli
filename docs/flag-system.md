@@ -1,6 +1,6 @@
 ---
 title: Flag System
-description: "strictcli's flag and argument system: four types, defaults, boolean negation, repeatable flags, the reserved names, mutex election, and positional args."
+description: "strictcli's flag and argument system: the mandatory three-way presence declaration, four types, boolean negation and tri-state, repeatable flags, the reserved names, mutex election, and positional args."
 nav_group: "Guides"
 nav_order: 3
 ---
@@ -19,13 +19,18 @@ are parsed from CLI tokens, environment variables, and config files.
 
 ```python
 @app.command("deploy", help="deploy the application", effect="mutating")
-@strictcli.flag("target", type=str, help="deployment target")
+@strictcli.flag("target", type=str, presence="required", help="deployment target")
 @strictcli.flag("cache", type=bool, default=True, help="reuse the build cache")
 @strictcli.flag("replicas", type=int, default=3, help="number of replicas")
 @strictcli.flag("threshold", type=float, default=0.95, help="success threshold")
 def deploy(ctx, target, cache, replicas, threshold):
     ...
 ```
+
+Every flag also declares its **presence** -- one of `required`, `optional`, or a
+`default` value. `presence="required"` above is that declaration; `default=`
+on the other three is the same declaration in its value-carrying form. See
+[The presence declaration](#the-presence-declaration) below.
 
 Every command declares its `effect` -- `"read_only"` or `"mutating"` -- and the
 declaration is mandatory. See the [Python quickstart](python-quickstart.md#command-classification)
@@ -77,32 +82,138 @@ shortest-round-trip representation that produces identical output byte-for-byte
 across Python, Go, and TypeScript. The canonical form is verified by exhaustive
 bit-pattern tests committed in the conformance suite.
 
-## Required vs optional flags
+## The presence declaration
 
-A flag without a default is required. A flag with a default is optional. There is no `required=True` parameter -- the presence or absence of a default is the sole mechanism.
+Every flag and every positional argument declares **exactly one** of three facts
+about itself, and declares it explicitly. Nothing about presence is inferred
+from the shape of another declaration:
+
+| Fact | What it means | Python | Go | TypeScript |
+|------|---------------|--------|-----|-----------|
+| **required** | a value must be supplied | `presence="required"` | `Required()` | `{ presence: "required" }` |
+| **optional** | absence is legal and is delivered *as* absence | `presence="optional"` | `Optional()` | `{ presence: "optional" }` |
+| **default** | the framework supplies the declared value when nothing else does | `default=<value>` | `Default(<value>)` | `{ presence: "default", default: <value> }` |
 
 ```python
-# Required: no default, must be passed on every invocation
-@strictcli.flag("target", type=str, help="deployment target")
+# Required: some source must supply it on every invocation
+@strictcli.flag("target", type=str, presence="required", help="deployment target")
 
-# Optional: has a default, may be omitted
+# Default: 3 when nothing supplies a value
 @strictcli.flag("replicas", type=int, default=3, help="number of replicas")
+
+# Optional: the handler receives None when nothing supplies a value
+@strictcli.flag("tag", type=str, presence="optional", help="release tag")
 ```
 
-In help output, required flags show `[required]` and optional flags show `[default: <value>]`.
+Declaring **none** of the three is a registration-time hard error naming all
+three choices:
 
-### How defaults work internally
+```
+Flag "y": presence is undeclared: declare exactly one of presence="required", presence="optional", or default=<value>
+```
 
-When a `Flag` is constructed without a `default` (or with `default=_MISSING`), its internal default is set to `None`. At parse time, if no value arrives from CLI, env, or config, a flag with `default=None` triggers an error: `flag '--target' is required`.
+Declaring **two** is a registration-time hard error naming the two that were
+supplied:
 
-For repeatable flags and dict flags, the default is always resolved to an empty list or empty dict respectively -- they are never required.
+```
+Flag "z": presence is declared twice: presence="required" and default=a cannot be combined; declare exactly one
+```
+
+### A null default is not optionality
+
+`default=None` (Python), `Default(nil)` (Go) and `default: null` (TypeScript)
+are registration errors that redirect to the optional spelling. Optionality has
+exactly one way to be written, and the value-shaped way is refused rather than
+accepted as a synonym:
+
+```
+Flag "x": default=None does not declare optionality: use presence="optional" (it delivers None when the flag is absent)
+```
+
+`presence="optional"` is what delivers `None` / `nil` / `undefined`.
+
+### What "required" requires
+
+A `required` declaration is satisfied by **any source that supplies a value** -- a CLI
+token, a bound environment variable, a config file entry, or an `Implies`
+injection. It is not a "must be typed on the command line" rule. The one
+exception belongs to [mutex groups](#mutex-groups), where env and config are not
+consulted for a member at all.
+
+### What "optional" delivers
+
+An optional flag delivers absence as a **present key**: `None` in Python, `nil`
+in Go, `undefined` in TypeScript. The keyword argument is always passed -- it is never
+omitted -- so a handler reads it like any other value:
+
+```python
+@app.command("publish", help="publish a build", effect="mutating")
+@strictcli.flag("tag", type=str, presence="optional", help="release tag")
+def publish(ctx, tag):
+    if tag is None:
+        ctx.info("publishing untagged")
+```
+
+In Python a handler parameter bound to an optional flag or arg must either
+declare no default at all (as above) or default to `None`. Anything else --
+`def publish(ctx, tag="")` -- re-introduces at the handler boundary the sentinel
+the declaration just removed, and is a registration-time hard error:
+
+```
+command "publish": handler parameter 'tag' is bound to optional flag '--tag' and must default to None
+```
+
+Go and TypeScript handlers receive one kwargs map / one args object, so they
+have no per-parameter default and no such check.
+
+### Was this supplied? `ctx.provided`
+
+`ctx.provided(name)` (Python and TypeScript) / `ctx.Provided(name)` (Go) answers
+whether the **invocation** caused a value, so no handler reconstructs that
+boolean out of a sentinel:
+
+| Source | `provided` |
+|--------|-----------|
+| `cli`, `env`, `config`, `implied` | **true** -- the invocation caused the value |
+| `default`, `infra` | **false** -- the declaration caused it |
+
+An optional flag that received nothing carries source `default` and reports
+`false`. Unknown names raise exactly as `ctx.source` does.
+
+### Presence in help output
+
+Every flag and every arg renders **exactly one** presence part, and it is the
+last bracketed part of the line:
+
+| Declared | Rendered |
+|----------|----------|
+| required | `[required]` |
+| optional | `[optional]` |
+| default | `[default: <value>]` |
+
+A declared empty collection renders `[default: []]` or `[default: {}]`, and a
+required positional argument renders `[required]` like a required flag.
+
+### Presence composed with other declarations
+
+| Declared with | Behavior |
+|---------------|----------|
+| `choices` | a **declared default value** must be in `choices` at registration; absence is never matched against `choices`, so `optional` + `choices` checks nothing at registration and validates only supplied values |
+| `env` / `config` | an env- or config-supplied value satisfies a `required` declaration and makes the flag *provided*; precedence stays CLI > env > config > default |
+| `validate` | runs on a supplied value only -- **never** on a declared default, and never on absence |
+| `Implies` target | the injected value satisfies a `required` declaration (implication resolves before defaults) |
+| `Implies` trigger | fires when the flag is *provided*; a defaulted trigger never fires from its own default |
+| `CoRequired` / `Requires` | a member is present iff it is *provided*, so a default never satisfies a dependency |
+| mutex member | declaring `required` is a registration error; declare `optional` or a `default` |
+| `RelativeToRoot` | the marker **is** a `default=` declaration; its value resolves at parse time with source label `infra` |
 
 ## Boolean flag semantics
 
 Boolean flags have special behavior compared to other types, including automatic
 negation form generation, required boolean semantics where callers must
-explicitly pass `--flag` or `--no-flag`, and strict env var parsing that accepts
-only a fixed set of truthy and falsy strings.
+explicitly pass `--flag` or `--no-flag`, a genuine tri-state under
+`presence="optional"`, and strict env var parsing that accepts only a fixed set
+of truthy and falsy strings.
 
 ### Automatic negation (--flag / --no-flag)
 
@@ -124,25 +235,40 @@ This creates both `--auto-commit` (sets True) and `--no-auto-commit` (sets False
 
 ### Required booleans
 
-A bool flag without a default is required -- the user must pass either `--flag`
-or `--no-flag` explicitly. This is a deliberate design choice that forces
-callers to declare their intent on binary decisions rather than relying on
-implicit defaults. The error message for a missing required boolean reflects
-both accepted forms:
+A bool flag declaring `presence="required"` forces the caller to pass either
+`--flag` or `--no-flag` explicitly, which is the mechanism for forcing explicit
+intent on binary decisions (e.g., `--watch` / `--no-watch` during a release).
+The error message reflects both accepted forms:
+
+```python
+@strictcli.flag("watch", type=bool, presence="required", help="watch CI after release")
+```
 
 ```
 flag '--watch' must be passed as --watch or --no-watch
 ```
 
-This is the mechanism for forcing explicit intent on binary decisions (e.g., `--watch` / `--no-watch` during a release).
+### Tri-state booleans
+
+A bool flag declaring `presence="optional"` is a genuine three-valued flag:
+`--flag` is true, `--no-flag` is false, and absence is absence. This is what
+retires the "use a string and treat the empty string as unset" idiom.
+
+```python
+@app.command("build", help="build the project", effect="mutating")
+@strictcli.flag("cache", type=bool, presence="optional", help="reuse the build cache")
+def build(ctx, cache):
+    if cache is None:
+        ctx.info("cache decision inherited from the profile")
+```
 
 ### Non-negatable booleans
 
 Setting `negatable=False` disables the `--no-flag` form, turning the flag into
-a pure presence flag that is `True` when passed and falls through to its default
-otherwise. This is useful for flags like `--debug` where negation is not
-meaningful. Non-negatable bool flags without a default produce a different,
-simpler error message that only shows the positive form:
+a pure presence flag that is `True` when passed and otherwise takes whatever its
+presence declaration says. This is useful for flags like `--debug` where
+negation is not meaningful. A non-negatable bool declaring `presence="required"`
+produces a simpler error message that only shows the positive form:
 
 ```
 flag '--debug' must be passed as --debug
@@ -176,13 +302,20 @@ This allows `-r` as an alias for `--recursive`. Short flags follow the same pars
 ## Repeatable flags
 
 A flag with `repeatable=True` can be passed multiple times on the command line,
-with each occurrence appending to a list. Repeatable flags are never required
-and always default to an empty list. They support uniqueness enforcement via the
-`unique` parameter and can split env var values using a declared separator
-character.
+with each occurrence appending to a list. Like every other flag, a repeatable
+flag declares its own presence -- there is no silent empty-list default. They
+support uniqueness enforcement via the `unique` parameter and can split env var
+values using a declared separator character.
 
 ```python
-@strictcli.flag("tag", type=str, help="tags to apply", repeatable=True, unique=False)
+# An empty list when nothing is passed -- declared, not assumed
+@strictcli.flag("tag", type=str, default=[], help="tags to apply", repeatable=True, unique=False)
+
+# Absent when nothing is passed: the handler receives None, not []
+@strictcli.flag("only", type=str, presence="optional", help="restrict to these", repeatable=True, unique=False)
+
+# At least one occurrence must arrive from some source
+@strictcli.flag("host", type=str, presence="required", help="hosts to contact", repeatable=True, unique=True)
 ```
 
 ```
@@ -192,11 +325,11 @@ mytool cmd --tag alpha --tag beta --tag gamma
 
 ### Rules for repeatable flags
 
-- Repeatable flags are never required. They default to an empty list `[]`.
+- A repeatable flag declares presence like any other flag. `default=[]` is an explicit, legal declaration; `presence="optional"` delivers absence rather than `[]`; `presence="required"` demands at least one occurrence from some source.
 - `type=bool` is incompatible with `repeatable=True`.
 - `unique` must be set explicitly to `True` or `False`. When `unique=True`, duplicate values are rejected.
 - If the flag has an `env` binding, `env_separator` is required (a single character used to split the env var value into list elements).
-- An explicit default on a repeatable flag must be a non-empty list of the correct type. To default to an empty list, omit the default entirely.
+- A non-empty default must be a list of the correct element type.
 
 ### Compound types: list[T] and dict[str, T]
 
@@ -207,7 +340,7 @@ The element type `T` must be `str`, `int`, or `float` -- boolean elements are
 not supported in compound types.
 
 ```python
-@strictcli.flag("port", type=list[int], help="ports to bind")
+@strictcli.flag("port", type=list[int], default=[], help="ports to bind")
 ```
 
 This is equivalent to `type=int, repeatable=True` (with `unique` defaulting to `False`).
@@ -215,10 +348,15 @@ This is equivalent to `type=int, repeatable=True` (with `unique` defaulting to `
 Dict flags use `dict[str, T]`:
 
 ```python
-@strictcli.flag("label", type=dict[str, str], help="key=value labels")
+@strictcli.flag("label", type=dict[str, str], default={}, help="key=value labels")
 ```
 
 Each occurrence adds a key-value pair. Duplicate keys are rejected. Dict flags cannot be combined with `repeatable=True`, `unique`, `choices`, or `env_separator`.
+
+Compound flags declare presence honestly like every other flag: `default=[]` /
+`default={}` for an empty collection, `presence="optional"` to receive absence
+instead, `presence="required"` to demand at least one occurrence. A declared
+empty collection renders `[default: []]` / `[default: {}]` in help.
 
 ## Flag naming rules
 
@@ -266,19 +404,25 @@ should be used instead, and the framework generates the negation automatically.
 
 The error message: `flag 'no-cache': names starting with 'no-' are reserved for the negation system; use a positive name instead`.
 
-### All booleans must have explicit defaults or be required
+### Every boolean states its presence, like every other flag
 
-There is no implicit default for boolean flags. A bool flag without a `default` is required (the user must pass `--flag` or `--no-flag`). A bool flag with a `default` is optional. There is no middle ground where a bool silently defaults to `False`.
+There is no implicit default for boolean flags, and none of the three
+declarations is assumed. A bool silently defaulting to `False` has never been a
+possibility, and after the presence declaration neither is a bool whose author
+did not say which of the three it is:
 
 ```python
-# Required: user must choose explicitly
-@strictcli.flag("watch", type=bool, help="watch CI after release")
+# Required: user must choose explicitly, with --watch or --no-watch
+@strictcli.flag("watch", type=bool, presence="required", help="watch CI after release")
 
-# Optional: defaults to True, user can override with --no-auto-commit
+# Default True: user can override with --no-auto-commit
 @strictcli.flag("auto-commit", type=bool, default=True, help="commit automatically")
 
-# Optional: defaults to False, user can override with --recursive
+# Default False: user can override with --recursive
 @strictcli.flag("recursive", type=bool, default=False, help="recurse into subdirectories")
+
+# Optional: True, False, or absent -- a real tri-state
+@strictcli.flag("color", type=bool, presence="optional", help="colorize output")
 ```
 
 ### Dash-to-underscore conversion
@@ -293,13 +437,13 @@ allowed values. Choices are validated at registration time to ensure they match
 the flag's declared type.
 
 ```python
-@strictcli.flag("format", type=str, choices=["json", "text", "csv"], help="output format")
+@strictcli.flag("format", type=str, presence="required", choices=["json", "text", "csv"], help="output format")
 ```
 
 Rules:
 - `choices` is incompatible with `type=bool`.
 - All choice values must match the declared type.
-- If a default is set, it must be in the choices list.
+- If a `default` value is declared, it must be in the choices list. This is a check on declared *values*: `presence="optional"` declares no value, so it is checked against nothing at registration and absence is never matched against `choices` at parse time.
 - For repeatable flags, each individual value is validated against the choices.
 - Dict flags cannot have choices.
 
@@ -316,10 +460,14 @@ def positive_int(val):
     if val <= 0:
         raise ValueError("must be positive")
 
-@strictcli.flag("port", type=int, help="port number", validate=positive_int)
+@strictcli.flag("port", type=int, presence="required", help="port number", validate=positive_int)
 ```
 
-The callback receives the coerced value and should raise `ValueError` with a message on failure. For repeatable flags, the callback is called once per element.
+The callback receives the coerced value and should raise `ValueError` with a
+message on failure. For repeatable flags, the callback is called once per
+element. It runs on **supplied** values only: a declared default is the
+author's to get right at registration, so `validate` never runs against it, and
+it never runs on the absence an optional declaration delivers.
 
 ## Env var binding
 
@@ -329,10 +477,14 @@ sit between CLI tokens and config file values in the resolution cascade (CLI >
 env > config > default) and are skipped entirely under `--hermetic` mode.
 
 ```python
-@strictcli.flag("token", type=str, help="API token", env="MYAPP_TOKEN")
+@strictcli.flag("token", type=str, presence="required", help="API token", env="MYAPP_TOKEN")
 ```
 
-Precedence: CLI > env > config > default.
+Precedence: CLI > env > config > default. An env- or config-supplied value
+satisfies a `presence="required"` declaration -- what a required declaration
+demands is a value arriving, not a token being typed -- and it makes the flag
+*provided*, so
+`ctx.provided("token")` is true with source `env` or `config`.
 
 When the app declares an `env_prefix`, flag env vars must start with that prefix (enforced at registration). The `prefixed=False` option exempts a flag from this check.
 
@@ -345,38 +497,50 @@ same four scalar types as flags plus variadic collection into lists.
 
 ```python
 @app.command("greet", help="say hello", effect="read_only")
-@strictcli.arg("name", help="who to greet")
+@strictcli.arg("name", help="who to greet", presence="required")
 def greet(ctx, name):
     ctx.info(f"Hello, {name}!")
 ```
 
-### Required vs optional args
+### Arg presence
 
-By default, positional args are required (`required=True`). Optional args use
-`required=False` and may declare a default value. A required arg cannot have a
-default -- this invariant is enforced at registration time to prevent ambiguous
-declarations where a supposedly required arg silently falls through to a default
-value.
+Positional args take **the same three facts and the same one-spelling rule** as
+flags. There is no `required=` parameter on an arg: it was an implicit default
+(an arg that declared nothing was required by omission), and paired with
+`default=` it spelled one fact across two fields.
+
+| Fact | Python | Go | TypeScript |
+|------|--------|-----|-----------|
+| required | `presence="required"` | `ArgRequired()` | `{ presence: "required" }` |
+| optional | `presence="optional"` | `ArgOptional()` | `{ presence: "optional" }` |
+| default | `default=<value>` | `ArgDefault(<value>)` | `{ presence: "default", default: <value> }` |
 
 ```python
-@strictcli.arg("output", help="output file", required=False, default="out.txt")
+# A default when the token is absent
+@strictcli.arg("output", help="output file", default="out.txt")
+
+# Absence delivered as absence: the handler receives None
+@strictcli.arg("note", help="an optional note", presence="optional")
 ```
 
-A required arg cannot have a default -- this is enforced at registration.
+An optional arg delivers absence as a **present key** (`None` / `nil` /
+`undefined`) exactly as an optional flag does -- it does not omit the keyword
+argument.
 
 ### Variadic args
 
 A variadic arg collects all remaining positional tokens into a list, and must be
 the last positional argument in the command's declaration. At most one variadic
-arg is allowed per command. A variadic arg with `required=True` (the default)
-requires at least one value to be provided.
+arg is allowed per command. Because a variadic always delivers a list,
+`presence="required"` means *at least one value* and `presence="optional"` means
+*possibly none*; a `default` on a variadic arg is a registration error.
 
 ```python
 @app.command(
     "process",
     help="process files",
     effect="read_only",
-    args=[strictcli.Arg(name="files", help="input files", variadic=True)],
+    args=[strictcli.Arg(name="files", help="input files", variadic=True, presence="required")],
 )
 def process(ctx, files):
     for f in files:
@@ -388,7 +552,14 @@ mytool process a.txt b.txt c.txt
 # files=["a.txt", "b.txt", "c.txt"]
 ```
 
-A variadic arg with `required=True` (the default) requires at least one value. Variadic args support typed collection via `type=list[int]` (which also requires `variadic=True`).
+The empty case is spelled once, as `presence="optional"`. Declaring a default
+instead is refused:
+
+```
+Arg "files": a variadic arg cannot declare default=: it always delivers a list, so declare presence="required" for at least one value or presence="optional" for possibly none
+```
+
+Variadic args support typed collection via `type=list[int]` (which also requires `variadic=True`).
 
 ### Arg types
 
@@ -407,7 +578,7 @@ context is the primary interface between the handler and the framework.
 
 ```python
 @app.command("deploy", help="deploy the app", effect="mutating")
-@strictcli.flag("target", type=str, help="deployment target")
+@strictcli.flag("target", type=str, presence="required", help="deployment target")
 def deploy(ctx, target):
     ctx.info(f"Deploying to {target}")      # stdout
     ctx.warn("Deployment is slow today")     # stderr
@@ -478,9 +649,15 @@ The 6 source labels:
 | `cli` | Explicitly passed on the command line |
 | `env` | From an environment variable |
 | `config` | From a config file |
-| `default` | From the flag's declared default value |
+| `default` | From the flag's declared default value -- and the label an optional flag carries when nothing supplied it |
 | `implied` | Injected by an `Implies` dependency |
 | `infra` | Default resolved through a `RelativeToRoot` infrastructure root |
+
+For the yes/no question -- *did the invocation cause this value?* -- use
+[`ctx.provided(name)`](#was-this-supplied-ctxprovided) rather than comparing
+labels by hand. `ctx.source` is not superseded: it answers the narrower question
+of *which* origin, and is still the accessor for a handler that must distinguish
+env from config.
 
 ### Handler return values
 
@@ -530,7 +707,7 @@ validation.
 auth_flags = strictcli.FlagSet(
     name="auth",
     flags=[
-        strictcli.Flag(name="token", type=str, help="API token", env="MYAPP_TOKEN"),
+        strictcli.Flag(name="token", type=str, presence="required", help="API token", env="MYAPP_TOKEN"),
         strictcli.Flag(name="region", type=str, default="us-east-1", help="AWS region"),
     ],
 )
@@ -571,9 +748,10 @@ Three errors, checked in this order per group:
 Election is command-line-only, and this is the framework's one deliberate
 exception to the ordinary CLI > env > config > default precedence. A value that
 would reach a mutex member from an environment variable or a config file
-neither elects it nor is delivered to the handler: an unelected member gets its
-declared default, or nothing (`None` / `nil` / `undefined`) when it declares
-none, and its source label is `default`. A mutex group exists to make the
+neither elects it nor is delivered to the handler: an unelected member gets
+whatever its own presence declaration says -- its declared default, or
+`None` / `nil` / `undefined` when it declares `optional` -- and its source
+label is `default`. A mutex group exists to make the
 operator choose in the invocation, so an inherited environment cannot make that
 choice -- nor silently sit beside a typed one.
 
@@ -590,17 +768,29 @@ as "not chosen", and reads an unelected bool member the same way an elected
     help="produce output",
     effect="read_only",
     mutex=[strictcli.MutexGroup(flags=[
-        strictcli.Flag(name="as-table", type=bool, help="table output"),
-        strictcli.Flag(name="as-csv", type=bool, help="CSV output"),
+        strictcli.Flag(name="as-table", type=bool, presence="optional", help="table output"),
+        strictcli.Flag(name="as-csv", type=bool, presence="optional", help="CSV output"),
     ])],
 )
 def output(ctx, as_table, as_csv):
     ...
 ```
 
-A member with no declared default gets `None` instead of being required -- the
-group itself enforces that exactly one is chosen. (`json` is not usable as a
-flag name anywhere: it is reserved for machine mode.)
+### A member declares its own absence
+
+A mutex member declares presence like every other flag, and there is no
+exemption that fills it in. The ordinary declaration for a member is
+`presence="optional"`: the group enforces cardinality **on top of** presence,
+never instead of it. A `default` is legal too -- §21's unelected member delivers
+it. What a member cannot declare is `required`: the group's own requirement is
+what makes the choice mandatory, and a member that must always be typed
+contradicts a group that permits exactly one.
+
+```
+Flag "as-table": a mutex member cannot declare presence="required": the group's own requirement is what makes the choice mandatory
+```
+
+(`json` is not usable as a flag name anywhere: it is reserved for machine mode.)
 
 ## Dependencies
 
@@ -630,6 +820,12 @@ automatically sets a target flag's value when a trigger flag is provided.
 Dependencies can only reference flags you declared. The reserved quartet is not
 declarable, so `dry-run`, `approve-consequential`, `quiet` and `verbose` can
 never appear in a `Requires`, `CoRequired` or `Implies`.
+
+All three read presence through the same predicate `ctx.provided` uses: a flag
+counts as present when the **invocation** caused its value, so a declared
+default -- including a `RelativeToRoot` default with the `infra` label -- never
+satisfies a `Requires` or completes a `CoRequired` group, and an `Implies`
+trigger never fires from its own default.
 
 ## Help text is mandatory
 
