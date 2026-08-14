@@ -12525,12 +12525,19 @@ def _mcp_legacy_confirmation(
         "jsonrpc": "2.0", "id": state, **_mcp_confirmation_request(tool_name),
     })
     answer = channel.await_response(state)
+    # Consumption is unconditional once the blob is on the wire: EVERY exit
+    # below spends it, not just the one that reads a well-formed result. A blob
+    # an aborted exchange left live is still bound to this principal and this
+    # request digest for its whole five minutes, which is a `requestState` the
+    # client can present on the modern path with an acceptance it wrote itself
+    # -- for the very call the abort refused.
+    verified = continuation.verify(state, principal, digest) is None
     if answer is None or "result" not in answer:
         # A JSON-RPC error, or a stream that ended before an answer arrived.
         # There is no re-ask in this era: the server is holding the request
         # open, so a non-answer is a decision.
         return False
-    if continuation.verify(state, principal, digest) is not None:
+    if not verified:
         return False
     return _mcp_confirmation_verdict(answer["result"]) == "accept"
 

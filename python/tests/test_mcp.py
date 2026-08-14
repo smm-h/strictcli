@@ -1420,6 +1420,58 @@ class TestMcpLegacyConfirmation:
             "release", "look",
         ]
 
+    def test_an_aborted_exchange_consumes_its_state(self):
+        """Every legacy exit spends the blob -- an abort is not a free replay.
+
+        The blob binds the same principal and the same request digest the modern
+        era mints, and stays live for five minutes. An exchange that ended
+        without consuming it therefore hands the client a `requestState` it can
+        answer itself, on the modern path, for the very call it just aborted.
+        """
+        def replay(seen):
+            ask = next(r for r in seen if r.get("method") == "elicitation/create")
+            return _call_request(
+                3, name="release", arguments={},
+                requestState=ask["id"], inputResponses=_accept(),
+            )
+
+        responses = _Session(_confirming_app()).run(
+            _handshake(),
+            _legacy_call(2),
+            # A JSON-RPC error answers the elicitation: the exchange aborts.
+            lambda seen: {
+                "jsonrpc": "2.0", "id": seen[-1]["id"],
+                "error": {"code": -32601, "message": "Method not found"},
+            },
+            replay,
+        )
+        assert responses[2]["result"]["isError"] is True
+        assert "error" in responses[3], (
+            f"the aborted blob was replayed and ran the command: {responses[3]}"
+        )
+        assert responses[3]["error"]["message"] == "requestState has already been used"
+
+    def test_an_exchange_that_ends_unanswered_consumes_its_state(self):
+        """The stream ending is an exit too, and it spends the blob as well."""
+        def replay(seen):
+            return _call_request(
+                3, name="release", arguments={},
+                requestState=seen[-1]["id"], inputResponses=_accept(),
+            )
+
+        responses = _Session(_confirming_app()).run(
+            _handshake(),
+            _legacy_call(2),
+            # Held while the server waits; the stream then ends without an
+            # answer, which aborts, and the held request is served afterwards.
+            replay,
+        )
+        assert responses[2]["result"]["isError"] is True
+        assert "error" in responses[3], (
+            f"the aborted blob was replayed and ran the command: {responses[3]}"
+        )
+        assert responses[3]["error"]["message"] == "requestState has already been used"
+
     def test_a_modern_call_is_still_asked_the_modern_way_after_a_handshake(self):
         responses = _Session(_confirming_app()).run(
             _handshake(),
