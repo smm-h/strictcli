@@ -3357,3 +3357,123 @@ test("presence: an optional flag that received nothing reports source default", 
 		target: "cli",
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Parse-problem precedence: structure before value (§24.3, §18.19 item 224)
+//
+// The phase order is a property of the parser, not of the declaration: an
+// unknown flag, an unknown choice and a scope violation are facts about the
+// command line's SHAPE, and shape is decided before any token's text is
+// interpreted as a value -- on every command, selector-free ones included.
+// ---------------------------------------------------------------------------
+
+function precedenceApp(): AppImpl {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "test app",
+	}) as unknown as AppImpl;
+	(app as unknown as { command: (d: unknown) => void }).command(
+		defineReadOnlyCommand("cmd", {
+			help: "a command",
+			flags: {
+				count: flag("count", t.int, { help: "how many", presence: "optional" }),
+				ratio: flag("ratio", t.float, {
+					help: "the ratio",
+					presence: "optional",
+				}),
+				mode: flag("mode", t.str, {
+					help: "the mode",
+					presence: "optional",
+					choices: [{ value: "fast" }, { value: "slow" }],
+				}),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("precedence: an unknown flag outranks a value that will not coerce", async () => {
+	const r = await run(precedenceApp(), ["cmd", "--count", "abc", "--unknown"]);
+	assert.equal(r.exitCode, 1);
+	assert.match(r.stderr, /^error: unknown flag '--unknown'\n/);
+});
+
+test("precedence: the same holds when the bad value comes second", async () => {
+	const r = await run(precedenceApp(), ["cmd", "--unknown", "--count", "abc"]);
+	assert.match(r.stderr, /^error: unknown flag '--unknown'\n/);
+});
+
+test("precedence: an unknown flag outranks a float that will not coerce", async () => {
+	const r = await run(precedenceApp(), ["cmd", "--ratio", "nope", "--unknown"]);
+	assert.match(r.stderr, /^error: unknown flag '--unknown'\n/);
+});
+
+test("precedence: an unknown flag outranks an invalid choice", async () => {
+	const r = await run(precedenceApp(), [
+		"cmd",
+		"--mode",
+		"sideways",
+		"--unknown",
+	]);
+	assert.match(r.stderr, /^error: unknown flag '--unknown'\n/);
+});
+
+test("precedence: a value problem alone still reports itself", async () => {
+	// Precedence ORDERS problems; it never suppresses one.
+	const r = await run(precedenceApp(), ["cmd", "--count", "abc"]);
+	assert.match(r.stderr, /^error: --count: expected integer, got 'abc'\n/);
+});
+
+test("precedence: value problems keep command-line order among themselves", async () => {
+	const a = await run(precedenceApp(), [
+		"cmd",
+		"--count",
+		"abc",
+		"--ratio",
+		"nope",
+	]);
+	assert.match(a.stderr, /^error: --count: /);
+	const b = await run(precedenceApp(), [
+		"cmd",
+		"--ratio",
+		"nope",
+		"--count",
+		"abc",
+	]);
+	assert.match(b.stderr, /^error: --ratio: /);
+});
+
+test("precedence: a missing value is structural and outranks a bad value", async () => {
+	// `--flag` with nothing after it is a token-consumption fact, decided in
+	// the scan itself.
+	const r = await run(precedenceApp(), ["cmd", "--count", "abc", "--ratio"]);
+	assert.match(r.stderr, /^error: flag '--ratio' requires a value\n/);
+});
+
+test("precedence: an unknown flag outranks an unknown choice on a selector", async () => {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "test app",
+	}) as unknown as AppImpl;
+	(app as unknown as { command: (d: unknown) => void }).command(
+		defineReadOnlyCommand("send", {
+			help: "send it",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({ help: "by email" }),
+						sms: choice({ help: "by text" }),
+					},
+					{ help: "delivery channel", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	const r = await run(app, ["send", "--via", "pigeon", "--unknown"]);
+	assert.match(r.stderr, /^error: unknown flag '--unknown'\n/);
+});

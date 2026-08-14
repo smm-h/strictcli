@@ -78,8 +78,18 @@ export interface Occurrence {
 /** Raw occurrences by dash name, produced by parse.ts's token loop. */
 export type Occurrences = Map<string, Occurrence>;
 
-/** The four phases, as comparable stage numbers (§24.3's precedence rule). */
+/**
+ * The phases, as comparable stage numbers (§24.3's precedence rule).
+ *
+ * `shape` is the token scan's own structural verdict -- which flag a token
+ * names, and whether it consumes the next argv element. It precedes every
+ * election because it is decided before any of them: a name the declaration
+ * never mentions, or a value-taking token with nothing after it, is a fact
+ * about the command line's shape and cannot wait for an election to be read
+ * (§18.19 item 224).
+ */
 export const STAGE = {
+	shape: 0,
 	election: 1,
 	scope: 2,
 	value: 3,

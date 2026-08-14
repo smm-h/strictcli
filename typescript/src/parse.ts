@@ -541,28 +541,23 @@ export function parseCommand(
 
 	const cliSet = new Map<string, unknown>();
 	const positionals: string[] = [];
-	// Phase 1: tokenize every occurrence WITHOUT interpreting any of it. Every
-	// problem the loop finds is recorded with its stage rather than thrown, so
-	// an election or a scope violation can outrank it (contract §24.3's
-	// precedence rule). With no selector declared, only value-stage problems
-	// can arise and the first recorded one is the first thrown -- which is what
-	// this loop did before the construct existed.
+	// Phase 1: tokenize every occurrence WITHOUT interpreting any of it. The
+	// scan decides SHAPE only -- which flag a token names, whether it consumes
+	// the next argv element -- and records each root-scope occurrence
+	// uninterpreted; every coercion runs afterwards, with the election and
+	// scope phases in between. So a structural problem is reported ahead of a
+	// value that will not parse whichever came first on the command line, on
+	// every command rather than only on one that declares a selector (contract
+	// §24.3, §18.19 item 224).
 	const occ: Occurrences = new Map();
 	const problems: ParseProblem[] = [];
+	/** A structural verdict of the scan itself: it outranks every election. */
 	const record = (message: string): void => {
-		problems.push({ stage: STAGE.value, message });
+		problems.push({ stage: STAGE.shape, message });
 	};
-	const coerce = (f: AnyFlag, raw: string): void => {
-		try {
-			parseRawFlagValue(f, raw, cliSet, tracker);
-		} catch (e) {
-			if (e instanceof ParseError) {
-				record(e.message);
-				return;
-			}
-			throw e;
-		}
-	};
+	/** One root-scope occurrence, uninterpreted: a raw token, or a bool. */
+	const rootOccs: { readonly f: AnyFlag; readonly raw: string | boolean }[] =
+		[];
 
 	let i = 0;
 	let stopFlags = false;
@@ -592,7 +587,7 @@ export function parseCommand(
 				if (f.schema === "bool") {
 					record(errBoolFlagNoValue(flagPart));
 				} else {
-					coerce(f, valuePart);
+					rootOccs.push({ f, raw: valuePart });
 				}
 			} else if (sc !== undefined) {
 				if (!sc.takesValue) {
@@ -615,7 +610,7 @@ export function parseCommand(
 		// --no-flag negation
 		const negated = lookups.negation.get(tok);
 		if (negated !== undefined) {
-			cliSet.set(negated.name, false);
+			rootOccs.push({ f: negated, raw: false });
 			i++;
 			continue;
 		}
@@ -641,7 +636,7 @@ export function parseCommand(
 					: (sc as ScopedTokenTarget).takesValue;
 			if (!takesValue) {
 				if (f !== undefined) {
-					cliSet.set(f.name, true);
+					rootOccs.push({ f, raw: true });
 				} else {
 					recordOccurrence(occ, (sc as ScopedTokenTarget).name, "true");
 				}
@@ -654,7 +649,7 @@ export function parseCommand(
 				continue;
 			}
 			if (f !== undefined) {
-				coerce(f, tokens[i + 1] as string);
+				rootOccs.push({ f, raw: tokens[i + 1] as string });
 			} else {
 				recordOccurrence(
 					occ,
@@ -677,7 +672,7 @@ export function parseCommand(
 						: (sc as ScopedTokenTarget).takesValue;
 				if (!takesValue) {
 					if (f !== undefined) {
-						cliSet.set(f.name, true);
+						rootOccs.push({ f, raw: true });
 					} else {
 						recordOccurrence(occ, (sc as ScopedTokenTarget).name, "true");
 					}
@@ -690,7 +685,7 @@ export function parseCommand(
 					continue;
 				}
 				if (f !== undefined) {
-					coerce(f, tokens[i + 1] as string);
+					rootOccs.push({ f, raw: tokens[i + 1] as string });
 				} else {
 					recordOccurrence(
 						occ,
@@ -707,6 +702,26 @@ export function parseCommand(
 		// positional arg (e.g. negative numbers like -7, -3.14).
 		positionals.push(tok);
 		i++;
+	}
+
+	// The value pass over the root-scope occurrences, in command-line order.
+	// It runs after the whole scan, so a coercion failure can never outrank a
+	// structural verdict, and before the scopes' own value phase, so root
+	// values are reported ahead of scoped ones (contract §24.3).
+	for (const { f, raw } of rootOccs) {
+		if (typeof raw === "boolean") {
+			cliSet.set(f.name, raw);
+			continue;
+		}
+		try {
+			parseRawFlagValue(f, raw, cliSet, tracker);
+		} catch (e) {
+			if (e instanceof ParseError) {
+				problems.push({ stage: STAGE.value, message: e.message });
+				continue;
+			}
+			throw e;
+		}
 	}
 
 	// Phases 2-4: elections outermost first, scope-membership validation, then
