@@ -800,8 +800,9 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 		}
 		val, ok := store.get(f.Name)
 		if !ok || val == nil {
-			// nil means the flag was not passed (Default(nil) or an unset
-			// mutex flag) -- there is no value to validate.
+			// nil means the flag was not passed (an Optional()
+			// declaration, or an unelected mutex member) -- validate
+			// never runs on absence (contract §23.5).
 			continue
 		}
 		if f.Repeatable {
@@ -928,9 +929,10 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 // list, returning an error message or "" if valid. isArg selects the message
 // prefix ("argument 'name':" instead of "--name:"); the two message templates
 // live in errors.go so conformance/check_error_parity.py can extract them.
-// A nil val is exempt from validation: nil only arises from
-// Default(nil)/ArgDefault(nil) or an unset mutex flag, all meaning "not
-// passed" -- a CLI-supplied value is never nil.
+// A nil val is exempt from validation: nil only arises from an Optional() /
+// ArgOptional() declaration or an unelected mutex member, all meaning "not
+// passed" -- a CLI-supplied value is never nil. Absence is never matched
+// against choices (contract §23.5).
 func validateChoices(name string, val interface{}, repeatable bool, choices []interface{}, isArg bool) string {
 	if choices == nil || val == nil {
 		return ""
