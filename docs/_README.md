@@ -20,6 +20,7 @@ Most CLI frameworks infer behavior from type hints, function signatures, or nami
 - **Four types only.** `str`, `bool`, `int`, `float` -- no magic type coercion. NaN and Inf are rejected.
 - **Mandatory help text.** Every flag, arg, command, and group must have help text.
 - **Mandatory effect classification.** Every command declares `read_only` or `mutating`. There is no default and no inference from names, tags or handler bodies.
+- **Mandatory presence declaration.** Every flag and every positional argument declares exactly one of required, optional, or a default value. Declaring none or two is a registration-time error, and nothing about presence is derived from the shape of another declaration.
 - **Handler signature validation.** Parameter names must match declared flags and args exactly.
 - **Registration-time errors.** Misconfigurations fail loud and early, not at parse time.
 - **Minimal dependencies.** Each implementation uses its language's standard library plus TOML support: Python depends on [tomlkit](https://pypi.org/project/tomlkit/), Go depends on [go-toml-edit](https://github.com/smm-h/go-toml-edit), TypeScript depends on [smol-toml](https://www.npmjs.com/package/smol-toml) and [toml-eslint-parser](https://www.npmjs.com/package/toml-eslint-parser).
@@ -34,7 +35,7 @@ import strictcli
 app = strictcli.App("greet", version="1.0.0", help="A greeting app")
 
 @app.command("hello", help="Say hello", effect="read_only")
-@strictcli.flag("name", type=str, help="Who to greet")
+@strictcli.flag("name", type=str, presence="required", help="Who to greet")
 @strictcli.flag("loud", type=bool, default=False, help="Shout it")
 def hello(ctx, name, loud):
     msg = f"Hello, {name}!"
@@ -70,7 +71,7 @@ func main() {
         },
         strictcli.WithEffect(strictcli.EffectReadOnly),
         strictcli.WithFlags(
-            strictcli.StringFlag("name", "Who to greet"),
+            strictcli.StringFlag("name", "Who to greet", strictcli.Required()),
             strictcli.BoolFlag("loud", "Shout it", strictcli.Default(false)),
         ),
     )
@@ -94,8 +95,12 @@ app.command(
     defineReadOnlyCommand("hello", {
         help: "Say hello",
         flags: {
-            name: flag("name", t.str, { help: "Who to greet" }),
-            loud: flag("loud", t.bool, { help: "Shout it", default: false }),
+            name: flag("name", t.str, { help: "Who to greet", presence: "required" }),
+            loud: flag("loud", t.bool, {
+                help: "Shout it",
+                presence: "default",
+                default: false,
+            }),
         },
         handler: (args, ctx) => {
             // Inferred: args.name is string, args.loud is boolean
@@ -115,7 +120,9 @@ app.run(process.argv.slice(2));
 - Deprecated commands -- register retired commands that print a message and exit 1, shown in help under a `Deprecated:` section
 - Flags: string, boolean (with `--no-` negation), integer, float (NaN/Inf rejected)
 - Short flag aliases (`-o` for `--output`)
-- Positional arguments (required, optional with defaults, variadic)
+- Positional arguments -- the same three-way presence declaration as flags (required, optional, or a default), plus variadic collection
+- The presence declaration -- `presence="required"` / `presence="optional"` / `default=<value>` (Python), `Required()` / `Optional()` / `Default(v)` (Go), `{presence:"required"}` / `{presence:"optional"}` / `{presence:"default", default: v}` (TypeScript); an optional declaration delivers `None`/`nil`/`undefined` as a present key, and optional bools are a real tri-state
+- `ctx.provided(name)` / `ctx.Provided(name)` -- whether the invocation caused a value, rather than the declaration
 - Environment variable binding with prefix enforcement
 - Flag tags -- reusable bundles of flags shared across commands
 - Mutually exclusive flag groups (exactly one required)
