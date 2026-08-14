@@ -46,11 +46,6 @@ func (o *schemaObject) set(key string, value interface{}) *schemaObject {
 	return o
 }
 
-func (o *schemaObject) has(key string) bool {
-	_, ok := o.vals[key]
-	return ok
-}
-
 func (o *schemaObject) get(key string) interface{} {
 	return o.vals[key]
 }
