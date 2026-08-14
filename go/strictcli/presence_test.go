@@ -691,6 +691,9 @@ func TestHelpRendersArgPresence(t *testing.T) {
 			NewArg("src", "the source", ArgRequired()),
 			NewArg("dst", "the destination", ArgOptional()),
 			NewArg("mode", "the mode", ArgDefault("fast")),
+			// A bool default renders lowercase on the arg surface too.
+			NewArg("force", "force it", ArgType(TypeBool), ArgDefault(false)),
+			NewArg("deep", "go deep", ArgType(TypeBool), ArgDefault(true)),
 		))
 	r := app.Test([]string{"cmd", "--help"})
 	if r.ExitCode != 0 {
@@ -700,6 +703,8 @@ func TestHelpRendersArgPresence(t *testing.T) {
 		"the source [required]",
 		"the destination [optional]",
 		"the mode [default: fast]",
+		"force it [type: bool] [default: false]",
+		"go deep [type: bool] [default: true]",
 	} {
 		if !strings.Contains(r.Stdout, want) {
 			t.Fatalf("help missing %q; got:\n%s", want, r.Stdout)
