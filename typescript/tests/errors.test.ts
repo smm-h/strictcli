@@ -80,7 +80,7 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // errArgDefaultElementTypeMismatch. A list-typed arg must be variadic and a
 // variadic arg refuses a default, so no arg can carry a list default for them
 // to describe; the flag-side counterparts are untouched.
-const EXPECTED_TEMPLATE_COUNT = 352;
+const EXPECTED_TEMPLATE_COUNT = 353;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

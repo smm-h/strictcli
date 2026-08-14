@@ -22,6 +22,7 @@ import {
 import {
 	errArgBoolDefaultTypeMismatch,
 	errArgChoicesEmpty,
+	errArgChoicesEntryNotRecord,
 	errArgChoicesIncompatibleBool,
 	errArgChoiceTypeMismatch,
 	errArgDefaultNullNotOptional,
@@ -906,7 +907,7 @@ export function arg<
 		}
 		validateChoiceRecords(
 			o.choices,
-			(i) => errChoicesEntryNotRecord(name, i),
+			(i) => errArgChoicesEntryNotRecord(name, i),
 			() => errArgHelpEmpty(),
 		);
 		for (const c of choiceValues(o.choices)) {
@@ -1625,16 +1626,21 @@ function validateDeclTree(
 ): void {
 	const index = buildScopeIndex(decls);
 	for (const [name, entries] of index) {
-		for (let i = 0; i < entries.length; i++) {
-			const a = entries[i] as ScopeIndexEntry;
-			// A scoped flag may not reuse a command-level flag's name: it could
-			// never be reached.
-			if (a.path.length > 0 && rootNames.has(name)) {
-				const last = a.path[a.path.length - 1] as ScopeStep;
+		// A scoped flag may not reuse a command-level flag's name: it could
+		// never be reached. Checked across every entry BEFORE the pair scan, so
+		// the collision is named as itself rather than as a name two scopes
+		// happen to share.
+		if (rootNames.has(name)) {
+			const scoped = entries.find((e) => e.path.length > 0);
+			if (scoped !== undefined) {
+				const last = scoped.path[scoped.path.length - 1] as ScopeStep;
 				throw new RegistrationError(
 					errScopedNameCollidesRoot(last.choiceName, last.selector.name, name),
 				);
 			}
+		}
+		for (let i = 0; i < entries.length; i++) {
+			const a = entries[i] as ScopeIndexEntry;
 			for (let j = i + 1; j < entries.length; j++) {
 				const b = entries[j] as ScopeIndexEntry;
 				if (!simultaneouslyElectable(a.path, b.path)) {

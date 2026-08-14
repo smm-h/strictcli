@@ -14,11 +14,14 @@
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import type { Effect } from "./effects.js";
 import {
+	errFlagInvalidChoice,
 	errFlagOutOfScope,
 	errJsonSchemaIsGroup,
 	errJsonSchemaRouteError,
 	errOneOfRequired,
 	errRouterCommandMustBeString,
+	errScopeWhyElected,
+	errScopeWhyNotProvided,
 	InvokeError,
 } from "./errors.js";
 import {
@@ -36,7 +39,7 @@ import { type CallOptions, commandClassification } from "./invoke.js";
 import { flagParamName } from "./parse.js";
 import { resolveCommand } from "./routing.js";
 import type { ScalarSchema } from "./types.js";
-import { formatValueForError } from "./values.js";
+import { formatChoices, formatValueForError } from "./values.js";
 
 /**
  * A descriptor for exposing one CLI command to tool-using LLM agents.
@@ -294,10 +297,11 @@ export function scopeDescriptionBlock(cmd: RegisteredCommand): string {
 				continue;
 			}
 			for (const [choiceName, c] of Object.entries(d.choices)) {
-				const path = [
-					...prefix,
-					`${flagParamName(d.name)}=${flagParamName(choiceName)}`,
-				];
+				// The key is the scope's path in the PROPERTY names the schema
+				// publishes: the selector is a property, and the choice is the
+				// value its enum publishes -- so the choice name is not
+				// underscored (§24.11).
+				const path = [...prefix, `${flagParamName(d.name)}=${choiceName}`];
 				const params: string[] = [];
 				if (c.value !== undefined) {
 					params.push(`${flagParamName(choiceName)} (required)`);
@@ -363,10 +367,7 @@ export function flatToCallKwargs(
 				continue;
 			}
 			for (const [choiceName, c] of Object.entries(d.choices)) {
-				const next = [
-					...path,
-					`${flagParamName(d.name)}=${flagParamName(choiceName)}`,
-				];
+				const next = [...path, `${flagParamName(d.name)}=${choiceName}`];
 				if (c.value !== undefined) {
 					const owners = scopedParams.get(flagParamName(choiceName)) ?? [];
 					owners.push(next.join(" "));
@@ -390,6 +391,7 @@ export function flatToCallKwargs(
 		}
 	}
 
+	const elected = new Map<string, string>();
 	const buildRecord = (sel: AnyChoiceFlag): unknown => {
 		const key = flagParamName(sel.name);
 		const named = kwargs[key];
@@ -410,13 +412,14 @@ export function flatToCallKwargs(
 		const chosen = sel.choices[tag];
 		if (chosen === undefined) {
 			throw new InvokeError(
-				`--${sel.name}: invalid value '${tag}', must be one of: ${Object.keys(
-					sel.choices,
-				)
-					.map((c) => `'${c}'`)
-					.join(", ")}`,
+				errFlagInvalidChoice(
+					sel.name,
+					String(tag),
+					formatChoices(Object.keys(sel.choices)),
+				),
 			);
 		}
+		elected.set(flagParamName(sel.name), tag);
 		const record: Record<string, unknown> = { choice: tag };
 		if (chosen.value !== undefined) {
 			const payloadKey = flagParamName(tag);
@@ -459,15 +462,45 @@ export function flatToCallKwargs(
 			out[key] = value;
 			continue;
 		}
+		// The same `<why>` clause the CLI parser gives, in the machine
+		// spelling: the first owner's outermost unsatisfied election.
 		throw new InvokeError(
 			errFlagOutOfScope(
 				key,
 				owners.map((o) => `'${o}'`).join(" or "),
-				"that scope was not elected",
+				whyNotLive(owners[0] as string, elected),
 			),
 		);
 	}
 	return out;
+}
+
+/**
+ * The out-of-scope `<why>` clause at the machine boundary: the first segment
+ * of the owner's path whose election did not happen, named the way §12.13's
+ * three clauses name it.
+ */
+function whyNotLive(
+	owner: string,
+	elected: ReadonlyMap<string, string>,
+): string {
+	const satisfied: string[] = [];
+	for (const segment of owner.split(" ")) {
+		const [selectorName, choiceName] = segment.split("=");
+		const actual = elected.get(selectorName as string);
+		if (actual === choiceName) {
+			satisfied.push(segment);
+			continue;
+		}
+		if (actual === undefined) {
+			return errScopeWhyNotProvided(selectorName as string);
+		}
+		return errScopeWhyElected(
+			[...satisfied, `${selectorName}=${actual}`].join(" "),
+			"",
+		);
+	}
+	return errScopeWhyNotProvided(owner);
 }
 
 function makeTool(
@@ -480,7 +513,10 @@ function makeTool(
 		description: `${cmd.help}${scopeDescriptionBlock(cmd)}`,
 		parameters: buildJSONSchema(cmd),
 		...commandClassification(cmd),
-		execute: (kwargs = {}, opts = {}) =>
+		// async so a conversion refusal reaches the caller as a REJECTED
+		// promise, exactly as an invocation error does: a tool's execute is a
+		// promise-returning contract, and a synchronous throw would escape it.
+		execute: async (kwargs = {}, opts = {}) =>
 			app.call(commandPath, flatToCallKwargs(cmd, kwargs), opts),
 	};
 }

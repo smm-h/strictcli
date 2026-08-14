@@ -27,6 +27,7 @@ import {
 	errCallConsequentialUnconsented,
 	errCallPathIsGroup,
 	errDictFlagExpectedMapType,
+	errFlagInvalidChoice,
 	errOneOfRequired,
 	errPassthroughArgsNotStringSlice,
 	errScopeSuffix,
@@ -54,6 +55,7 @@ import {
 } from "./parse.js";
 import { resolveCommand } from "./routing.js";
 import { SourcedStore } from "./sources.js";
+import { formatChoices } from "./values.js";
 
 /** Sinks for invoke contexts: structured data flows back through the Outcome. */
 const discard: Writer = { write: () => {} };
@@ -470,11 +472,11 @@ function validateElectedRecord(sel: AnyChoiceFlag, value: unknown): unknown {
 	const tag = raw[CHOICE_TAG_KEY];
 	if (typeof tag !== "string" || !Object.hasOwn(sel.choices, tag)) {
 		throw new Error(
-			`--${sel.name}: invalid value '${String(tag)}', must be one of: ${Object.keys(
-				sel.choices,
-			)
-				.map((c) => `'${c}'`)
-				.join(", ")}`,
+			errFlagInvalidChoice(
+				sel.name,
+				String(tag),
+				formatChoices(Object.keys(sel.choices)),
+			),
 		);
 	}
 	const chosen = sel.choices[tag] as NonNullable<(typeof sel.choices)[string]>;

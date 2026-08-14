@@ -2460,6 +2460,17 @@ export function errChoicesEntryNotRecord(name: string, i: number): string {
 	return `Flag ${q(name)}: choices entry ${i} is a bare value: declare it as ${RECORD_SPELLING}`;
 }
 
+/**
+ * The arg-side sibling. §12.13 pins the flag spelling; positional args keep
+ * `choices` in the same record form (§24.7), and this catalog twins every
+ * flag/arg message that reaches both surfaces (errFlagChoicesEmpty /
+ * errArgChoicesEmpty and the whole default-type-mismatch family), so an arg
+ * reports itself as an arg rather than borrowing the flag prefix.
+ */
+export function errArgChoicesEntryNotRecord(name: string, i: number): string {
+	return `Arg ${q(name)}: choices entry ${i} is a bare value: declare it as ${RECORD_SPELLING}`;
+}
+
 // --- Registration guards: reserved names inside a scope (§24.7) ---
 
 export function errScopedNameChoiceReserved(c: string, sel: string): string {

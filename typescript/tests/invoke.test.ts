@@ -398,7 +398,7 @@ test("call: a bad elected record raises InvokeError", async () => {
 	// record itself.
 	await assert.rejects(build().call("fetch", { source: { choice: "both" } }), {
 		name: "InvokeError",
-		message: "--source: invalid value 'both', must be one of: 'url', 'file'",
+		message: "--source: invalid value 'both', must be one of: url, file",
 	});
 	await assert.rejects(build().call("fetch"), {
 		name: "InvokeError",
