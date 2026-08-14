@@ -992,6 +992,30 @@ class TestMcpRequestMetadata:
             "'io.modelcontextprotocol/whatever'"
         )
 
+    def test_more_than_one_offending_key_names_the_first_in_sorted_order(self):
+        """The same request names the same key in every implementation.
+
+        Go sorts the key set before validating because its map iteration is
+        randomized (§22.2); Python and TypeScript read a document's own order,
+        which is a different key whenever a request carries more than one
+        offending key. Sorted is what §22.2 documents, so all three sort.
+        """
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": _meta(**{"z!bad": 1, "a!bad": 1})},
+        })
+        assert resp["error"]["message"] == "invalid _meta key name: 'a!bad'"
+
+    def test_the_sorted_order_spans_both_key_rules(self):
+        """The lexically first offender is named whichever rule it breaks."""
+        resp = _send_one(_modern_app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": {"_meta": _meta(**{"z!bad": 1, "io.mcp/whatever": 1})},
+        })
+        assert resp["error"]["message"] == (
+            "unrecognized reserved _meta key: 'io.mcp/whatever'"
+        )
+
     def test_a_vendor_key_is_carried_without_complaint(self):
         resp = _send_one(_modern_app(), {
             "jsonrpc": "2.0", "id": 1, "method": "tools/list",

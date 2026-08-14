@@ -11879,7 +11879,12 @@ def _mcp_validate_meta(meta: dict) -> str | None:
     Called only once the block is known to carry the protocol version, which is
     what selects the modern era in the first place.
     """
-    for key in meta:
+    # Sorted, not in the document's own order: a request carrying more than one
+    # offending key must be refused by naming the SAME key in all three
+    # implementations (§22.2), and Go has to sort because its map iteration is
+    # randomized. Python's sort is by code point, which is UTF-8 byte order --
+    # the order Go's sort.Strings gives.
+    for key in sorted(meta):
         if not _mcp_meta_key_valid(key):
             return f"invalid _meta key name: '{key}'"
         if (
