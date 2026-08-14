@@ -10,8 +10,8 @@ result is a CLI whose behavior is fully determined by its declaration.
 
 This package is the **native TypeScript implementation**: pure ESM, Node >= 22,
 with full static type inference from flag declarations all the way to handler
-arguments — declare `flag("count", t.int, { required: true })` and your
-handler's `args.count` is a `bigint`, checked by the compiler.
+arguments — declare `flag("count", t.int, { help: "...", presence: "required" })`
+and your handler's `args.count` is a `bigint`, checked by the compiler.
 
 ## Install
 
@@ -38,10 +38,23 @@ app.command(
 	defineMutatingCommand("build", {
 		help: "Build the project",
 		flags: {
-			count: flag("count", t.int, { help: "How many times to build" }),
-			label: flag("label", t.str, { help: "Build label", default: "dev" }),
+			count: flag("count", t.int, {
+				help: "How many times to build",
+				presence: "required",
+			}),
+			label: flag("label", t.str, {
+				help: "Build label",
+				presence: "default",
+				default: "dev",
+			}),
 		},
-		args: [arg("values", t.float, { help: "Input values", variadic: true })],
+		args: [
+			arg("values", t.float, {
+				help: "Input values",
+				variadic: true,
+				presence: "required",
+			}),
+		],
 		handler: (args, ctx) => {
 			// Inferred: args.count is bigint, args.label is string, args.values is number[]
 			ctx.info(`building ${args.count} time(s) as ${args.label}`);
@@ -61,6 +74,16 @@ for commands that change nothing, `defineMutatingCommand` for commands that do.
 Classification is mandatory and has no default, so the factory name *is* the
 classification, and a read-only command's handler `ctx` is narrowed such that
 calling a mutating effect on it is a compile error.
+
+Every flag and every arg declares **exactly one** of three facts about itself:
+`presence: "required"` (a value must be supplied), `presence: "optional"`
+(absence is legal and arrives as `undefined`), or `presence: "default"` with a
+`default` value the framework supplies when nothing else does. Declaring none
+of the three, or two of them, is a registration-time hard error, and nothing
+about presence is inferred from the shape of another declaration. An optional
+declaration is what makes a key optional in the inferred handler-args type, and
+`ctx.provided(name)` answers whether the invocation — CLI, env, config or an
+implication — supplied the value, rather than the declaration.
 
 Note that `--dry-run`, `--approve-consequential`, `--quiet` and `--verbose` are
 framework-owned names. You never declare them; their values arrive on the

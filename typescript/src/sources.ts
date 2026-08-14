@@ -31,7 +31,7 @@ export class SourcedStore {
 
 	/**
 	 * Returns the stored value, or undefined when absent. A stored value can
-	 * itself be undefined (an unset mutex flag / explicitly-optional flag), so
+	 * itself be undefined (a flag declaring `presence: "optional"`), so
 	 * presence checks must go through has(), never through get().
 	 */
 	get(name: string): unknown {

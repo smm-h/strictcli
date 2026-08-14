@@ -732,8 +732,9 @@ export function validateAndBuildKwargs(
 		}
 	}
 
-	// Custom validation. An undefined value means the flag was not passed
-	// (default: null or an unset mutex flag) -- nothing to validate.
+	// Custom validation. An undefined value means the flag was not passed --
+	// an optional declaration delivering absence -- so there is nothing to
+	// validate: `validate` never runs on absence (contract §23.5).
 	for (const f of cmd.flags) {
 		const validate = flagOpts(f).validate;
 		if (validate === undefined || !store.has(f.name)) {

@@ -260,9 +260,10 @@ export function formatChoices(choices: readonly unknown[]): string {
 
 /**
  * Validates a resolved value against declared choices. A missing value
- * (undefined/null) is exempt: it only arises from an explicitly-optional
- * flag or an unset mutex flag, never from a CLI-supplied value. Repeatable
- * values validate element-wise.
+ * (undefined/null) is exempt: it only arises from a flag or arg declaring
+ * `presence: "optional"`, never from a supplied value, and absence is never
+ * matched against choices (contract §23.5). Repeatable values validate
+ * element-wise.
  */
 export function validateChoices(
 	name: string,
