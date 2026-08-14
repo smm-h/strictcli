@@ -526,6 +526,25 @@ func TestRequiredSatisfiedByImplication(t *testing.T) {
 	}
 }
 
+func TestRequiredURLClassFlagSatisfiedByConnectionEnv(t *testing.T) {
+	// A URL-class flag binds to a declared connection env, and that value
+	// satisfies requiredness like any other env value (§23.5's URL row).
+	os.Setenv("DATABASE_URL", "postgres://from-env/db")
+	defer os.Unsetenv("DATABASE_URL")
+	app := NewApp("myapp", "1.0.0", "test app",
+		WithConnectionEnv("DATABASE_URL", "Postgres connection string"))
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		if kwargs["dsn"] != "postgres://from-env/db" {
+			t.Fatalf("dsn = %#v", kwargs["dsn"])
+		}
+		return Exit(0)
+	}, WithFlags(StringFlag("dsn", "connection string", Required(), ConnectionURLFlag("DATABASE_URL"))),
+		WithEffect(EffectReadOnly))
+	if r := app.Test([]string{"run"}); r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // ctx.Provided (§23.6)
 // ---------------------------------------------------------------------------
