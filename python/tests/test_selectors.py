@@ -1089,6 +1089,46 @@ def test_a_defaulted_selector_renders_its_complete_elected_value():
     assert "[default: sms (phone-number=+15550100)]" in r.stdout
 
 
+def test_a_defaulted_selector_renders_its_fields_in_declaration_order():
+    """The pinned form: `[default: <choice> (<field>=<value>, ...)]`, one
+    part per scalar field, in the order the scope declares them."""
+    app = _notify(
+        presence=strictcli._MISSING,
+        default=Webhook(url="https://example.test/hook", retries=5),
+    )
+    r = app.test(["send", "--help"])
+    assert (
+        "[default: webhook (url=https://example.test/hook, retries=5)]"
+    ) in r.stdout
+
+
+def test_a_defaulted_selector_with_an_empty_scope_renders_the_choice_alone():
+    """The pinned form for an empty scope is `[default: <choice>]` -- no
+    parenthesis at all, never an empty `()`."""
+
+    @choice("none", help="deliver nothing at all")
+    class NoDelivery:
+        pass
+
+    @choice("shout", help="deliver by shouting")
+    class Shout:
+        pass
+
+    app = strictcli.App(name="notify", version="1.0.0", help="notifier")
+
+    @app.command("send", help="send one", effect="mutating")
+    @choice_flag(
+        "via", help="delivery channel", choices=[NoDelivery, Shout],
+        elect_by="selector-token", default=NoDelivery(),
+    )
+    def send(ctx, via: NoDelivery | Shout):
+        return 0
+
+    r = app.test(["send", "--help"])
+    assert "delivery channel [default: none]\n" in r.stdout
+    assert "[default: none (" not in r.stdout
+
+
 # ---------------------------------------------------------------------------
 # §24.11 -- schema, MCP and the machine boundary
 # ---------------------------------------------------------------------------
