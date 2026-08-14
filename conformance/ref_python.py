@@ -537,8 +537,16 @@ def _emit_command_registration(
                 gf_name = gf["name"]
                 ftype = gf.get("type", "str")
                 if ftype == "bool":
+                    # An OPTIONAL global that received nothing arrives as None,
+                    # which renders as None here exactly as it does on the
+                    # ordinary handler path -- truthiness would spell it
+                    # "false" and hide the difference from a real false.
                     lines.append(
-                        f'{indent}    print({gf_name!r} + "=" + ("true" if globals[{gf_name!r}] else "false"))'
+                        f'{indent}    _gv = globals[{gf_name!r}]'
+                    )
+                    lines.append(
+                        f'{indent}    print({gf_name!r} + "=" + '
+                        f'("None" if _gv is None else ("true" if _gv else "false")))'
                     )
                 else:
                     lines.append(

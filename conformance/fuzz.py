@@ -51,20 +51,23 @@ SIMPLE_APP: dict = {
         {
             "name": "run",
             "help": "run something",
+            "effect": "read_only",
             "flags": [
                 {
                     "name": "name",
                     "type": "str",
                     "help": "a name",
+                    "presence": "default",
                     "default": "world",
                 },
                 {
-                    "name": "verbose",
+                    "name": "chatter",
                     "type": "bool",
-                    "help": "verbose output",
+                    "help": "chatter output",
+                    "presence": "optional",
                 },
             ],
-            "handler_prints": "run name={name} verbose={verbose}",
+            "handler_prints": "run name={name} chatter={chatter}",
         },
     ],
 }
@@ -75,15 +78,17 @@ COMPLEX_APP: dict = {
     "help": "a complex app for fuzzing",
     "global_flags": [
         {
-            "name": "verbose",
+            "name": "chatter",
             "type": "bool",
-            "help": "verbose output",
+            "help": "chatter output",
+            "presence": "optional",
         },
     ],
     "commands": [
         {
             "name": "raw",
             "help": "passthrough command",
+            "effect": "read_only",
             "passthrough": True,
             "passthrough_handler_prints": "{name}:{args}",
         },
@@ -96,33 +101,37 @@ COMPLEX_APP: dict = {
                 {
                     "name": "migrate",
                     "help": "run migrations",
+                    "effect": "read_only",
                     "flags": [
                         {
                             "name": "target",
                             "type": "str",
                             "help": "deploy target",
+                            "presence": "required",
                             "choices_str": ["prod", "staging"],
                         },
                         {
                             "name": "count",
                             "type": "int",
                             "help": "number of migrations",
+                            "presence": "default",
                             "default": 1,
                         },
                         {
-                            "name": "dry-run",
+                            "name": "pretend",
                             "type": "bool",
-                            "help": "dry run mode",
+                            "help": "pretend mode",
+                            "presence": "optional",
                         },
                     ],
                     "args": [
                         {
                             "name": "path",
                             "help": "migration path",
-                            "required": True,
+                            "presence": "required",
                         },
                     ],
-                    "handler_prints": "migrate target={target} count={count} dry-run={dry-run} path={path} verbose={verbose}",
+                    "handler_prints": "migrate target={target} count={count} pretend={pretend} path={path} chatter={chatter}",
                 },
             ],
         },
