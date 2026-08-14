@@ -55,7 +55,7 @@ check, and any divergence in these areas blocks a release:
 
 ### JSON test cases
 
-The core of the suite is 80 JSON files in `conformance/cases/`, containing 835
+The core of the suite is 80 JSON files in `conformance/cases/`, containing 837
 individual test cases organized by feature area (flags, config, checks, groups,
 etc.). Each case is a self-contained JSON object specifying an app definition,
 argv input, optional environment variables, and expected output assertions
@@ -162,8 +162,8 @@ TypeScript's dynamic runtime):
 
 Three cases carry such a restriction today: the bad-return hard error, which
 Go's `Outcome` type makes unrepresentable, and one aborted-dispatch envelope
-case written twice, once for Go and once for the other two. So of the 835
-cases Go runs 833, and Python and TypeScript run 834 each.
+case written twice, once for Go and once for the other two. So of the 837
+cases Go runs 835, and Python and TypeScript run 836 each.
 
 ### Differential argv fuzzing
 
@@ -329,6 +329,6 @@ If the new case has output that is legitimately language-specific, add an `ackno
 ## Architecture notes
 
 - The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently. It covers 3 target implementations with 11 automated checks.
-- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 835 test cases across all 3 targets (833 on Go and 834 on each of Python and TypeScript, the difference being the three target-restricted cases).
+- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 837 test cases across all 3 targets (835 on Go and 836 on each of Python and TypeScript, the difference being the three target-restricted cases).
 - The conformance tool itself is built with strictcli (dogfooding the check system). Its checks are declared in `conformance/conformance_tool/.strictcli/checks.toml`.
 - Adding a new target to the suite is a data-entry task: register a new `Target` descriptor in `run.py` (one `_register_target(...)` call) and add corresponding entries in `check_api_surface.py`, `check_error_parity.py`, and `check_schema_parity.py`. The orchestration, comparison, and reporting logic is fully target-agnostic.
