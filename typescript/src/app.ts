@@ -687,7 +687,12 @@ function registerCommand(
 	for (const f of def.allFlags) {
 		const cf = app.configFields.get(flagParamName(f.name));
 		if (cf !== undefined) {
-			checkFlagConfigFieldDefault(f.name, flagOpts(f).default, cf);
+			checkFlagConfigFieldDefault(
+				f.name,
+				flagOpts(f).presence,
+				flagOpts(f).default,
+				cf,
+			);
 		}
 	}
 	into.set(def.name, {

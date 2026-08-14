@@ -64,6 +64,7 @@ import {
 	flag,
 	flagOpts,
 	mutexGroup,
+	type Presence,
 	pyRepr,
 	schemaKind,
 } from "./factories.js";
@@ -662,14 +663,18 @@ function matchesScalarSchema(schema: ScalarSchema, v: unknown): boolean {
 /**
  * Registration-time agreement check for a flag colliding with a config field
  * (a validation-only coexistence): explicit defaults on both sides must be
- * equal. A flag default of undefined/null means "no default".
+ * equal. A flag has a default exactly when its DECLARED presence is "default"
+ * (contract §23.1) -- never when its default value happens to be neither
+ * undefined nor null, which would stand the value's shape in for the
+ * declaration.
  */
 export function checkFlagConfigFieldDefault(
 	flagName: string,
+	flagPresence: Presence,
 	flagDefault: unknown,
 	cf: ConfigFieldRt,
 ): void {
-	const flagHas = flagDefault !== undefined && flagDefault !== null;
+	const flagHas = flagPresence === "default";
 	if (flagHas && cf.hasDefault && !deepEqualTrees(flagDefault, cf.default)) {
 		throw new RegistrationError(
 			errConfigFieldFlagDefaultDisagree(
@@ -731,7 +736,12 @@ export function registerConfigField(
 	// are checked from the command-registration side instead.
 	for (const f of collectAllFlags(app)) {
 		if (flagParamName(f.name) === name) {
-			checkFlagConfigFieldDefault(f.name, flagOpts(f).default, cf);
+			checkFlagConfigFieldDefault(
+				f.name,
+				flagOpts(f).presence,
+				flagOpts(f).default,
+				cf,
+			);
 		}
 	}
 	app.configFields.set(name, cf);
