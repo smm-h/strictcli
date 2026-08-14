@@ -24,13 +24,18 @@ import {
 	errArgChoicesEmpty,
 	errArgChoicesIncompatibleBool,
 	errArgChoiceTypeMismatch,
+	errArgDefaultNullNotOptional,
+	errArgDefaultValueMissing,
 	errArgDictTypeNotSupportedOnArgs,
 	errArgFloatDefaultTypeMismatch,
 	errArgHelpEmpty,
 	errArgIntDefaultTypeMismatch,
 	errArgListTypeOnArgsRequiresVariadicTrue,
 	errArgNameConsentReserved,
+	errArgPresenceDeclaredTwice,
+	errArgPresenceUndeclared,
 	errArgStrDefaultTypeMismatch,
+	errArgVariadicDefault,
 	errCommandAtMostOneVariadic,
 	errCommandCoRequiredDuplicate,
 	errCommandCoRequiredMinFlags,
@@ -59,6 +64,8 @@ import {
 	errFlagChoiceTypeMismatch,
 	errFlagConflictModeBad,
 	errFlagDefaultElementTypeMismatch,
+	errFlagDefaultNullNotOptional,
+	errFlagDefaultValueMissing,
 	errFlagDictCannotCombineChoices,
 	errFlagDictCannotCombineRepeatable,
 	errFlagDictCannotCombineUnique,
@@ -68,17 +75,18 @@ import {
 	errFlagEnvSeparatorRequiresEnv,
 	errFlagEnvSeparatorRequiresRepeatable,
 	errFlagEnvSeparatorSingleChar,
-	errFlagExplicitEmptyDefaultRedundantDict,
-	errFlagExplicitEmptyDefaultRedundantList,
 	errFlagFloatDefaultTypeMismatch,
 	errFlagForceReserved,
 	errFlagHelpEmpty,
 	errFlagIntDefaultTypeMismatch,
+	errFlagMutexMemberRequired,
 	errFlagNameConsentReserved,
 	errFlagNameJsonReserved,
 	errFlagNameReservedByFramework,
 	errFlagNameYesBanned,
 	errFlagNoPrefixReserved,
+	errFlagPresenceDeclaredTwice,
+	errFlagPresenceUndeclared,
 	errFlagRepeatableEnvRequiresSeparator,
 	errFlagRepeatableIncompatibleBool,
 	errFlagUniqueRequiresRepeatable,
@@ -89,7 +97,9 @@ import {
 	errGrantReasonEmpty,
 	errInvalidTagName,
 	errPayloadSchemaInvalid,
-	errRequiredArgCannotHaveDefault,
+	PRESENCE_SPELLING_OPTIONAL,
+	PRESENCE_SPELLING_REQUIRED,
+	presenceSpellingDefault,
 	RegistrationError,
 } from "./errors.js";
 import type { HandlerArgs } from "./infer.js";
@@ -105,6 +115,7 @@ import type {
 	ScalarSchema,
 	Schema,
 } from "./types.js";
+import { formatValueForError } from "./values.js";
 
 // --- Python-parity value formatting for registration errors ---
 
@@ -174,12 +185,21 @@ export type ElementOf<Out> = Out extends readonly (infer E)[] ? E : Out;
 export type ConflictMode = "cli-wins" | "error";
 
 /**
- * Per-carrier option surface. Inapplicable options are `never`-typed so they
- * cannot be provided at all: negatable is bool-only; choices exclude bool and
- * dict; envSeparator/repeatable/unique are list-only (list carriers are the
- * only repeatable flags in TS -- scalar `repeatable: true` does not exist).
+ * The three-way presence declaration every flag and every arg carries
+ * (contract §23.1). Exactly one of the three facts is declared, always
+ * explicitly: nothing about presence is inferred from the shape of another
+ * declaration.
  */
-export type FlagOpts<Out, S extends Schema> = {
+export type Presence = "required" | "optional" | "default";
+
+/**
+ * The options every flag carries whatever its presence declaration is.
+ * Inapplicable options are `never`-typed so they cannot be provided at all:
+ * negatable is bool-only; choices exclude bool and dict;
+ * envSeparator/repeatable/unique are list-only (list carriers are the only
+ * repeatable flags in TS -- scalar `repeatable: true` does not exist).
+ */
+interface FlagCommonOpts<Out, S extends Schema> {
 	readonly help: string;
 	readonly short?: string;
 	readonly env?: string;
@@ -187,13 +207,6 @@ export type FlagOpts<Out, S extends Schema> = {
 	readonly conflictMode?: ConflictMode;
 	/** Throw an Error to reject; list validators receive each element. */
 	readonly validate?: (value: ElementOf<Out>) => void;
-	/**
-	 * `null` declares an explicitly-optional scalar flag (the Go `Default(nil)`
-	 * / conformance `"default": null` shape). Absent default = required. A
-	 * relativeToRoot() marker resolves through a declared infra root when
-	 * defaults are applied at parse time (source label "infra").
-	 */
-	readonly default?: Out | null | InfraRootPath;
 	readonly negatable?: S extends "bool" ? boolean : never;
 	readonly choices?: S extends "bool" | DictSchema
 		? never
@@ -210,7 +223,33 @@ export type FlagOpts<Out, S extends Schema> = {
 	readonly connectionUrl?: boolean;
 	/** The declared connection env (createApp connectionEnv) this flag binds to. */
 	readonly connectionEnv?: string;
-};
+}
+
+/**
+ * Per-carrier option surface, a discriminated union on `presence` (contract
+ * §23.2) mirroring the three-shape union ArgOpts has carried since the port.
+ *
+ * - `presence: "required"` -- a value must be supplied, by CLI, env, config or
+ *   an implication.
+ * - `presence: "optional"` -- absence is legal and is delivered AS absence
+ *   (`undefined`), for every carrier including bools (real tri-state) and
+ *   compounds (no silent `[]` / `{}`).
+ * - `presence: "default"` -- the framework supplies the declared value when
+ *   nothing else does. The `default` member is mandatory here and illegal
+ *   anywhere else; a relativeToRoot() marker resolves through a declared infra
+ *   root when defaults are applied at parse time (source label "infra").
+ *
+ * `default: null` does not type-check and is refused at registration too, with
+ * a redirect to `presence: "optional"` -- a widened option object can reach the
+ * factory at runtime with a `null` the compiler never saw.
+ */
+export type FlagOpts<Out, S extends Schema> =
+	| (FlagCommonOpts<Out, S> & { readonly presence: "required" })
+	| (FlagCommonOpts<Out, S> & { readonly presence: "optional" })
+	| (FlagCommonOpts<Out, S> & {
+			readonly presence: "default";
+			readonly default: Out | InfraRootPath;
+	  });
 
 /** A fully typed flag descriptor produced by the flag() factory. */
 export interface FlagDef<
@@ -238,7 +277,11 @@ export interface AnyFlag {
 	readonly name: string;
 	readonly schema: Schema;
 	readonly carrier: Carrier<unknown, Schema>;
-	readonly opts: { readonly help: string; readonly default?: unknown };
+	readonly opts: {
+		readonly help: string;
+		readonly presence: Presence;
+		readonly default?: unknown;
+	};
 	readonly _out?: unknown;
 }
 
@@ -249,6 +292,8 @@ export interface AnyFlag {
  */
 export interface FlagOptsView {
 	readonly help: string;
+	/** The declared presence; always one of the three after registration. */
+	readonly presence: Presence;
 	readonly short?: string;
 	readonly env?: string;
 	readonly prefixed?: boolean;
@@ -339,6 +384,77 @@ export const RESERVED_MACHINE_FLAG_NAME = "json";
  */
 export const RESERVED_CONSENT_PARAM_NAME = "approve_consequential";
 
+/** The four presence messages of one surface (flags or args). */
+interface PresenceErrors {
+	undeclared(name: string): string;
+	declaredTwice(name: string, first: string, second: string): string;
+	nullNotOptional(name: string): string;
+	defaultValueMissing(name: string): string;
+}
+
+const FLAG_PRESENCE_ERRORS: PresenceErrors = {
+	undeclared: errFlagPresenceUndeclared,
+	declaredTwice: errFlagPresenceDeclaredTwice,
+	nullNotOptional: errFlagDefaultNullNotOptional,
+	defaultValueMissing: errFlagDefaultValueMissing,
+};
+
+const ARG_PRESENCE_ERRORS: PresenceErrors = {
+	undeclared: errArgPresenceUndeclared,
+	declaredTwice: errArgPresenceDeclaredTwice,
+	nullNotOptional: errArgDefaultNullNotOptional,
+	defaultValueMissing: errArgDefaultValueMissing,
+};
+
+/**
+ * Resolves the declared presence at registration time (contract §23.1,
+ * §12.12). The type system already refuses a `default` outside the
+ * `"default"` member, but the check is enforced at runtime too: a widened
+ * option object -- a conformance harness, a plain-JS consumer, an `as`
+ * assertion -- reaches the factory with shapes the compiler never saw.
+ *
+ * Zero declared and two declared are both hard errors, and a null-valued
+ * default is refused before either: it is not a spelling of optionality.
+ */
+function resolvePresence(
+	name: string,
+	o: { readonly presence?: unknown; readonly default?: unknown },
+	errs: PresenceErrors,
+): Presence {
+	const dflt = o.default;
+	if (dflt === null) {
+		throw new RegistrationError(errs.nullNotOptional(name));
+	}
+	const declared = o.presence;
+	if (
+		declared !== "required" &&
+		declared !== "optional" &&
+		declared !== "default"
+	) {
+		throw new RegistrationError(errs.undeclared(name));
+	}
+	if (declared === "default") {
+		if (dflt === undefined) {
+			throw new RegistrationError(errs.defaultValueMissing(name));
+		}
+		return "default";
+	}
+	if (dflt !== undefined) {
+		// Canonical order (required, optional, default) regardless of the order
+		// they were written in, so the line is deterministic.
+		throw new RegistrationError(
+			errs.declaredTwice(
+				name,
+				declared === "required"
+					? PRESENCE_SPELLING_REQUIRED
+					: PRESENCE_SPELLING_OPTIONAL,
+				presenceSpellingDefault(formatValueForError(dflt)),
+			),
+		);
+	}
+	return declared;
+}
+
 // Mirrors Python Flag.__post_init__ (the divergence ground truth), with the
 // TS carrier model: list carriers ARE the repeatable flags, dict carriers are
 // Map-backed, int is bigint, float is number.
@@ -370,6 +486,7 @@ function validateFlagConfig(
 	if (name.startsWith("no-")) {
 		throw new RegistrationError(errFlagNoPrefixReserved(name));
 	}
+	const presence = resolvePresence(name, o, FLAG_PRESENCE_ERRORS);
 	const kind = schemaKind(carrier.schema);
 	const elem = elemSchemaOf(carrier);
 	if (kind === "dict") {
@@ -445,16 +562,15 @@ function validateFlagConfig(
 			}
 		}
 	}
-	const dflt = o.default;
-	if (kind === "dict" && dflt !== undefined && dflt !== null) {
+	// Every default check below runs only for a `presence: "default"`
+	// declaration: an optional or required flag HAS no value to check, and an
+	// empty collection is now a declaration rather than the framework's own
+	// silent fallback (contract §23.5, §12.12's deleted templates).
+	const dflt = presence === "default" ? o.default : undefined;
+	if (kind === "dict" && dflt !== undefined) {
 		if (!(dflt instanceof Map)) {
 			throw new RegistrationError(
 				`Flag "${name}": dict flag default must be a Map`,
-			);
-		}
-		if (dflt.size === 0) {
-			throw new RegistrationError(
-				errFlagExplicitEmptyDefaultRedundantDict(name),
 			);
 		}
 		for (const [k, v] of dflt as Map<unknown, unknown>) {
@@ -469,15 +585,10 @@ function validateFlagConfig(
 				);
 			}
 		}
-	} else if (kind === "list" && dflt !== undefined && dflt !== null) {
+	} else if (kind === "list" && dflt !== undefined) {
 		if (!Array.isArray(dflt)) {
 			throw new RegistrationError(
 				`Flag "${name}": list flag default must be an array`,
-			);
-		}
-		if (dflt.length === 0) {
-			throw new RegistrationError(
-				errFlagExplicitEmptyDefaultRedundantList(name),
 			);
 		}
 		for (const [i, el] of (dflt as unknown[]).entries()) {
@@ -487,7 +598,7 @@ function validateFlagConfig(
 				);
 			}
 		}
-	} else if (kind === "scalar" && dflt !== undefined && dflt !== null) {
+	} else if (kind === "scalar" && dflt !== undefined) {
 		if (carrier.schema === "int" && typeof dflt !== "bigint") {
 			throw new RegistrationError(
 				errFlagIntDefaultTypeMismatch(name, pyTypeName(dflt)),
@@ -499,11 +610,13 @@ function validateFlagConfig(
 			);
 		}
 	}
+	// The default-in-choices check applies to declared VALUES only, never to
+	// absence: an optional flag declares no value, so there is nothing to match
+	// against choices (§23.5's whole-table note).
 	if (
 		kind === "scalar" &&
 		o.choices !== undefined &&
 		dflt !== undefined &&
-		dflt !== null &&
 		!(o.choices as readonly unknown[]).includes(dflt)
 	) {
 		throw new RegistrationError(
@@ -543,27 +656,31 @@ type ArgChoices<Out, S extends ScalarSchema> = S extends "bool"
 /**
  * Args take scalar carriers only; a variadic arg collects Out[] (the list-arg
  * shape from the siblings is expressed as scalar carrier + `variadic: true`).
- * `default` is only meaningful with `required: false` (required is the arg
- * default, matching the siblings).
+ *
+ * The same three-way presence declaration flags carry (contract §23.3),
+ * expressed through the same discriminated union: `required?: boolean` is
+ * DELETED, not retained beside it. A variadic arg always delivers a list, so
+ * `required` means at least one value and `optional` means possibly none;
+ * `presence: "default"` on a variadic arg is a registration error.
  */
 export type ArgOpts<Out, S extends ScalarSchema> =
 	| {
 			readonly help: string;
-			readonly variadic: true;
-			readonly required?: boolean;
+			readonly presence: "required";
+			readonly variadic?: boolean;
 			readonly choices?: ArgChoices<Out, S>;
 	  }
 	| {
 			readonly help: string;
-			readonly variadic?: false;
-			readonly required?: true;
+			readonly presence: "optional";
+			readonly variadic?: boolean;
 			readonly choices?: ArgChoices<Out, S>;
 	  }
 	| {
 			readonly help: string;
+			readonly presence: "default";
+			readonly default: Out;
 			readonly variadic?: false;
-			readonly required: false;
-			readonly default?: Out;
 			readonly choices?: ArgChoices<Out, S>;
 	  };
 
@@ -591,7 +708,7 @@ export interface AnyArg {
 	readonly carrier: Carrier<unknown, ScalarSchema>;
 	readonly opts: {
 		readonly help: string;
-		readonly required?: boolean;
+		readonly presence: Presence;
 		readonly variadic?: boolean;
 		readonly default?: unknown;
 	};
@@ -601,7 +718,8 @@ export interface AnyArg {
 /** Runtime view of an arg's options (see FlagOptsView). */
 export interface ArgOptsView {
 	readonly help: string;
-	readonly required?: boolean;
+	/** The declared presence; always one of the three after registration. */
+	readonly presence: Presence;
 	readonly variadic?: boolean;
 	readonly default?: unknown;
 	readonly choices?: readonly unknown[];
@@ -626,10 +744,11 @@ export function arg<
 	if (name === RESERVED_CONSENT_PARAM_NAME) {
 		throw new RegistrationError(errArgNameConsentReserved());
 	}
-	// required defaults to true; the type system steers toward valid shapes but
-	// cannot excess-property-check generic constraints, so enforce here too.
-	if (o.required !== false && "default" in o) {
-		throw new RegistrationError(errRequiredArgCannotHaveDefault());
+	const presence = resolvePresence(name, o, ARG_PRESENCE_ERRORS);
+	// A variadic arg always delivers a list, so the empty case is `optional`,
+	// spelled once (§23.3).
+	if (presence === "default" && o.variadic === true) {
+		throw new RegistrationError(errArgVariadicDefault(name));
 	}
 	const kind = schemaKind(carrier.schema);
 	if (kind === "dict") {
@@ -662,12 +781,9 @@ export function arg<
 			}
 		}
 	}
-	const dflt = o.default;
-	if (
-		dflt !== undefined &&
-		dflt !== null &&
-		!matchesScalar(carrier.schema, dflt)
-	) {
+	// As on flags, the value checks below apply to a declared value only.
+	const dflt = presence === "default" ? o.default : undefined;
+	if (dflt !== undefined && !matchesScalar(carrier.schema, dflt)) {
 		const got = pyTypeName(dflt);
 		switch (carrier.schema) {
 			case "str":
@@ -683,7 +799,6 @@ export function arg<
 	if (
 		o.choices !== undefined &&
 		dflt !== undefined &&
-		dflt !== null &&
 		!(o.choices as readonly unknown[]).includes(dflt)
 	) {
 		throw new RegistrationError(
@@ -1212,6 +1327,13 @@ function buildCommandDef<
 			);
 		}
 		for (const f of mgFlags) {
+			// A member that must always be typed contradicts a group that permits
+			// exactly one: the group's own requirement is what makes the choice
+			// mandatory (§23.5's mutex row). The member declares optional (or a
+			// default) and the group enforces cardinality on top of that.
+			if (flagOpts(f).presence === "required") {
+				throw new RegistrationError(errFlagMutexMemberRequired(f.name));
+			}
 			if (mutexFlagNames.has(f.name)) {
 				throw new RegistrationError(
 					errCommandFlagInMultipleMutex(name, f.name),

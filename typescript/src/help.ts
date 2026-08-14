@@ -8,9 +8,9 @@
  * - App-level "Global flags:" section: Python renders it (name/short + help,
  *   no meta), Go omits it entirely; no conformance case covers it. TS follows
  *   Python (the divergence ground truth).
- * - "[optional]" for explicitly-optional flags (default: null): Go-only
- *   behavior (the Default(nil) fix); Python cannot express it. TS supports
- *   default: null, so it adopts the Go rendering.
+ * - Every flag and every arg renders exactly one presence part, last on the
+ *   line: "[required]", "[optional]" or "[default: <value>]" (contract §23.8).
+ *   A declared empty collection renders "[default: []]" / "[default: {}]".
  * - List carriers render "[repeatable]" when declared with repeatable: true
  *   (the sibling scalar-repeatable shape) and "[list]" otherwise (the sibling
  *   compound-list shape).
@@ -22,6 +22,7 @@ import {
 	type AnyFlag,
 	elemSchemaOf,
 	flagOpts,
+	type Presence,
 	schemaKind,
 } from "./factories.js";
 import { formatFloatCanonical } from "./float.js";
@@ -173,6 +174,40 @@ function formatDefaultForHelp(value: unknown): string {
 	return String(value);
 }
 
+/**
+ * The single presence part every flag and arg renders, LAST on its line
+ * (contract §23.8). A declared empty collection renders `[default: []]` /
+ * `[default: {}]`: it is a declaration now, and a declaration that rendered as
+ * blank would leave that one line with no presence part at all.
+ */
+function presenceMeta(
+	presence: Presence,
+	dflt: unknown,
+	kind: "scalar" | "list" | "dict",
+	schema: string,
+): string {
+	if (presence === "required") {
+		return "required";
+	}
+	if (presence === "optional") {
+		return "optional";
+	}
+	if (kind === "dict") {
+		const m = dflt as ReadonlyMap<string, unknown>;
+		return `default: ${m.size === 0 ? "{}" : formatDefaultForHelp(m)}`;
+	}
+	if (kind === "list") {
+		const items = dflt as readonly unknown[];
+		return `default: ${
+			items.length === 0 ? "[]" : items.map(formatValueForError).join(", ")
+		}`;
+	}
+	if (schema === "bool") {
+		return `default: ${dflt === true ? "true" : "false"}`;
+	}
+	return `default: ${formatDefaultForHelp(dflt)}`;
+}
+
 /** Left-column spec string for a flag (e.g. "--target, -t <str>"). */
 export function buildFlagSpec(f: AnyFlag): string {
 	const o = flagOpts(f);
@@ -220,26 +255,7 @@ export function buildFlagMeta(f: AnyFlag): string {
 				: `env: ${o.env}`,
 		);
 	}
-	const dflt = o.default;
-	if (kind === "dict") {
-		// Dict flags are never required; show the default only if non-empty.
-		if (dflt instanceof Map && dflt.size > 0) {
-			metaParts.push(`default: ${formatDefaultForHelp(dflt)}`);
-		}
-	} else if (f.schema === "bool" && dflt !== undefined && dflt !== null) {
-		metaParts.push(`default: ${dflt === true ? "true" : "false"}`);
-	} else if (kind === "list") {
-		// List flags are never required; show the default only if non-empty.
-		if (Array.isArray(dflt) && dflt.length > 0) {
-			metaParts.push(`default: ${dflt.map(formatValueForError).join(", ")}`);
-		}
-	} else if (dflt !== undefined && dflt !== null) {
-		metaParts.push(`default: ${formatDefaultForHelp(dflt)}`);
-	} else if (dflt === null) {
-		metaParts.push("optional");
-	} else {
-		metaParts.push("required");
-	}
+	metaParts.push(presenceMeta(o.presence, o.default, kind, f.schema));
 	return ` [${metaParts.join("] [")}]`;
 }
 
@@ -264,14 +280,14 @@ function argMeta(a: AnyArg): string {
 	if (opts.choices !== undefined) {
 		metaParts.push(`choices: ${formatChoices(opts.choices)}`);
 	}
-	if (a.opts.required === false) {
-		if ("default" in a.opts) {
-			metaParts.push(`default: ${formatDefaultForHelp(a.opts.default)}`);
-		} else {
-			metaParts.push("optional");
-		}
-	}
-	return metaParts.length > 0 ? ` [${metaParts.join("] [")}]` : "";
+	// Args carry the same single presence part flags do -- a required
+	// positional renders `[required]` where nothing was rendered before, since
+	// this framework's help has no usage line to show requiredness any other
+	// way (contract §23.8).
+	metaParts.push(
+		presenceMeta(a.opts.presence, a.opts.default, "scalar", a.schema),
+	);
+	return ` [${metaParts.join("] [")}]`;
 }
 
 /**

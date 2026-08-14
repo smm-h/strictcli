@@ -213,10 +213,6 @@ export function errArgHelpEmpty(): string {
 	return "Arg.help must be a non-empty string";
 }
 
-export function errRequiredArgCannotHaveDefault(): string {
-	return "required arg cannot have a default";
-}
-
 export function errArgListTypeRequiresVariadic(name: string): string {
 	return `Arg ${q(name)}: list type requires variadic=true`;
 }
@@ -391,10 +387,6 @@ export function errFlagDictDefaultMustBeMap(name: string): string {
 	return `Flag ${q(name)}: dict flag default must be a map[string]interface{}`;
 }
 
-export function errFlagExplicitEmptyDefaultRedundantDict(name: string): string {
-	return `Flag ${q(name)}: explicit empty default is redundant for dict flags, omit the default`;
-}
-
 export function errFlagDefaultValueForKey(
 	name: string,
 	k: string,
@@ -407,10 +399,6 @@ export function errFlagListDefaultMustBeSlice(name: string): string {
 	return `Flag ${q(name)}: list flag default must be a []interface{}`;
 }
 
-export function errFlagExplicitEmptyDefaultRedundantList(name: string): string {
-	return `Flag ${q(name)}: explicit empty default is redundant for list flags, omit the default`;
-}
-
 export function errFlagDefaultElementError(
 	name: string,
 	i: number,
@@ -421,12 +409,6 @@ export function errFlagDefaultElementError(
 
 export function errFlagRepeatableDefaultMustBeList(name: string): string {
 	return `Flag ${q(name)}: repeatable flag default must be a list`;
-}
-
-export function errFlagExplicitEmptyDefaultRedundantRepeatable(
-	name: string,
-): string {
-	return `Flag ${q(name)}: explicit empty default is redundant for repeatable flags, omit the default`;
 }
 
 export function errFlagDefaultElementTypeMismatch(
@@ -2176,4 +2158,102 @@ export function errAppConfigFormatBad(gotRepr: string): string {
 
 export function errAppConfigConflictModeBad(gotRepr: string): string {
 	return `App.config_conflict_mode must be "cli-wins" or "error", got ${gotRepr}`;
+}
+
+// ---------------------------------------------------------------------------
+// factories.ts — the presence declaration (registration-time, contract §12.12)
+//
+// Every flag and every arg declares EXACTLY ONE of required / optional / a
+// value default (§23.1). The sentence in each template is byte-identical
+// across the three implementations; the SPELLINGS inside it are each
+// language's own, which is §12.10's handle-availability precedent applied to
+// a larger triple.
+// ---------------------------------------------------------------------------
+
+/** TypeScript's spelling of the required declaration (flags and args alike). */
+export const PRESENCE_SPELLING_REQUIRED = 'presence: "required"';
+/** TypeScript's spelling of the optional declaration (flags and args alike). */
+export const PRESENCE_SPELLING_OPTIONAL = 'presence: "optional"';
+/**
+ * TypeScript's spelling of the default declaration. The value clause is part
+ * of the spelling: `presence: "default"` alone declares nothing, because the
+ * union member carries the value.
+ */
+export function presenceSpellingDefault(formattedValue: string): string {
+	return `presence: "default" with default: ${formattedValue}`;
+}
+/**
+ * The default spelling WITHOUT its value clause, for the variadic-arg message:
+ * that message is about the spelling being inapplicable, not about the value
+ * that was written (§12.12).
+ */
+export const PRESENCE_SPELLING_DEFAULT_BARE = 'presence: "default"';
+/**
+ * The default spelling with an unfilled value clause, for the zero-declaration
+ * message: nothing was written, so there is no value to render.
+ */
+export const PRESENCE_SPELLING_DEFAULT_PLACEHOLDER =
+	'presence: "default" with default: <value>';
+
+export function errFlagPresenceUndeclared(name: string): string {
+	return `Flag ${q(name)}: presence is undeclared: declare exactly one of ${PRESENCE_SPELLING_REQUIRED}, ${PRESENCE_SPELLING_OPTIONAL}, or ${PRESENCE_SPELLING_DEFAULT_PLACEHOLDER}`;
+}
+
+export function errArgPresenceUndeclared(name: string): string {
+	return `Arg ${q(name)}: presence is undeclared: declare exactly one of ${PRESENCE_SPELLING_REQUIRED}, ${PRESENCE_SPELLING_OPTIONAL}, or ${PRESENCE_SPELLING_DEFAULT_PLACEHOLDER}`;
+}
+
+export function errFlagPresenceDeclaredTwice(
+	name: string,
+	first: string,
+	second: string,
+): string {
+	return `Flag ${q(name)}: presence is declared twice: ${first} and ${second} cannot be combined; declare exactly one`;
+}
+
+export function errArgPresenceDeclaredTwice(
+	name: string,
+	first: string,
+	second: string,
+): string {
+	return `Arg ${q(name)}: presence is declared twice: ${first} and ${second} cannot be combined; declare exactly one`;
+}
+
+/**
+ * One spelling per fact: the value-shaped spelling of optionality is refused
+ * and redirected rather than accepted as a second synonym (§23.1, item 138).
+ * The parenthetical is not decoration -- the value the reader wanted is
+ * exactly what the redirected spelling delivers.
+ */
+export function errFlagDefaultNullNotOptional(name: string): string {
+	return `Flag ${q(name)}: default: null does not declare optionality: use presence: "optional" (it delivers undefined when the flag is absent)`;
+}
+
+export function errArgDefaultNullNotOptional(name: string): string {
+	return `Arg ${q(name)}: default: null does not declare optionality: use presence: "optional" (it delivers undefined when the arg is absent)`;
+}
+
+/** §23.5's mutex row: the group's own requirement is what makes the choice mandatory. */
+export function errFlagMutexMemberRequired(name: string): string {
+	return `Flag ${q(name)}: a mutex member cannot declare ${PRESENCE_SPELLING_REQUIRED}: the group's own requirement is what makes the choice mandatory`;
+}
+
+/** §23.3: a variadic arg always delivers a list, so the empty case is `optional`. */
+export function errArgVariadicDefault(name: string): string {
+	return `Arg ${q(name)}: a variadic arg cannot declare ${PRESENCE_SPELLING_DEFAULT_BARE}: it always delivers a list, so declare ${PRESENCE_SPELLING_REQUIRED} for at least one value or ${PRESENCE_SPELLING_OPTIONAL} for possibly none`;
+}
+
+/**
+ * TypeScript-only, for a state no sibling can reach: `presence: "default"`
+ * with no `default` value. Python's `default=<value>` and Go's `Default(v)`
+ * ARE the value, so a half-written default declaration is inexpressible
+ * there; TS's union member can be widened past the type system with the value
+ * missing. Same precedent as the repeatable-requires-a-list-type message.
+ */
+export function errFlagDefaultValueMissing(name: string): string {
+	return `Flag ${q(name)}: ${PRESENCE_SPELLING_DEFAULT_BARE} requires a default value: declare default: <value>, or ${PRESENCE_SPELLING_OPTIONAL} for no value`;
+}
+
+export function errArgDefaultValueMissing(name: string): string {
+	return `Arg ${q(name)}: ${PRESENCE_SPELLING_DEFAULT_BARE} requires a default value: declare default: <value>, or ${PRESENCE_SPELLING_OPTIONAL} for no value`;
 }

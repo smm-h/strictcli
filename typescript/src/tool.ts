@@ -88,10 +88,12 @@ export function buildJSONSchema(
 		prop.description = o.help;
 		properties[paramName] = prop;
 
-		// A flag is required if it's scalar, non-bool, and has no default
-		// (default: null counts as a default -- the flag is explicitly
-		// optional). List and dict flags always default to empty collections.
-		if (kind === "scalar" && f.schema !== "bool" && o.default === undefined) {
+		// Requiredness comes from the DECLARED presence, flags and args alike
+		// (contract §13's presence-round amendment). The hand-written derivation
+		// this replaces excluded bools on the reasoning that "bool flags always
+		// have a default", which §23 makes false by construction: a required
+		// bool now appears here, as it already did in Python's projection.
+		if (o.presence === "required") {
 			required.push(paramName);
 		}
 	}
@@ -112,7 +114,7 @@ export function buildJSONSchema(
 		prop.description = a.opts.help;
 		properties[a.name] = prop;
 
-		if (a.opts.required !== false) {
+		if (a.opts.presence === "required") {
 			required.push(a.name);
 		}
 	}

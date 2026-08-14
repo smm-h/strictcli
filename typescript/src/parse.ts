@@ -348,57 +348,53 @@ interface DefaultedValue {
 }
 
 /**
- * Resolves the value of a flag that was not provided by CLI, env, or config.
- * Throws ParseError when the flag is required. prefix is "" for command flags
- * and "global " for global flags. A relativeToRoot() marker default resolves
- * through the declared infra roots and reports source "infra"
+ * Resolves the value of a flag that was not provided by CLI, env, or config,
+ * from its DECLARED presence (contract §23.1) -- nothing is inferred from the
+ * shape of the default any more, and there is no mutex-member exemption: a
+ * member declares `optional` (or a default) like anything else and the group
+ * enforces cardinality on top of that.
+ *
+ * Throws ParseError when the flag declares `required`. prefix is "" for
+ * command flags and "global " for global flags. A relativeToRoot() marker
+ * default resolves through the declared infra roots and reports source "infra"
  * (distinguishable from a plain default); hermetic mode never suppresses it
  * (roots were resolved at construction, with no argv dependency).
  * Exported for invoke.ts (programmatic invocation applies global defaults).
  */
 export function applyFlagDefault(
 	f: AnyFlag,
-	mutexFlagNames: ReadonlySet<string> | null,
 	prefix: string,
 	infraRoots: ReadonlyMap<string, string>,
 ): DefaultedValue {
 	const o = flagOpts(f);
-	const kind = schemaKind(f.schema);
-	if (kind === "dict") {
-		const dflt = o.default;
-		return {
-			value: dflt instanceof Map ? new Map(dflt) : new Map<string, unknown>(),
-			source: "default",
-		};
+	if (o.presence === "optional") {
+		// Absence delivered AS absence, for every carrier: a compound flag that
+		// wants an empty collection declares `default: []` / `default: new Map()`.
+		return { value: undefined, source: "default" };
 	}
-	if (kind === "list") {
+	if (o.presence === "default") {
 		const dflt = o.default;
-		return {
-			value: Array.isArray(dflt) ? [...dflt] : [],
-			source: "default",
-		};
-	}
-	if (o.default !== undefined && o.default !== null) {
-		if (isInfraRootPath(o.default)) {
-			// Should be unreachable: markers are validated at registration.
+		if (isInfraRootPath(dflt)) {
 			try {
 				return {
-					value: resolveInfraRootPath(o.default, infraRoots),
+					value: resolveInfraRootPath(dflt, infraRoots),
 					source: "infra",
 				};
 			} catch (e) {
 				throw new ParseError(`${prefix}${(e as Error).message}`);
 			}
 		}
-		return { value: o.default, source: "default" };
-	}
-	if (o.default === null) {
-		// default: null -- explicitly optional; the value is "not passed".
-		return { value: undefined, source: "default" };
-	}
-	if (mutexFlagNames?.has(f.name)) {
-		// Mutex groups enforce their own required semantics.
-		return { value: undefined, source: "default" };
+		const kind = schemaKind(f.schema);
+		if (kind === "dict") {
+			return {
+				value: new Map(dflt as Map<string, unknown>),
+				source: "default",
+			};
+		}
+		if (kind === "list") {
+			return { value: [...(dflt as unknown[])], source: "default" };
+		}
+		return { value: dflt, source: "default" };
 	}
 	// Inline message templates, mirroring the siblings' inline fmt/f-strings.
 	if (f.schema === "bool" && isNegatableBool(f)) {
@@ -712,24 +708,14 @@ export function validateAndBuildKwargs(
 		}
 	}
 
-	const mutexFlagNames = new Set<string>();
-	for (const mg of def.mutex) {
-		for (const f of Object.values(mg.flags)) {
-			mutexFlagNames.add(f.name);
-		}
-	}
-
-	// Defaults
+	// Defaults. Every flag resolves from its own declared presence, mutex
+	// members included: the exemption that handed a member an absent value its
+	// declaration never asked for is deleted (contract §23.4).
 	for (const f of cmd.flags) {
 		if (store.has(f.name)) {
 			continue;
 		}
-		const { value, source } = applyFlagDefault(
-			f,
-			mutexFlagNames,
-			"",
-			infraRoots,
-		);
+		const { value, source } = applyFlagDefault(f, "", infraRoots);
 		store.set(f.name, value, source);
 	}
 
@@ -784,17 +770,19 @@ export function validateAndBuildKwargs(
 				a.name,
 				coerceArgValue(a.name, positionals[idx] as string, a.schema),
 			);
-		} else if (a.opts.required !== false) {
+		} else if (a.opts.presence === "required") {
 			throw new ParseError(errMissingRequiredArgument(a.name));
-		} else if (a.opts.default !== undefined) {
+		} else if (a.opts.presence === "default") {
 			argValues.set(a.name, a.opts.default);
+		} else {
+			// An optional arg delivers absence as a PRESENT key holding undefined
+			// (contract §23.3): key-absence delivery was rejected for the round.
+			argValues.set(a.name, undefined);
 		}
-		// Optional arg with no default: key omitted (the handler-args type
-		// marks it `?:`), matching Python's omitted kwarg.
 	});
 	if (hasVariadic && lastArg !== undefined) {
 		const remaining = positionals.slice(fixedArgs.length);
-		if (lastArg.opts.required !== false && remaining.length === 0) {
+		if (lastArg.opts.presence === "required" && remaining.length === 0) {
 			throw new ParseError(errMissingRequiredArgument(lastArg.name));
 		}
 		argValues.set(
@@ -1005,12 +993,7 @@ export function extractGlobalFlags(
 		if (cliSet.has(f.name)) {
 			continue;
 		}
-		const { value, source } = applyFlagDefault(
-			f,
-			null,
-			"global ",
-			app.infraRoots,
-		);
+		const { value, source } = applyFlagDefault(f, "global ", app.infraRoots);
 		cliSet.set(f.name, value);
 		sources[flagParamName(f.name)] = source;
 	}

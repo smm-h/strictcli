@@ -1078,20 +1078,14 @@ export function resolveFlagShowSource(
 	if (Object.hasOwn(configData, param)) {
 		return [configData[param], "config"];
 	}
-	// Python Flag normalizes absent list/dict defaults to []/{} at
-	// construction, so config show renders them as empty containers.
-	const dflt = flagOpts(f).default;
-	const kind = schemaKind(f.schema);
-	if (kind === "dict") {
-		return [dflt instanceof Map ? dflt : new Map(), "default"];
-	}
-	if (kind === "list") {
-		return [Array.isArray(dflt) ? dflt : [], "default"];
-	}
-	if (dflt !== undefined && dflt !== null) {
-		return [dflt, "default"];
-	}
-	return [undefined, "default"];
+	// The declared presence decides, for every carrier: a compound flag that
+	// declares `optional` shows absence, exactly as a scalar one does, and the
+	// silent []/{} normalization is gone with the derivation behind it
+	// (contract §23.4).
+	const o = flagOpts(f);
+	return o.presence === "default"
+		? [o.default, "default"]
+		: [undefined, "default"];
 }
 
 // --- Template generation (config init) ---
@@ -1105,19 +1099,13 @@ function renderTemplateTomlValue(v: unknown): string {
 }
 
 /**
- * A flag's default for template rendering: list/dict flags normalize an
- * absent default to []/{} (Python Flag construction does this normalization).
+ * A flag's declared default for template rendering, or undefined when the
+ * flag declares `required` or `optional` -- those declare no value, so the
+ * template has nothing to render for them (contract §23.4).
  */
 function normalizeFlagTemplateDefault(f: AnyFlag): unknown {
-	const dflt = flagOpts(f).default;
-	const kind = schemaKind(f.schema);
-	if (kind === "dict") {
-		return dflt instanceof Map ? dflt : new Map<string, unknown>();
-	}
-	if (kind === "list") {
-		return Array.isArray(dflt) ? dflt : [];
-	}
-	return dflt;
+	const o = flagOpts(f);
+	return o.presence === "default" ? o.default : undefined;
 }
 
 /** TOML template with comments (Python _generate_config_template_toml). */
@@ -1754,6 +1742,7 @@ export function registerConfigGroup(app: AppImpl): void {
 			flags: {
 				plain: flag("plain", t.bool, {
 					help: "Display config values in a human-readable table format",
+					presence: "default",
 					default: false,
 				}),
 			},
@@ -1770,19 +1759,22 @@ export function registerConfigGroup(app: AppImpl): void {
 			args: [
 				arg("key", t.str, {
 					help: "The config key to set, matching a registered flag name",
+					presence: "required",
 				}),
 				arg("value", t.str, {
 					help: "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
-					required: false,
+					presence: "optional",
 				}),
 			],
 			flags: {
 				clear: flag("clear", t.bool, {
 					help: "Clear a repeatable flag by setting its value to an empty list",
+					presence: "default",
 					default: false,
 				}),
 				default: flag("default", t.bool, {
 					help: "Reset a key to its default value by removing it from the config file",
+					presence: "default",
 					default: false,
 				}),
 			},

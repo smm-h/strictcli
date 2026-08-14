@@ -142,7 +142,7 @@ function applyFlagDefaultForInvoke(
 	infraRoots: ReadonlyMap<string, string>,
 ): { value: unknown; source: string } {
 	try {
-		return applyFlagDefault(f, null, prefix, infraRoots);
+		return applyFlagDefault(f, prefix, infraRoots);
 	} catch (e) {
 		if (e instanceof ParseError) {
 			throw new InvokeError(e.message);

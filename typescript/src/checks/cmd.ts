@@ -76,22 +76,27 @@ function registerCheckCommand(app: AppImpl): void {
 	const candidates: AnyFlag[] = [
 		flag("all", t.bool, {
 			help: "Run every registered check regardless of tag or name filters",
+			presence: "default",
 			default: false,
 		}),
 		flag("tag", t.str, {
 			help: "Tag DSL expression to select checks (e.g. 'changelog & !quality')",
+			presence: "default",
 			default: "",
 		}),
 		flag("name", t.str, {
 			help: "Glob pattern to filter checks by name (e.g. 'hash-*', '*coverage*')",
+			presence: "default",
 			default: "",
 		}),
 		flag("list", t.bool, {
 			help: "List all registered checks with their tags and exit without running",
+			presence: "default",
 			default: false,
 		}),
 		flag("ignore-warnings", t.bool, {
 			help: "Treat warn-severity results as passing so they do not cause nonzero exit",
+			presence: "default",
 			default: false,
 		}),
 	];

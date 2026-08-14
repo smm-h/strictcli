@@ -131,23 +131,22 @@ function serializeFlag(f: AnyFlag): Record<string, unknown> {
 	if (o.short !== undefined) {
 		d.short = o.short;
 	}
-	// default: markers first (machine-stable shape), then per-kind rules.
-	// Absent and explicit-null defaults are both omitted (defaults.flag says
-	// default: null); empty list/dict defaults are omitted (Python's
-	// compound-list/dict rule).
-	const dflt = o.default;
-	if (isInfraRootPath(dflt)) {
-		d.default = serializeMarker(dflt);
-	} else if (kind === "list") {
-		if (Array.isArray(dflt) && dflt.length > 0) {
-			d.default = [...dflt];
-		}
-	} else if (kind === "dict") {
-		if (dflt instanceof Map && dflt.size > 0) {
-			d.default = dflt;
-		}
-	} else if (dflt !== undefined && dflt !== null) {
-		d.default = dflt;
+	// presence: ALWAYS emitted (contract §13's presence-round amendment). The
+	// requiredness erasure -- a required flag and an optional one serializing
+	// identically -- is what let schema parity pass by three implementations
+	// agreeing about a fact none of them emitted.
+	d.presence = o.presence;
+	// default: emitted exactly when presence is "default", and then ALWAYS,
+	// whatever the value: [], {}, "", false and 0 are declarations now, so the
+	// omit-when-empty compound rules are deleted. A RelativeToRoot marker keeps
+	// its machine-stable shape.
+	if (o.presence === "default") {
+		const dflt = o.default;
+		d.default = isInfraRootPath(dflt)
+			? serializeMarker(dflt)
+			: kind === "list"
+				? [...(dflt as unknown[])]
+				: dflt;
 	}
 	if (o.env !== undefined) {
 		d.env = o.env;
@@ -186,10 +185,11 @@ function serializeArg(a: AnyArg): Record<string, unknown> {
 	if (a.schema !== "str") {
 		d.type = a.schema;
 	}
-	if (o.required === false) {
-		d.required = false;
-	}
-	if (o.default !== undefined) {
+	// The arg entry's `required` key is deleted: it was the arg-side spelling
+	// of the same fact, and keeping it beside `presence` would put two keys on
+	// one fact (contract §13's presence-round amendment).
+	d.presence = o.presence;
+	if (o.presence === "default") {
 		d.default = o.default;
 	}
 	if (o.variadic === true) {

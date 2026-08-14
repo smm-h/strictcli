@@ -102,6 +102,19 @@ export const NO_RESERVED_FLAGS: ReservedFlags = {
 };
 
 /**
+ * The source labels that mean the INVOCATION caused the value (contract
+ * §23.6). "default" and "infra" are the declaration deciding, so they are not
+ * provided -- "infra" is a RelativeToRoot default whose label merely says
+ * which default it was.
+ */
+const PROVIDED_SOURCES: ReadonlySet<string> = new Set([
+	"cli",
+	"env",
+	"config",
+	"implied",
+]);
+
+/**
  * Everything a handler's context carries except the effects handle. The two
  * classification-narrowed context types differ in that one member and in
  * nothing else.
@@ -124,6 +137,7 @@ interface ContextBase {
 	debug(msg: string): void;
 	error(msg: string): void;
 	source(name: string): string;
+	provided(name: string): boolean;
 	infraValue(envVar: string): [value: string | undefined, isSet: boolean];
 	connectionEnvValue(
 		envVar: string,
@@ -334,6 +348,21 @@ export class Context implements MutatingContext {
 			return byName;
 		}
 		throw new Error(errNoSourceInfo(name));
+	}
+
+	/**
+	 * Was this flag's value caused by the INVOCATION rather than by the
+	 * declaration (contract §23.6)? True for the sources the invocation
+	 * supplies -- "cli", "env", "config" and "implied" -- and false for
+	 * "default" and "infra", which are the declaration deciding.
+	 *
+	 * An optional flag that received nothing carries source "default" and is
+	 * therefore not provided: an optional declaration deciding on absence IS
+	 * the declaration deciding. Unknown names behave exactly as source()'s do,
+	 * through the same lookup and the same message.
+	 */
+	provided(name: string): boolean {
+		return PROVIDED_SOURCES.has(this.source(name));
 	}
 
 	/**

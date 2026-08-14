@@ -2,27 +2,31 @@
  * Handler-args inference: computes the precise args object type a handler
  * receives from a command's keyed flag map and ordered arg tuple.
  *
- * Optionality mirrors the runtime kwargs contract of the siblings:
- * - flags: scalar with `default: null` (explicitly optional) -> true `?:` key;
- *   everything else (required, defaulted, list, dict) -> always-present key.
- * - args: `required: false` with no default -> true `?:` key (the siblings
- *   omit the kwarg entirely); variadic -> always-present array.
+ * Optionality follows the DECLARED presence (contract §23.2), for flags and
+ * args alike:
+ * - flags: `presence: "optional"` -> true `?:` key, for every carrier
+ *   including compounds; `required` and `default` -> always-present key.
+ * - args: `presence: "optional"` on a non-variadic arg -> true `?:` key (the
+ *   runtime object carries the property holding `undefined`, §23.3); variadic
+ *   -> always-present array, since a variadic always delivers a list.
+ *
+ * Reading the declaration is what fixes the unsoundness this module carried:
+ * a mutex member declared without a default used to be typed as an
+ * always-present, non-nullable key while the parser handed it `undefined`
+ * through the exemption §23.4 deletes.
  */
 
 import type { AnyArg, AnyCommand, AnyFlag, FlagMap } from "./factories.js";
-import type { DictSchema, ListSchema } from "./types.js";
 
 /** Flattens an intersection into a single object type (homomorphic, keeps `?:`). */
 type Prettify<T> = { [K in keyof T]: T[K] };
 
-/** A flag key is optional iff the flag is scalar and declared with `default: null`. */
-type FlagKeyIsOptional<D extends AnyFlag> = D["schema"] extends
-	| ListSchema
-	| DictSchema
-	? false
-	: D["opts"] extends { readonly default: null }
-		? true
-		: false;
+/** A flag key is optional iff the flag declares `presence: "optional"`. */
+type FlagKeyIsOptional<D extends AnyFlag> = D["opts"] extends {
+	readonly presence: "optional";
+}
+	? true
+	: false;
 
 type FlagValue<D extends AnyFlag> = NonNullable<D["_out"]>;
 
@@ -41,15 +45,13 @@ type OptionalFlagKeys<F extends FlagMap> = {
 		: never]?: FlagValue<F[K]>;
 };
 
-/** An arg key is optional iff non-variadic, `required: false`, and no default. */
+/** An arg key is optional iff it is non-variadic and declares `presence: "optional"`. */
 type ArgKeyIsOptional<D extends AnyArg> = D["opts"] extends {
 	readonly variadic: true;
 }
 	? false
-	: D["opts"] extends { readonly required: false }
-		? "default" extends keyof D["opts"]
-			? false
-			: true
+	: D["opts"] extends { readonly presence: "optional" }
+		? true
 		: false;
 
 type ArgValue<D extends AnyArg> = D["opts"] extends { readonly variadic: true }
@@ -69,9 +71,8 @@ type OptionalArgKeys<A extends readonly AnyArg[]> = {
 };
 
 /**
- * Computes the handler args type from a flag map and arg tuple. Flags with
- * `default: null` become optional keys; args with `required: false` and no
- * default become optional keys.
+ * Computes the handler args type from a flag map and arg tuple. Flags and
+ * non-variadic args declaring `presence: "optional"` become optional keys.
  */
 export type InferHandlerArgs<
 	F extends FlagMap,
