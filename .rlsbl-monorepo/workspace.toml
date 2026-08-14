@@ -11,17 +11,19 @@ name = "ts-strictcli"
 path = "python/"
 name = "strictcli"
 releasable = "py-strictcli"
-watch = ["python/**", "LICENSE"]
+watch = ["python/**", "LICENSE", ".github/workflows/**"]
 
 [[projects]]
 path = "go/"
 name = "go-strictcli"
 releasable = "go-strictcli"
+watch = [".github/workflows/**"]
 
 [[projects]]
 path = "typescript/"
 name = "ts-strictcli"
 releasable = "ts-strictcli"
+watch = [".github/workflows/**"]
 
 [[projects]]
 path = "conformance/"
