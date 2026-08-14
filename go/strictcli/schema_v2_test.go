@@ -394,6 +394,10 @@ func TestAChoiceValueKeepsItsOwnType(t *testing.T) {
 
 // --- §25.6: the selector encoding ---
 
+// The whole `commands` block, verbatim: each scoped entry is a FULL flag entry
+// with its own fragment and presence, which is what makes the encoding satisfy
+// §24.11 rather than gesture at it, and what makes recursion free. These are
+// the same bytes the Python implementation writes for the same declaration.
 func TestTheSelectorEntryIsPublishedNested(t *testing.T) {
 	app := schemaTestApp(t)
 	app.Command("send", "send one notification", noop, WithEffect(EffectMutating),
@@ -410,14 +414,14 @@ func TestTheSelectorEntryIsPublishedNested(t *testing.T) {
 			BoolFlag("dry", "print what would be sent", Default(false)),
 		))
 	text := dumpText(t, app)
-	start := strings.Index(text, `        {
-          "name": "via"`)
-	end := strings.Index(text, `          "name": "dry"`)
-	if start < 0 || end < 0 {
-		t.Fatalf("the selector entry is missing:\n%s", text)
-	}
-	got := text[start:end]
-	want := `        {
+	got := text[strings.Index(text, "\n  \"commands\"")+1:]
+	want := `  "commands": {
+    "send": {
+      "name": "send",
+      "help": "send one notification",
+      "effect": "mutating",
+      "flags": [
+        {
           "name": "via",
           "help": "delivery channel",
           "short": "v",
@@ -464,9 +468,22 @@ func TestTheSelectorEntryIsPublishedNested(t *testing.T) {
           "elect_by": "selector-token"
         },
         {
+          "name": "dry",
+          "help": "print what would be sent",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "default",
+          "default": false,
+          "negatable": true
+        }
+      ]
+    }
+  }
+}
 `
 	if got != want {
-		t.Fatalf("the selector entry's bytes changed:\n--- got ---\n%s\n--- want ---\n%s", got, want)
+		t.Fatalf("the selector encoding's bytes changed:\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
 }
 
