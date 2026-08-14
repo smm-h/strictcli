@@ -19,7 +19,7 @@ import pytest
 
 import strictcli
 from strictcli import (
-    Choice, choice, choice_flag, member_value, sub_choice_flag, sub_flag,
+    choice, choice_flag, member_value, sub_choice_flag, sub_flag,
 )
 
 
