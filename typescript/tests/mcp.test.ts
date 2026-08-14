@@ -1656,6 +1656,28 @@ test("mcp: a legacy exchange aborted by an error response consumes its state", a
 	assertReplayRefused(responses[3] as Record<string, unknown>);
 });
 
+test("mcp: a legacy exchange refused by its answer consumes its state", async () => {
+	// The exits that always consumed still do, after the reordering.
+	for (const answer of [
+		{ action: "decline" },
+		{ action: "cancel" },
+		{ action: "accept", content: { proceed: false } },
+	]) {
+		const responses = await serveSession(
+			confirmingApp(),
+			() => handshakeRequest(true),
+			() => legacyCall(2, "release"),
+			(seen) => answerElicitation(seen, answer),
+			replayAskedBlob,
+		);
+		assert.equal(
+			resultOf(responses[2] as Record<string, unknown>).isError,
+			true,
+		);
+		assertReplayRefused(responses[3] as Record<string, unknown>);
+	}
+});
+
 test("mcp: a legacy exchange that ends unanswered consumes its state", async () => {
 	const responses = await serveScript(
 		confirmingApp(),
