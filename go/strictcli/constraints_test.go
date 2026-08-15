@@ -405,6 +405,41 @@ func TestElectionLegalityIsReportedBeforePresenceLegality(t *testing.T) {
 	})
 }
 
+// The dependency families' own guards are a TRAILING phase after pass 7, so a
+// member declaring Required() outranks a same-flag `Requires` over operands
+// that both resolve (§26.8). Only the phase boundary is under test here: the
+// same-flag state is otherwise legal to reach.
+func TestPresenceLegalityIsReportedBeforeTheSameFlagGuard(t *testing.T) {
+	expectPanic(t, `command "cmd": constraint "sel" member '--b' declares Required(): a member the invocation must always supply leaves the constraint nothing to decide`, func() {
+		simpleApp("cmd", "a command", "ok",
+			WithFlags(
+				StringFlag("a", "the a", Optional()),
+				StringFlag("b", "the b", Required()),
+			),
+			WithConstraints(
+				AllOrNone("sel", Member("a"), Member("b")),
+				Requires("rr", "a", "a"),
+			))
+	})
+}
+
+// The same boundary for the other guard in the trailing phase: a non-bool
+// `Implies` trigger is read after pass 7 has refused the required member.
+func TestPresenceLegalityIsReportedBeforeTheImpliesTriggerGuard(t *testing.T) {
+	expectPanic(t, `command "cmd": constraint "sel" member '--b' declares Required(): a member the invocation must always supply leaves the constraint nothing to decide`, func() {
+		simpleApp("cmd", "a command", "ok",
+			WithFlags(
+				StringFlag("a", "the a", Optional()),
+				StringFlag("b", "the b", Required()),
+				BoolFlag("t", "the target", Default(false)),
+			),
+			WithConstraints(
+				AllOrNone("sel", Member("a"), Member("b")),
+				Implies("ii", "a", "t", true),
+			))
+	})
+}
+
 // --- Parse time: the two violation sentences (§12.15) ---
 
 func purgeApp() *App {
