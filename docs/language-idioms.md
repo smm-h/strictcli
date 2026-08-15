@@ -143,6 +143,74 @@ Same semantic, same pinned sentences, same help bytes. Three declaration
 surfaces that are not translations of each other, and each is the shape its
 language's existing strictcli idiom already pointed at.
 
+## A third case: the constraint member
+
+The [constraint system](flag-system.md#constraints) is the same story once more,
+and it is worth reading because two of the three surfaces move part of the rule
+into the compiler.
+
+One semantic: a co-occurrence constraint carries a **mandatory name** and **at
+least two members**; a member is a *reference by name* to a flag, a positional
+arg or another named constraint, plus an election selector from the closed
+vocabulary `present` / `true` / `non_empty` saying when it counts as engaged.
+
+**Python** -- frozen dataclasses whose first field is `name`, and a keyword
+taking a closed string vocabulary, which is how Python already spells `effect=`,
+`presence=` and `elect_by=`:
+
+```python
+constraints=[
+    strictcli.AllOrNone("author-name", [
+        strictcli.Member("old-name"), strictcli.Member("new-name"),
+    ]),
+    strictcli.AtLeastOne("purge-selection", [
+        strictcli.Member("targets", when="non_empty"),
+        strictcli.Member("all", when="true"),
+    ]),
+]
+```
+
+**Go** -- constructors returning a closed interface, with functional options for
+the selector because Go has no keyword arguments:
+
+```go
+sc.WithConstraints(
+    sc.AllOrNone("author-name", sc.Member("old-name"), sc.Member("new-name")),
+    sc.AtLeastOne("purge-selection",
+        sc.Member("targets", sc.WhenNonEmpty()),
+        sc.Member("all", sc.WhenTrue()),
+    ),
+)
+```
+
+**TypeScript** -- one option object per factory, matching the shape `requires`
+and `implies` already had, with a member as a plain object literal:
+
+```ts
+constraints: [
+    allOrNone({ name: "author-name", members: [{ name: "old-name" }, { name: "new-name" }] }),
+    atLeastOne({ name: "purge-selection", members: [
+        { name: "targets", when: "non_empty" },
+        { name: "all", when: "true" },
+    ]}),
+]
+```
+
+Two of those bought an enforcement the third cannot express, and in both cases
+the same one. Go's constructors take **two named members before the variadic
+tail**, so a one-member constraint does not compile; a caller holding a slice
+writes `AllOrNone(n, ms[0], ms[1], ms[2:]...)`, which fails at the caller rather
+than inside the framework. TypeScript types `members` as
+`readonly [ConstraintMember, ConstraintMember, ...ConstraintMember[]]`, so the
+same floor is a compile error there too, and `when` is the literal union
+`"present" | "true" | "non_empty"`, so a typo does not compile either.
+
+Python's list takes any length and its keyword takes any string, so Python is
+where `errConstraintMinMembers` is reachable at all -- and the other two record
+the covering input they can only reach through a widened or JSON-shaped caller.
+Nothing was weakened to keep the three in step: the runtime refusal exists in
+all three, and two of them simply refuse earlier.
+
 ## What each surface bought
 
 The divergence is not merely tolerated for style. In every case the language's
@@ -361,6 +429,23 @@ Flag "x": presence must be "required" or "optional", got 'defualt'; a default va
 
 Go's three sibling options and TypeScript's discriminated union have no input
 that could carry a bad presence value. There is nothing to mistype.
+
+The constraint system produces the same asymmetry for the same reason. A
+member's election selector is a Python keyword taking a string, so
+`Member("all", when="tru")` is writable, and it is refused where it was written
+-- in the record's own constructor, before registration order ever runs:
+
+```
+Member "all": when must be "present", "true" or "non_empty", got 'tru'
+```
+
+Go declares that selector with `WhenTrue()` / `WhenPresent()` / `WhenNonEmpty()`
+and TypeScript with a literal union, so a typo is a compile error in both and
+neither has an input that could produce the sentence. Note what this template is
+*not*: the cross-language guards all name a declared selector that cannot apply
+to the member's **type** -- `when: "true"` on a string, `when: "non_empty"` on an
+int -- and every implementation raises those. This one names a typo in the
+keyword's own vocabulary, which only one spelling can carry.
 
 **TypeScript only.** TypeScript is the only language whose default spelling has
 two parts, so a widened options object can reach the factory carrying the
