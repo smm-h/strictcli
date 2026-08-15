@@ -4117,6 +4117,73 @@ def _store_dict_flag(f: "Flag", raw: str, cli_set: dict) -> None:
         cli_set[f.name][k] = v
 
 
+def _resolve_flag_env_value(
+    f: "Flag", env_val: str, stdin_consumed_by: list,
+) -> object:
+    """Coerce one env var value for one flag, whatever scope declared it.
+
+    The compound, repeatable, ``env_separator`` and @-prefix rules are the
+    flag's own, so an env binding inside an elected scope resolves exactly as
+    an unconditional one does (§24.3's "unaffected" list, §24.6). One function
+    holds them, because three copies of this block are how the scoped surface
+    came to silently ignore ``env_separator``.
+    """
+    if f.compound == "dict":
+        try:
+            parsed = json.loads(env_val)
+        except json.JSONDecodeError as e:
+            raise _ParseError(
+                f"--{f.name}: invalid JSON in env var '{f.env}': {e}"
+            )
+        if not isinstance(parsed, dict):
+            raise _ParseError(
+                f"--{f.name}: env var '{f.env}' must be a JSON object, "
+                f"got {type(parsed).__name__}"
+            )
+        return {
+            k: _coerce_dict_json_value(f.name, k, v, f.value_type)
+            for k, v in parsed.items()
+        }
+    if f.type is bool:
+        try:
+            return _strict_bool(env_val)
+        except ValueError:
+            raise _ParseError(
+                f"invalid boolean value {env_val!r} for env var "
+                f"'{f.env}' (flag '--{f.name}')"
+            )
+    split = f.repeatable and f.env_separator is not None
+    elements = _split_escaped(env_val, f.env_separator) if split else [env_val]
+    coerced_list: list = []
+    for element in elements:
+        if f.type is int:
+            try:
+                coerced_list.append(_strict_int(element))
+            except ValueError as e:
+                raise _ParseError(f"--{f.name}: {e} (from env var '{f.env}')")
+        elif f.type is float:
+            try:
+                coerced_list.append(_strict_float(element))
+            except ValueError as e:
+                raise _float_parse_error(f.name, element, e, env=f.env)
+        else:
+            resolved, stdin_consumed_by[0] = _resolve_at_prefix(
+                f.name, element, stdin_consumed_by[0],
+            )
+            coerced_list.append(resolved)
+    if split:
+        if f.unique:
+            dup = _find_duplicate(coerced_list)
+            if dup is not None:
+                raise _ParseError(
+                    f"--{f.name}: duplicate value "
+                    f"'{_format_value_for_error(dup)}' "
+                    f"(from env var '{f.env}')"
+                )
+        return coerced_list
+    return coerced_list if f.repeatable else coerced_list[0]
+
+
 _SCALAR_TYPES = (str, bool, int, float)
 _NON_BOOL_SCALAR_TYPES = (str, int, float)
 
@@ -5375,10 +5442,12 @@ def sub_flag(
     short: str | None = None,
     choices: list | None = None,
     env: str | None = None,
+    env_separator: str | None = None,
     prefixed: bool = True,
     repeatable: bool = False,
     unique: object = _MISSING,
     negatable: object = _MISSING,
+    conflict_mode: object = _MISSING,
     validate: Callable | None = None,
 ):
     """Declare one flag of a choice's scope, inside the choice's class body.
@@ -5390,6 +5459,12 @@ def sub_flag(
 
     Presence is declared here exactly as it is on a command-level flag
     (§24.1): a scope is not a presence declaration and never supplies one.
+
+    Every composition a command-level flag accepts is accepted here, because
+    §24.3 says a scoped flag's env, config and compound behaviour is unaffected
+    by the construct: ``env_separator`` is what makes a repeatable or list
+    scoped flag with an env binding declarable at all, and ``conflict_mode`` is
+    that flag's per-flag override of the app's config conflict mode.
     """
     payload = {
         "kind": "flag",
@@ -5399,10 +5474,12 @@ def sub_flag(
         "short": short,
         "choices": choices,
         "env": env,
+        "env_separator": env_separator,
         "prefixed": prefixed,
         "repeatable": repeatable,
         "unique": unique,
         "negatable": negatable,
+        "conflict_mode": conflict_mode,
         "validate": validate,
     }
     return _scope_field(payload, default)
@@ -5774,10 +5851,12 @@ def _build_choice_spec(
                 short=meta["short"],
                 choices=meta["choices"],
                 env=meta["env"],
+                env_separator=meta["env_separator"],
                 prefixed=meta["prefixed"],
                 repeatable=meta["repeatable"],
                 unique=meta["unique"],
                 negatable=meta["negatable"],
+                conflict_mode=meta["conflict_mode"],
                 validate=meta["validate"],
             ))
             continue
@@ -9550,111 +9629,9 @@ class App:
             if f.env is not None:
                 env_val = os.environ.get(f.env)
                 if env_val is not None:
-                    if f.compound == "dict":
-                        # Dict flags parse env vars as JSON
-                        try:
-                            parsed = json.loads(env_val)
-                        except json.JSONDecodeError as e:
-                            raise _ParseError(
-                                f"--{f.name}: invalid JSON in env var "
-                                f"'{f.env}': {e}"
-                            )
-                        if not isinstance(parsed, dict):
-                            raise _ParseError(
-                                f"--{f.name}: env var '{f.env}' must be a "
-                                f"JSON object, got {type(parsed).__name__}"
-                            )
-                        result = {}
-                        for k, v in parsed.items():
-                            result[k] = _coerce_dict_json_value(
-                                f.name, k, v, f.value_type,
-                            )
-                        cli_set[f.name] = result
-                    elif f.type is bool:
-                        try:
-                            cli_set[f.name] = _strict_bool(env_val)
-                        except ValueError:
-                            raise _ParseError(
-                                f"invalid boolean value {env_val!r} for env var "
-                                f"'{f.env}' (flag '--{f.name}')"
-                            )
-                    elif f.type is int:
-                        if f.repeatable and f.env_separator is not None:
-                            parts = _split_escaped(env_val, f.env_separator)
-                            coerced_list = []
-                            for element in parts:
-                                try:
-                                    coerced_list.append(_strict_int(element))
-                                except ValueError as e:
-                                    raise _ParseError(
-                                        f"--{f.name}: {e} (from env var '{f.env}')"
-                                    )
-                            if f.unique:
-                                dup = _find_duplicate(coerced_list)
-                                if dup is not None:
-                                    raise _ParseError(
-                                        f"--{f.name}: duplicate value "
-                                        f"'{_format_value_for_error(dup)}' "
-                                        f"(from env var '{f.env}')"
-                                    )
-                            cli_set[f.name] = coerced_list
-                        else:
-                            try:
-                                coerced = _strict_int(env_val)
-                            except ValueError as e:
-                                raise _ParseError(
-                                    f"--{f.name}: {e} (from env var '{f.env}')"
-                                )
-                            cli_set[f.name] = [coerced] if f.repeatable else coerced
-                    elif f.type is float:
-                        if f.repeatable and f.env_separator is not None:
-                            parts = _split_escaped(env_val, f.env_separator)
-                            coerced_list = []
-                            for element in parts:
-                                try:
-                                    coerced_list.append(_strict_float(element))
-                                except ValueError as e:
-                                    raise _float_parse_error(
-                                        f.name, element, e, env=f.env,
-                                    )
-                            if f.unique:
-                                dup = _find_duplicate(coerced_list)
-                                if dup is not None:
-                                    raise _ParseError(
-                                        f"--{f.name}: duplicate value "
-                                        f"'{_format_value_for_error(dup)}' "
-                                        f"(from env var '{f.env}')"
-                                    )
-                            cli_set[f.name] = coerced_list
-                        else:
-                            try:
-                                coerced = _strict_float(env_val)
-                            except ValueError as e:
-                                raise _float_parse_error(f.name, env_val, e, env=f.env)
-                            cli_set[f.name] = [coerced] if f.repeatable else coerced
-                    else:
-                        if f.repeatable and f.env_separator is not None:
-                            parts = _split_escaped(env_val, f.env_separator)
-                            coerced_list = []
-                            for element in parts:
-                                resolved, self._stdin_consumed_by = _resolve_at_prefix(
-                                    f.name, element, self._stdin_consumed_by,
-                                )
-                                coerced_list.append(resolved)
-                            if f.unique:
-                                dup = _find_duplicate(coerced_list)
-                                if dup is not None:
-                                    raise _ParseError(
-                                        f"--{f.name}: duplicate value "
-                                        f"'{_format_value_for_error(dup)}' "
-                                        f"(from env var '{f.env}')"
-                                    )
-                            cli_set[f.name] = coerced_list
-                        else:
-                            resolved, self._stdin_consumed_by = _resolve_at_prefix(
-                                f.name, env_val, self._stdin_consumed_by,
-                            )
-                            cli_set[f.name] = [resolved] if f.repeatable else resolved
+                    holder = [self._stdin_consumed_by]
+                    cli_set[f.name] = _resolve_flag_env_value(f, env_val, holder)
+                    self._stdin_consumed_by = holder[0]
                     env_names.add(f.name)
 
         # Resolve config values for global flags not set by CLI or env.
@@ -10696,6 +10673,16 @@ def _scope_description_lines(
             child = path + ((_flag_param_name(m.name), c.name),)
             key = " ".join(f"{s}={v}" for s, v in child)
             params: list[str] = []
+            # A member's payload is a parameter of the scope, listed first and
+            # under the member's OWN name -- `target=profile: profile
+            # (required)` (§24.11, item 222). It is the schema property an
+            # agent must send to elect that member with a value, so a block
+            # that omitted it described the scope as empty.
+            if c.payload is not None:
+                params.append(
+                    f"{_flag_param_name(c.payload.name)} "
+                    f"({_scope_presence_text(c.payload)})"
+                )
             for entry in c.members:
                 name = _flag_param_name(entry.name)
                 if isinstance(entry, _Selector):
@@ -11425,19 +11412,23 @@ def _check_scoped_config_conflict(
         )
 
 
-def _resolve_scoped_flag(
+def _resolve_scoped_value(
     f: Flag,
     occs: list[_Occ],
     *,
-    scope_suffix: str,
-    origin_suffix: str,
     config_data: dict | None,
     hermetic: bool,
     pre_typed: bool,
     stdin_consumed_by: list,
     conflict_mode: str = "cli-wins",
-) -> tuple[object, str]:
-    """Phase 4 for one scoped flag: value, then presence (§24.1)."""
+) -> tuple[object, str] | None:
+    """The VALUE phase for one scoped flag, or None when nothing supplied it.
+
+    Split from the presence phase because §24.3 pins the two as separate
+    phases: every value inside the live scopes is interpreted before any
+    missing required flag is reported, so `--via email --retries abc` names
+    the integer that will not parse rather than the subject it never reached.
+    """
     hits = [o for o in occs if o.name == f.name]
     if hits:
         if pre_typed:
@@ -11476,18 +11467,7 @@ def _resolve_scoped_flag(
     if not pre_typed and not hermetic and f.env is not None:
         env_val = os.environ.get(f.env)
         if env_val is not None:
-            if f.type is bool:
-                try:
-                    return _strict_bool(env_val), "env"
-                except ValueError:
-                    raise _ParseError(
-                        f"invalid boolean value {env_val!r} for env var "
-                        f"'{f.env}' (flag '--{f.name}')"
-                    )
-            return (
-                _coerce_scoped_value(f, env_val, stdin_consumed_by),
-                "env",
-            )
+            return _resolve_flag_env_value(f, env_val, stdin_consumed_by), "env"
     if not pre_typed and not hermetic and config_data:
         key = _flag_param_name(f.name)
         if key in config_data:
@@ -11495,6 +11475,13 @@ def _resolve_scoped_flag(
                 return _coerce_config_value(config_data[key], f), "config"
             except ValueError as e:
                 raise _ParseError(f"--{f.name}: config value error: {e}")
+    return None
+
+
+def _apply_scoped_presence(
+    f: Flag, *, scope_suffix: str, origin_suffix: str,
+) -> tuple[object, str]:
+    """The PRESENCE phase for one scoped flag no value phase supplied."""
     if f.presence == _PRESENCE_DEFAULT:
         if f.compound == "dict":
             return dict(f.default), "default"
@@ -11508,12 +11495,96 @@ def _resolve_scoped_flag(
     )
 
 
+def _coerce_member_payload(
+    spec: _ChoiceSpec,
+    occs: list[_Occ],
+    *,
+    config_data: dict | None,
+    hermetic: bool,
+    pre_typed: bool,
+    stdin_consumed_by: list,
+    conflict_mode: str,
+) -> object:
+    """The value phase for one elected member's payload (§24.4, §24.7)."""
+    hits = [o for o in occs if o.name == spec.name]
+    raw = hits[-1].raw if hits else None
+    value = (
+        raw if pre_typed
+        else _coerce_scoped_value(spec.payload, raw, stdin_consumed_by)
+    )
+    # §21.3's `config_conflict_mode="error"` carve-out survives untouched
+    # on member flags (§21's box, item 119): it is a value-hygiene check
+    # about the operator's own configuration, and it runs even where the
+    # config value itself is never consulted.
+    _check_scoped_config_conflict(
+        spec.payload, value,
+        config_data=config_data, hermetic=hermetic,
+        pre_typed=pre_typed, conflict_mode=conflict_mode,
+    )
+    return value
+
+
+def _run_scope_value_phase(
+    members: tuple,
+    path: tuple,
+    occs: list[_Occ],
+    state: _ElectionState,
+    values: dict,
+    *,
+    config_data: dict | None,
+    hermetic: bool,
+    pre_typed: bool,
+    stdin_consumed_by: list,
+    conflict_mode: str,
+) -> None:
+    """Interpret every value inside the live scopes, at every depth (§24.3).
+
+    The value phase runs to completion before the presence phase begins, so a
+    token that will not coerce is reported wherever it sits in the scope tree,
+    ahead of any required flag that was never supplied. Results land in
+    ``values`` keyed by (scope path, flag name) and the presence pass reads
+    them from there: coercing twice would consume stdin twice on an @-prefix.
+    """
+    for m in members:
+        if isinstance(m, Flag):
+            resolved = _resolve_scoped_value(
+                m, occs, config_data=config_data, hermetic=hermetic,
+                pre_typed=pre_typed, stdin_consumed_by=stdin_consumed_by,
+                conflict_mode=conflict_mode,
+            )
+            if resolved is not None:
+                values[(path, m.name)] = resolved
+            continue
+        key = _sel_key(path, m.name)
+        elected = state.elected.get(key)
+        if elected is None or key in state.from_default:
+            # An unelected selector is the presence phase's business, and a
+            # defaulted selection was decided by the declaration (§24.5).
+            continue
+        child = path + ((m.name, elected.name),)
+        if elected.payload is not None:
+            values[(child, elected.name)] = (
+                _coerce_member_payload(
+                    elected, occs, config_data=config_data, hermetic=hermetic,
+                    pre_typed=pre_typed, stdin_consumed_by=stdin_consumed_by,
+                    conflict_mode=conflict_mode,
+                ),
+                "cli",
+            )
+        _run_scope_value_phase(
+            elected.members, child, occs, state, values,
+            config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
+            stdin_consumed_by=stdin_consumed_by, conflict_mode=conflict_mode,
+        )
+
+
 def _instantiate_choice(
     sel: _Selector,
     spec: _ChoiceSpec,
     path: tuple,
     occs: list[_Occ],
     state: _ElectionState,
+    values: dict,
     *,
     config_data: dict | None,
     hermetic: bool,
@@ -11523,34 +11594,21 @@ def _instantiate_choice(
     conflict_mode: str = "cli-wins",
 ) -> object:
     """Build one elected choice's record: the tag plus that choice's fields."""
-    values: dict[str, object] = {}
+    record_values: dict[str, object] = {}
     sources: dict[str, str] = {}
     if spec.payload is not None:
-        hits = [o for o in occs if o.name == spec.name]
-        raw = hits[-1].raw if hits else None
-        values[_SCOPE_RESERVED_VALUE] = (
-            raw if pre_typed
-            else _coerce_scoped_value(spec.payload, raw, stdin_consumed_by)
-        )
-        # §21.3's `config_conflict_mode="error"` carve-out survives untouched
-        # on member flags (§21's box, item 119): it is a value-hygiene check
-        # about the operator's own configuration, and it runs even where the
-        # config value itself is never consulted.
-        _check_scoped_config_conflict(
-            spec.payload, values[_SCOPE_RESERVED_VALUE],
-            config_data=config_data, hermetic=hermetic,
-            pre_typed=pre_typed, conflict_mode=conflict_mode,
-        )
-        sources[_SCOPE_RESERVED_VALUE] = "cli"
+        payload_value, payload_source = values[(path, spec.name)]
+        record_values[_SCOPE_RESERVED_VALUE] = payload_value
+        sources[_SCOPE_RESERVED_VALUE] = payload_source
     inner = _build_scope_values(
-        spec.members, path, occs, state,
+        spec.members, path, occs, state, values,
         config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
         stdin_consumed_by=stdin_consumed_by, member_spelled=member_spelled,
         conflict_mode=conflict_mode,
     )
-    values.update(inner.values)
+    record_values.update(inner.values)
     sources.update(inner.sources)
-    record = spec.cls(**values)
+    record = spec.cls(**record_values)
     object.__setattr__(record, _RECORD_SOURCES_ATTR, sources)
     return record
 
@@ -11575,6 +11633,7 @@ def _build_scope_values(
     path: tuple,
     occs: list[_Occ],
     state: _ElectionState,
+    values: dict,
     *,
     config_data: dict | None,
     hermetic: bool,
@@ -11583,20 +11642,23 @@ def _build_scope_values(
     member_spelled: dict[str, bool],
     conflict_mode: str = "cli-wins",
 ) -> _SelectorResult:
-    """Phase 4: resolve values and presence within the live scopes only."""
+    """The PRESENCE phase, building the records the value phase filled (§24.3).
+
+    ``values`` is what :func:`_run_scope_value_phase` produced; a flag missing
+    from it is one no source supplied, which is where presence decides.
+    """
     result = _SelectorResult()
     path_text = _render_scope_path(path, member_spelled)
     scope_suffix = _msg_scope_suffix(path_text)
     origin_suffix = _msg_election_origin_suffix(_path_origin(path, state))
     for m in members:
         if isinstance(m, Flag):
-            value, source = _resolve_scoped_flag(
-                m, occs, scope_suffix=scope_suffix,
-                origin_suffix=origin_suffix, config_data=config_data,
-                hermetic=hermetic, pre_typed=pre_typed,
-                stdin_consumed_by=stdin_consumed_by,
-                conflict_mode=conflict_mode,
-            )
+            resolved = values.get((path, m.name))
+            if resolved is None:
+                resolved = _apply_scoped_presence(
+                    m, scope_suffix=scope_suffix, origin_suffix=origin_suffix,
+                )
+            value, source = resolved
             result.values[_flag_param_name(m.name)] = value
             result.sources[_flag_param_name(m.name)] = source
             continue
@@ -11623,7 +11685,7 @@ def _build_scope_values(
             result.sources[param] = "default"
             continue
         result.values[param] = _instantiate_choice(
-            m, elected, path + ((m.name, elected.name),), occs, state,
+            m, elected, path + ((m.name, elected.name),), occs, state, values,
             config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
             stdin_consumed_by=stdin_consumed_by, member_spelled=member_spelled,
             conflict_mode=conflict_mode,
@@ -11688,8 +11750,16 @@ def _resolve_selectors(
             cmd, occs,
             config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
         )
+    # §24.3's phase order, spelled as two passes: every value inside the live
+    # scopes is interpreted first, and only then does presence decide.
+    values: dict = {}
+    _run_scope_value_phase(
+        cmd.selectors, (), occs, state, values,
+        config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
+        stdin_consumed_by=stdin_consumed_by, conflict_mode=conflict_mode,
+    )
     result = _build_scope_values(
-        cmd.selectors, (), occs, state,
+        cmd.selectors, (), occs, state, values,
         config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
         stdin_consumed_by=stdin_consumed_by, member_spelled=member_spelled,
         conflict_mode=conflict_mode,
@@ -12075,111 +12145,9 @@ def _parse_command(
         if f.env is not None:
             env_val = os.environ.get(f.env)
             if env_val is not None:
-                if f.compound == "dict":
-                    # Dict flags parse env vars as JSON
-                    try:
-                        parsed = json.loads(env_val)
-                    except json.JSONDecodeError as e:
-                        raise _ParseError(
-                            f"--{f.name}: invalid JSON in env var "
-                            f"'{f.env}': {e}"
-                        )
-                    if not isinstance(parsed, dict):
-                        raise _ParseError(
-                            f"--{f.name}: env var '{f.env}' must be a JSON "
-                            f"object, got {type(parsed).__name__}"
-                        )
-                    result = {}
-                    for k, v in parsed.items():
-                        result[k] = _coerce_dict_json_value(
-                            f.name, k, v, f.value_type,
-                        )
-                    cli_set[f.name] = result
-                elif f.type is bool:
-                    try:
-                        cli_set[f.name] = _strict_bool(env_val)
-                    except ValueError:
-                        raise _ParseError(
-                            f"invalid boolean value {env_val!r} for env var "
-                            f"'{f.env}' (flag '--{f.name}')"
-                        )
-                elif f.type is int:
-                    if f.repeatable and f.env_separator is not None:
-                        parts = _split_escaped(env_val, f.env_separator)
-                        coerced_list = []
-                        for element in parts:
-                            try:
-                                coerced_list.append(_strict_int(element))
-                            except ValueError as e:
-                                raise _ParseError(
-                                    f"--{f.name}: {e} (from env var '{f.env}')"
-                                )
-                        if f.unique:
-                            dup = _find_duplicate(coerced_list)
-                            if dup is not None:
-                                raise _ParseError(
-                                    f"--{f.name}: duplicate value "
-                                    f"'{_format_value_for_error(dup)}' "
-                                    f"(from env var '{f.env}')"
-                                )
-                        cli_set[f.name] = coerced_list
-                    else:
-                        try:
-                            coerced = _strict_int(env_val)
-                        except ValueError as e:
-                            raise _ParseError(
-                                f"--{f.name}: {e} (from env var '{f.env}')"
-                            )
-                        cli_set[f.name] = [coerced] if f.repeatable else coerced
-                elif f.type is float:
-                    if f.repeatable and f.env_separator is not None:
-                        parts = _split_escaped(env_val, f.env_separator)
-                        coerced_list = []
-                        for element in parts:
-                            try:
-                                coerced_list.append(_strict_float(element))
-                            except ValueError as e:
-                                raise _float_parse_error(
-                                    f.name, element, e, env=f.env,
-                                )
-                        if f.unique:
-                            dup = _find_duplicate(coerced_list)
-                            if dup is not None:
-                                raise _ParseError(
-                                    f"--{f.name}: duplicate value "
-                                    f"'{_format_value_for_error(dup)}' "
-                                    f"(from env var '{f.env}')"
-                                )
-                        cli_set[f.name] = coerced_list
-                    else:
-                        try:
-                            coerced = _strict_float(env_val)
-                        except ValueError as e:
-                            raise _float_parse_error(f.name, env_val, e, env=f.env)
-                        cli_set[f.name] = [coerced] if f.repeatable else coerced
-                else:
-                    if f.repeatable and f.env_separator is not None:
-                        parts = _split_escaped(env_val, f.env_separator)
-                        coerced_list = []
-                        for element in parts:
-                            resolved, stdin_consumed_by[0] = _resolve_at_prefix(
-                                f.name, element, stdin_consumed_by[0],
-                            )
-                            coerced_list.append(resolved)
-                        if f.unique:
-                            dup = _find_duplicate(coerced_list)
-                            if dup is not None:
-                                raise _ParseError(
-                                    f"--{f.name}: duplicate value "
-                                    f"'{_format_value_for_error(dup)}' "
-                                    f"(from env var '{f.env}')"
-                                )
-                        cli_set[f.name] = coerced_list
-                    else:
-                        resolved, stdin_consumed_by[0] = _resolve_at_prefix(
-                            f.name, env_val, stdin_consumed_by[0],
-                        )
-                        cli_set[f.name] = [resolved] if f.repeatable else resolved
+                cli_set[f.name] = _resolve_flag_env_value(
+                    f, env_val, stdin_consumed_by,
+                )
                 env_names.add(f.name)
 
     # Step 4.2: resolve config values for flags not set by CLI or env.
@@ -13143,7 +13111,17 @@ def _format_declared_default_for_help(decl: "Flag | Arg") -> str:
     it. The arg side used to render its value through ``str`` alone, which put
     a bool's `True` next to a flag's `true` in the same help output.
     """
-    value = decl.default
+    return _format_value_for_help(decl.default, decl)
+
+
+def _format_value_for_help(value: object, decl: "Flag | Arg") -> str:
+    """§23.8's value formatter: one value, rendered under one declaration.
+
+    The value is a parameter rather than always ``decl.default`` because a
+    defaulted selector renders the fields of its default INSTANCE through this
+    same formatter (§24.10, item 215) -- a bool field there is `false`, exactly
+    as it is on the flag's own line.
+    """
     compound = getattr(decl, "compound", "scalar")
     if compound == "dict":
         if not value:
@@ -13203,12 +13181,15 @@ def _format_selector_presence(sel: _Selector) -> str:
 
     A defaulted selector renders its COMPLETE elected value -- the choice plus
     the fields its scope needed -- because that is what the default is (§24.5).
+    Each field goes through §23.8's value formatter, the one the field's own
+    line already uses, so a bool reads `false` here too (item 215).
     """
     if sel.presence == _PRESENCE_REQUIRED:
         return " [required]"
     spec = sel.choice_by_class(type(sel.default))
     inner = ", ".join(
-        f"{f.name}={_format_default_for_help(getattr(sel.default, _flag_param_name(f.name)))}"
+        f"{f.name}="
+        f"{_format_value_for_help(getattr(sel.default, _flag_param_name(f.name)), f)}"
         for f in spec.members
         if isinstance(f, Flag)
     )

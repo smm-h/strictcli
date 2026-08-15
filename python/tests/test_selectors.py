@@ -1102,6 +1102,39 @@ def test_a_defaulted_selector_renders_its_fields_in_declaration_order():
     ) in r.stdout
 
 
+def test_a_defaulted_selector_renders_a_bool_field_through_23_8s_formatter():
+    """Item 215: each field is rendered by §23.8's value formatter, so a bool
+    reads `false` inside the parenthesis exactly as it does on its own line --
+    never Python's `False`."""
+
+    @choice("webhook", help="post the notification to a URL")
+    class Hook:
+        url: str = sub_flag(help="where to post", default="https://example.invalid")
+        retries: int = sub_flag(help="delivery attempts", default=3)
+        insecure: bool = sub_flag(help="skip certificate verification", default=False)
+
+    @choice("email", help="deliver the notification as an email message")
+    class Mail:
+        subject: str = sub_flag(help="subject line", presence="required")
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("send", help="send one", effect="read_only")
+    @choice_flag(
+        "via", help="delivery channel", choices=[Mail, Hook],
+        elect_by="selector-token", default=Hook(),
+    )
+    def send(ctx, via: Mail | Hook):
+        return 0
+
+    r = app.test(["send", "--help"])
+    assert (
+        "[default: webhook (url=https://example.invalid, retries=3, "
+        "insecure=false)]"
+    ) in r.stdout
+    assert "insecure=False" not in r.stdout
+
+
 def test_a_defaulted_selector_with_an_empty_scope_renders_the_choice_alone():
     """The pinned form for an empty scope is `[default: <choice>]` -- no
     parenthesis at all, never an empty `()`."""
@@ -1170,6 +1203,39 @@ def test_an_empty_scope_renders_no_parameters():
         "  visibility=user-facing type=fix: symptom (required)\n"
         "  visibility=internal: (no parameters)"
     ) in tool.description
+
+
+def test_a_member_payload_is_a_listed_scope_parameter():
+    """Item 222: the payload is a parameter of its scope, named by the
+    member's own flag name -- `mode=profile: profile (required)`, never
+    `(no parameters)`."""
+
+    @choice("profile", help="one named profile")
+    class Profile:
+        value: str = member_value(help="the profile name")
+
+    @choice("all-profiles", help="every profile")
+    class AllProfiles:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "mode", help="which profiles", presence="required",
+        elect_by="member-flags", choices=[Profile, AllProfiles],
+    )
+    def run(ctx, mode: Profile | AllProfiles):
+        print(repr(mode))
+
+    tool = next(t for t in app.as_tools() if t.name == "run")
+    assert tool.description == (
+        "run it\n"
+        "\n"
+        "Scoped parameters (enforced at call time):\n"
+        "  mode=profile: profile (required)\n"
+        "  mode=all-profiles: (no parameters)"
+    )
 
 
 def test_a_member_spelled_selector_projects_identically():
@@ -1467,6 +1533,122 @@ def test_a_repeatable_scoped_flag():
     assert "A(tag=['x', 'y'])" in r.stdout
 
 
+def _separator_app():
+    """A scope declaring both compositions §24.3 calls unaffected: a repeatable
+    flag with an env binding, and a list flag with one."""
+
+    @choice("a", help="mode a")
+    class A:
+        tag: str = sub_flag(
+            help="tags", presence="required", env="MYAPP_TAG",
+            env_separator=",", repeatable=True, unique=False,
+        )
+        label: list[str] = sub_flag(
+            help="labels", default=[], unique=False, env="MYAPP_LABEL",
+            env_separator=",",
+        )
+
+    @choice("b", help="mode b")
+    class B:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "mode", help="the mode", presence="required",
+        elect_by="selector-token", choices=[A, B],
+    )
+    def run(ctx, mode: A | B):
+        print(repr(mode))
+
+    return app
+
+
+def test_a_repeatable_scoped_flag_declares_an_env_separator(monkeypatch):
+    """A repeatable flag with an env binding REQUIRES an env_separator, so
+    without the keyword the composition is undeclarable inside a scope."""
+    monkeypatch.setenv("MYAPP_TAG", "x,y")
+    r = _separator_app().test(["run", "--mode", "a"])
+    assert r.exit_code == 0
+    assert "tag=['x', 'y']" in r.stdout
+
+
+def test_a_scoped_list_flag_splits_its_env_binding_on_the_separator(monkeypatch):
+    monkeypatch.setenv("MYAPP_TAG", "x")
+    monkeypatch.setenv("MYAPP_LABEL", "alpha,beta")
+    r = _separator_app().test(["run", "--mode", "a"])
+    assert r.exit_code == 0
+    assert "label=['alpha', 'beta']" in r.stdout
+
+
+def test_a_scoped_env_binding_reports_the_separators_duplicate(monkeypatch):
+    """The env-value rules are the root surface's own, error text included."""
+
+    @choice("a", help="mode a")
+    class A:
+        tag: list[str] = sub_flag(
+            help="tags", default=[], unique=True, env="MYAPP_TAG",
+            env_separator=",",
+        )
+
+    @choice("b", help="mode b")
+    class B:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "mode", help="the mode", presence="required",
+        elect_by="selector-token", choices=[A, B],
+    )
+    def run(ctx, mode: A | B):
+        print(repr(mode))
+
+    monkeypatch.setenv("MYAPP_TAG", "x,x")
+    r = app.test(["run", "--mode", "a"])
+    assert r.exit_code == 1
+    assert (
+        "error: --tag: duplicate value 'x' (from env var 'MYAPP_TAG')\n"
+    ) in r.stderr
+
+
+def test_a_scoped_flag_declares_its_own_conflict_mode(tmp_path, monkeypatch):
+    """The per-flag override of the app's config conflict mode is declarable
+    inside a scope, and it fires where the app default would not."""
+    config_dir = tmp_path / "myapp"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text('{"tag": "from-config"}')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+
+    @choice("a", help="mode a")
+    class A:
+        tag: str = sub_flag(
+            help="a tag", presence="required", conflict_mode="error",
+        )
+
+    @choice("b", help="mode b")
+    class B:
+        pass
+
+    app = strictcli.App(
+        name="myapp", version="1.0.0", help="test app", config=True,
+    )
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "mode", help="the mode", presence="required",
+        elect_by="selector-token", choices=[A, B],
+    )
+    def run(ctx, mode: A | B):
+        print(repr(mode))
+
+    r = app.test(["run", "--mode", "a", "--tag", "from-cli"])
+    assert r.exit_code == 1
+    assert "flag 'tag' set in both cli and config; remove one\n" in r.stderr
+
+
 def test_an_at_prefix_resolves_on_a_scoped_string_flag(tmp_path):
     payload = tmp_path / "body.txt"
     payload.write_text("hello from a file")
@@ -1538,6 +1720,55 @@ def test_an_unknown_choice_outranks_a_root_value_that_will_not_coerce():
     r = _precedence_notify().test(["send", "--count", "abc", "--via", "carrier-pigeon"])
     assert r.exit_code == 1
     assert "error: --via: invalid value 'carrier-pigeon'" in r.stderr
+
+
+def test_a_scoped_coercion_failure_outranks_a_missing_required_flag():
+    """§24.3's `value -> presence`: the whole value phase runs first, so a
+    token that will not coerce is reported before a required flag the
+    invocation never supplied -- whatever order the scope declares them in."""
+    r = _notify().test(["send", "--via", "webhook", "--retries", "abc"])
+    assert r.exit_code == 1
+    assert "error: --retries: expected integer, got 'abc'\n" in r.stderr
+
+
+def test_the_value_phase_spans_every_depth_of_the_live_scopes():
+    """A nested scope's coercion failure outranks the OUTER scope's missing
+    required flag: the value phase is a property of the parser, not of one
+    scope's own member list."""
+
+    @choice("fast", help="the fast lane")
+    class Fast:
+        retries: int = sub_flag(help="attempts", presence="optional")
+
+    @choice("slow", help="the slow lane")
+    class Slow:
+        pass
+
+    @choice("http", help="over http")
+    class Http:
+        url: str = sub_flag(help="where to post", presence="required")
+        lane: Fast | Slow = sub_choice_flag(
+            help="which lane", presence="required",
+            elect_by="selector-token", choices=[Fast, Slow],
+        )
+
+    @choice("noop", help="nowhere")
+    class Noop:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "via", help="the transport", presence="required",
+        elect_by="selector-token", choices=[Http, Noop],
+    )
+    def run(ctx, via: Http | Noop):
+        print(repr(via))
+
+    r = app.test(["run", "--via", "http", "--lane", "fast", "--retries", "abc"])
+    assert r.exit_code == 1
+    assert "error: --retries: expected integer, got 'abc'\n" in r.stderr
 
 
 def test_a_root_value_problem_is_still_reported_when_the_shape_is_sound():
