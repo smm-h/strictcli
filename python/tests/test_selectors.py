@@ -1614,6 +1614,55 @@ def test_a_scoped_env_binding_reports_the_separators_duplicate(monkeypatch):
     ) in r.stderr
 
 
+def _checked_scope_app():
+    @choice("a", help="mode a")
+    class A:
+        level: str = sub_flag(
+            help="the level", presence="required", env="MYAPP_LEVEL",
+            choices=[strictcli.Choice("low"), strictcli.Choice("high")],
+            validate=_refuse_high,
+        )
+
+    @choice("b", help="mode b")
+    class B:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "mode", help="the mode", presence="required",
+        elect_by="selector-token", choices=[A, B],
+    )
+    def run(ctx, mode: A | B):
+        print(repr(mode))
+
+    return app
+
+
+def _refuse_high(value):
+    if value == "high":
+        raise ValueError("that value is refused")
+
+
+def test_a_scoped_env_value_is_checked_against_the_declared_choices(monkeypatch):
+    """A supplied value is a supplied value whatever supplied it: the closed
+    set applies to an env binding inside an elected scope too."""
+    monkeypatch.setenv("MYAPP_LEVEL", "sideways")
+    r = _checked_scope_app().test(["run", "--mode", "a"])
+    assert r.exit_code == 1
+    assert (
+        "error: --level: invalid value 'sideways', must be one of: low, high\n"
+    ) in r.stderr
+
+
+def test_a_scoped_env_value_runs_the_declared_validate(monkeypatch):
+    monkeypatch.setenv("MYAPP_LEVEL", "high")
+    r = _checked_scope_app().test(["run", "--mode", "a"])
+    assert r.exit_code == 1
+    assert "error: --level: that value is refused\n" in r.stderr
+
+
 def test_a_scoped_flag_declares_its_own_conflict_mode(tmp_path, monkeypatch):
     """The per-flag override of the app's config conflict mode is declarable
     inside a scope, and it fires where the app default would not."""

@@ -11454,28 +11454,45 @@ def _resolve_scoped_value(
             f, value, config_data=config_data, hermetic=hermetic,
             pre_typed=pre_typed, conflict_mode=conflict_mode,
         )
-        _validate_choices(f.name, value, f.repeatable, f.choices)
-        if f.validate is not None and value is not None:
-            for v in (value if f.repeatable else [value]):
-                try:
-                    f.validate(v)
-                except ValueError as e:
-                    raise _ParseError(f"--{f.name}: {e}")
-        return value, "cli"
+        return _check_scoped_value(f, value, "cli")
     # An ambient binding is consulted exactly when its scope is elected, which
     # is the only path that reaches this function (§24.6).
     if not pre_typed and not hermetic and f.env is not None:
         env_val = os.environ.get(f.env)
         if env_val is not None:
-            return _resolve_flag_env_value(f, env_val, stdin_consumed_by), "env"
+            return _check_scoped_value(
+                f, _resolve_flag_env_value(f, env_val, stdin_consumed_by),
+                "env",
+            )
     if not pre_typed and not hermetic and config_data:
         key = _flag_param_name(f.name)
         if key in config_data:
             try:
-                return _coerce_config_value(config_data[key], f), "config"
+                coerced = _coerce_config_value(config_data[key], f)
             except ValueError as e:
                 raise _ParseError(f"--{f.name}: config value error: {e}")
+            return _check_scoped_value(f, coerced, "config")
     return None
+
+
+def _check_scoped_value(
+    f: Flag, value: object, source: str,
+) -> tuple[object, str]:
+    """Choices and ``validate``, applied to a SUPPLIED scoped value (§24.3).
+
+    Which source supplied it never enters into it: an env or config binding
+    inside an elected scope is a supplied value, so the declaration's closed
+    set and its callback both apply, exactly as they do on the root surface
+    (steps 5.5 and 5.6). Only a declared default escapes ``validate``.
+    """
+    _validate_choices(f.name, value, f.repeatable, f.choices)
+    if f.validate is not None and value is not None:
+        for v in (value if f.repeatable else [value]):
+            try:
+                f.validate(v)
+            except ValueError as e:
+                raise _ParseError(f"--{f.name}: {e}")
+    return value, source
 
 
 def _apply_scoped_presence(
