@@ -2271,6 +2271,39 @@ test("mcp: the election phase runs over EVERY selector before any refusal", asyn
 		(await twoSelectorApp().test(["run", "--gamma", "g"])).stderr,
 		errOut("flag '--first' is required", "myapp run"),
 	);
+	// The same rule with both selectors member-spelled, which is where the
+	// unstaged walk was first observed.
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("launch", {
+			help: "launch",
+			flags: {
+				mode: memberChoiceFlag(
+					"mode",
+					{ fast: choice({ help: "fast" }), slow: choice({ help: "slow" }) },
+					{ help: "how fast", presence: "required" },
+				),
+				target: memberChoiceFlag(
+					"target",
+					{
+						profile: choice({
+							help: "one profile",
+							value: { carrier: t.str, help: "profile name" },
+						}),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "what to launch", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	const launch = app.asTools().find((t2) => t2.name === "launch");
+	assert.ok(launch);
+	await assert.rejects(
+		launch.execute({ target: "all-profiles", profile: "work" }),
+		{ message: "--profile and --all-profiles are mutually exclusive" },
+	);
 });
 
 test("mcp: an elected member whose payload is absent requires a value", async () => {

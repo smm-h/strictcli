@@ -28,6 +28,7 @@ import {
 	errCallPathIsGroup,
 	errDictFlagExpectedMapType,
 	errFlagInvalidChoice,
+	errFlagRequiresValue,
 	errOneOfRequired,
 	errPassthroughArgsNotStringSlice,
 	errScopeSuffix,
@@ -484,9 +485,13 @@ function validateElectedRecord(sel: AnyChoiceFlag, value: unknown): unknown {
 	const provided = new Set<string>();
 	if (chosen.value !== undefined) {
 		if (!Object.hasOwn(raw, CHOICE_VALUE_KEY)) {
-			throw new Error(
-				`flag '--${tag}' is required${errScopeSuffix(`--${tag}`)}`,
-			);
+			// A member flag is elected by its own token and that token CARRIES the
+			// payload, so a record electing one with no `value` is the command
+			// line's own `--<member>` with nothing after it, and takes that
+			// sentence. The ordinary required-flag message is refused for it: a
+			// member flag's scope path stops at the scope that OWNS it (§12.13), so
+			// that message would render the member as its own owner.
+			throw new Error(errFlagRequiresValue(`--${tag}`));
 		}
 		out[CHOICE_VALUE_KEY] = raw[CHOICE_VALUE_KEY];
 		provided.add(CHOICE_VALUE_KEY);

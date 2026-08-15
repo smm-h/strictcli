@@ -410,6 +410,14 @@ test("call: a bad elected record raises InvokeError", async () => {
 		name: "InvokeError",
 		message: "one of --url, --file is required",
 	});
+	// A member flag is elected by its own token and that token CARRIES the
+	// payload, so a record electing one with no `value` is `--url` typed with
+	// nothing after it -- and takes that sentence, never a presence refusal
+	// naming the member as its own owner (§24.11).
+	await assert.rejects(build().call("fetch", { source: { choice: "url" } }), {
+		name: "InvokeError",
+		message: "flag '--url' requires a value",
+	});
 	assert.equal(
 		await build().call("fetch", { source: { choice: "url", value: "u" } }),
 		0,
