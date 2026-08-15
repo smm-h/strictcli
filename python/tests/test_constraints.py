@@ -1385,12 +1385,16 @@ def test_a_nested_at_least_one_inlines_its_branches():
     def cmd(ctx, a, b, c):
         pass
 
-    assert app.json_schema("cmd")["anyOf"] == [
-        {"required": ["a"]},
-        {"required": ["b"]},  # inner's branches, inlined
-        {"required": ["a"]},
-        {"required": ["b"]},
-        {"required": ["c"]},
+    # Two at-least-one constraints are two independent rules, so they are
+    # conjoined rather than merged (§18.31 item 284) -- and `inner`'s branches
+    # are inlined into `outer`'s own `anyOf`.
+    assert app.json_schema("cmd")["allOf"] == [
+        {"anyOf": [{"required": ["a"]}, {"required": ["b"]}]},
+        {"anyOf": [
+            {"required": ["a"]},
+            {"required": ["b"]},
+            {"required": ["c"]},
+        ]},
     ]
 
 
@@ -1411,7 +1415,7 @@ def test_implies_projects_nothing_and_takes_a_description_line():
     assert "dependentRequired" not in schema
     tool = next(t for t in app.as_tools() if t.name == "cmd")
     assert (
-        "  fast implies no_embeddings -- not expressed in the schema: "
+        "  fast implies embeddings = false -- not expressed in the schema: "
         "the injection" in tool.description
     )
 
@@ -1474,4 +1478,362 @@ def test_a_violation_at_the_machine_door_uses_the_parsers_own_sentence():
         app.call("rewrite", old_name="a")
     assert str(exc.value) == (
         'constraint "author-name": --old-name, --new-name must be used together'
+    )
+
+
+# ---------------------------------------------------------------------------
+# The reconciliation round (§18.31): the pins this implementation had to move
+# to, and the ones it already met.
+# ---------------------------------------------------------------------------
+
+
+def _two_at_least_one_app():
+    """Two independent at-least-one rules over disjoint members."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command(
+        "cmd", effect="read_only", help="a command",
+        constraints=[
+            AtLeastOne("first", [Member("a"), Member("b")]),
+            AtLeastOne("second", [Member("c"), Member("d")]),
+        ],
+    )
+    @strictcli.flag("a", type=str, help="a", presence="optional")
+    @strictcli.flag("b", type=str, help="b", presence="optional")
+    @strictcli.flag("c", type=str, help="c", presence="optional")
+    @strictcli.flag("d", type=str, help="d", presence="optional")
+    def cmd(ctx, a, b, c, d):
+        pass
+
+    return app
+
+
+def test_two_at_least_one_constraints_conjoin_in_all_of():
+    """§18.31 item 284: merging their branches would publish a schema
+    satisfied by EITHER rule where the command declares that both must hold."""
+    schema = _two_at_least_one_app().json_schema("cmd")
+    assert "anyOf" not in schema
+    assert schema["allOf"] == [
+        {"anyOf": [{"required": ["a"]}, {"required": ["b"]}]},
+        {"anyOf": [{"required": ["c"]}, {"required": ["d"]}]},
+    ]
+
+
+def test_exactly_one_at_least_one_stays_a_bare_any_of():
+    schema = _purge_app().json_schema("purge")
+    assert "allOf" not in schema
+    assert schema["anyOf"] == [
+        {"required": ["targets"]},
+        {"required": ["older_than"]},
+        {"required": ["all"]},
+    ]
+
+
+def test_the_all_of_elements_are_in_declaration_order():
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command(
+        "cmd", effect="read_only", help="a command",
+        constraints=[
+            AtLeastOne("second", [Member("c"), Member("d")]),
+            AtLeastOne("first", [Member("a"), Member("b")]),
+        ],
+    )
+    @strictcli.flag("a", type=str, help="a", presence="optional")
+    @strictcli.flag("b", type=str, help="b", presence="optional")
+    @strictcli.flag("c", type=str, help="c", presence="optional")
+    @strictcli.flag("d", type=str, help="d", presence="optional")
+    def cmd(ctx, a, b, c, d):
+        pass
+
+    assert app.json_schema("cmd")["allOf"] == [
+        {"anyOf": [{"required": ["c"]}, {"required": ["d"]}]},
+        {"anyOf": [{"required": ["a"]}, {"required": ["b"]}]},
+    ]
+
+
+def test_the_keywords_sit_after_required_and_before_additional_properties():
+    """§18.31 item 286: the rule-carrying keywords sit beside the two keys
+    they qualify, ahead of the key that closes the object."""
+    schema = _safegit_app().json_schema("rewrite")
+    assert list(schema) == [
+        "type", "properties", "required", "anyOf", "dependentRequired",
+        "additionalProperties",
+    ]
+
+
+def test_the_all_of_form_takes_the_same_position():
+    schema = _two_at_least_one_app().json_schema("cmd")
+    assert list(schema) == [
+        "type", "properties", "required", "allOf", "additionalProperties",
+    ]
+
+
+def test_a_command_with_no_constraints_keeps_the_bare_key_order():
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command("cmd", effect="read_only", help="a command")
+    @strictcli.flag("a", type=str, help="a", presence="optional")
+    def cmd(ctx, a):
+        pass
+
+    assert list(app.json_schema("cmd")) == [
+        "type", "properties", "required", "additionalProperties",
+    ]
+
+
+def test_implies_states_its_injected_value_in_the_description_block():
+    """§18.31 item 283: a false value is a VALUE, not a name -- `no_<target>`
+    names a key the schema does not carry and the caller can never send."""
+    tool = next(t for t in _implies_app().as_tools() if t.name == "cmd")
+    assert (
+        "  fast implies embeddings = false -- not expressed in the schema: "
+        "the injection" in tool.description
+    )
+    assert "no_embeddings" not in tool.description
+
+
+def test_implies_states_a_true_value_the_same_way():
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command(
+        "cmd", effect="read_only", help="a command",
+        constraints=[Implies("c-implies-d", flag="c", implies="d", value=True)],
+    )
+    @strictcli.flag("c", type=bool, help="c", default=False)
+    @strictcli.flag("d", type=bool, help="d", default=False)
+    def cmd(ctx, c, d):
+        pass
+
+    tool = next(t for t in app.as_tools() if t.name == "cmd")
+    assert (
+        "  c implies d = true -- not expressed in the schema: the injection"
+        in tool.description
+    )
+
+
+def test_the_implies_line_carries_no_in_sentence_commentary():
+    """The clause comes from the block's closed set like every other partial,
+    and the line says nothing else."""
+    tool = next(t for t in _implies_app().as_tools() if t.name == "cmd")
+    line = [
+        ln for ln in tool.description.splitlines() if "implies" in ln
+    ][0]
+    assert line == (
+        "  fast implies embeddings = false -- not expressed in the schema: "
+        "the injection"
+    )
+
+
+def test_the_requires_line_is_two_property_names_and_no_clause():
+    tool = next(t for t in _requires_app().as_tools() if t.name == "cmd")
+    line = [
+        ln for ln in tool.description.splitlines() if "requires" in ln
+    ][0]
+    assert line == "  format requires output"
+
+
+def test_a_dict_member_renders_its_value_type_in_one_argument():
+    """§18.31 item 289: the key type is `str` by construction, so a
+    two-argument word states a fact no declaration can vary."""
+    with pytest.raises(ValueError) as exc:
+        _register(
+            [AtLeastOne("selection", [
+                Member("a", when="true"), Member("b"),
+            ])],
+            flags=(("a", dict[str, int]), ("b", str)),
+        )()
+    assert "'--a' is a dict[int]" in str(exc.value)
+
+
+def test_a_variadic_arg_member_renders_its_collection_spelling():
+    with pytest.raises(ValueError) as exc:
+        _register(
+            [AtLeastOne("selection", [
+                Member("targets", when="true"), Member("a"),
+            ])],
+            args=[strictcli.Arg(
+                "targets", type=str, help="t", variadic=True,
+                presence="optional",
+            )],
+        )()
+    assert "'targets' is a list[str]" in str(exc.value)
+
+
+def test_a_variadic_bool_arg_is_sized_and_never_bool():
+    """§18.31 item 290: its value is a sequence whatever its element type is,
+    and it has no `--no-` spelling to decline with."""
+    build = _register(
+        [AtLeastOne("selection", [Member("targets"), Member("a")])],
+        args=[strictcli.Arg(
+            "targets", type=bool, help="t", variadic=True, presence="optional",
+        )],
+    )
+    build()  # omitting `when` is legal: the bool refusal does not apply
+
+    with pytest.raises(ValueError) as exc:
+        _register(
+            [AtLeastOne("selection", [
+                Member("targets", when="true"), Member("a"),
+            ])],
+            args=[strictcli.Arg(
+                "targets", type=bool, help="t", variadic=True,
+                presence="optional",
+            )],
+        )()
+    assert "'targets' is a list[bool]" in str(exc.value)
+
+    _register(
+        [AtLeastOne("selection", [
+            Member("targets", when="non_empty"), Member("a"),
+        ])],
+        args=[strictcli.Arg(
+            "targets", type=bool, help="t", variadic=True,
+            presence="optional",
+        )],
+    )()  # `non_empty` is legal on it
+
+
+@strictcli.choice("email", help="deliver by email")
+class _Email:
+    pass
+
+
+@strictcli.choice("sms", help="deliver by text")
+class _Sms:
+    pass
+
+
+_Via = _Email | _Sms
+
+
+def _selector_member_app(when=None, **selector_kwargs):
+    kwargs = {
+        "help": "delivery channel",
+        "elect_by": "selector-token",
+        "default": _Email(),
+        "choices": [_Email, _Sms],
+    }
+    kwargs.update(selector_kwargs)
+    if kwargs.get("presence") == "required":
+        # A selector declares required OR a default, never both (§24.5).
+        kwargs.pop("default", None)
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command(
+        "cmd", effect="read_only", help="a command",
+        constraints=[AtLeastOne("sel", [
+            Member("via", when=when), Member("note"),
+        ])],
+    )
+    @strictcli.choice_flag("via", **kwargs)
+    @strictcli.flag("note", type=str, help="a note", presence="optional")
+    def cmd(ctx, via: _Via, note):
+        print("ran")
+
+    return app
+
+
+def test_a_token_spelled_selector_may_be_a_member():
+    """§26.2: a token-spelled choice flag is an ordinary root-scope flag."""
+    app = _selector_member_app()
+    assert app.test(["cmd", "--via", "sms"]).exit_code == 0
+    assert app.test(["cmd", "--note", "x"]).exit_code == 0
+
+
+def test_a_selector_member_engages_only_when_the_invocation_elected_it():
+    """A DEFAULT election is the declaration deciding, not the invocation."""
+    r = _selector_member_app().test(["cmd"])
+    assert r.exit_code == 1
+    assert r.stderr.splitlines()[0] == (
+        'error: constraint "sel": at least one of --via, --note is required'
+    )
+
+
+def test_when_true_on_a_selector_member_renders_choice_flag():
+    """§18.31 item 289: its value is a record neither selector can test, so
+    the word names the CONSTRUCT."""
+    with pytest.raises(ValueError) as exc:
+        _selector_member_app(when="true")
+    assert str(exc.value) == (
+        'command "cmd": constraint "sel" member \'--via\' declares '
+        'when="true", which needs a bool; \'--via\' is a choice flag'
+    )
+
+
+def test_when_non_empty_on_a_selector_member_renders_choice_flag():
+    with pytest.raises(ValueError) as exc:
+        _selector_member_app(when="non_empty")
+    assert str(exc.value) == (
+        'command "cmd": constraint "sel" member \'--via\' declares '
+        'when="non_empty", which needs a string or a collection; '
+        "'--via' is a choice flag"
+    )
+
+
+def test_a_required_selector_member_is_refused():
+    """§26.5's inversion reaches a selector like any other declaration."""
+    with pytest.raises(ValueError) as exc:
+        _selector_member_app(presence="required")
+    assert str(exc.value) == (
+        'command "cmd": constraint "sel" member \'--via\' declares '
+        'presence="required": a member the invocation must always supply '
+        "leaves the constraint nothing to decide"
+    )
+
+
+def test_a_constraint_name_may_not_collide_with_a_selector_name():
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    with pytest.raises(ValueError) as exc:
+
+        @app.command(
+            "cmd", effect="read_only", help="a command",
+            constraints=[AtLeastOne("via", [Member("a"), Member("note")])],
+        )
+        @strictcli.choice_flag(
+            "via", help="channel", elect_by="selector-token",
+            default=_Email(), choices=[_Email, _Sms],
+        )
+        @strictcli.flag("a", type=str, help="a", presence="optional")
+        @strictcli.flag("note", type=str, help="n", presence="optional")
+        def cmd(ctx, via: _Via, a, note):
+            pass
+
+    assert str(exc.value) == (
+        'command "cmd": constraint name "via" is already a flag or arg name: '
+        "a member reference resolves by name and would be ambiguous"
+    )
+
+
+def test_a_selector_member_projects_as_its_own_property():
+    schema = _selector_member_app().json_schema("cmd")
+    assert schema["anyOf"] == [{"required": ["via"]}, {"required": ["note"]}]
+    tool = next(t for t in _selector_member_app().as_tools() if t.name == "cmd")
+    assert "  at least one of: via, note" in tool.description
+
+
+def test_the_decline_clause_searches_direct_members_only():
+    """§18.31 item 290: a `--no-<x>` two levels down names a token the reader
+    is not looking at, and the nested constraint has its own sentence."""
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command(
+        "cmd", effect="read_only", help="a command",
+        constraints=[
+            AllOrNone("inner", [Member("a", when="true"), Member("b")]),
+            AtLeastOne("outer", [Member("inner"), Member("c")]),
+        ],
+    )
+    @strictcli.flag("a", type=bool, help="a", default=False)
+    @strictcli.flag("b", type=str, help="b", presence="optional")
+    @strictcli.flag("c", type=str, help="c", presence="optional")
+    def cmd(ctx, a, b, c):
+        pass
+
+    r = app.test(["cmd", "--no-a"])
+    assert r.exit_code == 1
+    assert r.stderr.splitlines()[0] == (
+        'error: constraint "outer": at least one of (--a with --b), --c '
+        "is required"
     )
