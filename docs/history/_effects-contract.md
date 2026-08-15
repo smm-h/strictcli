@@ -848,6 +848,27 @@ DRY RUN — no changes were made. Would do:
   5. run: gh release view «step 4 output»
 ```
 
+> **Amendment (2026-08-16, update-command round, §18.33 item 312): an update command's log carries
+> one unnumbered write-set line, between the header and the first effect.** A command declaring
+> `update_of` (§27.2) states, before anything else, which properties this invocation writes and what
+> happens to the rest -- the campaign's own containment rule, that a positively-stated write set must
+> never be invisible (§27.13). The line's forms are pinned verbatim in §27.5; its two properties here
+> are §3's:
+>
+> - **it takes no sequence number.** The counter is contiguous over rendered *effects* (D3's rule
+>   above), and the write set is not an effect: it is a fact about the declaration and the
+>   invocation, known before the handler runs. Giving it a number would shift `«step N output»`,
+>   the truncation step and the log's own numbering by one for every update command, which is the
+>   three-strings-at-once defect that rule exists to prevent.
+> - **it renders in dry mode only**, immediately after the header and before line `1.`, once per
+>   dispatch. A live run's write set is carried in the envelope instead (§19.2's `writes`), because
+>   the envelope is a document a consumer parses where the human log is a preview a reader asked
+>   for; printing the line on every live run would put a permanent extra line on the primary output
+>   of every update command in the fleet.
+>
+> A read-only command can never carry one (`update_of` on a `read_only` command is a registration
+> error, §27.2), so §3.1's "header with an empty body" promise for read-only dry runs is untouched.
+
 ### 3.3 Truncation
 
 Extraction or branching on a carrier ends the preview. The framework prints the already-recorded
@@ -3542,6 +3563,104 @@ record-shape guards the box below adds *(extended 2026-08-15, audit round, §18.
 > the treatment every language-specific template takes -- asserted **per target** where they are
 > reachable, never forced into a shared spelling.
 
+### 12.16 The update-command construct
+
+Added 2026-08-16 (update-command round, §18.33). The family splits across both parity categories the
+way §12.13's and §12.15's do: the **violation** templates are **parse-time** (stderr, exit 1, one
+covering conformance case each); the **declaration guards** are **registration-time**, in §12.10's
+and §12.12's class.
+
+§12.12's `<required-spelling>`, `<optional-spelling>` and `<default-spelling>` rows are reused
+verbatim; this section adds one:
+
+| | Python | Go | TypeScript |
+|---|---|---|---|
+| `<nullable-spelling>` | `nullable=True` | `Nullable()` | `nullable: true` |
+
+**How a declaration renders inside a sentence** -- pinned once here, used by every template below and
+by §27's renderings. It is §12.15's member rule read over a new operand list rather than a second
+rule invented for one:
+
+- `<decl>` is `flag '--<x>'` for a flag and `argument '<x>'` for a positional arg. A **list** of
+  names is unquoted, joined by `, `, in declaration order (§12.13's member-list rule); a **single**
+  name standing alone is quoted;
+- **the presence spellings inside a sentence stay per-language and take the FLAG spelling even when
+  the subject is an arg**, which is §18.31 item 287's recorded reading of the identical situation
+  one construct over: these templates' prefix names the **command** rather than a surface, so the
+  sentence never claims to quote the arg surface's own option. Python and TypeScript spell both
+  operand kinds one way already, so Go is the only implementation where the two readings differ.
+
+**The prefix** is `command "<name>": ` on every registration guard, and `update "<resource>": ` on
+the one violation the construct owns -- §12.15's quoting rule unchanged, a declared identifier in
+double quotes and a typed token in single ones.
+
+**Registration guards.** All registration-time, all three implementations unless a row says
+otherwise.
+
+| Template | Text |
+|---|---|
+| `errMutatingDefault(name, x)` | `command "<name>": <decl> declares <default-spelling> on a mutating command: absence would write a value the invocation never stated (declare <required-spelling> or <optional-spelling>, or apply the fallback in the handler and say so in its help)` |
+| `errUpdateOnReadOnly(name)` | `command "<name>": a read_only command cannot declare update_of (a command that changes nothing writes no properties)` |
+| `errUpdateWriteModeInvalid(name, v)` | `command "<name>": invalid write_mode "<v>": must be "sparse" or "full_replace"` |
+| `errUpdateResourceCharset(name, r)` | `command "<name>": update resource "<r>" must match [a-z][a-z0-9-]*` |
+| `errUpdatePropertiesEmpty(name, r)` | `command "<name>": update of "<r>" declares no properties: an update with nothing to write is not an update` |
+| `errUpdateNameUnknown(name, r, x)` | `command "<name>": update of "<r>" references unknown name "<x>"` |
+| `errUpdateNameAmbiguous(name, r, x)` | `command "<name>": update of "<r>" references "<x>", which names both a flag and a positional arg` |
+| `errUpdateNameDuplicate(name, r, x)` | `command "<name>": update of "<r>" declares "<x>" twice` |
+| `errUpdateNameBothRoles(name, r, x)` | `command "<name>": update of "<r>" declares "<x>" as both identity and property` |
+| `errUpdateReferencesScopedFlag(name, r, x, path)` | `command "<name>": update of "<r>" references '<x>', which is declared under '<scope path>': an update's identity and properties are declared at root scope only` |
+| `errUpdatePropertyPresence(name, r, x)` | `command "<name>": update of "<r>" property <decl> declares <required-spelling>: a property is absent exactly when it is not being written, and the presence declaration for that is <optional-spelling>` |
+| `errUpdatePropertyIsArg(name, r, x)` | `command "<name>": update of "<r>" property "<x>" is a positional arg: a property must be individually omissible and clearable, and only a flag is` |
+| `errUpdatePropertyIsChoiceFlag(name, r, x)` | `command "<name>": update of "<r>" property '--<x>' is a choice flag: an elected record is a selection, not a property value` |
+| `errNullableNotProperty(name, x)` | `command "<name>": <decl> declares <nullable-spelling> but is not a property of an update: only a property can be cleared` |
+| `errUnsetNameReserved(name, x)` | `command "<name>": flag name "unset-<x>" is reserved: property '--<x>' declares <nullable-spelling>, which mints '--unset-<x>'` |
+
+Four notes the rows do not carry:
+
+- **`errMutatingDefault` is the only guard in this section that fires on a command declaring no
+  update at all.** The ban is §27.1's and keys on `effect="mutating"`; the rest of the section keys
+  on `update_of`. `<default-spelling>`'s `<value>` renders through the same value formatter every
+  other declaration guard uses (§12.12).
+- **`errUpdatePropertyPresence` covers `required` only.** A property declaring a default is refused
+  by `errMutatingDefault` four steps earlier (§27.11's order), an update command being mutating by
+  §27.2's own guard, so the two never compete for one declaration.
+- **`errUpdateWriteModeInvalid` is reachable in all three**, and the reachable inputs differ: Python
+  a string outside the vocabulary, TypeScript a widened caller past the literal union (§12.13 item
+  213's treatment), Go the **zero value** of the string-based `WriteMode` type, which renders `""`.
+  The sentence is byte-identical in each because the value formatter is.
+- **There is no missing-`write_mode` guard and no orphaned-`write_mode` guard.** The two facts are
+  one declaration in all three surfaces (§27.2), so neither half can be written without the other --
+  which is the state §1.1a's second and third guards had to police for the dry-run pair, made
+  unrepresentable here instead of guarded.
+
+**Violation templates (parse-time).**
+
+```
+update "<resource>": at least one property is required: --content, --ttl, --proxied
+```
+
+`errUpdateNoProperty(resource, properties)`. All three. `<properties>` is **every** declared
+property, rendered by the list rule above in declaration order, whether or not it is nullable --
+naming only the ones a reader has not used would require the framework to guess which one was meant.
+**There is deliberately no decline clause.** §12.15 appends §21.4's clause when a bool member was
+provided false, and the analogous input here is the opposite fact: inside an update command
+`--no-proxied` **provides** the property with the value `false` (§27.7), so it satisfies this rule
+rather than declining it, and this sentence cannot fire in its presence.
+
+```
+--<x> and --unset-<x> are mutually exclusive: a property is either written or cleared
+```
+
+`errUpdateValueAndUnset(x)`. All three, **command line only**: it is a collision between two tokens,
+and the machine doors have one key per property (§27.6), so no door can reach the state.
+
+**Category and coverage.** The two violation templates are parse-time and take the covering
+conformance case every parse template takes. The guards are registration-time and are asserted **per
+target**, as `conformance/cases/presence_registration.json` asserts §12.12's. **No template in this
+section is excluded in any implementation**, which is the difference between this construct and
+§12.15's: every guard here describes a declaration all three surfaces can express, because the
+declaration is a record of names rather than a shape a type system can close.
+
 ---
 
 ## 13. Schema fields
@@ -3985,6 +4104,45 @@ exclusion rationale.
 > `conformance/harness/main.go` splits the member array into Go's two-named-plus-variadic
 > constructors, and `conformance/harness_ts/main.js` builds the option object with its member tuple.
 
+> **Amendment (2026-08-16, update-command round, §18.33 items 307 and 316): the command entry gains
+> the update pair, and the flag entry gains `nullable`.** §27.2 makes `update_of` and `write_mode`
+> registration-level declarations in `effect`'s family, and §27.6 makes `nullable` a flag-level one;
+> this section is where those facts are published.
+>
+> **On every command entry**, in the key positions §25.9 gives them:
+>
+> | Key | Type | Emission |
+> |-----|------|----------|
+> | `update_of` | object | The declaration, as `{"resource": str, "identity": [str, ...], "properties": [str, ...]}`, names in **declaration order** and in the **declared spelling** -- the same names the flag and arg entries carry under `name` and the constraint catalogue carries under its members' `name` (§25.7), never the underscored parameter spelling the machine doors use (§27.9). All three keys are always present inside the object, `identity` as `[]` when the resource has none. Omitted from the command entry when the command declares no update, and absence means the command is not an update |
+> | `write_mode` | `"sparse"` \| `"full_replace"` | Emitted **exactly when `update_of` is, and never alone** -- the atomic pair, which is the dry-run pair's shape (`dry_run_supported` / `dry_run_unsupported_reason`) and is guaranteed here by construction rather than by a guard, the two facts being one declaration in all three surfaces (§27.2) |
+>
+> **On every flag entry:**
+>
+> | Key | Type | Emission |
+> |-----|------|----------|
+> | `nullable` | `true` | Emitted **only when declared true**; absence means the property cannot be cleared, which is the baseline. `consequential`'s omit-when-baseline shape. There is **no second flag entry** for the minted `--unset-<prop>`: it is derived from this key exactly as `--no-<x>` is derived from `negatable`, and the dump publishes declarations (§27.9) |
+>
+> **The conformance case schema** (`conformance/schema.json`) follows the **declaration** side, which
+> is item 200's distinction applied once more: a case declares what a consumer writes, and a
+> consumer writes **one** update record carrying its write mode (§27.2), where the dump publishes two
+> command-entry keys. So `$defs/command` gains a single `update_of` property -- an object with
+> `resource`, `write_mode`, `identity`, `properties` and `additionalProperties: false` -- and
+> `$defs/flag` gains `nullable` (`{"type": "boolean", "default": false}`). `update_of` joins the
+> deprecated branch's `then.properties` as `false`, a deprecated entry having no handler and
+> therefore no resource to write, and joins neither the top-level `required` nor the `else` branch's,
+> since almost every command declares no update. Inside the object, `write_mode` is **not**
+> `required` at the case-schema layer even though every declaration surface makes it mandatory: an
+> absent or unknown `write_mode` is the covering input for `errUpdateWriteModeInvalid` (§12.16), and
+> a case schema that cannot spell the refused declaration cannot test the refusal -- the presence
+> box's rule, applied once more. The three harnesses map the object onto §27.8's spellings, the
+> materialization rule §14.4 pins.
+>
+> `conformance/check_api_surface.py` gains the entity mappings on the existing descriptors, mirroring
+> `"command.grants"`: `"command.update_of"` -> `updateOf`, `"command.write_mode"` -> `writeMode`, and
+> `"flag.nullable"` -> `nullable`. `check_schema_parity.py` needs no shape change -- all three are
+> ordinary fields -- and `check_schema_fragments.py` is untouched, `nullable` being a sibling key
+> rather than a fragment keyword (§27.9).
+
 ---
 
 ## 14. Conformance surface
@@ -4422,7 +4580,9 @@ Recorded so implementors do not re-litigate them:
 ## 18. Decision provenance
 
 This section is **exhaustive**: every decision in §§1-17 -- and, since the machine-interface round,
-every section numbered after this one (§§19-25), which sit there because sections here are never
+every section numbered after this one (~~§§19-25~~ *(corrected 2026-08-16, update-command round,
+§18.33: the constraint round added §26 and this round adds §27, and neither updated the range)*
+**§§19-27**), which sit there because sections here are never
 renumbered -- that
 is not verbatim plan text is listed below, in one of three classes. If a statement in this document is not derivable from the ratified
 pin list in the campaign ledger, it appears here.
@@ -8614,6 +8774,232 @@ column); §12.15 (three Python-only guards added to the exclusion list).
      `Requires` over operands that both resolve, and outranks a non-bool `Implies` trigger, because
      step 7 precedes the phase.
 
+### 18.33 The update-command construct, authored (2026-08-16)
+
+Twenty items authoring **§27** and **§12.16**, the campaign's fifth and last design phase (L3.1
+through L3.6). Numbering continues §18.32's, for the reason §18.14 gave: the same campaign's ledger.
+This section is authored **before** implementation, on §18.30's precedent and for its reason -- the
+campaign's own discipline is that contract changes land as visible amendments with authored-spelling
+ledger entries before any code is written.
+
+**Origin tags**, per §18.14's preamble. Every item is **untagged** unless its own text says
+otherwise: the campaign's rulings are `[%%]` (B6, the ladder-3 pick) and `(D)` (B7, B9), and the
+items below are this round's authoring decisions inside those rulings, each with its reason stated
+where it is pinned. Six items carry an explicit **Flagged** mark: they are derivations the campaign
+did not make, written in because a registration guard cannot be written against an adjective, and
+marked so a later round can reverse one without excavating for it.
+
+**What was read**, on disk: the three implementations' presence, selector and constraint blocks
+(`python/strictcli/__init__.py`, `go/strictcli/`, `typescript/src/`), the framework's own `config`
+subcommand registration in all three, `go/strictcli/help.go`'s negatable-flag spec rendering, and the
+campaign's own file, whose L3 phase text and update-command survey are this round's brief.
+
+**Sites amended in place**: §3.2 (the write-set line in the would-do log); §13 (the command entry's
+update pair, the flag entry's `nullable`, and the case-schema surface); §19.2 (the `writes` member,
+and `interface_version`); §23.9 and §24.15 (the two deferral bullets, discharged); §24.11 (the null
+carve-out); §25.9 and §25.10 (key order and the `defaults` block); §26.14 (the open question,
+answered).
+
+300. **The mutating-default ban reaches every declared value default, and the campaign's word
+     "scalar" is widened to say so (§27.1).** L3.1 bans a "tool-picked **scalar** value default" on a
+     `mutating` command; the word was measured from the TTL-300 class the survey found rather than
+     authored as a limit, and a registration guard cannot be written against an adjective. What is
+     banned is a **declared value**: the four scalar types, `""` and `0` included, and a **non-empty**
+     list or dict default. **Flagged** for the widening: a `default=["a"]` is as tool-picked as a
+     `default=300`, and the shape of the container changes nothing about what reaches the write, but
+     no surveyed site is a non-empty compound default, so the widening is derived from the ban's own
+     reason rather than from evidence.
+
+301. **Two carve-outs, both derived and both flagged (§27.1).** **`default=[]` / `default={}` stay
+     legal**: an empty collection declares *no elements*, so no value the framework chose can reach a
+     write through it, and §23.5 made this spelling the explicit replacement for the framework's own
+     silent `[]` -- refusing it would push those sites back onto `optional` plus a handler-invented
+     empty collection, which is the re-sentinelization §23 removed. **A `RelativeToRoot` default
+     stays legal**: it resolves a location under a declared infrastructure root, deciding *where* a
+     command writes and never *what*, carries the `infra` label and answers `provided()` false, and
+     has no second spelling. Both are **Flagged**: the campaign named neither.
+
+302. **Where the ban is evaluated, and the one hole it leaves open (§27.1).** It is evaluated **per
+     command**, over the flags and args that command carries -- its own, its flag sets', and its
+     selectors' scoped flags at every depth -- so a shared flag set carrying a default is legal and
+     attaching it to a mutating command is not. **App-level global flags are not reached**, and this
+     is **Flagged** as a real hole rather than closed: a global has no classification of its own,
+     there is no command at the point of its declaration to key on, and closing it means either
+     banning globals with defaults outright or making one declaration's legality depend on every
+     command in the app. It is narrow in practice -- the fleet's globals decide output and
+     configuration, never resource content -- and it is stated so a later round can weigh it with
+     that fact in hand.
+
+303. **A selector's default survives the ban; the flags inside a defaulted scope do not (§27.1,
+     §24.5).** A choice name is not a value written to anything, and B2's own remedy for an absent
+     selection is to **name** the choice -- so refusing a selector default on a mutating command
+     would leave every mutating selector `required` while removing the construct's answer to the
+     problem it exists for. The scope beneath it is another matter: those are ordinary flags of a
+     mutating command, so on a mutating command **every sub-flag of a defaultable choice is
+     `optional`** (§24.5 already refuses a required one), and Python's instance-shaped default passes
+     **no field values** -- a field value written into the default instance is a value default under
+     another spelling, and Python is the only surface that can express it.
+
+304. **The framework's own `config set` fails the ban, and the fact is recorded rather than
+     excepted (§27.1).** It is a `mutating` command whose `--clear` and `--default` both declare
+     `default=False`, with two hand-rolled guards holding its illegal corners shut. Its shape after
+     the campaign is the one L3.3 models the clear vocabulary on -- an exactly-one selection over *a
+     value*, *clear*, and *reset to default*, which is a member-spelled selector (§24.4). **Flagged
+     for the implementation round**: a framework cannot ship a registration guard its own command
+     does not pass, and an exemption for framework-owned commands would be the escape hatch this
+     regime refuses everywhere else.
+
+305. **The role the campaign calls "selector" is authored as `identity` (§27.2).** L3.2 writes
+     "selector flags/args vs property flags", and this document has owned **selector** since §24 for
+     a choice flag that elects one scope. The collision is not hypothetical: an identity member **may
+     be** a selector in §24's sense (item 309), so one sentence would carry both meanings. The role
+     is unchanged and the word is not; the rename is recorded here rather than made silently.
+
+306. **The resource name is mandatory, for two independent reasons (§27.2).** It is the identifier
+     the at-least-one-property violation prints -- §26.9's reason, one construct over, since a family
+     plus a member list identifies a rule only until one command updates two things. And it is the
+     **corpus**: L3.6 records rung 10's resource model as a destination to be *extracted* from
+     roughly 26 shipped `update_of` declarations, and two commands naming one resource is exactly the
+     evidence that extraction reads. It takes `[a-z][a-z0-9-]*`, the constraint-name charset, so one
+     document has one identifier charset.
+
+307. **`write_mode` is declared INSIDE the update record and published as a SIBLING key (§27.2,
+     §27.9, §13, §25.9).** The campaign sketches it as a sibling declaration in the
+     `effect` / `consequential` / `dry_run_supported` family; authored, it nests, because a write
+     mode without an update has nothing to describe and nesting makes the half-declared state
+     unrepresentable in all three languages rather than guarded in two (§1.1a's dry-run pair is the
+     guarded shape, and it needed two registration guards to hold). The **dump** publishes two
+     command-entry keys, `update_of` and `write_mode`, because a consumer asking what mode a command
+     has should not have to descend -- item 200's declaration-versus-published-fact distinction,
+     applied a third time. The conformance case schema follows the **declaration** side. Their key
+     positions are §25.9's, immediately after the dry-run pair.
+
+308. **A property declares `optional` and nothing else (§27.3).** `required` is refused
+     (`errUpdatePropertyPresence`) with §26.5's reasoning read one construct over -- a property the
+     invocation must always supply is written in every invocation, which makes the at-least-one rule
+     unfireable and turns a sparse update into a partial full replace under a name that denies it. A
+     default is refused twice: by §27.1's ban, which reaches it first because an update command is
+     mutating by its own guard, and by this rule's own reason. An identity member declares `required`
+     or `optional`, the second being how *by name or by id* is spelled -- two optional identity
+     members plus an `AtLeastOne` over them, which is the composition §26 is for.
+
+309. **Both roles are ROOT SCOPE only, a property may not be a choice flag, and an identity member
+     may (§27.3).** The root-scope rule is not borrowed for symmetry: it is what makes the write set
+     **decidable at every door**. §18.29 item 268 pins that a caller-supplied value is decidable at
+     the flat door, and item 253 pins that a constructed scope record cannot tell a field the caller
+     wrote from one the declaration filled -- so a scoped property would have a membership two doors
+     could answer and one could not, which is one rule with three answers. A **property** may not be
+     a choice flag, an elected record being a selection rather than a property value, and that is
+     recorded as the sanctioned extension when a real site appears (§24.8's treatment). An
+     **identity** member may be one, token- or member-spelled, which is §26.2's "a selector may be a
+     member" one construct over. A **property is a flag**, never a positional
+     (`errUpdatePropertyIsArg`), for two independent reasons: a sparse update needs every property
+     individually omissible, which positional syntax cannot deliver past the last arg, and
+     `--unset-<prop>` is a flag by construction, so a positional property would be the one property
+     that could never be cleared. An identity member has neither problem and takes either surface.
+
+310. **The at-least-one-property rule is not an `AtLeastOne`, which answers §26.14's open question
+     (§27.4, §26.14).** Three reasons, each sufficient: it carries no name a consumer chose (§26.9
+     makes names mandatory precisely so a violation names a declaration the reader can find), §26.5's
+     presence cells have nothing to decide over a declaration with one legal presence, and §26.3's
+     `when` vocabulary has nothing to select over. A synthesized constraint would additionally appear
+     in the `Constraints:` help block and the dump's catalogue under a name no declaration contains,
+     which is the invented-identifier defect names exist to prevent. It **borrows** two things and
+     says so: §26.4's engagement predicate and §26.12's `anyOf` machinery, wrapping pin included.
+
+311. **The write set has no source filter, and a negated bool property is a PROVISION (§27.4).** A
+     property provided from `env`, from `config`, or by an `Implies` injection is provided, because
+     §23.6 is the framework's one definition of "was this supplied" and §26.3 already refused a
+     second one under a new name; the containment is that the write set is rendered, so a configured
+     value cannot join a write invisibly. And inside an update command `--no-proxied` **writes
+     `false`**: this inverts A1's election reading deliberately, A1 being about electing -- where a
+     false member selects nothing -- and this being about writing, where `false` is a value with the
+     same standing as any other. §12.16 therefore pins that `errUpdateNoProperty` carries **no**
+     decline clause, which is the same fact stated where somebody would otherwise add one by analogy
+     with §12.15.
+
+312. **The write-set line takes no sequence number and renders in dry mode only (§27.5, §3.2).** It
+     sits between the header and line `1.`, unnumbered, because §3.2's counter is contiguous over
+     rendered **effects** and a write set is not one -- numbering it would shift `«step N output»`,
+     the truncation step and the log's numbering by one on every update command, the
+     three-strings-at-once defect D3's rule exists to prevent. The forms are pinned verbatim, two
+     segments (`writes:` and `clears:`) separated by `; ` with an empty segment omitted, and a
+     trailing parenthetical that is a function of `write_mode` alone. Names render as **declared
+     names without the `--` prefix**, which is a third cut in the same place §26.10 and §26.12
+     already cut: a human surface names what a reader types, a machine surface names keys a caller
+     sends, and a write set is data rather than tokens. **Flagged**: the three-way spelling
+     (`phone-number` in the log, `phone_number` in the envelope and the MCP block, `--phone-number`
+     nowhere) is derived from those two precedents rather than ruled.
+
+313. **The envelope gains `writes` and `interface_version` becomes `2` (§19.2, §27.5).** The member
+     is populated in **both** modes, for `preview`'s reason: it is a function of the declaration and
+     the invocation, not of the mode. Its six keys are `resource`, `write_mode`, `written`,
+     `cleared`, `resent`, `untouched`, the four arrays partitioning the declared property set exactly,
+     with `resent` empty under `sparse` and `untouched` empty under `full_replace` -- a full-replace
+     write touches every property, so nothing is untouched, and a consumer reads the mode off the
+     member it is describing rather than by subtracting arrays from a schema it would have to load.
+     The version bump is §19.2's own rule (the number changes by amendment to that section) applied
+     to a key set that grows on **every** run, update command or not, since the member is never
+     absent. Keeping `1` was refused for that reason.
+
+314. **`nullable` mints `--unset-<prop>`, and the minted flag reaches the handler on the Context
+     (§27.6).** It delivers no kwarg: `ctx.unset(name)` answers it, which is §7.5's precedent for the
+     reserved quartet and is **forced** by Python's named handler parameters -- a minted kwarg would
+     demand a parameter for a flag the developer never declared, on a surface where `**kwargs` is
+     banned (§10.2). An unset property delivers absence and reports `provided()` **true**, the
+     invocation having caused the write; `ctx.unset` is what stops a handler reconstructing that
+     boolean from two facts, which is §23.6's own reason for existing. The minted flag is **not
+     negatable**, `--no-unset-<prop>` saying exactly what absence says. The vocabulary is `config
+     set`'s minus its third case: a property has no default, so there is nothing to reset it to.
+
+315. **`null` at the machine doors is the clear, and it is the one stated carve-out from "null is
+     legal for nothing" (§24.11, §27.6).** Item 240 banned `null` because it was always a second
+     spelling of **absence**, and a nullable property is the one declaration for which `null` is a
+     **value** -- clearing is a write. One key per property at every door, no minted parameter name
+     that could collide with a declared flag, and the `anyOf` branch stays a plain `required` on the
+     property's own key. The carve-out is a property of the **declaration** and never of the door,
+     and it does not widen item 252's optional-field carve-out, which spells absence inside a
+     container that cannot omit a field.
+
+316. **The dump publishes `nullable` as a flag-entry key and mints no second entry; the fragment is
+     untouched (§27.9, §25.2, §25.9, §25.10).** This is exactly how `negatable` publishes `--no-<x>`:
+     the dump publishes declarations, and a spelling the framework mints from one is not a second
+     declaration. §25.2's "no `null` in any fragment, and no type list" is **not amended** and does
+     not need to be -- `nullable` is a sibling key, the shape `presence` already has beside the
+     fragment, and the fragment describes the shape of a value the declaration types while
+     nullability is a different fact with its own key. `nullable` takes the `false` baseline in
+     §25.10's block and the last position in §25.9's flag-entry order.
+
+317. **The MCP projection: `anyOf` at EXACT fidelity, a type list for a nullable property, and its
+     own description block (§27.10).** The at-least-one-property rule projects one `required` branch
+     per property and is **exact** under §26.12's policy -- where that section's at-least-one rows go
+     partial when an election selector asks what a value *holds*, this rule **is** provision, and a
+     supplied key is a provided property at this door (§18.29 item 268), a `null` a supplied key and
+     a clear, a `false` a supplied key and a write. It counts for §26.12's one-bare /
+     two-or-more-wrapped `allOf` pin, with the update's branch **first** as the command's own
+     declaration. A nullable property publishes `{"type": ["<t>", "null"]}`: the MCP projection is
+     not bound by §25.2's closed subset -- it already emits `anyOf` and `dependentRequired` -- and a
+     caller that cannot see the null cannot clear anything. The description block appends after the
+     scope and constraint blocks, the established order.
+
+318. **The registration order, pinned in eight steps with the ban first (§27.11).** The ban runs
+     ahead of everything because it is a fact about the command's **classification** and is
+     independent of whether an update is declared at all; the rest runs from the record's own
+     identity outward to the declarations it names, which is §26.8's direction, with each step
+     crossing the whole declaration before the next begins. The name reservation runs **last**,
+     being the only step that reads the flag namespace back after the property set is known.
+
+319. **What the round does not touch, and the destination it protects.** Rung 10's resource model
+     stays the destination and stays **extracted** rather than designed -- L3.6's ordering, whose
+     evidence already exists in one surveyed site's non-unique selector, a refusal the shape only
+     reveals once someone writes the declaration; §27.2's mandatory resource name is what makes that
+     corpus readable when the round opens. Also untouched: a property whose value is a variant,
+     `Requires` / `Implies` semantics (§26.13's residual), the app-level global hole (item 302),
+     Phase F's consumer migration, and the release boundary -- this implementation joins the single
+     breaking release the campaign already scoped (F.4) and creates none of its own. The surfaces
+     outside this file that the implementation round must carry are listed at the end of §27.14, and
+     they include the framework's own `config set` (item 304).
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -8713,6 +9099,32 @@ how a terminal was configured.
 > status no implementation produces, and a harness must not normalize the status away: the Go
 > harness reproduces `2` and normalizes only the crash *report*, so the aborting cases' stderr stays
 > comparable while their exit status stays honest.
+
+> **Amendment (2026-08-16, update-command round, §18.33 item 313): the envelope gains `writes`, and
+> `interface_version` becomes `2`.** An update command's write set is a machine fact (§27.5) and the
+> envelope is where machine facts live. The member sits **after `dry_run` and before `preview`** --
+> what the run writes, beside the preview of how -- and the table's order is still readability only,
+> per the paragraph above.
+>
+> | Key | Type | Meaning |
+> |-----|------|---------|
+> | `writes` | object \| null | The write set of a command declaring `update_of` (§27.2). `null` on every command that declares none. **Never absent**, and populated in **both** modes, for `preview`'s reason: it is a function of the declaration and the invocation, not of the mode. |
+>
+> The object's members and their key order are pinned in §27.5: `resource`, `write_mode`, `written`,
+> `cleared`, `resent`, `untouched`, the last four arrays of underscored property names in declaration
+> order. Under `sparse`, `resent` is `[]` and `untouched` holds every property the invocation did not
+> supply; under `full_replace` those two swap -- `untouched` is `[]`, because a full-replace write
+> touches every property, and `resent` names the ones the handler reads back and sends unchanged. A
+> consumer reads the write mode from the member it is describing rather than by subtracting arrays
+> from a schema it would otherwise have to load.
+>
+> **`interface_version` becomes `2`.** The row above says the version changes only by a later
+> amendment to this section, and this is one: the key set grows, and a consumer that validates the
+> envelope's key set against version `1` must be able to tell which document it holds. The
+> alternative -- keeping `1` because the member is `null` on every non-update command -- was refused
+> for that reason: a member that is *never absent* is part of the key set on every run, update
+> command or not. `schema_version` (§25) is a different number for a different document and does not
+> move.
 
 ### 19.3 The `preview` member
 
@@ -9961,7 +10373,9 @@ Stated so the boundary is a decision rather than an omission:
   groups.
 - **The update-command construct.** The mutating-default ban, `update_of=`, `write_mode=` and the
   `--unset-<prop>` vocabulary are a third round. This round makes the distinction they rest on --
-  absent versus defaulted versus required -- expressible; it does not use it.
+  absent versus defaulted versus required -- expressible; it does not use it. *(discharged
+  2026-08-16, update-command round, §18.33: that round is §27, and the distinction this round made
+  expressible is what §27.3 makes a property's only legal presence.)*
 - **Consumer migration.** Retiring the `default=""` sentinel idiom is a per-repository judgement
   about which sites meant "absent" and which meant `""`, and no framework rule can make it. What
   the framework provides is that after this round both are sayable and they are not the same
@@ -10647,6 +11061,28 @@ alone and it stops at optionality -- at the flat boundary absence has its own sp
 there remains legal for nothing, and a required or defaulted field is unchanged at both doors. The
 record spelling is a container the check descends into, never one it stops at.**
 
+> **Amendment (2026-08-16, update-command round, §18.33 item 315): one stated carve-out from "null
+> is legal for nothing" -- a NULLABLE PROPERTY of an update command.** The rule above bans `null`
+> because it was always a second spelling of **absence**, and absence has exactly one spelling
+> (§23.4). A property declaring `nullable` (§27.6) is the one declaration in the framework for which
+> `null` is a **value**: it means *clear this property on the resource*, which is a write, and it is
+> as different from "leave this property alone" as `--content x` is. The CLI cannot type a null, so
+> it spells the same act `--unset-<prop>`; the machine doors have no tokens (this section's opening),
+> so they spell it on the property's own key.
+>
+> - `{"ttl": null}` on a command whose `ttl` is a nullable property is **accepted**, delivers absence
+>   to the handler, reports `provided()` **true**, and is what `ctx.unset("ttl")` answers true for
+>   (§27.6). It joins the write set exactly as a supplied value does (§27.4).
+> - `{"ttl": null}` where `ttl` is **not** a nullable property is refused by the rule above,
+>   unchanged, with its own sentence. The carve-out is a property of the **declaration**, never of
+>   the door: a door that accepted a null wherever a value could be absent would be the second
+>   spelling of absence this rule exists to refuse.
+> - The carve-out reaches the **record** door's fields at every depth on the same terms, and it does
+>   not widen item 252's optional-field carve-out: that one spells *absence* inside a container that
+>   cannot omit a field, this one spells a *value* the declaration names. A field that is both
+>   optional and nullable is not expressible, because a property may not be a scoped flag (§27.3).
+> - No template is authored. Acceptance produces no message, and the refusal is the existing one.
+
 **A positional's declaration binds a supplied value exactly as a flag's does** *(added 2026-08-15,
 contract-pin round, §18.24 item 244)*. §23.3 gives a positional the same three presence spellings
 and the same four types a flag has, so nothing about being a positional makes a supplied value
@@ -11025,7 +11461,9 @@ Stated so the boundary is a decision rather than an omission:
 - **The surviving constraint families**, which are the constraint round's (§24.14).
 - **The update-command construct** -- the mutating-default ban, `update_of=`, `write_mode=` and the
   `--unset-<prop>` vocabulary -- which is a third round. This construct makes one of its shapes
-  expressible (a property whose legality depends on a selection) and does not use it.
+  expressible (a property whose legality depends on a selection) and does not use it. *(discharged
+  2026-08-16, update-command round, §18.33: that round is §27, and it uses this construct in the
+  other direction -- an **identity** member may be a choice flag, a **property** may not, §27.3.)*
 - **`ConfigField` and config-file layout.** A config file is hierarchical and a scoped flag has a
   natural nested home in it; this round consults config for a scoped flag only through §24.6's
   conditional binding, using the flat key the flag already has, and pins no nested config spelling.
@@ -11444,7 +11882,8 @@ uniform position across the flag and arg entries, and the env-related keys are g
 that removing it leaves the CWD-free core dict byte-identical.
 
 **Flag entry:** `name`, `help`, `value_schema`, `short`, `presence`, `default`, `env`,
-`env_separator`, `prefixed`, `choices`, `elect_by`, `unique`, `conflict_mode`, `negatable`.
+`env_separator`, `prefixed`, `choices`, `elect_by`, `unique`, `conflict_mode`, `negatable`,
+`nullable` *(added 2026-08-16, update-command round, §18.33 item 316)*.
 
 **Arg entry:** `name`, `help`, `value_schema`, `presence`, `default`, `variadic`, `choices`.
 
@@ -11452,8 +11891,12 @@ that removing it leaves the CWD-free core dict byte-identical.
 `help`.
 
 **Command entry:** `name`, `help`, `effect`, `consequential`, `dry_run_supported`,
-`dry_run_unsupported_reason`, `payload_schema`, `owns_stdout`, `passthrough`, `flags`, `flag_sets`,
-`args`, `tags`, `constraints`, `hidden`, `interactive`, `config_fields`, `grants`, `forwarding`.
+`dry_run_unsupported_reason`, `update_of`, `write_mode`, `payload_schema`, `owns_stdout`,
+`passthrough`, `flags`, `flag_sets`, `args`, `tags`, `constraints`, `hidden`, `interactive`,
+`config_fields`, `grants`, `forwarding`. *(`update_of` and `write_mode` added 2026-08-16,
+update-command round, §18.33 item 307: they sit with the rest of the registration-level declaration
+family, after the dry-run pair and ahead of the payload keys, which is where §27.2 declares them to
+belong.)* **`update_of` object:** `resource`, `identity`, `properties`.
 
 **Group entry:** `name`, `help`, `commands`, `groups`, `deprecated`, `tags`, `hidden`.
 
@@ -11508,13 +11951,15 @@ v2 makes it true.
   },
   "flag": {
     "short": null, "env": null, "env_separator": null, "prefixed": true, "choices": null,
-    "elect_by": null, "unique": false, "conflict_mode": null, "negatable": null
+    "elect_by": null, "unique": false, "conflict_mode": null, "negatable": null,
+    "nullable": false
   },
   "arg": { "variadic": false, "choices": null },
   "choice": { "flags": [] },
   "choice_record": { "help": null },
   "command": {
     "consequential": false, "dry_run_supported": true, "dry_run_unsupported_reason": null,
+    "update_of": null, "write_mode": null,
     "payload_schema": null, "owns_stdout": false, "passthrough": false, "flags": [],
     "flag_sets": [], "args": [], "tags": [], "constraints": [], "hidden": false,
     "interactive": false, "config_fields": [], "grants": [], "forwarding": null
@@ -12379,8 +12824,23 @@ out-of-scope note exists to prevent.
 - **`Requires` / `Implies` semantics**, including the present-but-false residual recorded above.
 - **The update-command construct** (L3): the mutating-default ban, `update_of=`, `write_mode=` and
   the `--unset-<prop>` vocabulary. L3.2's at-least-one-property rule is the framework enforcing a
-  rule of its own about a declared property set, not an `AtLeastOne` a command writes; whether it is
-  implemented over this system's predicate is L3's decision to make with its own evidence.
+  rule of its own about a declared property set, not an `AtLeastOne` a command writes; ~~whether it
+  is implemented over this system's predicate is L3's decision to make with its own evidence~~
+  *(answered 2026-08-16, update-command round, §18.33 item 310)*.
+
+> **Answered (2026-08-16, update-command round, §18.33 item 310): the at-least-one-property rule is
+> NOT an `AtLeastOne`, and it borrows exactly two things from this system.** §27.4 rules it, and the
+> reasons are this system's own. It is **not a constraint**: a constraint carries a mandatory name
+> its author chose (§26.9) and this rule is derived from `update_of`, so it has no name to carry and
+> its sentence takes the resource instead; §26.5's presence cells have nothing to decide over a
+> property, which has exactly one legal presence (§27.3); and §26.3's `when` vocabulary has nothing
+> to select over, the rule being over provision itself. What it **does** borrow is §26.4's engagement
+> predicate -- §23.6's `provided`, with no source filter, for the reason §26.3 refused one -- and
+> §26.12's `anyOf` machinery, including the one-bare/two-or-more-wrapped `allOf` pin, which it joins
+> as an `anyOf`-producing rule (§27.10). Implementing it as a synthesized `AtLeastOne` was refused
+> for a third reason beyond the two above: a synthesized constraint would appear in `--help`'s
+> `Constraints:` block and in the dump's constraint catalogue under a name no declaration contains,
+> which is the same invented-identifier defect §26.9 makes names mandatory to avoid.
 - **Multi-elect** (§24.13), which is the selector's extension and shares nothing with this system.
 - **The release boundary.** This amendment's implementation joins the single breaking strictcli
   release the campaign already scoped (L1 + L2 + L3, F.4); it does not create a release of its own,
@@ -12392,3 +12852,607 @@ line and the `dependencies=[...]` sentence), `docs/flag-system.md`, the conforma
 constraint cases and `conformance/schema.json`'s `$defs`, and the fleet's own declarations -- every
 `CoRequired` in the fleet must be rewritten because the name is mandatory, which is the migration
 F.1 already schedules.
+
+---
+
+## 27. The update-command construct
+
+Added 2026-08-16 (update-command round, §18.33). This is the fifth and last design phase of the
+declaration-regime campaign, and the **normative record of what a partial update is**: what a
+mutating command may never default, what an update declares about the resource it changes, which
+properties this invocation writes, how that write set is rendered on every surface that publishes it,
+and how a property is cleared. It implements campaign phase **L3** in full -- L3.1's ban, L3.2's
+declaration, L3.3's clear vocabulary, L3.4's containment rationale, L3.5's bool rule and L3.6's
+rejections.
+
+§23.9 and §24.15 each deferred this construct by name, and §26.14 left one of its questions open;
+all three promises are discharged here, the last of them in §26.14's own box (item 310).
+
+**The evidence, measured across the fleet before the campaign.** Nine sites wrote a **tool-picked
+value on absence** -- two DNS `update-record` commands silently reset a record's TTL to 300 and 600
+whenever the operator did not restate it. Two more sites forced **restatement of unread state**: one
+`cf dns update-record` requires `--proxied` on every edit, with the surrender documented in a source
+comment, and one `update-rule` requires `--enable` or `--disable`, so a routine change to a mail
+route's destination re-decides whether the route is live. Three "no fields specified" guards had been
+written and could never fire, their commands' flags having collapsed to required. One tool's
+`changelog edit` had a partial-update design disabled by its own declaration, whose negated form
+additionally wiped two other fields. And exactly one command in the entire fleet -- strictcli's own
+`config set` -- had a complete write/clear/reset vocabulary. Every one of those is a consequence of
+absence having no declared meaning.
+
+### 27.1 The mutating-default ban
+
+**On a command declaring `effect="mutating"`, a flag or a positional arg may not declare a value
+default.** Registration-time hard error in all three implementations (`errMutatingDefault`, §12.16).
+
+The reason is one sentence, and every cell below is derived from it: **absence must never resolve to
+a value the invocation did not state, because on a mutating command a value the framework picked is
+a value the framework writes.** The TTL-300 class is exactly that shape -- a declaration says `300`,
+an operator changes a record's content, and a number nobody typed replaces a number nobody read.
+
+**The boundary, cell by cell.** The campaign's L3.1 says "tool-picked **scalar** value default", and
+the word `scalar` was measured from the class the survey found rather than authored as a limit. What
+the ban reaches is settled here, because a registration guard cannot be written against an adjective:
+
+| Declaration, on a `mutating` command | Verdict | Why |
+|---|---|---|
+| `default=<str>` / `<int>` / `<float>`, **any** value, `""` and `0` included | **registration error** | the measured class. `""` is a value like any other after §23, and a site that meant *absent* declares `optional` -- which is L1.4's whole triage |
+| `default=true` / `default=false` on a bool | **registration error** | the same class with two values. It is what the forced-restatement sites would collapse into if they simply stopped forcing, and refusing it is what makes L3.5's tri-state the **only** shape a bool property can take |
+| a **non-empty** `list` or `dict` default | **registration error** | a widening of the campaign's word, derived from the ban's own reason: `default=["a"]` is as tool-picked as `default=300`, and the shape of the container changes nothing about what reaches the write. **Flagged as a derivation** (§18.33 item 300) |
+| `default=[]` / `default={}` | **legal** | an empty collection declares *no elements*, so no value the framework chose can reach a write through it. §23.5 made this spelling the explicit replacement for the framework's own silent `[]`; refusing it would push those sites back onto `optional` plus a handler-invented `[]`, which is the re-sentinelization §23 removed. **Flagged as a derivation** |
+| a `RelativeToRoot` default | **legal** | it resolves a **location** under a declared infrastructure root, deciding *where* a command writes and never *what* it writes; its source label is `infra`, `provided()` is false (§23.6), and there is no second spelling for it. **Flagged as a derivation** |
+| any default on a `read_only` command | **legal, untouched** | the ban keys on classification exactly as dry-mode participation does (§1.3). A command that changes nothing writes no value, invented or otherwise |
+| a **selector's** `default` (§24.5) | **legal** | a choice name is not a value written to anything: it names which scope is live. Refusing it would leave every mutating selector `required`, and B2's own remedy for an absent selection is to **name** the choice -- which is what a default election does |
+| the flags **inside** a defaulted choice's scope | **reached, at every depth** | they are ordinary flags of a mutating command. A defaulted selection is complete (§24.5) and may declare no required sub-flag, so on a mutating command **every sub-flag of a defaultable choice is `optional`**. In Python, where the default *is* a constructed instance, this means the instance passes **no field values**: a field value written into the default instance is a value default under another spelling |
+| a **flag set's** flag | **reached per attaching command** | the ban is evaluated over the flags a command actually carries -- its own, its flag sets', and its selectors' scoped flags at every depth. A shared flag set carrying a default is legal, and attaching it to a mutating command is not |
+| an **app-level global** flag's default | **not reached** | a global has no classification of its own; it reaches read-only and mutating commands alike, and there is no command at the point of its declaration to key on. **Flagged**: this is a real hole, narrow in practice (the fleet's globals decide output and configuration, never resource content) and stated rather than closed, because closing it means either banning globals with defaults outright or making a global's legality depend on every command in the app |
+| an `Implies` injection | **not a default** | it exists only because the invocation contained the trigger: `provided()` is true, source `implied` (§23.6) |
+| an `env` or `config` value | **not a default** | the operator supplied it |
+
+**The three remedies, and the one that can be abused.** A site hit by the ban makes the flag
+`required`, makes it `optional`, or applies the fallback in the handler and says so in the flag's
+help -- the campaign's own list, and the error's own trailing clause. The third is legal **only where
+the fallback is not itself a write**: a handler that substitutes `300` and then sends it has moved
+the ban's defect one layer down, where no registration guard can see it. For an update command that
+door is closed structurally -- a property has no default and absence means untouched (§27.3, §27.4)
+-- and for the rest, the migration is where a human decides, which is why F.3 splits each of the nine
+sites into a `create` command that keeps an explicit value and an `update` command whose property
+becomes absent-means-untouched.
+
+**The framework's own `config set` is hit by this ban**, and the fact is recorded rather than
+excepted: it is a `mutating` command whose `--clear` and `--default` both declare `default=False`.
+Its natural shape after the campaign is the one L3.3 models the clear vocabulary on -- an exactly-one
+selection over *a value*, *clear* and *reset to default*, which is a **member-spelled selector**
+(§24.4), not three bools with two hand-rolled guards. **Flagged for the implementation round**: the
+framework cannot ship a registration guard its own command does not pass.
+
+### 27.2 The update declaration
+
+An update command declares **one record**, in the registration-level family `effect`,
+`consequential` and `dry_run_supported` belong to:
+
+| Fact | What it says |
+|---|---|
+| `resource` | the **name** of the thing being updated -- mandatory, matching `[a-z][a-z0-9-]*`, the constraint-name charset (§12.15) |
+| `write_mode` | `"sparse"` or `"full_replace"` -- mandatory, no default |
+| `identity` | the flags and args that name **which** resource instance -- possibly empty |
+| `properties` | the flags that name **what changes** -- at least one |
+
+**The resource name is mandatory for two independent reasons**, either sufficient on its own. It is
+the identifier the at-least-one-property violation prints, and a violation that named a family plus a
+list would identify a rule only until one command updates two things (§26.9's reason, one construct
+over). And it is the **corpus**: L3.6 records rung 10's resource model as the destination to be
+*extracted* from roughly 26 shipped `update_of` declarations, and two commands naming one resource is
+precisely the evidence that extraction reads. A resource name is what makes a later round possible;
+without it this construct records a shape and forgets what it was a shape of.
+
+**`write_mode` is mandatory because a preview must not lie.** The two values mean:
+
+| `write_mode` | What the handler does | What every surface renders |
+|---|---|---|
+| `sparse` | sends only the provided properties; the resource's other properties are not part of the request | `(other properties unchanged)` |
+| `full_replace` | sends the whole resource: the provided properties from this invocation, and every other property read back and re-sent | `(other properties are re-sent as read)` |
+
+A fetch-then-merge handler against a full-replace API writes **every** property, including ones no
+operator mentioned, and a preview that said "other properties unchanged" would be a false statement
+about the most destructive thing the command does. There is no default value, for the reason `effect`
+has none: the framework refuses to guess which of two writes a command performs.
+
+**`update_of` on a `read_only` command is a registration error** (`errUpdateOnReadOnly`, §12.16),
+mirroring §8.1's consequential prohibition and §1.1a's dry-run one, and for the same reason -- a
+command that changes nothing writes no properties. An update command is therefore **always**
+`mutating`, which is what makes §27.1's ban apply to every one of its declarations without a second
+rule.
+
+**`dry_run_supported=false` composes with an update declaration and is legal.** The human write-set
+line then never renders, there being no dry run to render it in; the envelope's `writes` member still
+does, in a live run (§27.5). Nothing about §1.1a changes.
+
+**The word `identity`, and why it is not `selector`.** The campaign's L3.2 wrote "selector flags/args
+vs property flags", and this document has owned **selector** since §24 for a different construct: a
+choice flag that elects one scope. One document cannot carry two meanings for one word, and the
+collision is not hypothetical here, because an identity member **may be** a selector in §24's sense
+(§27.3). The role keeps its meaning and takes a name that does not collide. *(Recorded rather than
+silently adopted: §18.33 item 305.)*
+
+### 27.3 Identity and properties
+
+**Both are references by name, resolved at registration, at root scope only.** The model is §26.2's,
+one construct over: a name is looked up among the command's flags and its positional args; unknown,
+ambiguous, duplicated and both-roles names are registration errors (§12.16); and a name that resolves
+to a flag declared **inside a choice scope** is refused with the sentence that names the actual fault
+(`errUpdateReferencesScopedFlag`), never as an unknown name.
+
+The root-scope rule is not borrowed for symmetry. It is what makes the write set **decidable at every
+door**: §18.29 item 268 pins that a caller-supplied value is decidable at the flat door because the
+door reads the caller's keys, while item 253 pins that a *constructed scope record* cannot tell a
+field the caller wrote from one the declaration filled. A property inside a scope would therefore
+have a write-set membership that the argv door and the flat door could answer and the record door
+could not -- one rule with three answers, which is exactly what this campaign exists to remove.
+
+**What each role may declare**, against §23's three presences:
+
+| | `required` | a value `default` | `optional` |
+|---|---|---|---|
+| **property** | **registration error** (`errUpdatePropertyPresence`). A property the invocation must always supply is written in every invocation, which makes the at-least-one rule unfireable and turns a sparse update into a partial full replace under a name that denies it | **registration error**, already, by §27.1's ban -- the command is mutating by §27.2's own guard. This is the TTL-300 cell, and it is refused twice over | **the only legal declaration.** Absence *is* untouched, and `optional` is §23's one spelling for a declaration whose absence is delivered as absence |
+| **identity** | **legal**, and the ordinary case: an update that cannot name its target has nothing to write to | **registration error** by §27.1's ban | **legal**, for alternative addressing: two optional identity members plus an `AtLeastOne` over them (§26) is how *by name or by id* is declared, and the constraint system is what states the rule |
+
+**A property is a flag; an identity member may be a flag or a positional arg**
+(`errUpdatePropertyIsArg`). Two reasons, either sufficient. A sparse update needs **every** property
+to be individually omissible, and positional syntax cannot deliver that past the last arg -- omitting
+the second of three positionals is not expressible at all. And the clear vocabulary has no positional
+spelling: `--unset-<prop>` is a flag by construction (§27.6), so a positional property would be the
+one property that could never be cleared. Identity has neither problem: it names *which* resource,
+where a positional is the ordinary CLI spelling (`myapp update-record <record-id>`).
+
+**A property may not be a choice flag** (`errUpdatePropertyIsChoiceFlag`). A selector's value is a
+tagged record (§24.1), and a record is a selection rather than a property value; nothing in this
+round says what writing one would mean. Recorded as the sanctioned extension when a real site appears
+-- the treatment §24.8 gives in-scope constraints.
+
+**An identity member may be a choice flag**, token- or member-spelled, at root scope. The elected
+record is how a resource with two addressing modes names itself, and §26.2's "a selector may be a
+member" is the precedent this follows. Its election's own provided-ness follows §24.5 and §18.28 item
+264 unchanged -- a selection nobody elected reports `default` with `provided()` false at every door
+-- and that answer never reaches the write set, which is a question about properties only.
+
+**A flag that is named in neither list is neither**, and that is legal and ordinary. `--format`,
+`--wait`, `--timeout`: an update command's declarations are not required to be exhaustively
+classified, because a flag that is not part of the resource is not a fact about the resource. What is
+refused is a name in **both** lists (`errUpdateNameBothRoles`).
+
+### 27.4 The at-least-one-property rule
+
+**The framework enforces that at least one property is provided.** All properties absent is a
+parse-time hard error naming every declared property (`errUpdateNoProperty`, §12.16), never a silent
+no-op and never a request that writes nothing. This is what deletes the fleet's three dead "no fields
+specified" guards: the rule they were written for is now the framework's, stated once, and their
+commands could never reach them anyway.
+
+It is **not** an `AtLeastOne`, and §26.14's box records the full answer (item 310): it carries no
+name a consumer chose, §26.5's presence cells have nothing to decide over a declaration with one
+legal presence, and §26.3's `when` vocabulary has nothing to select over. What it borrows is §26.4's
+engagement predicate and §26.12's `anyOf` machinery (§27.11, §27.10).
+
+**A property is provided exactly when §23.6's predicate says so, and there is no source filter.** A
+value from `env`, from `config`, or injected by an `Implies` is a provision; a `default` or an
+`infra` label is not, and a property can carry neither anyway (§27.3). This is §26.3's refusal of a
+source filter, taken for its reason: the framework has exactly one definition of "was this supplied",
+and a second one under a new name is what the presence round removed. The containment is the
+rendering -- an env-provided property appears in the write set line and in the envelope beside a
+typed one, so a configured value cannot join a write invisibly (§27.13).
+
+**A negated bool property is a provision, not a decline.** Inside an update command `--no-proxied`
+**writes `false`**: the write set is what the invocation states, and stating `false` is stating a
+value. This inverts A1's election reading on purpose, and the inversion is stated here so that nobody
+restores the decline clause by analogy: A1 is about **electing** -- where `--no-x` chooses nothing
+because a false member is not a selection -- and this is about **writing**, where false is a value
+with the same standing as any other. §12.16 pins that `errUpdateNoProperty` carries no decline
+clause, and the two facts are the same fact.
+
+**An unset is a provision too** (§27.6): clearing a property is writing it.
+
+### 27.5 The write set and its two renderings
+
+**The write set of an invocation is the ordered pair of the properties it writes and the properties
+it clears**, in declaration order, computed at parse time from §27.4's predicate. The framework
+renders it wherever a run reports what it does, and both renderings are pinned here because a write
+set that a reader has to reconstruct is the invisible write set L3.4 exists to prevent.
+
+**The human rendering: one unnumbered line in the would-do log.** It sits immediately after §3.2's
+header and before line `1.`, takes no sequence number and renders in dry mode only (§3.2's amendment
+box states the two properties and their reasons). The forms, verbatim, two-space indent:
+
+```
+  writes: content (other properties unchanged)
+  writes: content, ttl (other properties unchanged)
+  writes: content; clears: ttl (other properties unchanged)
+  clears: ttl (other properties unchanged)
+  writes: content (other properties are re-sent as read)
+```
+
+- **two segments, `writes:` first, separated by `; `.** An empty segment is omitted entirely, and
+  §27.4's rule guarantees at least one survives, so the line is never empty and never has to say
+  that it is;
+- **names are the properties' declared names without the `--` prefix**, in declaration order:
+  `phone-number`, never `--phone-number` and never `phone_number`. The log is the human surface,
+  where the reader knows a declaration by the name they type; and the write set is **data**, which
+  is why the token's prefix comes off. The machine surfaces use the underscored parameter name
+  (§27.9, §27.10) -- the same cut §26.10 and §26.12 already make between a help line and a
+  description block;
+- **the trailing parenthetical is a function of `write_mode` alone** and is always present, in both
+  segment shapes. It is the sentence a preview would otherwise leave to a reader's assumption, and
+  §27.2 is why it may never be omitted for brevity.
+
+A fully worked dry run, in §3.2's format:
+
+```
+DRY RUN — no changes were made. Would do:
+  writes: content; clears: ttl (other properties unchanged)
+  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7
+```
+
+**The machine rendering: the envelope's `writes` member** (§19.2's amendment box). Its shape, with
+key order pinned:
+
+```json
+"writes": {
+  "resource": "dns-record",
+  "write_mode": "sparse",
+  "written": ["content"],
+  "cleared": ["ttl"],
+  "resent": [],
+  "untouched": ["proxied"]
+}
+```
+
+- the four arrays hold **underscored parameter names** in declaration order, and they partition the
+  declared property set exactly: every property appears in exactly one of them;
+- `written` and `cleared` are the two halves of the write set, and they are disjoint by
+  §12.16's value-and-unset refusal;
+- **`resent` and `untouched` are the two readings of "the rest", and exactly one of them is ever
+  non-empty**: under `sparse` the rest is untouched and `resent` is `[]`; under `full_replace` the
+  rest is re-sent and `untouched` is `[]`, because a full-replace write touches every property. A
+  consumer therefore reads the write mode off the member it is describing, rather than by
+  subtracting arrays from a schema it would otherwise have to load;
+- it is populated **in both modes**, for `preview`'s reason (§19.3): it is a function of the
+  declaration and the invocation, not of the mode. A live `--json` run reports what it wrote.
+
+### 27.6 The clear vocabulary
+
+**A property declaring `nullable` mints `--unset-<prop>`.** The vocabulary is modeled on
+`config set`'s value / `--clear` / `--default` -- the fleet's only complete one before this round --
+with its third case deliberately absent: a property has no default (§27.3), so there is nothing to
+reset it to, and the vocabulary is complete at two.
+
+- **`""` is an ordinary value**, and always was after L1.4's triage. `--content ""` writes an empty
+  string. This is the whole point of separating the sentinel from the value.
+- **The minted flag is framework-owned and reaches the handler on the Context.** It delivers no
+  kwarg of its own: `ctx.unset(name)` / `ctx.Unset(name)` / `ctx.unset(name)` answers it, which is
+  §7.5's precedent for the reserved quartet ("their values reach the handler on the Context") and is
+  forced here by Python's named handler parameters -- a minted kwarg would demand a parameter for a
+  flag the developer never declared, on a surface where `**kwargs` is banned (§10.2).
+- **An unset property delivers absence and reports `provided()` true.** The value the handler
+  receives is `None` / `nil` / `undefined`, the same as an untouched property's; the two are
+  distinguished by `provided`, and `ctx.unset` is what saves a handler from reconstructing the
+  boolean out of two facts -- §23.6's own reason for existing, applied once more. An unknown name
+  behaves exactly as `ctx.provided`'s and `ctx.source`'s does, with the same message.
+- **Value and unset together is a parse error** (`errUpdateValueAndUnset`, §12.16), command line
+  only: the machine doors have one key per property, so no door can reach the state.
+- **The minted flag is not negatable.** `--no-unset-content` names nothing and is refused by the
+  ordinary unknown-flag path: declining a clear says exactly what absence already says, and a second
+  spelling for it would be the two-spellings mistake in a new place.
+- **The machine doors spell the clear as `null` on the property's own key** (§24.11's amendment box).
+  One key per property at every door, no minted parameter name to collide with a declared flag, and
+  the `anyOf` branch stays a plain `required` on that key (§27.10). The carve-out from "null is legal
+  for nothing" is stated there and is a property of the **declaration**, never of the door.
+- **`nullable` on anything that is not a property is a registration error**
+  (`errNullableNotProperty`), and **`unset-<x>` is a reserved flag name** on a command whose `<x>` is
+  a nullable property (`errUnsetNameReserved`).
+- **Every type may be nullable**, the four scalars and the compounds alike: clearing is a fact about
+  the resource's field, not about the value's shape.
+
+**Help rendering follows negation's precedent exactly.** A negatable bool renders both its spellings
+in one line's name column (`--x, --no-x`), with one help text and one presence part; a nullable
+property does the same:
+
+```
+  --content <str>, --unset-content    record content; --unset-content clears it [optional]
+  --proxied, --no-proxied, --unset-proxied    whether the record is proxied [optional]
+```
+
+One line, one help text, and **one presence part** -- §23.8's invariant is untouched, because the
+minted spelling is a second way to write to one declaration rather than a second declaration.
+
+### 27.7 Bool properties, and the sub-verb pair convention
+
+**A bool property inside an update command is a real tri-state**: `--proxied` writes true,
+`--no-proxied` writes false, absent leaves it alone. This is §23.5's optional-bool row read over a
+property, and it is the shape that removes the forced-restatement class outright -- the surrendered
+`--proxied` and the live-mail-routing `--enable` / `--disable` both become properties nobody has to
+restate to change something else.
+
+**A standalone single-property toggle keeps the sub-verb pair convention.** `enable` and `disable`
+as two commands remain the right shape when the toggle *is* the operation -- the fleet's sixteen such
+pairs stay legal and stay idiomatic. Both are stated here so neither reads as a violation of the
+other: a sub-verb pair is a **command** whose whole purpose is one property, and a tri-state bool is
+a **property** of a command that updates several. The test is whether the command has anything else
+to write; when it does, forcing the toggle into every invocation is the defect this round removes.
+
+### 27.8 The authored spellings, per language
+
+Per B9, parity binds semantics and the pinned sentences of §12.16, never declaration surfaces. Each
+surface below is the shape its language's existing strictcli idiom already points at, and **the write
+mode is declared inside the update record in all three** -- a write mode without an update has
+nothing to describe, and nesting it makes the half-declared state unrepresentable rather than guarded
+(§1.1a's pair is the guarded shape, and this is the better one where a language allows it).
+
+**Python -- a frozen record with a keyword vocabulary.**
+
+```python
+@app.command("update-record", help="change one DNS record in place", effect="mutating",
+             update_of=UpdateOf("dns-record", write_mode="sparse",
+                                identity=["zone", "record-id"],
+                                properties=["content", "ttl", "proxied"]))
+@flag("zone", type=str, help="zone the record belongs to", presence="required")
+@flag("record-id", type=str, help="identifier of the record to change", presence="required")
+@flag("content", type=str, help="record content", presence="optional")
+@flag("ttl", type=int, help="time to live in seconds", presence="optional", nullable=True)
+@flag("proxied", type=bool, help="whether the record is proxied", presence="optional")
+def update_record(ctx, zone, record_id, content, ttl, proxied) -> int:
+    ...
+```
+
+- `UpdateOf` is a **frozen, keyword-only dataclass** whose first field is `resource`, joining the
+  CapWords family `AtLeastOne`, `AllOrNone`, `Requires` and `Implies` established for declarations
+  that name a rule;
+- `write_mode=` is a keyword taking a closed string vocabulary, which is how Python spells `effect=`,
+  `presence=` and `elect_by=`, and it carries **no default**, so omitting it is Python's own
+  `TypeError` at the declaration site;
+- `identity=` and `properties=` are lists of **declared names**, dashed exactly as `Member("old-name")`
+  takes them (§26.6). There is no alternate underscored spelling on the declaration surface;
+- `nullable=True` sits on the flag, beside `presence=`.
+
+**Go -- a constructor plus functional options, and a string-based mode.**
+
+```go
+sc.WithUpdateOf("dns-record", sc.WriteSparse,
+    sc.Identity("zone", "record-id"),
+    sc.Properties("content", "ttl", "proxied"),
+)
+```
+
+```go
+type WriteMode string
+
+const (
+    WriteSparse      WriteMode = "sparse"
+    WriteFullReplace WriteMode = "full_replace"
+)
+
+func WithUpdateOf(resource string, mode WriteMode, opts ...UpdateOption) CmdOption
+func Identity(names ...string) UpdateOption
+func Properties(first string, rest ...string) UpdateOption
+func Nullable() FlagOption
+```
+
+- **the mode is a positional parameter**, which is Go's spelling of mandatory: there is no option to
+  forget and no zero-valued struct field to fill in silently. `WriteMode` is **string-based** so its
+  zero value renders `""` in `errUpdateWriteModeInvalid` and the sentence stays byte-identical with
+  its siblings' (§12.16);
+- `Properties(first string, rest ...string)` puts a **compile-time floor of one** on the property
+  list, which is §26.6's two-named-plus-variadic idiom at the arity this construct needs. The
+  registration guard survives for the caller that omits the option entirely;
+- `Nullable()` is an ordinary `FlagOption` beside `Required()` / `Optional()` / `Default(v)`.
+
+**TypeScript -- one option object, literal unions, and compile-checked names.**
+
+```ts
+updateOf: {
+    resource: "dns-record",
+    writeMode: "sparse",
+    identity: ["zone", "record-id"],
+    properties: ["content", "ttl", "proxied"],
+},
+```
+
+- one option object on the command spec, the shape `requires({...})` and `implies({...})` already
+  have;
+- `writeMode` is the literal union `"sparse" | "full_replace"`, so a typo is a compile error;
+- `properties` is typed `readonly [K, ...K[]]` where `K` is the **key union of the command's own
+  declaration map**, so the floor of one *and* every name are checked by the compiler: a property
+  naming a flag the command does not declare does not compile, and `errUpdateNameUnknown` is
+  reachable only through a widened or JSON-shaped caller -- which is exactly the covering input its
+  conformance case asserts, §12.13 item 213's treatment. `identity` takes the same key union without
+  the floor. **A payoff reaching one language is a pro** (B9), and this is the round's;
+- `nullable: true` joins the flag's option object.
+
+### 27.9 The schema encoding
+
+§13's amendment box pins the keys; this section pins what they mean and what they deliberately do not
+carry.
+
+- **`update_of` and `write_mode` are two command-entry keys** in the dump, where they are one nested
+  record on every declaration surface. That is item 200's declaration-versus-published-fact
+  distinction: a consumer reading a dump asks "what write mode does this command have", and a key it
+  can read without descending is the answer; a consumer *writing* a declaration must not be able to
+  spell half of one. The conformance **case** schema follows the declaration side, for the same
+  reason (§13's box).
+- **The encoding is complete rather than indicative.** A consumer reconstructs the rule without
+  re-reading the declaration: the resource, the mode, and both name lists in declaration order. A
+  partially encoded update is not a legal intermediate state -- the sentence §24.11 and §26.11 both
+  pin, for the third time and the same reason.
+- **Names are published in the declared spelling**, matching the flag entry's own `name` and the
+  constraint catalogue's member names (§25.7). The underscored spelling belongs to the machine doors,
+  where a caller writes keys (§18.24 item 242).
+- **`nullable` is a key on the property's flag entry, and the minted `--unset-<prop>` gets no entry
+  of its own.** This is precisely how `negatable` publishes `--no-<x>`: the dump publishes
+  declarations, and a spelling the framework mints from one is not a second declaration.
+- **The `value_schema` fragment is unchanged by `nullable`.** §25.2 closes the subset at four
+  keywords and states that there is no `null` in any fragment and no type list; that rule is not
+  amended, and it does not need to be, because `nullable` is a sibling key -- the same shape
+  `presence` already has beside the fragment, and the same sentence: the reader that wants both reads
+  both keys. The fragment describes the shape of a value the *declaration types*; whether the
+  property can also be cleared is a different fact with its own key.
+
+### 27.10 The MCP projection
+
+The tool schema is one flat object, as it is everywhere else, and this round adds three things to it.
+
+- **Properties are ordinary optional properties and never appear in `required`.** Their requiredness
+  is exactly the at-least-one rule, which `required` cannot express.
+- **Identity members project as ordinary properties**, and a `required` identity flag joins
+  `required` like any other required flag.
+- **The at-least-one-property rule projects as `anyOf`, one branch per property**:
+  `anyOf: [{"required": ["content"]}, {"required": ["ttl"]}, {"required": ["proxied"]}]`, in
+  declaration order. Its fidelity under §26.12's policy is **exact**, and the reason is worth stating
+  because §26.12's at-least-one rows are often partial: those are partial when an election selector
+  asks what a value *holds* and `required` can only say a key is present. Here the rule **is**
+  provision -- a supplied key is a provided property at this door (§18.29 item 268), a `null` is a
+  supplied key and a clear (§27.6), and a `false` is a supplied key and a write (§27.4) -- so
+  `required` states the whole rule with nothing left over.
+- **It counts as an `anyOf`-producing rule for §26.12's wrapping pin.** A command with an update and
+  no at-least-one constraint emits the bare `anyOf`; a command with both emits
+  `allOf: [{anyOf: <update>}, {anyOf: <constraint>}, ...]`, the update's branch **first**, it being
+  the command's own declaration rather than an entry in the constraint list. Merging them into one
+  `anyOf` is the silent weakening item 284 already refused.
+- **A nullable property's schema is a type list including `"null"`** -- `{"type": ["string",
+  "null"]}`. The MCP projection is not bound by §25.2's four-keyword subset (it already emits `anyOf`
+  and `dependentRequired`), and here the null is a **value the declaration names**, not a spelling of
+  absence, so publishing it in the type is publishing the declaration. A caller that cannot see it
+  cannot clear anything.
+
+**The description block**, in the shape §24.11's scope block and §26.12's constraint block already
+established, appended after both when they exist and separated by a blank line:
+
+```
+Update of "dns-record" (write mode: sparse):
+  identifies: zone, record_id
+  writes: content, ttl, proxied -- at least one is required
+  a property that is not supplied is left unchanged; null clears ttl
+```
+
+- members render in **property names** (underscored), like every other member in this block: the
+  caller writes keys, not argv;
+- the `identifies:` line is omitted when the resource declares no identity members;
+- the last line's first clause is `left unchanged` under `sparse` and `re-sent as read` under
+  `full_replace`, which are the human log's two parentheticals in the same words;
+- the `; null clears <list>` clause appears only when at least one property is nullable, naming them
+  in declaration order.
+
+**Enforcement at call time is unchanged and total.** Every rule in this section is evaluated at the
+machine doors exactly as at the argv door, and a violation returns §12.16's sentence through the
+framework's existing tool-result error channel (`isError` content, never `-32602`) -- §24.11's
+correction, whose reasoning covers this case without amendment.
+
+### 27.11 Registration and the resolution order
+
+Registration resolves and validates a command's update declaration in this order, pinned because
+three implementations must report the same first error for a declaration with two faults:
+
+1. **the ban** -- §27.1's `errMutatingDefault`, over every flag and arg the command carries, in
+   declaration order. It runs first because it is a fact about the **command's classification** and
+   is independent of whether an update is declared at all;
+2. **classification legality** -- `update_of` on a `read_only` command;
+3. **record legality** -- the resource name's charset, the write mode's vocabulary, at least one
+   property;
+4. **name resolution** -- each name in either list resolves to exactly one flag or arg; unknown,
+   ambiguous, duplicated and both-roles names refuse here;
+5. **scope** -- a resolved flag declared inside a choice scope refuses (§24.8, §12.13);
+6. **role legality** -- a property that is a positional arg, then a property that is a choice flag;
+7. **presence legality** -- §27.3's required-property refusal;
+8. **the clear vocabulary** -- `nullable` off a property, and the `unset-<x>` name reservation, which
+   runs last because it is the only step that reads the flag namespace back after the property set is
+   known.
+
+The order runs from the command's own classification, through the record's identity, outward to the
+declarations it names -- §26.8's direction, and each step runs across the whole declaration before
+the next begins, so a message never blames a name for a fault in the record that names it.
+
+### 27.12 Composition
+
+Every cell is pinned; none is new behaviour left implicit.
+
+| Composed with | The answer |
+|---|---|
+| **§23.1 presence** | a property declares `optional` and nothing else; an identity member declares `required` or `optional`; no declaration on a mutating command declares a value default (§27.1) |
+| **§23.6 `ctx.provided`** | it **defines** the write set, unchanged and with no source filter. `ctx.unset` distinguishes a clear from a write; nothing else is added to the predicate |
+| **§23.8 help** | unchanged: one presence part per line, and the minted `--unset-<x>` shares its property's line the way `--no-<x>` shares a bool's |
+| **§24 selectors** | an identity member may be a token- or member-spelled choice flag; a property may not be one; both roles are root-scope only, and a defaulted choice's scope on a mutating command holds only optional flags (§27.1) |
+| **§24.11 the machine doors** | the write set is decidable at all three doors because properties are root-scope declarations; `null` on a nullable property's key is the clear, a stated carve-out from the null rule |
+| **§25 schema** | two command-entry keys and one flag-entry key; no fragment changes, no `defaults`-block exception, no new entity |
+| **§26 constraints** | an update command declares constraints like any command; the at-least-one-property rule is not one of them (§26.14's box); alternative addressing over optional identity members **is** an `AtLeastOne`, which is the intended composition |
+| **§19 the envelope** | a `writes` member in both modes, and `interface_version` becomes `2` |
+| **§3 dry mode** | one unnumbered line after the header, dry mode only, no sequence number consumed |
+| **§1.1a `dry_run_supported`** | legal together; the human line then never renders and the envelope member still does |
+| **§8 `consequential`** | orthogonal. An update command may be consequential and prompts on exactly the same terms |
+| **§7 the reserved quartet** | untouched. `--unset-<prop>` is minted per nullable property and is never an app-wide reserved name |
+
+### 27.13 Absence-semantics containment
+
+The rationale L3.4 asks to be recorded, because the two halves of this round look contradictory until
+it is stated.
+
+**Absence resolving to a VALUE is banned** (§27.1). That is the TTL-300 shape: a gap in the
+invocation is filled by the declaration and the filled value is written. Nothing distinguishes it
+from a value the operator typed once it reaches the resource, and the operator never saw it.
+
+**Absence BOUNDING SCOPE is legitimate**, and it is what a sparse update is. With the at-least-one
+rule in place, the properties the invocation supplied **are** a positively-stated write set --
+membership in a list, not an interpretation of a gap -- and the framework renders that list on every
+surface a run reports through (§27.5). The gap is not read as a value; it is read as *not a member*,
+which is a fact the invocation states by omission the way a set states its non-members.
+
+**Forced restatement is the design that causes wrong writes.** The alternative to absence-bounds-scope
+is requiring every property on every invocation, and the fleet ran that experiment: one command
+forced `--proxied` on every edit with the surrender written into a source comment, and another forced
+`--enable` / `--disable` on a live mail route, so changing a destination re-decides whether the route
+is live. Making the operator restate state they did not read is not caution; it is a write of unread
+state with the operator's name on it.
+
+The three properties that keep the legitimate half legitimate, each enforced rather than promised:
+the write set is **derived from one predicate** (§23.6, no source filter); it is **never empty**
+(§27.4); and it is **never invisible** (§27.5).
+
+### 27.14 What this round rejects and does not touch
+
+**Rejected, re-recorded** (L3.6, and these are rejections rather than deferrals):
+
+- **`--only` scoping.** A flag listing which properties to write, beside the property flags
+  themselves, manufactures a second statement of the write set that can disagree with the first. The
+  supplied properties already **are** the list.
+- **`--set k=v`.** It needs a heterogeneous keyed-flag type in the value engine three
+  implementations keep byte-identical, and it destroys per-property typing, per-property help,
+  per-property negation and the whole clear vocabulary in one move. Every property fact this round
+  publishes would become a string.
+- **Per-property subcommands as the standalone answer.** Against a full-replace API they are a
+  lost-update race by construction: two of them running against one resource each read, merge and
+  send the whole thing. The sub-verb pair survives for the single-property command (§27.7), which is
+  a different claim.
+- **A default on a property, under any spelling.** Including "a default that is only applied when the
+  API has no value", which is the same write with a longer sentence.
+
+**Not touched**, so the boundary is a decision rather than an omission:
+
+- **Rung 10, the resource model** -- declare a resource once and derive `show`, `update` and `set`
+  from it, with a complete written / unchanged / re-sent account. It is the **destination**, and L3.6
+  is explicit about how it is reached: **extracted from roughly 26 shipped `update_of` declarations
+  in a later campaign**, never designed from read handlers. The evidence for that ordering already
+  exists -- one surveyed site has a non-unique selector, a refusal the shape only reveals once
+  someone writes the declaration -- and the mandatory resource name (§27.2) is what makes the corpus
+  readable when that round opens.
+- **A property whose value is a variant** (a choice flag as a property), recorded in §27.3 as the
+  sanctioned extension when a real site appears.
+- **`Requires` / `Implies` semantics**, still §26.13's recorded residual, untouched here.
+- **The app-level global default hole** (§27.1's table), stated and not closed.
+- **Consumer migration**, which is the campaign's Phase F: the nine default-fill sites, the two
+  forced-restatement sites, the three dead guards, and `update_of` adoption on roughly 26 commands.
+- **The release boundary.** This amendment's implementation joins the single breaking strictcli
+  release the campaign already scoped (L1 + L2 + L3, F.4); it creates no release of its own.
+
+**Surfaces outside this document that the implementation round must carry**, recorded because this
+file is the only thing this round writes: strictcli's own `CLAUDE.md` (the presence bullet gains the
+property rule and the mutating-default ban), `docs/flag-system.md`, `docs/language-idioms.md` (the
+three surfaces of §27.8 as a fourth reference case), the conformance corpus's update cases and
+`conformance/schema.json`'s `$defs`, the framework's own `config set` (§27.1's flagged consequence),
+and the fleet's own declarations, which F.1 already schedules.
