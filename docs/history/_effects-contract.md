@@ -173,6 +173,15 @@ short-reuse guards promoted from one language's authoring to the cross-language 
 items changes bytes on commands that declare no selector at all (§24.3's precedence), and it is
 named as a behaviour change rather than left inside a table cell.
 
+The **conformance corpus** was then rebuilt against those three implementations, which falsified two
+further texts and left two spellings the corpus could not do without. §18.20 carries that as items
+225-228, continuing the same numbering, and it likewise reverses no ruling and adds no section: the
+skipped-binding diagnostic enumerates bindings that carried a value rather than declarations, the
+value phase reports coercion before `validate` rather than in command-line order, `errScopedPositional`
+joins the unconstructable-in-one-language family, and the case schema's two covering-input keys plus
+Python's two missing `sub_flag` keywords are ratified so that every rule §24 pins can actually be
+declared in all three surfaces.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -3048,7 +3057,15 @@ better.
 Choice "<c>" of "<sel>": positional args cannot be declared inside a choice scope: a positional's meaning would depend on an election that may be typed after it
 ```
 
-`errScopedPositional(c, sel)`. All three.
+`errScopedPositional(c, sel)`. ~~All three.~~ *(amended 2026-08-15, corpus round, §18.20 item 227)*
+**Python and TypeScript; Go-excluded.** Go's `Choice(name, help string, flags ...Flag)` takes flags
+and nothing else, and an `Arg` is not a `Flag` -- so a positional declared inside a scope is a
+**compile** error in Go, and the state the template refuses is unconstructable rather than merely
+unraised. That is `errSelectorDefaultIncomplete`'s class (item 167) and `errMemberFlagPresence`'s
+(item 213), and it takes the same treatment: an `excluded:` entry in `check_error_parity.py` with
+the rationale, never a parity defect. Python reaches the state through an `Arg` in the choice class's
+body and TypeScript through a widened flags map, and those two are the covering inputs the
+conformance case supplies (§18.20 item 228 authors the case-schema key that spells them).
 
 **A constraint naming a scoped flag** (S9, §24.8):
 
@@ -3537,6 +3554,43 @@ exclusion rationale.
 > builds the keyed choice map for `choiceFlag` / `memberChoiceFlag`. One case declaration, three
 > idiomatic surfaces (B9) -- which is what lets each of §12.13's parse-time templates have a single
 > covering case asserted on all three targets.
+
+> **Ratification (2026-08-15, corpus round, §18.20 item 228): `$defs/choice` carries two keys beyond
+> the box above, and both exist for the box's own reason.** Rebuilding the conformance corpus against
+> the authored surface found two of §12.13's **registration** templates with no spellable covering
+> input, and the box above already answers that class of question: a schema that cannot spell the
+> refused declaration cannot test the refusal. Both keys are therefore part of the authored surface
+> rather than additions to it, and neither adds a declaration a consumer would ever write on purpose.
+>
+> - **`presence`**, `{"enum": ["required", "optional"]}` on the choice object, is the **member**
+>   flag's own presence and exists solely as the input `errMemberFlagPresence` is asserted against
+>   (§12.13). A member flag's presence is `required`, read as *required once this member is elected*,
+>   and no declaration surface has a slot for anything else -- so the key spells a state the surfaces
+>   reach only sideways: TypeScript reads the choice record back as `{ presence?: unknown }` and Go
+>   sets the option on the electing flag. Python is excluded from that template (§18.19 item 213), so
+>   a case spelling this key restricts its targets -- the same target split the fields-carrying
+>   selector default already has.
+> - **`args`**, an array of `{"$ref": "#/$defs/arg"}` on the choice object, is the input
+>   `errScopedPositional` is asserted against (§12.13, §24.7). It spells a positional inside a scope,
+>   which no surface offers deliberately: Python reaches it through an `Arg` in the choice class's
+>   body and TypeScript through a widened flags map, and **Go cannot express it at all** (§18.20 item
+>   227), so a case spelling this key likewise restricts its targets.
+>
+> Both keys are `additionalProperties: false`-compatible members of `$defs/choice`, carry their
+> rationale in their own `description`, and are the only two places in the case schema whose reason
+> for existing is a registration refusal rather than a declaration a case would make in earnest.
+>
+> **Python's `sub_flag(...)` gains `env_separator` and `conflict_mode`** with the same ratification,
+> because the corpus proved a second kind of hole: §24.3's "unaffected" list states that a scoped
+> flag's env, config and compound behaviour is untouched by the construct, and behaviour that cannot
+> be *declared* in one of the three surfaces cannot be verified there. Go's scoped flags are ordinary
+> `Flag` values carrying the full option set and TypeScript's are ordinary flag literals, so both
+> already spelled the pairwise rows (a repeatable scoped flag reading a separated env var, a scoped
+> flag whose config value collides with a command-line one under `conflict_mode="error"`); Python's
+> `sub_flag(...)` is its own constructor and took neither keyword, which made those rows undeclarable
+> in exactly one target. The two keywords are added to `sub_flag(...)` with the command-level
+> `flag(...)` spelling and semantics unchanged -- no new rule, no new template, and no behaviour that
+> was not already pinned.
 
 > **Amendment (2026-08-14, schema-v2 round): the app and command entries gain the behavioral keys
 > the dump was blind to, and the `defaults` block is rewritten.** Also §25's, and recorded here for
@@ -6159,6 +6213,87 @@ bullets) and §24.11 (the refusal channel, and the description map's choice name
      consequence rather than a side effect: it is user-visible, so each implementation names it in
      its own changelog. No sentence changes -- only which of two true refusals is printed.
 
+### 18.20 Corrections and ratifications forced by the conformance corpus rebuild (2026-08-15)
+
+The implementation sweep (§18.19) swept what building §24 three times proved. Rebuilding the
+**conformance corpus** against those three implementations proved four more things, and it proved
+them from the other direction: a corpus has to *declare* every state a pinned template refuses and
+then *observe* what each implementation actually prints, which reaches sentences an implementor
+reading the contract never has cause to test. This section is that sweep. Numbering continues
+§18.19's, for the reason §18.14 gave: the same campaign's ledger.
+
+**Nothing below changes a guarantee**, and the shape is §18.19's exactly. Two items are
+**corrections**, where a pinned sentence said something all three implementations falsify and the
+document follows the implementations. Two are **ratifications**, where the corpus needed a spelling
+the authored surface did not have and the surface's own stated rationale already decided what it
+should be.
+
+**Origin tags**, per §18.14's preamble. Every item here is **untagged**: none is a `(D)` directive
+and none is a `[%%]` adopted recommendation. They are implementation-forced corrections and authored
+remainders in the §18.3 class.
+
+**Sites amended in place**: §12.13 (one template marked Go-excluded), §13 (one new ratification box
+under the item-207 box), §24.3 (the value phase's internal order, and one new paragraph on the
+"unaffected" list's declarability) and §24.6 (the skipped-binding enumeration's subject).
+
+225. **§24.6's skipped-binding enumeration is over bindings that carried a value (§24.6).** The
+     pinned sentence read as an enumeration over *declarations* -- a line for every scoped flag
+     declaring an `env=` or a config key, elected or not. It is over **bindings that had something to
+     deliver**: the environment variable actually set, or the config key actually present in the
+     loaded document. A declared-but-unset binding produces no line, because nothing was skipped --
+     `not consulted:` names a value that existed and was not read, and over declarations it would
+     report the absence of a value as the suppression of one, printing a line per declaration on
+     every `--verbose` run of a command with a large scope tree. Python and TypeScript already read
+     it this way. **Go was internally inconsistent with itself**: its config branch tested the key's
+     presence while its env branch fired on the declaration, so one Go command emitted both readings
+     at once; the env branch is corrected to match Go's own config branch. The diagnostic's two
+     sentences, slots, declaration order, level, stream and machine-mode carriage are all unchanged.
+
+226. **§24.3's within-phase ordering is corrected for the value phase (§24.3).** Item 224 closed with
+     "within one phase, ordering is unchanged: command-line order, first recorded reported first",
+     and the value phase does not work that way in any of the three. A value is **coerced as its
+     token is consumed**, while `validate` callbacks run in a **later pass over the command's
+     declared flags** -- Python's step 5.6, Go's `Validate` loop over `cmd.flags`, TypeScript's
+     matching loop in `validateAndBuildKwargs` -- so a coercion failure is reported before a
+     `validate` refusal regardless of argv order *and* regardless of declaration order. The corrected
+     rule is the observed one: **command-line order in every phase but the value phase, which reports
+     every coercion failure before any `validate` refusal**; at-prefix resolution rides token
+     consumption and therefore orders with coercion. The three implementations agree with each other
+     -- the sentence was wrong about behaviour nobody disputed -- and the alternative repair, moving
+     `validate` into token consumption three times, is worse on its own terms: it would fire a
+     callback on a value a later token, an env var or a config key had not yet supplied. The phase
+     order itself (`election -> scope -> value -> presence`) is untouched and no sentence changes.
+
+227. **`errScopedPositional` is Go-excluded (§12.13).** Go's `Choice(name, help string, flags
+     ...Flag)` takes flags and nothing else, and an `Arg` is not a `Flag` -- so a positional declared
+     inside a choice scope is a **compile** error in Go and the refused state is unconstructable
+     rather than merely unraised. That is item 213's exact class (and item 167's before it), and it
+     gets item 213's exact treatment: an `excluded:` entry in `check_error_parity.py` carrying the
+     rationale, never a parity defect. The template stays pinned and asserted in Python, which
+     reaches the state through an `Arg` in the choice class's body, and in TypeScript, which reaches
+     it through a widened flags map; those two are the covering inputs, and item 228 authors the
+     case-schema key that spells them.
+
+228. **The two case-schema keys authored beyond item 207 are ratified, and Python's `sub_flag` gains
+     two keywords (§13, §24.3).** Item 207 authored `conformance/schema.json`'s selector surface
+     against a rule it stated itself -- a schema that cannot spell the refused declaration cannot
+     test the refusal -- and the corpus found two registration templates still unspellable under it.
+     `$defs/choice` therefore carries two keys the box did not list, each existing **solely** as a
+     covering input and neither being a declaration a consumer would write in earnest:
+     **`presence`** (`{"enum": ["required", "optional"]}`, the member flag's own presence, the input
+     `errMemberFlagPresence` is asserted against; Python is excluded from that template per item 213,
+     so a case using the key restricts its targets) and **`args`** (an array of `$defs/arg`, the
+     input `errScopedPositional` is asserted against; Go cannot express the state at all per item
+     227, so a case using the key likewise restricts its targets). Ratified as the item-207 rationale
+     extended one step, not as new surface. Recorded with them, because the corpus proved it the same
+     way: §24.3's "unaffected" list claims a scoped flag's env, config and compound behaviour is
+     untouched by the construct, and one of the three surfaces could not **declare** two of those
+     rows -- Python's `sub_flag(...)` took no `env_separator` and no `conflict_mode`, while Go's
+     scoped flags are ordinary `Flag` values with the full option set and TypeScript's are ordinary
+     flag literals. Both keywords are added to `sub_flag(...)` with the command-level `flag(...)`
+     spelling and semantics unchanged: no new rule, no new template, and no behaviour that was not
+     already pinned -- only the ability to write it down in the third surface.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -7620,13 +7755,34 @@ refusal, an at-prefix failure -- on a command that declares no selector exactly 
 The alternative reading, that a command with no selector keeps reporting problems in argv order,
 would make the same two mistakes on the same command line report differently depending on a
 declaration the user cannot see, which is the outcome the phase order exists to prevent. Within one
-phase, ordering is unchanged: command-line order, first recorded reported first.
+phase, ordering is ~~unchanged: command-line order, first recorded reported first~~ *(amended
+2026-08-15, corpus round, §18.20 item 226)* **command-line order in every phase but the value phase,
+which reports every coercion failure before any `validate` refusal**.
 
 This **changes bytes on existing selector-free commands**, and it is a deliberate consequence rather
 than a side effect: `myapp run --count abc --nosuch` reported the coercion failure on `--count`
 before this round wherever the parser coerced inline, and reports `unknown flag '--nosuch'` after
 it. It is user-visible, so each implementation names it in its own changelog; nothing about which
 *sentence* is produced changes, only which of two true refusals is the one printed.
+
+> **Correction (2026-08-15, corpus round, §18.20 item 226): the value phase has an internal order,
+> and it is not command-line order.** The struck words said the value phase reports in argv order,
+> first recorded first; all three implementations falsify that, and they falsify it identically. A
+> value is **coerced as its token is consumed**, and `validate` callbacks run in a **later pass over
+> the command's declared flags** -- Python's step 5.6, Go's `Validate` loop over `cmd.flags`,
+> TypeScript's matching loop in `validateAndBuildKwargs`. So `myapp run --checked bad --count abc`
+> and `myapp run --count abc --checked bad` both report the coercion failure on `--count`, whatever
+> the argv order and whatever the declaration order, and no reordering of either produces the
+> `validate` refusal first. At-prefix resolution rides the same token consumption, so it orders with
+> coercion rather than against it.
+>
+> The document follows the three implementations, which agree with each other: the sentence was
+> simply wrong about a behaviour that was never in dispute, and relocating `validate` into token
+> consumption in three places to rescue it would have been a change made for the document's
+> convenience -- and a worse one, because `validate` running per token would fire it on a flag whose
+> final value a later token, an env var or a config key had not yet supplied. Nothing about the
+> **phase** order (§24.3's pinned `election -> scope -> value -> presence`) changes, no sentence
+> changes, and every other phase orders exactly as the struck words said.
 
 **Tokenization cannot wait for an election.** Whether `--target` consumes the next argv element is
 decided before any choice is elected, which is why sibling scopes may reuse a name only with an
@@ -7642,6 +7798,14 @@ position-independent pre-scan (it runs before the command's declaration is consu
 boundary, passthrough commands (they declare nothing), `--hermetic`, `--config`, at-prefix
 resolution on a scoped string flag when it is supplied, negation of a scoped bool, and repeatable
 and dict sub-flags.
+
+**That list is a claim about behaviour, and behaviour has to be declarable to be verified** *(added
+2026-08-15, corpus round, §18.20 item 228)*. Building the corpus against it found the env and config
+rows unwritable in one target: Python's `sub_flag(...)` took no `env_separator` and no
+`conflict_mode`, while Go's scoped flags are ordinary `Flag` values carrying the full option set and
+TypeScript's are ordinary flag literals. The two keywords are added to `sub_flag(...)` with the
+command-level `flag(...)` spelling and semantics unchanged; the list above is what it always said,
+and now every row of it can be declared in all three surfaces.
 
 ### 24.4 Member spelling
 
@@ -7732,9 +7896,11 @@ written in the declaration (the flag sits in a scope), the framework evaluates t
 the same way every run, and the same command line plus the same environment always produces the
 same values. What is refused is the *silent* part, and it is refused by surfacing:
 
-**Every skipped binding is named under `--verbose`**, one line per binding, in declaration order,
-at debug level -- so it is hidden by default, shown by `--verbose`, and carried in machine mode's
-`diagnostics` at level `debug` (§19.2) whatever the human stream did:
+~~**Every skipped binding is named under `--verbose`**~~ *(amended 2026-08-15, corpus round, §18.20
+item 225)* **Every skipped binding that carried a value is named under `--verbose`**, one line per
+such binding, in declaration order, at debug level -- so it is hidden by default, shown by
+`--verbose`, and carried in machine mode's `diagnostics` at level `debug` (§19.2) whatever the human
+stream did:
 
 ```
 not consulted: env var '<VAR>' binds flag '--<x>' under '<scope path>', which was not elected
@@ -7758,6 +7924,21 @@ the run continues.
 > convenience. Machine mode is unchanged and was already stated correctly one paragraph up: the
 > same lines ride the envelope's `diagnostics` at level `debug` (§19.2) whatever the human stream
 > did.
+
+> **Correction (2026-08-15, corpus round, §18.20 item 225): the enumeration is over bindings that
+> carried a value, never over declarations.** The struck words read as an enumeration over the
+> *declaration*: one line for every scoped flag that declares an `env=` or a config key, elected or
+> not. The rule is the other one. A line is emitted only where the binding **had something to
+> deliver** -- the environment variable is actually set in this process's environment, or the key is
+> actually present in the loaded config document -- and a declared-but-unset binding is silent,
+> because nothing was skipped. `not consulted:` names a value that existed and was not read; over
+> declarations it would report the absence of a value as the suppression of one, and `--verbose` on a
+> command with a large scope tree would print a line per declaration on every run, drowning the lines
+> that name a real cause. Python and TypeScript already read it this way and agree with each other;
+> Go was internally inconsistent -- its config branch tested the key's presence and its env branch
+> fired on the declaration -- and its env branch is corrected to match its own config branch. Nothing
+> else about the diagnostic moves: same two sentences, same slots, same declaration order among the
+> lines that do appear, same level, same stream, same machine-mode carriage.
 
 **An election from a non-CLI source names itself in every message it causes.** A required sub-flag
 missing under a scope elected by an environment variable, or a typed flag refused because an
