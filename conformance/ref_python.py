@@ -469,6 +469,59 @@ def _emit_flag_set(fs_def: dict, indent: str = "") -> str:
     )
 
 
+def _emit_constraint_member(m: object) -> str:
+    """One `Member(...)` record, or a bare name passed straight through.
+
+    A string entry is emitted as a bare Python string on purpose: it is the
+    covering input for `errConstraintMemberNotRecord`, which Python and
+    TypeScript can reach and Go cannot.
+    """
+    if isinstance(m, str):
+        return repr(m)
+    parts = [repr(m["name"])]
+    if m.get("when") is not None:
+        parts.append(f"when={m['when']!r}")
+    return f"strictcli.Member({', '.join(parts)})"
+
+
+def _emit_constraint(c: dict) -> str:
+    """One constraint expression from the case encoding (contract §26).
+
+    The case encoding mirrors the SCHEMA encoding of §25.7's rewritten
+    catalogue -- `type`, `name`, and either `members` or the dependency
+    families' own operands -- minus the member `kind`, which registration
+    resolves rather than the declaration carrying.
+    """
+    t = c["type"]
+    if t in ("at_least_one", "all_or_none"):
+        ctor = "AtLeastOne" if t == "at_least_one" else "AllOrNone"
+        members = ", ".join(_emit_constraint_member(m) for m in c["members"])
+        return f"strictcli.{ctor}({c['name']!r}, [{members}])"
+    if t == "requires":
+        return (
+            f"strictcli.Requires({c['name']!r}, flag={c['flag']!r}, "
+            f"depends_on={c['depends_on']!r})"
+        )
+    if t == "implies":
+        val = "True" if c["value"] else "False"
+        return (
+            f"strictcli.Implies({c['name']!r}, flag={c['flag']!r}, "
+            f"implies={c['implies']!r}, value={val})"
+        )
+    raise ValueError(f"unknown constraint type {t!r}")
+
+
+def _constraint_exprs(cmd_def: dict) -> list[str]:
+    """The `constraints` case key, in lockstep with the Go and TS harnesses.
+
+    The pre-§26 `dependencies` key is gone with the construct it carried; a
+    corpus case still using it declares no constraint at all.
+    """
+    if not cmd_def.get("constraints"):
+        return []
+    return [_emit_constraint(c) for c in cmd_def["constraints"]]
+
+
 def _collect_params(cmd_def: dict, global_flags: list[dict] | None = None) -> list[str]:
     """Collect all parameter names for a command handler."""
     params = []
@@ -872,22 +925,9 @@ def _emit_command_registration(
                 lines.append(f"{te},")
             lines.append(f"{indent}    ],")
 
-        if cmd_def.get("dependencies"):
-            dep_exprs = []
-            for dep in cmd_def["dependencies"]:
-                if dep["type"] == "co_required":
-                    flags_repr = repr(dep["flags"])
-                    dep_exprs.append(f"strictcli.CoRequired(flags={flags_repr})")
-                elif dep["type"] == "requires":
-                    dep_exprs.append(
-                        f"strictcli.Requires(flag={dep['flag']!r}, depends_on={dep['depends_on']!r})"
-                    )
-                elif dep["type"] == "implies":
-                    val = "True" if dep["value"] else "False"
-                    dep_exprs.append(
-                        f"strictcli.Implies(flag={dep['flag']!r}, implies={dep['implies']!r}, value={val})"
-                    )
-            lines.append(f"{indent}    dependencies=[{', '.join(dep_exprs)}],")
+        constraint_exprs = _constraint_exprs(cmd_def)
+        if constraint_exprs:
+            lines.append(f"{indent}    constraints=[{', '.join(constraint_exprs)}],")
 
         if cmd_def.get("tags"):
             tag_set = ", ".join(repr(t) for t in cmd_def["tags"])
@@ -959,23 +999,12 @@ def _emit_command_registration(
             decorator_parts.append(f"{te},")
         decorator_parts.append(f"{indent}    ],")
 
-    # dependencies
-    if cmd_def.get("dependencies"):
-        dep_exprs = []
-        for dep in cmd_def["dependencies"]:
-            if dep["type"] == "co_required":
-                flags_repr = repr(dep["flags"])
-                dep_exprs.append(f"strictcli.CoRequired(flags={flags_repr})")
-            elif dep["type"] == "requires":
-                dep_exprs.append(
-                    f"strictcli.Requires(flag={dep['flag']!r}, depends_on={dep['depends_on']!r})"
-                )
-            elif dep["type"] == "implies":
-                val = "True" if dep["value"] else "False"
-                dep_exprs.append(
-                    f"strictcli.Implies(flag={dep['flag']!r}, implies={dep['implies']!r}, value={val})"
-                )
-        decorator_parts.append(f"{indent}    dependencies=[{', '.join(dep_exprs)}],")
+    # constraints (contract §26)
+    constraint_exprs = _constraint_exprs(cmd_def)
+    if constraint_exprs:
+        decorator_parts.append(
+            f"{indent}    constraints=[{', '.join(constraint_exprs)}],"
+        )
 
     # tags
     if cmd_def.get("tags"):
