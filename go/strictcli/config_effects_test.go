@@ -39,7 +39,7 @@ func TestConfigSetDryRunChangesNothing(t *testing.T) {
 	}
 
 	app := dryConfigApp("dryset")
-	r := app.Test([]string{"--dry-run", "config", "set", "opt", "after"})
+	r := app.Test([]string{"--dry-run", "config", "set", "opt", "--value", "after"})
 	if r.ExitCode != 0 {
 		t.Fatalf("exit=%d stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -60,7 +60,7 @@ func TestConfigSetDryRunPreviewsTheMissingDirectory(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 
 	app := dryConfigApp("drymk")
-	r := app.Test([]string{"--dry-run", "config", "set", "opt", "v"})
+	r := app.Test([]string{"--dry-run", "config", "set", "opt", "--value", "v"})
 	if r.ExitCode != 0 {
 		t.Fatalf("exit=%d stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -86,7 +86,7 @@ func TestConfigSetTomlDryRunChangesNothing(t *testing.T) {
 	}
 
 	app := dryConfigApp("drytoml", WithConfigFormat("toml"))
-	r := app.Test([]string{"--dry-run", "config", "set", "opt", "after"})
+	r := app.Test([]string{"--dry-run", "config", "set", "opt", "--value", "after"})
 	if r.ExitCode != 0 {
 		t.Fatalf("exit=%d stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -161,7 +161,7 @@ func TestConfigCommandsStillMutateInLiveMode(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("config init did not write the file: %v", err)
 	}
-	if r := app.Test([]string{"config", "set", "opt", "v"}); r.ExitCode != 0 {
+	if r := app.Test([]string{"config", "set", "opt", "--value", "v"}); r.ExitCode != 0 {
 		t.Fatalf("config set: exit=%d stderr=%q", r.ExitCode, r.Stderr)
 	}
 	data, _ := os.ReadFile(path)

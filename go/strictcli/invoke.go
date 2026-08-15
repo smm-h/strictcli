@@ -198,6 +198,9 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	// when validateAndBuildKwargs applies defaults.
 	store := newSourcedStore()
 	positionals := map[string]interface{}{}
+	// The properties this call CLEARED, spelled `null` on the property's own
+	// key at this door (§27.6).
+	unsets := map[string]bool{}
 
 	// A selector's value on the programmatic front door is the same record a
 	// handler receives -- Elect(<choice>, Fields{...}) -- or, at the machine
@@ -304,6 +307,18 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 		if !ok {
 			continue
 		}
+		// The one stated carve-out from "null is legal for nothing" (§24.11's
+		// amendment, §27.6): a NULLABLE PROPERTY is the one declaration for
+		// which null is a VALUE -- it means clear this property on the
+		// resource, which is a write. It delivers absence, reports Provided()
+		// true, and is what ctx.Unset answers true for. The carve-out is a
+		// property of the DECLARATION and never of the door: a null anywhere
+		// else is refused by the rule below, unchanged.
+		if raw == nil && f.Nullable {
+			unsets[f.Name] = true
+			store.set(f.Name, nil, SourceCLI)
+			continue
+		}
 		checked, errStr := checkPreTypedValue(f, raw)
 		if errStr != "" {
 			return invokeResult{exitCode: 1, err: errStr}
@@ -337,7 +352,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 
 	// Run validation and build final kwargs
 	var noStdin *string
-	validatedKwargs, postGlobalValues, sources, errStr := validateAndBuildKwargs(cmd, store, preTypedPositionals(positionals), props.globalNames, a.infraRoots, est, cliByFlag, amb, &noStdin)
+	validatedKwargs, postGlobalValues, sources, writes, errStr := validateAndBuildKwargs(cmd, store, preTypedPositionals(positionals), props.globalNames, a.infraRoots, est, cliByFlag, amb, &noStdin, unsets)
 	if errStr != "" {
 		return invokeResult{exitCode: 1, err: errStr}
 	}
@@ -378,6 +393,8 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 		a.armEffects(cmd, commandPath, false, nil))
 	ctx.commandName = cmd.Name
 	ctx.payloadSchema = cmd.PayloadSchema
+	ctx.writes = writes
+	ctx.unsets = unsets
 
 	// Call the handler under the runtime seal.
 	var outcome Outcome

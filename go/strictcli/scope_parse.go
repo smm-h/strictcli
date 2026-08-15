@@ -494,6 +494,10 @@ const (
 	occValue   occKind = iota // `--x v` or `--x=v`
 	occBool                   // `--x` on a bool flag
 	occNegated                // `--no-x`
+	// occUnset is `--unset-x` on a nullable property of an update command
+	// (§27.6). It supplies the property -- clearing is writing -- and delivers
+	// absence with Provided() true.
+	occUnset
 )
 
 // occurrence is one command-line mention of a flag, in command-line order.

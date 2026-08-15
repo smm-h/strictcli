@@ -2842,7 +2842,7 @@ func TestConfigSetCreatesFile(t *testing.T) {
 	), WithEffect(EffectReadOnly))
 
 	// Run config set
-	r := app.Test([]string{"config", "set", "theme", "dark"})
+	r := app.Test([]string{"config", "set", "theme", "--value", "dark"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -3990,7 +3990,7 @@ func TestConfigSetWritesToml(t *testing.T) {
 		StringFlag("name", "a name", Default("")),
 	), WithEffect(EffectReadOnly))
 
-	r := app.Test([]string{"config", "set", "name", "alice"})
+	r := app.Test([]string{"config", "set", "name", "--value", "alice"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4029,15 +4029,15 @@ func TestConfigSetWritesTypedValues(t *testing.T) {
 	), WithEffect(EffectReadOnly))
 
 	// Set each value via config set
-	r := app.Test([]string{"config", "set", "count", "42"})
+	r := app.Test([]string{"config", "set", "count", "--value", "42"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set count: expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
-	r = app.Test([]string{"config", "set", "loud", "true"})
+	r = app.Test([]string{"config", "set", "loud", "--value", "true"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set loud: expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
-	r = app.Test([]string{"config", "set", "rate", "3.14"})
+	r = app.Test([]string{"config", "set", "rate", "--value", "3.14"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set rate: expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4096,7 +4096,7 @@ func TestConfigSetRejectsUnknownKey(t *testing.T) {
 	), WithEffect(EffectReadOnly))
 
 	// Setting a key that doesn't correspond to any registered flag should fail
-	r := app.Test([]string{"config", "set", "nonexistent", "value"})
+	r := app.Test([]string{"config", "set", "nonexistent", "--value", "value"})
 	if r.ExitCode == 0 {
 		t.Errorf("expected nonzero exit code for unknown config key, got 0")
 	}
@@ -4117,28 +4117,28 @@ func TestConfigSetTypedBool(t *testing.T) {
 	path := filepath.Join(tmpDir, "boolapp", "config.json")
 
 	// "true" -> bool true
-	r := app.Test([]string{"config", "set", "debug", "true"})
+	r := app.Test([]string{"config", "set", "debug", "--value", "true"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set debug true: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
 	assertConfigValue(t, path, "debug", true)
 
 	// "yes" -> bool true
-	r = app.Test([]string{"config", "set", "debug", "yes"})
+	r = app.Test([]string{"config", "set", "debug", "--value", "yes"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set debug yes: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
 	assertConfigValue(t, path, "debug", true)
 
 	// "1" -> bool true
-	r = app.Test([]string{"config", "set", "debug", "1"})
+	r = app.Test([]string{"config", "set", "debug", "--value", "1"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set debug 1: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
 	assertConfigValue(t, path, "debug", true)
 
 	// "false" -> bool false
-	r = app.Test([]string{"config", "set", "debug", "false"})
+	r = app.Test([]string{"config", "set", "debug", "--value", "false"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set debug false: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4156,7 +4156,7 @@ func TestConfigSetTypedInt(t *testing.T) {
 
 	path := filepath.Join(tmpDir, "intapp", "config.json")
 
-	r := app.Test([]string{"config", "set", "count", "42"})
+	r := app.Test([]string{"config", "set", "count", "--value", "42"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set count 42: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4175,14 +4175,14 @@ func TestConfigSetTypedFloat(t *testing.T) {
 	path := filepath.Join(tmpDir, "floatapp", "config.json")
 
 	// "3.14" -> float64(3.14)
-	r := app.Test([]string{"config", "set", "rate", "3.14"})
+	r := app.Test([]string{"config", "set", "rate", "--value", "3.14"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set rate 3.14: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
 	assertConfigValue(t, path, "rate", float64(3.14))
 
 	// "3" -> float64(3) (stored as 3.0 in JSON)
-	r = app.Test([]string{"config", "set", "rate", "3"})
+	r = app.Test([]string{"config", "set", "rate", "--value", "3"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set rate 3: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4201,7 +4201,7 @@ func TestConfigSetBadValue(t *testing.T) {
 	), WithEffect(EffectReadOnly))
 
 	// Bad int
-	r := app.Test([]string{"config", "set", "count", "abc"})
+	r := app.Test([]string{"config", "set", "count", "--value", "abc"})
 	if r.ExitCode == 0 {
 		t.Errorf("config set count abc: expected nonzero exit")
 	}
@@ -4210,7 +4210,7 @@ func TestConfigSetBadValue(t *testing.T) {
 	}
 
 	// Bad bool
-	r = app.Test([]string{"config", "set", "debug", "maybe"})
+	r = app.Test([]string{"config", "set", "debug", "--value", "maybe"})
 	if r.ExitCode == 0 {
 		t.Errorf("config set debug maybe: expected nonzero exit")
 	}
@@ -4219,7 +4219,7 @@ func TestConfigSetBadValue(t *testing.T) {
 	}
 
 	// Bad float
-	r = app.Test([]string{"config", "set", "rate", "xyz"})
+	r = app.Test([]string{"config", "set", "rate", "--value", "xyz"})
 	if r.ExitCode == 0 {
 		t.Errorf("config set rate xyz: expected nonzero exit")
 	}
@@ -4237,7 +4237,7 @@ func TestConfigSetUnknownKeyError(t *testing.T) {
 		StringFlag("name", "a name", Default("")),
 	), WithEffect(EffectReadOnly))
 
-	r := app.Test([]string{"config", "set", "xyz", "value"})
+	r := app.Test([]string{"config", "set", "xyz", "--value", "value"})
 	if r.ExitCode == 0 {
 		t.Errorf("expected nonzero exit for unknown key")
 	}
@@ -4269,10 +4269,10 @@ func TestConfigSetRoundTripTyped(t *testing.T) {
 
 	// Set typed values via config set
 	for _, cmd := range [][]string{
-		{"config", "set", "count", "7"},
-		{"config", "set", "loud", "true"},
-		{"config", "set", "rate", "2.5"},
-		{"config", "set", "name", "hello"},
+		{"config", "set", "count", "--value", "7"},
+		{"config", "set", "loud", "--value", "true"},
+		{"config", "set", "rate", "--value", "2.5"},
+		{"config", "set", "name", "--value", "hello"},
 	} {
 		app := buildApp()
 		r := app.Test(cmd)
@@ -4574,7 +4574,7 @@ func TestTomlConfigSetRoundTrip(t *testing.T) {
 	), WithEffect(EffectReadOnly))
 
 	// Set a value via config set
-	r := app.Test([]string{"config", "set", "name", "bob"})
+	r := app.Test([]string{"config", "set", "name", "--value", "bob"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4623,13 +4623,13 @@ func TestTomlConfigSetOverwrite(t *testing.T) {
 	), WithEffect(EffectReadOnly))
 
 	// Set initial value
-	r := app.Test([]string{"config", "set", "color", "red"})
+	r := app.Test([]string{"config", "set", "color", "--value", "red"})
 	if r.ExitCode != 0 {
 		t.Fatalf("first config set failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
 
 	// Overwrite with new value
-	r = app.Test([]string{"config", "set", "color", "blue"})
+	r = app.Test([]string{"config", "set", "color", "--value", "blue"})
 	if r.ExitCode != 0 {
 		t.Fatalf("second config set failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4679,7 +4679,7 @@ func TestTomlConfigSetWritesTypedValues(t *testing.T) {
 		{"rate", "3.14"},
 		{"name", "alice"},
 	} {
-		r := app.Test([]string{"config", "set", tc.key, tc.val})
+		r := app.Test([]string{"config", "set", tc.key, "--value", tc.val})
 		if r.ExitCode != 0 {
 			t.Fatalf("config set %s %s failed: exit %d, stderr=%q", tc.key, tc.val, r.ExitCode, r.Stderr)
 		}
@@ -4730,7 +4730,7 @@ func TestConfigSetNegativeInt(t *testing.T) {
 
 	path := filepath.Join(tmpDir, "negintapp", "config.json")
 
-	r := app.Test([]string{"config", "set", "count", "-7"})
+	r := app.Test([]string{"config", "set", "count", "--value", "-7"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set count -7: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -4748,7 +4748,7 @@ func TestConfigSetNegativeFloat(t *testing.T) {
 
 	path := filepath.Join(tmpDir, "negfloatapp", "config.json")
 
-	r := app.Test([]string{"config", "set", "rate", "-3.14"})
+	r := app.Test([]string{"config", "set", "rate", "--value", "-3.14"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set rate -3.14: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -5857,7 +5857,7 @@ func TestConfigSetRepeatableString(t *testing.T) {
 	defer cleanup()
 
 	app := configSetApp()
-	r := app.Test([]string{"config", "set", "tags", "a,b,c"})
+	r := app.Test([]string{"config", "set", "tags", "--value", "a,b,c"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -5885,7 +5885,7 @@ func TestConfigSetRepeatableInt(t *testing.T) {
 	defer cleanup()
 
 	app := configSetApp()
-	r := app.Test([]string{"config", "set", "counts", "1,2,3"})
+	r := app.Test([]string{"config", "set", "counts", "--value", "1,2,3"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -5913,7 +5913,7 @@ func TestConfigSetRepeatableFloat(t *testing.T) {
 	defer cleanup()
 
 	app := configSetApp()
-	r := app.Test([]string{"config", "set", "rates", "1.5,2.5,3.0"})
+	r := app.Test([]string{"config", "set", "rates", "--value", "1.5,2.5,3.0"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -5941,7 +5941,7 @@ func TestConfigSetEscapedComma(t *testing.T) {
 	defer cleanup()
 
 	app := configSetApp()
-	r := app.Test([]string{"config", "set", "tags", `a\,b,c`})
+	r := app.Test([]string{"config", "set", "tags", "--value", `a\,b,c`})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -5969,7 +5969,7 @@ func TestConfigSetRepeatableUniqueValid(t *testing.T) {
 	defer cleanup()
 
 	app := configSetApp()
-	r := app.Test([]string{"config", "set", "ids", "1,2,3"})
+	r := app.Test([]string{"config", "set", "ids", "--value", "1,2,3"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -5980,7 +5980,7 @@ func TestConfigSetRepeatableUniqueDuplicate(t *testing.T) {
 	defer cleanup()
 
 	app := configSetApp()
-	r := app.Test([]string{"config", "set", "ids", "1,2,1"})
+	r := app.Test([]string{"config", "set", "ids", "--value", "1,2,1"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
@@ -5994,7 +5994,7 @@ func TestConfigSetRoundTripJSON(t *testing.T) {
 	defer cleanup()
 
 	app := configSetApp()
-	r := app.Test([]string{"config", "set", "tags", "x,y"})
+	r := app.Test([]string{"config", "set", "tags", "--value", "x,y"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -6039,7 +6039,7 @@ func TestConfigSetRoundTripTOML(t *testing.T) {
 		StringFlag("tags", "tags", Repeatable(), Unique(false), Default([]interface{}{})),
 	), WithEffect(EffectReadOnly))
 
-	r := app.Test([]string{"config", "set", "tags", "a,b"})
+	r := app.Test([]string{"config", "set", "tags", "--value", "a,b"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set failed: exit %d, stderr=%q", r.ExitCode, r.Stderr)
 	}
@@ -6146,7 +6146,13 @@ func TestConfigSetDefaultNonexistentKeyError(t *testing.T) {
 	}
 }
 
-func TestConfigSetNoArgsError(t *testing.T) {
+// The three guards below are gone as GUARDS: `config set`'s write is an
+// exactly-one selection over a value, a clear and a reset to default (contract
+// §27.1, §18.33 item 304), so electing none and electing two are refused by the
+// framework's own selector machinery, in its own sentences, before the handler
+// runs. What used to be three hand-rolled checks is now the declaration.
+
+func TestConfigSetElectingNothingIsRefused(t *testing.T) {
 	_, cleanup := configTestSetup(t)
 	defer cleanup()
 
@@ -6155,40 +6161,40 @@ func TestConfigSetNoArgsError(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "config set: provide a value, --clear, or --default") {
-		t.Fatalf("expected provide-a-value error, got %q", r.Stderr)
+	if !strings.Contains(r.Stderr, "one of --value, --clear, --default is required") {
+		t.Fatalf("expected the unsatisfied-selector refusal, got %q", r.Stderr)
 	}
 }
 
-func TestConfigSetValueWithClearError(t *testing.T) {
+func TestConfigSetValueWithClearIsRefused(t *testing.T) {
 	_, cleanup := configTestSetup(t)
 	defer cleanup()
 
 	app := configSetApp()
-	r := app.Test([]string{"config", "set", "tags", "a,b", "--clear"})
+	r := app.Test([]string{"config", "set", "tags", "--value", "a,b", "--clear"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "config set: cannot provide a value with --clear") {
-		t.Fatalf("expected value-with-clear error, got %q", r.Stderr)
+	if !strings.Contains(r.Stderr, "--value and --clear are mutually exclusive") {
+		t.Fatalf("expected the two-members refusal, got %q", r.Stderr)
 	}
 }
 
-func TestConfigSetValueWithDefaultError(t *testing.T) {
+func TestConfigSetValueWithDefaultIsRefused(t *testing.T) {
 	_, cleanup := configTestSetup(t)
 	defer cleanup()
 
 	app := configSetApp()
-	r := app.Test([]string{"config", "set", "name", "alice", "--default"})
+	r := app.Test([]string{"config", "set", "name", "--value", "alice", "--default"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "config set: cannot provide a value with --default") {
-		t.Fatalf("expected value-with-default error, got %q", r.Stderr)
+	if !strings.Contains(r.Stderr, "--value and --default are mutually exclusive") {
+		t.Fatalf("expected the two-members refusal, got %q", r.Stderr)
 	}
 }
 
-func TestConfigSetClearAndDefaultError(t *testing.T) {
+func TestConfigSetClearAndDefaultIsRefused(t *testing.T) {
 	_, cleanup := configTestSetup(t)
 	defer cleanup()
 
@@ -6197,8 +6203,8 @@ func TestConfigSetClearAndDefaultError(t *testing.T) {
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	if !strings.Contains(r.Stderr, "config set: --clear and --default are mutually exclusive") {
-		t.Fatalf("expected mutex error, got %q", r.Stderr)
+	if !strings.Contains(r.Stderr, "--clear and --default are mutually exclusive") {
+		t.Fatalf("expected the two-members refusal, got %q", r.Stderr)
 	}
 }
 

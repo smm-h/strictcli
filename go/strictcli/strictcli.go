@@ -136,6 +136,13 @@ type Flag struct {
 	Unique       bool
 	EnvSeparator string
 
+	// Nullable declares that this property of an update command can be CLEARED
+	// (contract §27.6), which mints the framework-owned `--unset-<name>`. It is
+	// legal only on a property of an update: nullable on anything else is a
+	// registration-time hard error. An unset property delivers absence and
+	// reports Provided() true; ctx.Unset(name) is what tells the two apart.
+	Nullable bool
+
 	// ConnectionURL marks this flag as a connection-URL (URL-class) flag: a flag
 	// whose value is a connection URL (e.g. a database DSN). A URL-class flag MUST
 	// bind to a declared connection env (ConnectionEnv), enforced at registration.
@@ -299,9 +306,17 @@ type Command struct {
 	// (contract §19.6) -- a SQL dump, an SVG, a hash-verified JSON document.
 	// In machine mode the envelope moves to stderr so the artifact's bytes are
 	// untouched. Outside machine mode the declaration changes nothing at all.
-	OwnsStdout   bool
-	Grants       []Grant
-	Forwarding   *Forwarding
+	OwnsStdout bool
+	Grants     []Grant
+	Forwarding *Forwarding
+	// updateOf is the command's update declaration (contract §27.2): the
+	// resource it changes, the write mode, and the names of the declarations
+	// that identify the instance and the ones that carry what changes. nil on
+	// every command that declares no update. Declared through WithUpdateOf,
+	// which is the only spelling -- a half-declared record (a write mode
+	// without an update, or the reverse) is unrepresentable rather than
+	// guarded.
+	updateOf    *updateDecl
 	flags       []Flag
 	args        []Arg
 	flagSets    []FlagSet
@@ -2563,6 +2578,16 @@ func (a *App) newDispatchContext(stdout, stderr io.Writer, pr parseResult, reser
 		reserved, a.armEffects(pr.cmd, pr.cmdPath, reserved.dryRun, stdout))
 	ctx.commandName = pr.cmd.Name
 	ctx.payloadSchema = pr.cmd.PayloadSchema
+	ctx.writes = pr.writes
+	ctx.unsets = pr.unsets
+	// The write set's human rendering: ONE unnumbered line between the log's
+	// header and its first effect, in dry mode only (contract §3.2's amendment,
+	// §27.5). It takes no sequence number -- the counter is contiguous over
+	// rendered EFFECTS, and a write set is not one -- and a live run's write set
+	// rides the envelope instead.
+	if pr.writes != nil && reserved.dryRun && a.effects != nil {
+		a.effects.writeSetLine = pr.writes.logLine()
+	}
 	// Every conditional binding this run did not consult is NAMED, one line per
 	// binding, in declaration order, on the debug channel: hidden by default,
 	// shown by --verbose, and carried in machine mode's diagnostics at level
@@ -2641,8 +2666,11 @@ func (a *App) emitPreDispatchEnvelope(stdout io.Writer) {
 }
 
 // interfaceVersion is the envelope contract's own version (§19.2). Changed only
-// by a later amendment to that section.
-const interfaceVersion = 1
+// by a later amendment to that section -- and §18.33 item 313 is one: the key
+// set grew a `writes` member that is never absent, so a consumer validating the
+// envelope's key set against version 1 must be able to tell which document it
+// holds.
+const interfaceVersion = 2
 
 // goPanicExitStatus is the exit status the Go runtime gives a process whose
 // panic was never recovered. It is the status §3.5 promises an aborted
@@ -2654,16 +2682,21 @@ const goPanicExitStatus = 2
 // the table's order in that section: optional and for readability only, since
 // correctness is decided by structural comparison.
 type envelope struct {
-	InterfaceVersion int                      `json:"interface_version"`
-	App              string                   `json:"app"`
-	AppVersion       string                   `json:"app_version"`
-	Command          *string                  `json:"command"`
-	ExitCode         int                      `json:"exit_code"`
-	Payload          interface{}              `json:"payload"`
-	DryRun           bool                     `json:"dry_run"`
-	Preview          []map[string]interface{} `json:"preview"`
-	PreviewError     *previewError            `json:"preview_error"`
-	Diagnostics      []diagnosticRecord       `json:"diagnostics"`
+	InterfaceVersion int         `json:"interface_version"`
+	App              string      `json:"app"`
+	AppVersion       string      `json:"app_version"`
+	Command          *string     `json:"command"`
+	ExitCode         int         `json:"exit_code"`
+	Payload          interface{} `json:"payload"`
+	DryRun           bool        `json:"dry_run"`
+	// Writes is the write set of a command declaring update_of (§27.5), and
+	// null on every command that declares none. NEVER absent, and populated in
+	// BOTH modes, for preview's reason: it is a function of the declaration and
+	// the invocation, not of the mode.
+	Writes       *writesEnvelope          `json:"writes"`
+	Preview      []map[string]interface{} `json:"preview"`
+	PreviewError *previewError            `json:"preview_error"`
+	Diagnostics  []diagnosticRecord       `json:"diagnostics"`
 }
 
 // previewError is the terminal condition of a preview that did not finish
@@ -2803,6 +2836,9 @@ func (a *App) emitEnvelope(ctx *Context, stdout io.Writer, command *string, exit
 		if ctx.payloadSet {
 			env.Payload = ctx.payload
 		}
+		if ctx.writes != nil {
+			env.Writes = ctx.writes.envelopeMember()
+		}
 		if len(ctx.diagnostics) > 0 {
 			env.Diagnostics = ctx.diagnostics
 		}
@@ -2935,6 +2971,11 @@ type parseResult struct {
 	dumpSchema      bool
 	serveMCP        bool
 	hermetic        bool // --hermetic active for this invocation
+	// writes is this invocation's write set (contract §27.5), nil on every
+	// command that declares no update. unsets names the properties this
+	// invocation CLEARED, which is what ctx.Unset answers off.
+	writes *updateState
+	unsets map[string]bool
 	// skippedBindings names every conditional env/config binding this run did
 	// NOT consult, because its scope was not elected (contract §24.6). They are
 	// DIAGNOSTICS, emitted on the debug channel once the dispatch context
@@ -3371,7 +3412,7 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 	}
 
-	kwargs, postGlobalValues, cmdSources, err, skipped := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy, a.configConflictMode, preScan.hermetic, a.infraRoots)
+	kwargs, postGlobalValues, cmdSources, writes, unsets, err, skipped := parseCommand(cmd, cmdRest, a.globalFlags, a.configData, &a.stdinConsumedBy, a.configConflictMode, preScan.hermetic, a.infraRoots)
 	if err != "" {
 		parts := append([]string{a.Name}, path...)
 		parts = append(parts, cmd.Name)
@@ -3394,7 +3435,7 @@ func (a *App) doParse(argv []string) parseResult {
 		}
 		cmdSources[k] = v
 	}
-	return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources, hermetic: preScan.hermetic, skippedBindings: skipped}
+	return parseResult{cmd: cmd, cmdPath: resolvedCmdPath, kwargs: kwargs, globalKwargs: globalValues, sources: cmdSources, hermetic: preScan.hermetic, skippedBindings: skipped, writes: writes, unsets: unsets}
 }
 
 // tokensContainHelp checks if --help or -h appears in tokens before any "--"
@@ -3948,6 +3989,12 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	// Store the resolved allFlags on the command for parsing. The constraint
 	// passes below resolve member names against it and against cmd.args.
 	cmd.flags = allFlags
+
+	// The update declaration, in §27.11's pinned eight-step order. It runs
+	// BEFORE the constraint passes because its first step is the
+	// mutating-default ban, which is a fact about the command's own
+	// classification and is independent of every rule declared on top of it.
+	validateUpdate(name, cmd)
 
 	// Validate the constraint set, in §26.8's pinned pass order -- including the
 	// trailing phase carrying the two dependency families' own guards.

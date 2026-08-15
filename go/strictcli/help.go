@@ -576,6 +576,14 @@ func buildFlagSpec(f Flag) string {
 			spec += " <choice>"
 		}
 	}
+	// A nullable property renders its minted clear spelling on the SAME line,
+	// exactly as a negatable bool renders `--x, --no-x` (contract §27.6): one
+	// line, one help text, and one presence part -- §23.8's invariant is
+	// untouched, because the minted spelling is a second way to write to one
+	// declaration rather than a second declaration.
+	if f.Nullable {
+		spec += ", --" + unsetFlagName(f.Name)
+	}
 	return spec
 }
 

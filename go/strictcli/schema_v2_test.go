@@ -400,7 +400,10 @@ func TestAChoiceValueKeepsItsOwnType(t *testing.T) {
 // the same bytes the Python implementation writes for the same declaration.
 func TestTheSelectorEntryIsPublishedNested(t *testing.T) {
 	app := schemaTestApp(t)
-	app.Command("send", "send one notification", noop, WithEffect(EffectMutating),
+	// read_only: the entry under test is the SELECTOR's shape, and the two
+	// declared defaults below would be refused on a mutating command by
+	// §27.1's ban -- at every depth, the scoped one included.
+	app.Command("send", "send one notification", noop, WithEffect(EffectReadOnly),
 		WithFlags(
 			ChoiceFlag("via", "delivery channel", Required(), Short("v"),
 				Choice("email", "deliver the notification as an email message",
@@ -419,7 +422,7 @@ func TestTheSelectorEntryIsPublishedNested(t *testing.T) {
     "send": {
       "name": "send",
       "help": "send one notification",
-      "effect": "mutating",
+      "effect": "read_only",
       "flags": [
         {
           "name": "via",
@@ -559,7 +562,10 @@ func TestAMemberPayloadIsTheFirstScopeEntryNamedValue(t *testing.T) {
 
 func TestADefaultedSelectorPublishesTheFlatMap(t *testing.T) {
 	app := schemaTestApp(t)
-	app.Command("send", "send one", noop, WithEffect(EffectMutating),
+	// read_only: the fact under test is the DEFAULTED SELECTOR's flat map, and
+	// the scoped defaults it is built from are refused on a mutating command by
+	// §27.1's ban.
+	app.Command("send", "send one", noop, WithEffect(EffectReadOnly),
 		WithFlags(ChoiceFlag("via", "delivery channel", Default("webhook"),
 			Choice("webhook", "post to a URL",
 				StringFlag("url", "the endpoint", Default("https://example.test/hook")),
@@ -698,7 +704,7 @@ func TestFlagSetsRecordTheGroupingV1Discarded(t *testing.T) {
 	app.Command("noop", "Does nothing", noop, WithEffect(EffectReadOnly),
 		WithFlags(StringFlag("own", "Its own flag", Optional())),
 		WithFlagSets(FlagSet{Name: "common", Flags: []Flag{
-			BoolFlag("verbose-output", "Say more", Default(false)),
+			BoolFlag("verbose-output", "Say more", Optional()),
 			StringFlag("region", "Where", Optional()),
 		}}))
 	data := dumpJSON(t, app)
@@ -909,7 +915,8 @@ const pythonMinimalDump = `{
       "elect_by": null,
       "unique": false,
       "conflict_mode": null,
-      "negatable": null
+      "negatable": null,
+      "nullable": false
     },
     "arg": {
       "variadic": false,
@@ -925,6 +932,8 @@ const pythonMinimalDump = `{
       "consequential": false,
       "dry_run_supported": true,
       "dry_run_unsupported_reason": null,
+      "update_of": null,
+      "write_mode": null,
       "payload_schema": null,
       "owns_stdout": false,
       "passthrough": false,
@@ -991,17 +1000,22 @@ func TestARichDeclarationMatchesTheSiblingImplementationsBytes(t *testing.T) {
 		WithGrants(Grant{Name: "write", Reason: "writes the release", Kind: "file_write"}),
 		WithConstraints(Requires("region-needs-target", "region", "target")),
 		WithFlags(
-			StringFlag("target", "Where to deploy", Short("t"), Default("prod"),
+			// Optional(), not Default("prod"): the command is mutating, and
+			// §27.1's ban refuses a declared value default on one -- at every
+			// depth, which is why `create-missing` below moved too. The empty
+			// collection defaults and the RelativeToRoot default stay, being
+			// the ban's two carve-outs.
+			StringFlag("target", "Where to deploy", Short("t"), Optional(),
 				Env("MYAPP_TARGET"), Choices(Ch("prod", "production"), Ch("dev", ""))),
 			StringFlag("region", "Which region", Optional()),
 			StringFlag("tag", "A tag", Repeatable(), Unique(true), Default([]interface{}{})),
 			DictFlag(TypeStr, "header", "HTTP headers", Unique(false), Default(map[string]interface{}{})),
-			BoolFlag("verbose-output", "Say more", Default(false)),
+			BoolFlag("verbose-output", "Say more", Optional()),
 			StringFlag("path", "A path", Default(RelativeToRoot("MYAPP_HOME", "store"))),
 			MemberChoiceFlag("target-set", "which profiles to operate on", Required(),
 				MemberChoice(StringFlag("profile", "profile name", Required()),
 					"operate on one named profile",
-					BoolFlag("create-missing", "create the profile when absent", Default(false))),
+					BoolFlag("create-missing", "create the profile when absent", Optional())),
 				MemberChoice(BoolFlag("all-profiles", "every profile", Required()),
 					"operate on every profile"),
 			),
@@ -1055,8 +1069,7 @@ const pythonRichDump = `  "project_id": "testproject",
             ]
           },
           "short": "t",
-          "presence": "default",
-          "default": "prod",
+          "presence": "optional",
           "env": "MYAPP_TARGET",
           "choices": [
             {
@@ -1107,8 +1120,7 @@ const pythonRichDump = `  "project_id": "testproject",
           "value_schema": {
             "type": "boolean"
           },
-          "presence": "default",
-          "default": false,
+          "presence": "optional",
           "negatable": true
         },
         {
@@ -1150,8 +1162,7 @@ const pythonRichDump = `  "project_id": "testproject",
                   "value_schema": {
                     "type": "boolean"
                   },
-                  "presence": "default",
-                  "default": false,
+                  "presence": "optional",
                   "negatable": true
                 }
               ]

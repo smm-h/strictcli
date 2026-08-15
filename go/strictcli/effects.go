@@ -509,6 +509,11 @@ type effectLog struct {
 	// survives the claim intact.
 	claimed         bool
 	handlerRendered bool
+	// writeSetLine is an update command's write-set line (contract §27.5),
+	// rendered between the header and the first effect and taking no sequence
+	// number. Empty on every command that declares no update, and set only for
+	// a dry run -- a live run's write set rides the envelope instead.
+	writeSetLine string
 }
 
 // seamSuppressed reports whether the handler already produced the log's bytes
@@ -533,6 +538,9 @@ func (l *effectLog) nextCacheSeq() int { return l.cached + 1 }
 // render renders the would-do log. CacheWrites are never written to it.
 func (l *effectLog) render() string {
 	lines := []string{dryRunHeader}
+	if l.writeSetLine != "" {
+		lines = append(lines, "  "+l.writeSetLine)
+	}
 	for _, r := range l.records {
 		if r.kind == CacheWrite {
 			continue

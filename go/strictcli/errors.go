@@ -1740,6 +1740,117 @@ func errConstraintUnknownFlag(name, c, x string) string {
 	return fmt.Sprintf("command %q: constraint %q references unknown flag %q", name, c, x)
 }
 
+// ---------------------------------------------------------------------------
+// update.go — the update-command construct (contract §12.16, §27)
+//
+// The family splits across both parity categories the way §12.13's and §12.15's
+// do: the two VIOLATION templates are parse-time (stderr, exit 1); the
+// declaration guards are registration-time, in §12.10's and §12.12's class.
+//
+// `<decl>` is `flag '--<x>'` for a flag and `argument '<x>'` for a positional
+// arg (renderDeclFlag / renderDeclArg in update.go). The presence spellings
+// inside these sentences take the FLAG spelling even when the subject is an
+// arg -- Required(), Optional(), Default(<value>) -- because the prefix names
+// the COMMAND rather than a surface, so the sentence never claims to quote the
+// arg surface's own option (§12.16, §18.31 item 287).
+//
+// The prefix is `command "<name>": ` on every registration guard, and
+// `update "<resource>": ` on the one violation the construct owns.
+// ---------------------------------------------------------------------------
+
+// errMutatingDefault is the ONLY guard in this family that fires on a command
+// declaring no update at all: the ban keys on effect="mutating" (§27.1), where
+// the rest keys on update_of.
+func errMutatingDefault(name, decl, value string) string {
+	return fmt.Sprintf("command %q: %s declares Default(%s) on a mutating command: absence would write a value the invocation never stated (declare Required() or Optional(), or apply the fallback in the handler and say so in its help)", name, decl, value)
+}
+
+func errUpdateOnReadOnly(name string) string {
+	return fmt.Sprintf("command %q: a read_only command cannot declare update_of (a command that changes nothing writes no properties)", name)
+}
+
+// errUpdateWriteModeInvalid is reachable in all three implementations, and the
+// reachable inputs differ: in Go it is the ZERO VALUE of the string-based
+// WriteMode type, which renders "". The sentence is byte-identical in each
+// because the value formatter is.
+func errUpdateWriteModeInvalid(name, v string) string {
+	return fmt.Sprintf("command %q: invalid write_mode %q: must be \"sparse\" or \"full_replace\"", name, v)
+}
+
+func errUpdateResourceCharset(name, r string) string {
+	return fmt.Sprintf("command %q: update resource %q must match [a-z][a-z0-9-]*", name, r)
+}
+
+func errUpdatePropertiesEmpty(name, r string) string {
+	return fmt.Sprintf("command %q: update of %q declares no properties: an update with nothing to write is not an update", name, r)
+}
+
+func errUpdateNameUnknown(name, r, x string) string {
+	return fmt.Sprintf("command %q: update of %q references unknown name %q", name, r, x)
+}
+
+func errUpdateNameAmbiguous(name, r, x string) string {
+	return fmt.Sprintf("command %q: update of %q references %q, which names both a flag and a positional arg", name, r, x)
+}
+
+func errUpdateNameDuplicate(name, r, x string) string {
+	return fmt.Sprintf("command %q: update of %q declares %q twice", name, r, x)
+}
+
+func errUpdateNameBothRoles(name, r, x string) string {
+	return fmt.Sprintf("command %q: update of %q declares %q as both identity and property", name, r, x)
+}
+
+func errUpdateReferencesScopedFlag(name, r, x, path string) string {
+	return fmt.Sprintf("command %q: update of %q references '%s', which is declared under '%s': an update's identity and properties are declared at root scope only", name, r, x, path)
+}
+
+// errUpdatePropertyPresence covers `required` ONLY: a property declaring a
+// default is refused by errMutatingDefault four steps earlier (§27.11's order),
+// an update command being mutating by §27.2's own guard, so the two never
+// compete for one declaration.
+func errUpdatePropertyPresence(name, r, decl string) string {
+	return fmt.Sprintf("command %q: update of %q property %s declares Required(): a property is absent exactly when it is not being written, and the presence declaration for that is Optional()", name, r, decl)
+}
+
+func errUpdatePropertyIsArg(name, r, x string) string {
+	return fmt.Sprintf("command %q: update of %q property %q is a positional arg: a property must be individually omissible and clearable, and only a flag is", name, r, x)
+}
+
+func errUpdatePropertyIsChoiceFlag(name, r, x string) string {
+	return fmt.Sprintf("command %q: update of %q property '--%s' is a choice flag: an elected record is a selection, not a property value", name, r, x)
+}
+
+func errNullableNotProperty(name, decl string) string {
+	return fmt.Sprintf("command %q: %s declares Nullable() but is not a property of an update: only a property can be cleared", name, decl)
+}
+
+func errUnsetNameReserved(name, x string) string {
+	return fmt.Sprintf("command %q: flag name \"unset-%s\" is reserved: property '--%s' declares Nullable(), which mints '--unset-%s'", name, x, x, x)
+}
+
+// --- The two violations (parse-time) ---
+
+// errUpdateNoProperty names EVERY declared property, whether or not it is
+// nullable: naming only the ones a reader has not used would require the
+// framework to guess which one was meant.
+//
+// There is deliberately NO decline clause. §12.15 appends §21.4's clause when a
+// bool member was provided false; the analogous input here is the opposite
+// fact, because inside an update command `--no-proxied` PROVIDES the property
+// with the value false (§27.7), so it satisfies this rule rather than declining
+// it and this sentence cannot fire in its presence.
+func errUpdateNoProperty(resource, properties string) string {
+	return fmt.Sprintf("update %q: at least one property is required: %s", resource, properties)
+}
+
+// errUpdateValueAndUnset is COMMAND LINE only: it is a collision between two
+// tokens, and the machine doors have one key per property (§27.6), so no door
+// can reach the state.
+func errUpdateValueAndUnset(x string) string {
+	return fmt.Sprintf("--%s and --unset-%s are mutually exclusive: a property is either written or cleared", x, x)
+}
+
 // --- Delivery-side panics (Go-only: Match is exhaustive at dispatch) ---
 
 func errGetElectedNoSuchKey(name string) string {

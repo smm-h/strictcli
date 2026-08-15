@@ -165,7 +165,7 @@ func serializeFlagMember(f *Flag) *schemaObject {
 
 // serializeFlag converts a Flag to an ordered entry, in §25.9's key order:
 // name, help, value_schema, short, presence, default, env, env_separator,
-// prefixed, choices, elect_by, unique, conflict_mode, negatable.
+// prefixed, choices, elect_by, unique, conflict_mode, negatable, nullable.
 func serializeFlag(f *Flag) *schemaObject {
 	d := newSchemaObject().
 		set("name", f.Name).
@@ -208,6 +208,14 @@ func serializeFlag(f *Flag) *schemaObject {
 	}
 	if f.Type == TypeBool && !f.Repeatable {
 		d.set("negatable", f.Negatable)
+	}
+	// Emitted only when declared true; absence means the property cannot be
+	// cleared, which is the baseline. There is NO second flag entry for the
+	// minted `--unset-<prop>`: it is derived from this key exactly as
+	// `--no-<x>` is derived from `negatable`, and the dump publishes
+	// declarations (contract §13's amendment, §27.9).
+	if f.Nullable {
+		d.set("nullable", true)
 	}
 	return d
 }
@@ -353,6 +361,16 @@ func serializeCommand(cmd *Command) *schemaObject {
 	if !cmd.DryRunSupported {
 		m.set("dry_run_supported", false)
 		m.set("dry_run_unsupported_reason", cmd.DryRunUnsupportedReason)
+	}
+	// The update declaration, published as TWO command-entry keys where it is
+	// one nested record on the declaration surface (contract §13's amendment,
+	// §27.9): a consumer asking what write mode a command has should not have
+	// to descend, and a consumer WRITING a declaration must not be able to
+	// spell half of one. The pair is atomic by construction rather than by a
+	// guard -- the two facts are one declaration.
+	if cmd.updateOf != nil {
+		m.set("update_of", serializeUpdateOf(cmd.updateOf))
+		m.set("write_mode", string(cmd.updateOf.mode))
 	}
 	// The payload contract, published verbatim (contract §19.5): the inline
 	// literal is the sole canonical artifact, so the dump carries it as
@@ -549,7 +567,8 @@ func buildSchemaDefaults() *schemaObject {
 			set("elect_by", nil).
 			set("unique", false).
 			set("conflict_mode", nil).
-			set("negatable", nil)).
+			set("negatable", nil).
+			set("nullable", false)).
 		set("arg", newSchemaObject().
 			set("variadic", false).
 			set("choices", nil)).
@@ -563,6 +582,8 @@ func buildSchemaDefaults() *schemaObject {
 			set("consequential", false).
 			set("dry_run_supported", true).
 			set("dry_run_unsupported_reason", nil).
+			set("update_of", nil).
+			set("write_mode", nil).
 			set("payload_schema", nil).
 			set("owns_stdout", false).
 			set("passthrough", false).

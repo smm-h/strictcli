@@ -1010,6 +1010,30 @@ func (a *App) registerConfigGroup() {
 	)
 
 	// config set
+	//
+	// The write is an EXACTLY-ONE SELECTION over a value, a clear and a reset to
+	// default -- a member-spelled selector (contract §27.1, §18.33 item 304).
+	// The shape it replaces was two bools declaring Default(false) plus an
+	// optional positional, with three hand-rolled guards holding its illegal
+	// corners shut, and §27.1's mutating-default ban refuses exactly that: a
+	// framework cannot ship a registration guard its own command does not pass,
+	// and an exemption for framework-owned commands would be the escape hatch
+	// this regime refuses everywhere else.
+	//
+	// The selection is what the guards used to say. "--clear and --default are
+	// mutually exclusive", "cannot provide a value with --clear" and "provide a
+	// value, --clear, or --default" are all unrepresentable now: exactly one
+	// member is elected, and electing none is the framework's own unsatisfied-
+	// selector refusal.
+	setWriteValue := MemberChoice(
+		StringFlag("value", "Write this value at the key, coerced to the key's own type (comma-separated for a repeatable flag, backslash-escaping a literal comma; a JSON object for a dict flag)", Required()),
+		"Write a value at the key")
+	setWriteClear := MemberChoice(
+		BoolFlag("clear", "Clear a repeatable flag by setting its value to an empty list", Required()),
+		"Clear a repeatable flag")
+	setWriteDefault := MemberChoice(
+		BoolFlag("default", "Reset a key to its default value by removing it from the config file", Required()),
+		"Reset the key to its declared default")
 	registerFrameworkSubcommand(grp, "set", "Write a persistent value into the config file so it overrides a flag's declared default on every later run. The value is coerced to the flag's own type and rejected if it does not fit: repeatable flags take a comma-separated list (backslash-escape a literal comma) and are checked for duplicates, dict flags take a JSON object. Use --default to drop a key back to its default, and --clear to empty a repeatable flag.", EffectMutating, func(ctx *Context, args map[string]interface{}) Outcome {
 		key := Get[string](args, "key")
 		path := configPath(a.Name, a.configPathOverride, a.configFormat)
@@ -1041,37 +1065,14 @@ func (a *App) registerConfigGroup() {
 			return Exit(1)
 		}
 
-		useClear := Get[bool](args, "clear")
-		useDefault := Get[bool](args, "default")
-
-		// Validate: exactly one of (value, --clear, --default)
-		value, hasValue := GetOpt[string](args, "value")
-		if useClear && useDefault {
-			fmt.Fprintln(os.Stderr, "config set: --clear and --default are mutually exclusive")
-			return Exit(1)
-		}
-		if hasValue && useClear {
-			fmt.Fprintln(os.Stderr, "config set: cannot provide a value with --clear")
-			return Exit(1)
-		}
-		if hasValue && useDefault {
-			fmt.Fprintln(os.Stderr, "config set: cannot provide a value with --default")
-			return Exit(1)
-		}
-		if !hasValue && !useClear && !useDefault {
-			fmt.Fprintln(os.Stderr, "config set: provide a value, --clear, or --default")
-			return Exit(1)
-		}
-
-		// Config fields do not support --clear (not repeatable)
-		if matchedConfigField != nil && useClear {
-			fmt.Fprintln(os.Stderr, "config set: --clear is only for repeatable flags")
-			return Exit(1)
-		}
+		// The elected member says what to write. Match is exhaustive against the
+		// declaration, so a fourth member could not be added without every
+		// dispatch site naming it.
+		write := GetElected(args, "write")
 
 		// --clear: repeatable flags only, writes []
-		if useClear {
-			if !matchedFlag.Repeatable {
+		if write.Is(setWriteClear) {
+			if matchedConfigField != nil || !matchedFlag.Repeatable {
 				fmt.Fprintln(os.Stderr, "config set: --clear is only for repeatable flags")
 				return Exit(1)
 			}
@@ -1080,7 +1081,7 @@ func (a *App) registerConfigGroup() {
 		}
 
 		// --default: remove the key from config
-		if useDefault {
+		if write.Is(setWriteDefault) {
 			if _, ok := nestedGet(existing, key); !ok {
 				fmt.Fprintf(os.Stderr, "config set: key '%s' not in config\n", key)
 				return Exit(1)
@@ -1088,6 +1089,9 @@ func (a *App) registerConfigGroup() {
 			nestedDelete(existing, key)
 			return Exit(writeConfigFile(e, existing, path, a.configFormat, configChange{key: key, remove: true}))
 		}
+
+		// The value member carries its payload under the reserved field name.
+		value := Get[string](write.Fields, scopeReservedValueName)
 
 		// Config field: coerce to config field type
 		if matchedConfigField != nil {
@@ -1192,11 +1196,9 @@ func (a *App) registerConfigGroup() {
 		return Exit(writeConfigFile(e, existing, path, a.configFormat, configChange{key: key, value: typedValue}))
 	}, WithArgs(
 		NewArg("key", "The config key to set, matching a registered flag name", ArgRequired()),
-		NewArg("value", "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
-			ArgOptional()),
 	), WithFlags(
-		BoolFlag("clear", "Clear a repeatable flag by setting its value to an empty list", Default(false)),
-		BoolFlag("default", "Reset a key to its default value by removing it from the config file", Default(false)),
+		MemberChoiceFlag("write", "What to write at the key: a value, a clear, or a reset to the declared default", Required(),
+			setWriteValue, setWriteClear, setWriteDefault),
 	))
 
 	// config edit

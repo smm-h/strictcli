@@ -62,6 +62,17 @@ func buildJSONSchema(cmd *Command) map[string]interface{} {
 		// inside `items`, describing an element rather than the array.
 		prop := toPlain(flagValueSchema(f)).(map[string]interface{})
 		prop["description"] = f.Help
+		// A NULLABLE property publishes a type list including "null" (contract
+		// §27.10). This projection is not bound by §25.2's four-keyword subset
+		// -- it already emits anyOf and dependentRequired -- and here the null
+		// is a VALUE the declaration names rather than a spelling of absence,
+		// so publishing it in the type is publishing the declaration. A caller
+		// that cannot see it cannot clear anything.
+		if f.Nullable {
+			if t, ok := prop["type"]; ok {
+				prop["type"] = []interface{}{t, "null"}
+			}
+		}
 
 		properties[paramName] = prop
 
@@ -93,7 +104,10 @@ func buildJSONSchema(cmd *Command) map[string]interface{} {
 		"additionalProperties": false,
 	}
 	// The constraint projection sits BESIDE properties and required on this one
-	// flat object schema (contract §26.12). Enforcement at call time is
+	// flat object schema (contract §26.12), and carries the update's own
+	// at-least-one-property branch ahead of it (§27.10). A property is never in
+	// `required`: its requiredness IS the at-least-one rule, which `required`
+	// cannot express. Enforcement at call time is
 	// unchanged and total: the schema is advisory, the runtime refusal is the
 	// authority.
 	projectConstraints(cmd, schema)
@@ -357,6 +371,11 @@ func toolDescription(cmd *Command) string {
 		if lines := constraintDescriptionLines(cmd, fidelities); len(lines) > 0 {
 			out += "\n\nConstraints (enforced at call time):\n  " + strings.Join(lines, "\n  ")
 		}
+	}
+	// The update block, appended after both when they exist and separated by a
+	// blank line -- the established order (contract §27.10).
+	if header, lines := updateDescriptionLines(cmd); header != "" {
+		out += "\n\n" + header + "\n  " + strings.Join(lines, "\n  ")
 	}
 	return out
 }

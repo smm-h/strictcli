@@ -696,7 +696,7 @@ func TestConfigSetConfigField(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("region", ConfigFieldHelp("Region"), ConfigFieldDefault("us-east-1"))
 
-	r := app.Test([]string{"config", "set", "region", "eu-west-1"})
+	r := app.Test([]string{"config", "set", "region", "--value", "eu-west-1"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
@@ -716,7 +716,7 @@ func TestConfigSetConfigFieldTypeBool(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("verbose", ConfigFieldHelp("Verbose output"), ConfigFieldType(TypeBool), ConfigFieldDefault(false))
 
-	r := app.Test([]string{"config", "set", "verbose", "true"})
+	r := app.Test([]string{"config", "set", "verbose", "--value", "true"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
@@ -735,7 +735,7 @@ func TestConfigSetConfigFieldTypeInt(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("port", ConfigFieldHelp("Port number"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
 
-	r := app.Test([]string{"config", "set", "port", "9090"})
+	r := app.Test([]string{"config", "set", "port", "--value", "9090"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
@@ -754,7 +754,7 @@ func TestConfigSetConfigFieldTypeFloat(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("threshold", ConfigFieldHelp("Detection threshold"), ConfigFieldType(TypeFloat), ConfigFieldDefault(0.5))
 
-	r := app.Test([]string{"config", "set", "threshold", "0.95"})
+	r := app.Test([]string{"config", "set", "threshold", "--value", "0.95"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
@@ -773,7 +773,7 @@ func TestConfigSetConfigFieldInvalidType(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("port", ConfigFieldHelp("Port number"), ConfigFieldType(TypeInt))
 
-	r := app.Test([]string{"config", "set", "port", "not-a-number"})
+	r := app.Test([]string{"config", "set", "port", "--value", "not-a-number"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
 	}
@@ -789,7 +789,7 @@ func TestConfigSetUnknownKey(t *testing.T) {
 
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 
-	r := app.Test([]string{"config", "set", "nonexistent", "value"})
+	r := app.Test([]string{"config", "set", "nonexistent", "--value", "value"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit code 1, got %d", r.ExitCode)
 	}
@@ -1131,7 +1131,7 @@ func TestConfigSetNestedField(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("server.host", ConfigFieldHelp("Server hostname"), ConfigFieldDefault("localhost"))
 
-	r := app.Test([]string{"config", "set", "server.host", "example.com"})
+	r := app.Test([]string{"config", "set", "server.host", "--value", "example.com"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
@@ -1272,7 +1272,7 @@ func TestConfigSetDeepNestedField(t *testing.T) {
 	app := NewApp("test", "1.0.0", "test app", WithConfig(), WithConfigPath(configFile))
 	app.ConfigField("database.primary.host", ConfigFieldHelp("Primary database host"), ConfigFieldDefault("localhost"))
 
-	r := app.Test([]string{"config", "set", "database.primary.host", "db.example.com"})
+	r := app.Test([]string{"config", "set", "database.primary.host", "--value", "db.example.com"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d. stderr: %s", r.ExitCode, r.Stderr)
 	}
@@ -1705,7 +1705,7 @@ host = "localhost"
 	app.ConfigField("server.port", ConfigFieldHelp("Server port"), ConfigFieldType(TypeInt), ConfigFieldDefault(8080))
 	app.Command("deploy", "Deploy", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) }, WithEffect(EffectReadOnly))
 
-	r := app.Test([]string{"config", "set", "region", "us-west-2"})
+	r := app.Test([]string{"config", "set", "region", "--value", "us-west-2"})
 	if r.ExitCode != 0 {
 		t.Fatalf("config set exit %d, stderr: %s", r.ExitCode, r.Stderr)
 	}

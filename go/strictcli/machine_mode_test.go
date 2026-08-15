@@ -145,8 +145,8 @@ func envelopeText(command string, exitCode int, payload string, dryRun bool, pre
 		cmd = `"` + command + `"`
 	}
 	return fmt.Sprintf(
-		`{"interface_version":1,"app":"myapp","app_version":"1.0.0","command":%s,`+
-			`"exit_code":%d,"payload":%s,"dry_run":%t,"preview":%s,`+
+		`{"interface_version":2,"app":"myapp","app_version":"1.0.0","command":%s,`+
+			`"exit_code":%d,"payload":%s,"dry_run":%t,"writes":null,"preview":%s,`+
 			`"preview_error":%s,"diagnostics":%s}`+"\n",
 		cmd, exitCode, payload, dryRun, preview, previewError, diagnostics)
 }

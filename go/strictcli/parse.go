@@ -206,7 +206,7 @@ func resolveAtPrefix(flagName, raw string, stdinConsumedBy **string) (string, st
 // conflictMode is "cli-wins" (default) or "error" (config+cli/env overlap is an error).
 // When hermetic is true, env var and config resolution are skipped entirely.
 // Returns (kwargs, postGlobalValues, sources, errorString).
-func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string, conflictMode string, hermetic bool, infraRoots map[string]string) (map[string]interface{}, map[string]interface{}, map[string]string, string, []string) {
+func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData map[string]interface{}, stdinConsumedBy **string, conflictMode string, hermetic bool, infraRoots map[string]string) (map[string]interface{}, map[string]interface{}, map[string]string, *updateState, map[string]bool, string, []string) {
 	// Build flag lookup maps over the command's WHOLE scope tree (contract
 	// §24.3): whether `--target` consumes the next argv element is decided
 	// before any choice is elected, which is why sibling scopes may reuse a name
@@ -215,11 +215,20 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	shortLookup := make(map[string]*Flag)    // -x -> Flag
 	negationLookup := make(map[string]*Flag) // --no-flag-name -> Flag
 
+	unsetLookup := make(map[string]*Flag) // --unset-flag-name -> Flag
+
 	for _, name := range cmd.index.order {
 		f := cmd.index.sites[name][0].flag
 		longLookup["--"+f.Name] = f
 		if f.Type == TypeBool && f.Negatable {
 			negationLookup["--no-"+f.Name] = f
+		}
+		// The clear vocabulary's minted spelling (§27.6). It is framework-owned
+		// and reaches the handler on the Context; it is NOT negatable, so
+		// `--no-unset-<x>` names nothing and is refused by the ordinary
+		// unknown-flag path.
+		if f.Nullable {
+			unsetLookup["--"+unsetFlagName(f.Name)] = f
 		}
 	}
 	for _, short := range cmd.index.shortOrder {
@@ -291,13 +300,13 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 			if f, ok := longLookup[flagPart]; ok {
 				if f.Type == TypeBool {
-					return nil, nil, nil, errBoolFlagNoValue(flagPart), nil
+					return nil, nil, nil, nil, nil, errBoolFlagNoValue(flagPart), nil
 				}
 				record(f.Name, valuePart, occValue)
 			} else if _, ok := negationLookup[flagPart]; ok {
-				return nil, nil, nil, errBoolNegationNoValue(flagPart), nil
+				return nil, nil, nil, nil, nil, errBoolNegationNoValue(flagPart), nil
 			} else {
-				return nil, nil, nil, errUnknownFlag(flagPart), nil
+				return nil, nil, nil, nil, nil, errUnknownFlag(flagPart), nil
 			}
 			i++
 			continue
@@ -310,18 +319,27 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			continue
 		}
 
+		// --unset-flag: the clear vocabulary's minted spelling. It carries no
+		// value of its own -- clearing is one act, not a value -- and it is
+		// checked against the property's own occurrences in phase 4a.
+		if f, ok := unsetLookup[tok]; ok {
+			record(f.Name, "", occUnset)
+			i++
+			continue
+		}
+
 		// --flag (long form without =)
 		if strings.HasPrefix(tok, "--") {
 			f, ok := longLookup[tok]
 			if !ok {
-				return nil, nil, nil, errUnknownFlag(tok), nil
+				return nil, nil, nil, nil, nil, errUnknownFlag(tok), nil
 			}
 			if f.Type == TypeBool {
 				record(f.Name, "", occBool)
 				i++
 			} else {
 				if i+1 >= len(tokens) {
-					return nil, nil, nil, errFlagRequiresValue(tok), nil
+					return nil, nil, nil, nil, nil, errFlagRequiresValue(tok), nil
 				}
 				record(f.Name, tokens[i+1], occValue)
 				i += 2
@@ -337,7 +355,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					i++
 				} else {
 					if i+1 >= len(tokens) {
-						return nil, nil, nil, errFlagRequiresValue(tok), nil
+						return nil, nil, nil, nil, nil, errFlagRequiresValue(tok), nil
 					}
 					recordShort(tok[1:], f, tokens[i+1], occValue)
 					i += 2
@@ -383,7 +401,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 	amb := ambientSource{hermetic: hermetic, configData: configData}
 	est, electErr := elect(cmd, sup, amb)
 	if electErr != "" {
-		return nil, nil, nil, electErr, nil
+		return nil, nil, nil, nil, nil, electErr, nil
 	}
 
 	// A short claimed by two mutually exclusive scopes names its LIVE
@@ -408,13 +426,33 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 
 	// --- Phase 3: validate SCOPE membership of every supplied flag.
 	if errStr := est.checkScope(suppliedOrder); errStr != "" {
-		return nil, nil, nil, errStr, est.skipped
+		return nil, nil, nil, nil, nil, errStr, est.skipped
 	}
 
 	// --- Phase 4a: coerce the collected occurrences, in command-line order,
 	// against the LIVE declaration of each name.
+	//
+	// A property written AND cleared in one invocation is refused before either
+	// is read: the two tokens state opposite things about one property, and no
+	// order of application makes one of them true (§27.6).
+	unsets := map[string]bool{}
+	for _, o := range occs {
+		if o.kind == occUnset {
+			unsets[o.name] = true
+		}
+	}
+	if len(unsets) > 0 {
+		for _, o := range occs {
+			if o.kind != occUnset && unsets[o.name] {
+				return nil, nil, nil, nil, nil, errUpdateValueAndUnset(o.name), est.skipped
+			}
+		}
+	}
 	cliByFlag := make(map[*Flag]interface{})
 	for _, o := range occs {
+		if o.kind == occUnset {
+			continue
+		}
 		f := est.liveFlagFor(cmd, globalByName, o.name)
 		if f == nil {
 			continue // unreachable: scope validation passed
@@ -431,7 +469,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			continue
 		}
 		if errStr := parseFlagRawValue(f, o.raw, cliByFlag, stdinConsumedBy); errStr != "" {
-			return nil, nil, nil, errStr, est.skipped
+			return nil, nil, nil, nil, nil, errStr, est.skipped
 		}
 	}
 
@@ -447,6 +485,14 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		if v, ok := cliByFlag[&globalFlags[i]]; ok {
 			cliSet[globalFlags[i].Name] = v
 		}
+	}
+	// A cleared property is SUPPLIED: the value it delivers is absence, the
+	// same nil an untouched property delivers, and the two are told apart by
+	// Provided() -- true here, because the invocation caused the write -- and
+	// by ctx.Unset (§27.6). Entering it in the store also stops env, config and
+	// the declared-default step from filling the gap the clear opened.
+	for name := range unsets {
+		cliSet[name] = nil
 	}
 
 	// Track which flag names are set by env vs config (for source attribution).
@@ -474,7 +520,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 			}
 			val, errStr := resolveFlagEnvValue(f, envVal, stdinConsumedBy)
 			if errStr != "" {
-				return nil, nil, nil, errStr, est.skipped
+				return nil, nil, nil, nil, nil, errStr, est.skipped
 			}
 			cliSet[f.Name] = val
 			envNames[f.Name] = true
@@ -507,26 +553,26 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 					if effectiveMode == "error" {
 						coerced, errStr := coerceConfigValue(configVal, f)
 						if errStr != "" {
-							return nil, nil, nil, errConfigValueError(f.Name, errStr), est.skipped
+							return nil, nil, nil, nil, nil, errConfigValueError(f.Name, errStr), est.skipped
 						}
 						if !valuesEqualForConflict(existing, coerced, f) {
 							existingSource := "cli"
 							if envNames[f.Name] {
 								existingSource = "env"
 							}
-							return nil, nil, nil, errFlagSetInBothAndConfig(f.Name, existingSource), est.skipped
+							return nil, nil, nil, nil, nil, errFlagSetInBothAndConfig(f.Name, existingSource), est.skipped
 						}
 					}
 					continue // cli-wins, or error mode with matching values
 				}
 				coerced, errStr := coerceConfigValue(configVal, f)
 				if errStr != "" {
-					return nil, nil, nil, errConfigValueError(f.Name, errStr), est.skipped
+					return nil, nil, nil, nil, nil, errConfigValueError(f.Name, errStr), est.skipped
 				}
 				if f.Unique {
 					if arr, ok := coerced.([]interface{}); ok {
 						if dup := findDuplicate(arr); dup != nil {
-							return nil, nil, nil, errConfigValueDuplicate(f.Name, formatValueForError(dup)), est.skipped
+							return nil, nil, nil, nil, nil, errConfigValueDuplicate(f.Name, formatValueForError(dup)), est.skipped
 						}
 					}
 				}
@@ -563,10 +609,10 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 				}
 				coerced, errStr := coerceConfigValue(configVal, f)
 				if errStr != "" {
-					return nil, nil, nil, errConfigValueError(f.Name, errStr), est.skipped
+					return nil, nil, nil, nil, nil, errConfigValueError(f.Name, errStr), est.skipped
 				}
 				if !valuesEqualForConflict(existing, coerced, f) {
-					return nil, nil, nil, errFlagSetInBothCliAndConfig(f.Name), est.skipped
+					return nil, nil, nil, nil, nil, errFlagSetInBothCliAndConfig(f.Name), est.skipped
 				}
 			}
 		}
@@ -586,8 +632,8 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		}
 	}
 
-	kwargs, postGlobals, sources, errStr := validateAndBuildKwargs(cmd, store, argvPositionals(positionals), globalFlagNames, infraRoots, est, cliByFlag, amb, stdinConsumedBy)
-	return kwargs, postGlobals, sources, errStr, est.skipped
+	kwargs, postGlobals, sources, writes, errStr := validateAndBuildKwargs(cmd, store, argvPositionals(positionals), globalFlagNames, infraRoots, est, cliByFlag, amb, stdinConsumedBy, unsets)
+	return kwargs, postGlobals, sources, writes, unsets, errStr, est.skipped
 }
 
 // applyFlagDefault resolves the default value for a flag that was not provided
@@ -645,7 +691,7 @@ func applyFlagDefault(f *Flag, prefix string, roots map[string]string) (interfac
 // runs custom validation, resolves positional args, and builds the final
 // kwargs map.
 // Returns (kwargs, postGlobalValues, errorString).
-func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals positionalInput, globalFlagNames map[string]bool, infraRoots map[string]string, est *electionState, cliByFlag map[*Flag]interface{}, amb ambientSource, stdinConsumedBy **string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
+func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals positionalInput, globalFlagNames map[string]bool, infraRoots map[string]string, est *electionState, cliByFlag map[*Flag]interface{}, amb ambientSource, stdinConsumedBy **string, unsets map[string]bool) (map[string]interface{}, map[string]interface{}, map[string]string, *updateState, string) {
 	// Election ran in phase 2 and scope validation in phase 3 (scope_parse.go).
 	// MutexGroup is deleted: "exactly one of these" is a member-spelled selector
 	// now, and §21.4's three errors survive verbatim inside the election phase
@@ -672,7 +718,7 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals posit
 				if d.value {
 					explicitNeg = "no-"
 				}
-				return nil, nil, nil, errImpliesConflict(d.name, d.flag, neg, d.implies, explicitNeg)
+				return nil, nil, nil, nil, errImpliesConflict(d.name, d.flag, neg, d.implies, explicitNeg)
 			}
 			continue
 		}
@@ -685,7 +731,18 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals posit
 	// BEFORE defaults are applied, so a declared default cannot engage a member:
 	// isPresentForDeps counts cli, env, config and implied, and never default.
 	if errMsg := evaluateConstraints(cmd, store, positionals, est); errMsg != "" {
-		return nil, nil, nil, errMsg
+		return nil, nil, nil, nil, errMsg
+	}
+
+	// The at-least-one-property rule, and the write set it guarantees is never
+	// empty (contract §27.4, §27.5). It is the framework's own rule about a
+	// declared property set rather than a constraint the command wrote, so it
+	// is evaluated after every declared constraint has had its say -- and, like
+	// them, BEFORE defaults are applied, over the one provided-ness predicate
+	// with no source filter.
+	writes, errMsg := evaluateUpdate(cmd, store, unsets)
+	if errMsg != "" {
+		return nil, nil, nil, nil, errMsg
 	}
 
 	// Apply defaults (SourceDefault), and resolve every selector's elected
@@ -697,11 +754,11 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals posit
 		if f.Type == TypeChoice {
 			ls := est.bySel[f]
 			if ls.unsatisfied {
-				return nil, nil, nil, est.unsatisfiedSelectorError(ls)
+				return nil, nil, nil, nil, est.unsatisfiedSelectorError(ls)
 			}
 			elected, errMsg := est.resolveElected(ls, cliByFlag, amb, infraRoots, stdinConsumedBy)
 			if errMsg != "" {
-				return nil, nil, nil, errMsg
+				return nil, nil, nil, nil, errMsg
 			}
 			store.set(f.Name, elected, electionSource(ls.origin))
 			continue
@@ -711,7 +768,7 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals posit
 		}
 		val, src, errMsg := applyFlagDefault(f, "", infraRoots)
 		if errMsg != "" {
-			return nil, nil, nil, errMsg
+			return nil, nil, nil, nil, errMsg
 		}
 		store.set(f.Name, val, src)
 	}
@@ -724,7 +781,7 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals posit
 			continue
 		}
 		if errMsg := validateChoices(f.Name, val, f.Repeatable, f.Choices, false); errMsg != "" {
-			return nil, nil, nil, errMsg
+			return nil, nil, nil, nil, errMsg
 		}
 	}
 
@@ -748,12 +805,12 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals posit
 			}
 			for _, v := range vals {
 				if err := f.Validate(v); err != nil {
-					return nil, nil, nil, errFlagValueError(f.Name, err.Error())
+					return nil, nil, nil, nil, errFlagValueError(f.Name, err.Error())
 				}
 			}
 		} else {
 			if err := f.Validate(val); err != nil {
-				return nil, nil, nil, errFlagValueError(f.Name, err.Error())
+				return nil, nil, nil, nil, errFlagValueError(f.Name, err.Error())
 			}
 		}
 	}
@@ -762,10 +819,10 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals posit
 	argValues := make(map[string]interface{})
 	if positionals.preTyped {
 		if errStr := resolvePreTypedArgs(cmd, positionals.byName, argValues); errStr != "" {
-			return nil, nil, nil, errStr
+			return nil, nil, nil, nil, errStr
 		}
 	} else if errStr := resolveArgTokens(cmd, positionals.tokens, argValues); errStr != "" {
-		return nil, nil, nil, errStr
+		return nil, nil, nil, nil, errStr
 	}
 
 	// Validate arg choices (after type coercion)
@@ -776,7 +833,7 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals posit
 			continue
 		}
 		if errMsg := validateChoices(a.Name, val, a.IsVariadic, a.Choices, true); errMsg != "" {
-			return nil, nil, nil, errMsg
+			return nil, nil, nil, nil, errMsg
 		}
 	}
 
@@ -820,7 +877,7 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals posit
 		}
 	}
 
-	return kwargs, postGlobalValues, sources, ""
+	return kwargs, postGlobalValues, sources, writes, ""
 }
 
 // validateChoices checks a resolved flag or arg value against its choices

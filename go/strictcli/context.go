@@ -30,6 +30,15 @@ type Context struct {
 	payload       interface{}
 	payloadSet    bool
 
+	// The update construct's per-dispatch state (contract §27). writes is this
+	// invocation's write set, nil on every command that declares no update; it
+	// is what the envelope's `writes` member and the would-do log's write-set
+	// line both render. unsets names the properties this invocation CLEARED,
+	// which is what Unset answers off -- the minted `--unset-<prop>` delivers
+	// no kwarg of its own (§27.6, §7.5's precedent).
+	writes *updateState
+	unsets map[string]bool
+
 	// The diagnostics this dispatch emitted, in emission order (contract
 	// §19.2). In machine mode the writers below record here instead of
 	// writing: what they were asked to say rides the envelope. Outside machine
@@ -285,6 +294,29 @@ func (c *Context) Provided(name string) bool {
 		return true
 	}
 	return false
+}
+
+// Unset reports whether this invocation CLEARED the named property of an update
+// command (contract §27.6): `--unset-<prop>` on the command line, or `null` on
+// the property's own key at a machine door.
+//
+// An unset property delivers absence -- the same nil an untouched property
+// delivers -- and reports Provided() true, the invocation having caused the
+// write. This is what saves a handler from reconstructing that boolean out of
+// two facts, which is §23.6's own reason for existing.
+//
+// It accepts dashed or underscored names and panics on an unknown name with the
+// same message Source and Provided use: it reads the same per-parse store, so a
+// name with no source has no clear either.
+func (c *Context) Unset(name string) bool {
+	key := strings.ReplaceAll(name, "-", "_")
+	if _, ok := c.sources[key]; !ok {
+		if _, ok := c.sources[name]; !ok {
+			panic(errNoSourceInfo(name))
+		}
+	}
+	dashed := strings.ReplaceAll(name, "_", "-")
+	return c.unsets[dashed]
 }
 
 // reservedFrameworkFlagNames is the effects-regime quartet. The ban on these

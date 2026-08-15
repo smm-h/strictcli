@@ -967,6 +967,16 @@ func projectConstraints(cmd *Command, schema map[string]interface{}) []constrain
 	var anyOfs []interface{}
 	dependentRequired := map[string]interface{}{}
 
+	// The at-least-one-property rule is NOT a constraint (contract §26.14's
+	// answer, §27.4) but it borrows this machinery, wrapping pin included: it
+	// counts as an `anyOf`-producing rule, and its branch comes FIRST, it being
+	// the command's own declaration rather than an entry in the constraint
+	// list. Merging it into a constraint's `anyOf` would be the silent
+	// weakening item 284 already refused.
+	if branches := updateAnyOfBranches(cmd); len(branches) > 0 {
+		anyOfs = append(anyOfs, map[string]interface{}{"anyOf": branches})
+	}
+
 	addDependent := func(key string, values []interface{}) {
 		existing, ok := dependentRequired[key].([]interface{})
 		if !ok {
