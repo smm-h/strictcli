@@ -1,6 +1,6 @@
 ---
 title: Flag System
-description: "strictcli's flag and argument system: the mandatory three-way presence declaration, four types, boolean negation and tri-state, repeatable flags, the reserved names, mutex election, and positional args."
+description: "strictcli's flag and argument system: the mandatory three-way presence declaration, four types, boolean negation and tri-state, repeatable flags, the reserved names, choice flags and their declaration scopes, and positional args."
 nav_group: "Guides"
 nav_order: 3
 ---
@@ -137,8 +137,9 @@ Flag "x": default=None does not declare optionality: use presence="optional" (it
 A `required` declaration is satisfied by **any source that supplies a value** -- a CLI
 token, a bound environment variable, a config file entry, or an `Implies`
 injection. It is not a "must be typed on the command line" rule. The one
-exception belongs to [mutex groups](#mutex-groups), where env and config are not
-consulted for a member at all.
+exception belongs to [member-spelled choice flags](#member-spelling), where
+election is command-line-only and env and config are not consulted for a member
+at all.
 
 ### What "optional" delivers
 
@@ -199,12 +200,14 @@ required positional argument renders `[required]` like a required flag.
 | Declared with | Behavior |
 |---------------|----------|
 | `choices` | a **declared default value** must be in `choices` at registration; absence is never matched against `choices`, so `optional` + `choices` checks nothing at registration and validates only supplied values |
+| a scoped flag | declared exactly as a command-level flag is, and resolved when its scope is elected; a scope is not a presence declaration and never supplies one |
 | `env` / `config` | an env- or config-supplied value satisfies a `required` declaration and makes the flag *provided*; precedence stays CLI > env > config > default |
 | `validate` | runs on a supplied value only -- **never** on a declared default, and never on absence |
 | `Implies` target | the injected value satisfies a `required` declaration (implication resolves before defaults) |
 | `Implies` trigger | fires when the flag is *provided*; a defaulted trigger never fires from its own default |
 | `CoRequired` / `Requires` | a member is present iff it is *provided*, so a default never satisfies a dependency |
-| mutex member | declaring `required` is a registration error; declare `optional` or a `default` |
+| a choice flag | `required` or a `default` only; `optional` is a registration error, because an absent selection is a choice nobody named |
+| a member flag | **must** declare `required`, read as *required once this member is elected*; anything else is a registration error |
 | `RelativeToRoot` | the marker **is** a `default=` declaration; its value resolves at parse time with source label `infra` |
 
 ## Boolean flag semantics
@@ -436,16 +439,50 @@ parameter. Values not in the choices list produce a parse error listing all
 allowed values. Choices are validated at registration time to ensure they match
 the flag's declared type.
 
+**Every entry is a record: a value, and optional help.** The bare-value entry
+(`choices=["json", "csv"]`) is refused -- an entry that may carry help and an
+entry that carries none would be two spellings of one fact:
+
 ```python
-@strictcli.flag("format", type=str, presence="required", choices=["json", "text", "csv"], help="output format")
+@strictcli.flag("format", type=str, presence="required", help="output format",
+                choices=[strictcli.Choice("json", help="one JSON document"),
+                         strictcli.Choice("csv"),
+                         strictcli.Choice("xml")])
+```
+
+```
+Flag "format": choices entry 0 is a bare value: declare it as Choice(<value>, help=...)
+```
+
+Go spells the record `Ch("json", "one JSON document")` inside
+`Choices(...)` -- `Ch("csv", "")` is how it says "no help", since it has no
+optional parameters -- and TypeScript spells it
+`{ value: "json", help: "one JSON document" }` / `{ value: "csv" }`.
+
+The help an entry carries decides how the flag renders. Until one entry has
+help, the flag keeps its one-line form; from the first entry that has help, the
+whole flag renders as an indented block:
+
+```
+  --format <str>              output format [required]
+    json                      one JSON document
+    csv
+    xml
+  --style <str>               rendering style [choices: plain, rich] [default: plain]
 ```
 
 Rules:
+- Every entry is a record; a bare value is a registration error.
+- An entry's help is optional, and non-empty when supplied.
 - `choices` is incompatible with `type=bool`.
 - All choice values must match the declared type.
 - If a `default` value is declared, it must be in the choices list. This is a check on declared *values*: `presence="optional"` declares no value, so it is checked against nothing at registration and absence is never matched against `choices` at parse time.
 - For repeatable flags, each individual value is validated against the choices.
 - Dict flags cannot have choices.
+
+A `choices` flag restricts one **value**. When one of the alternatives needs
+flags of its own, or needs to be spelled as its own flag, the declaration is a
+[choice flag](#choice-flags-a-choice-is-a-declaration-scope) instead.
 
 ## Custom validation
 
@@ -721,83 +758,257 @@ def status(ctx, token, region):
     ...
 ```
 
-## Mutex groups
+## Choice flags: a choice is a declaration scope
 
-Mutually exclusive flags are declared via `MutexGroup`, which enforces that
-**exactly one** member is chosen in each invocation. A mutex group must contain
-at least 2 flags, and a flag cannot appear in multiple mutex groups.
-
-### What elects a member
-
-Only a **command-line token** elects. A bool member is elected by `--<name>`,
-and only when it resolves to **true**: `--no-<name>` *declines* the option --
-it says "not this one", and elects nothing. Every other type elects on presence
-with any value, including the empty string (`--profile ""` is an explicit act;
-whether `""` is legal for that flag is the flag's own value validation).
-
-Three errors, checked in this order per group:
-
-| Situation | Error |
-|-----------|-------|
-| More than one member elected | `--a and --b are mutually exclusive` |
-| One elected, another declined | `--no-b cannot be combined with --a (--no-b declines an option; it does not choose one)` |
-| Nothing elected | `one of --a, --b is required`, plus ` (--no-b declines an option; it does not choose one)` when a member was declined |
-
-### Env and config do not elect
-
-Election is command-line-only, and this is the framework's one deliberate
-exception to the ordinary CLI > env > config > default precedence. A value that
-would reach a mutex member from an environment variable or a config file
-neither elects it nor is delivered to the handler: an unelected member gets
-whatever its own presence declaration says -- its declared default, or
-`None` / `nil` / `undefined` when it declares `optional` -- and its source
-label is `default`. A mutex group exists to make the
-operator choose in the invocation, so an inherited environment cannot make that
-choice -- nor silently sit beside a typed one.
-
-### Handlers test absence, never truthiness
-
-A handler on a mutex member must test `is None` (Python) / `== nil` (Go) /
-`=== undefined` (TypeScript). A truthiness test misreads an elected `--profile ""`
-as "not chosen", and reads an unelected bool member the same way an elected
-`false` would read if one could exist.
+A **choice flag** elects **exactly one** of its declared choices per invocation,
+and each choice declares a **scope**: the flags that exist only while that
+choice is elected. Scoping by nesting replaces scoping by a separate constraint
+object -- *`--subject` belongs to `email`* is expressed by where the declaration
+sits, not by a rule written beside it.
 
 ```python
-@app.command(
-    "output",
-    help="produce output",
-    effect="read_only",
-    mutex=[strictcli.MutexGroup(flags=[
-        strictcli.Flag(name="as-table", type=bool, presence="optional", help="table output"),
-        strictcli.Flag(name="as-csv", type=bool, presence="optional", help="CSV output"),
-    ])],
-)
-def output(ctx, as_table, as_csv):
+@strictcli.choice("email", help="deliver the notification as an email message")
+class Email:
+    subject: str = strictcli.sub_flag(help="subject line of the message", presence="required")
+    recipient: str = strictcli.sub_flag(help="destination email address", presence="required")
+
+
+@strictcli.choice("sms", help="deliver the notification as a text message")
+class Sms:
+    phone_number: str = strictcli.sub_flag(help="destination number in E.164 form", presence="required")
+
+
+@app.command("send", help="send one notification", effect="mutating")
+@strictcli.choice_flag("via", help="delivery channel", short="v", presence="required",
+                       elect_by="selector-token", choices=[Email, Sms])
+def send(ctx, via: Email | Sms):
     ...
 ```
 
-### A member declares its own absence
-
-A mutex member declares presence like every other flag, and there is no
-exemption that fills it in. The ordinary declaration for a member is
-`presence="optional"`: the group enforces cardinality **on top of** presence,
-never instead of it. A `default` is legal too -- §21's unelected member delivers
-it. What a member cannot declare is `required`: the group's own requirement is
-what makes the choice mandatory, and a member that must always be typed
-contradicts a group that permits exactly one.
+`notify send --via email --subject hi` parses. `notify send --via sms --subject hi`
+is a parse error the declaration produces on its own:
 
 ```
-Flag "as-table": a mutex member cannot declare presence="required": the group's own requirement is what makes the choice mandatory
+error: flag '--subject' is only valid under '--via email', but '--via sms' was elected
 ```
+
+Never "unknown flag": the flag is declared, it is simply not in the elected
+scope, and the sentence names both sides.
+
+There is **no at-most-one construct** anywhere in the framework. An absent
+selection is a choice nobody named, so the answer is to name it as a choice of
+its own.
+
+### The two spellings
+
+`elect_by` chooses how a choice is elected on the command line. It is mandatory
+in Python and has no default; Go and TypeScript spell the same decision as twin
+constructors, so there is no option to forget.
+
+| | token spelling | member spelling |
+|---|---|---|
+| declared by | `elect_by="selector-token"` / `ChoiceFlag(...)` / `choiceFlag(...)` | `elect_by="member-flags"` / `MemberChoiceFlag(...)` / `memberChoiceFlag(...)` |
+| typed as | `--via email` | `--profile work`, `--all-profiles` |
+| the flag's own name | is typed | is **never** typed -- it is the handler key and the noun help and errors use |
+| a choice may carry a payload | no (the token names the choice) | yes: exactly one value, delivered under the reserved name `value` |
+| elects from | any source: CLI > env > config > default | the **command line only** |
+
+Both spellings deliver the same kind of value; only tokenization differs.
+
+### Member spelling
+
+A member-spelled choice is its own flag, carrying its own payload:
+
+```python
+@strictcli.choice("profile", help="use the named profile")
+class NamedProfile:
+    value: str = strictcli.member_value(help="profile name")
+    create_missing: bool = strictcli.sub_flag(help="create the profile if it does not exist", default=False)
+
+
+@strictcli.choice("all-profiles", help="apply to every profile")
+class AllProfiles:
+    pass
+
+
+@app.command("sync", help="synchronize profiles", effect="mutating")
+@strictcli.choice_flag("scope", help="what to synchronize", presence="required",
+                       elect_by="member-flags", choices=[NamedProfile, AllProfiles])
+def sync(ctx, scope: NamedProfile | AllProfiles):
+    ...
+```
+
+What a member elects, and what it does not: a bool member is elected by
+`--<name>` and only when it resolves to **true**. `--no-<name>` *declines* --
+it says "not this one" and elects nothing. Every other type elects on presence
+with any value, including the empty string (`--profile ""` is an explicit act;
+whether `""` is legal for that flag is the flag's own value validation).
+
+| Situation | Error |
+|-----------|-------|
+| More than one member elected | `--profile and --all-profiles are mutually exclusive` |
+| One elected, another declined | `--no-all-profiles cannot be combined with --profile (--no-all-profiles declines an option; it does not choose one)` |
+| Nothing elected | `one of --profile, --all-profiles is required`, plus ` (--no-all-profiles declines an option; it does not choose one)` when a member was declined |
+
+**Election is command-line-only**, and that is the framework's one deliberate
+exception to the ordinary CLI > env > config > default precedence. The spelling
+exists to make the operator choose *in the invocation*, and an inherited
+environment is not that choice.
+
+A member owns a scope like any other choice, so `--profile work --create-missing`
+parses and `--all-profiles --create-missing` is a scope error. A member carries
+its payload in the alternative that owns it, so there are no sentinel defaults
+on flags that mean nothing unless elected. And a member-spelled choice flag
+**cannot carry a short** -- it is never typed; a short declared on a member is
+an ordinary flag short.
+
+### Presence
+
+A choice flag declares `required` or a `default`. **`optional` is refused**:
+
+```
+Flag "via": a choice flag cannot declare presence="optional": an absent selection is a choice nobody named, so name it as a choice of its own
+```
+
+A **member flag must declare `required`**, read as *required once this member is
+elected*. This is the inverse of the rule the retired mutex group carried, where
+a member was forbidden from declaring `required`:
+
+```
+Choice "profile" of "scope": a member flag must declare Required(), read as required once this member is elected
+```
+
+That error belongs to Go and TypeScript, each with its own spelling inside the
+sentence. Python has no input that could produce it: `member_value(help=...)`
+takes no presence keyword, and a frozen dataclass's field is required by
+construction.
+
+A choice flag's **`default` is a complete elected value** -- a choice plus every
+field its scope needs -- so a defaulted selection with an unsatisfied required
+sub-flag cannot exist. Python spells it as a choice *instance*
+(`default=Sms(phone_number="+15550100")`), which a frozen dataclass cannot
+construct without its required fields; Go and TypeScript name the choice and a
+registration check refuses one whose scope declares a required sub-flag.
+Electing a choice on the command line never borrows the default's values.
+
+Scoped flags declare presence exactly as command-level flags do -- `required`,
+`optional`, or a `default`, resolved when their scope is elected. A scope is not
+a presence declaration and never supplies one.
+
+### Delivery: one tagged record per choice flag
+
+The handler receives, under the choice flag's own key, the elected choice plus
+that choice's fields, in each language's own exhaustively-checkable shape:
+
+| | delivered as | consumed by |
+|---|---|---|
+| Python | a frozen dataclass instance of the elected choice class | `match` / `case`, with `assert_never` in the last branch |
+| Go | `*Elected` -- the elected `*ChoiceDecl` plus `Fields` | `sc.Match` with `sc.When(<choice value>, ...)`, exhaustive against the declaration |
+| TypeScript | a member of a derived discriminated union, tagged `choice` | `switch (args.via.choice)`, with `assertNever` in the default branch |
+
+See the [Python](python-quickstart.md#choice-flags), [Go](go-quickstart.md#choice-flags)
+and [TypeScript](typescript-quickstart.md#choice-flags) quickstarts for each.
+
+**Scoped flags are never top-level handler arguments, at any depth.** The only
+key a choice flag adds is its own, so every declared top-level key is still
+always present. One level down the ordinary presence rule applies again
+unchanged: an optional sub-flag delivers absence as a present **field** of the
+record, never a missing one.
+
+Inside the record, provided-ness is answered by the record itself --
+`strictcli.provided(via, "subject")` (Python), `e.Provided("subject")` (Go),
+`provided(args.via, "subject")` (TypeScript). The context-level accessors do not
+see scope interiors: a scoped name is not unique command-wide, so
+`ctx.provided("subject")` has no single answer and raises the ordinary
+unknown-name error rather than inventing one. The choice flag's own key **is** in
+the store and answers as any flag does.
+
+### Order, recursion, and depth
+
+Nothing is interpreted until every token is collected, so `--subject hi --via email`
+parses exactly as `--via email --subject hi` does. Parsing is phased --
+**tokenize, resolve elections, validate scope membership, resolve values and
+presence** -- and error precedence follows that order: **election, then scope,
+then value, then presence**. `--via sms --subject hi` reports that `--subject`
+belongs to `email`, never that `--phone-number` is required: the spelling
+mistake is reported before its consequence.
+
+A choice flag is a flag, so a choice flag may be declared inside a choice's
+scope, to **unlimited depth** (`sub_choice_flag` in Python). "Required exactly
+when user-facing" stops being a rule a handler enforces and becomes where the
+declaration sits.
+
+Every name rule re-runs at every depth: the reserved quartet and `json`, the
+banned `yes`, bare `force`, the `no-` prefix, `approve_consequential`, the
+charset and the mandatory help. Two further names are reserved inside every
+scope -- `choice` (the delivered record's tag) and `value` (a member-spelled
+choice's own payload). A scoped flag may not reuse a command-level flag's name
+nor its own choice flag's name; sibling scopes may reuse a name only with an
+identical type and arity, because tokenization cannot wait for an election;
+simultaneously electable scopes may not reuse one at all. **Positional args
+cannot be declared inside a scope**, and keep `choices` at command level
+unchanged.
+
+### Ambient values in a scope that was not elected
+
+An env var or a config key bound to a scoped flag is consulted **when its scope
+is elected**, and otherwise never consulted. It is not an error and it is not a
+value -- the binding's condition is written in the declaration, and the
+framework evaluates it the same way every run.
+
+Every skipped binding that actually carried a value is named on the debug
+channel, one line per binding, in declaration order -- hidden by default, shown
+by `--verbose`, and carried in machine mode's `diagnostics` at level `debug`:
+
+```
+not consulted: env var 'MYAPP_SUBJECT' binds flag '--subject' under '--via email', which was not elected
+not consulted: config key 'subject' binds flag '--subject' under '--via email', which was not elected
+```
+
+An election from a non-CLI source names itself in every message it causes, so a
+refusal never blames a command line that does not contain the cause: the
+clauses ` from env var '<VAR>'`, ` from config key '<key>'` and ` by default`
+are appended to the sentence.
+
+### Constraints operate at root scope only
+
+`Requires`, `Implies` and the co-occurrence families reference flags **by
+name**, and a scoped name has no single namespace to resolve in. A constraint
+naming a scoped flag is a registration error, not a resolution -- because the
+scope already **is** the constraint. A choice's scope says "these flags exist
+together, exactly when this choice is elected", which is a co-requirement plus
+an exclusivity plus a conditional requirement in one declaration.
+
+### Choosing between a choice flag and a `choices` flag
+
+The boundary is structural, not a matter of taste:
+
+> **Need a scope or member spelling -> choice flag. A plain constrained value -> `choices` flag.**
+
+| | `choices` flag | choice flag |
+|---|---|---|
+| what an entry is | a **value**, with **optional** help | a **choice**: a name, **mandatory** help, and a scope |
+| delivery | the bare scalar, unchanged | one tagged record |
+| presence | all three | `required` or a `default` only |
+| sources | all sources | token spelling: all sources; member spelling: command line only |
+| help | one line, or a block once any entry carries help | always a block |
+
+Moving a declaration from a `choices` flag to a choice flag changes the handler
+contract from a **scalar** to a **record**: every read of that value changes
+shape, and the command's tests, its `call()` sites and its MCP arguments change
+with it. That cost is why both constructs exist -- forcing every four-value enum
+through a choice flag would make every simple flag pay it -- and it is why the
+boundary is drawn at what the choices *carry* rather than at how many there are.
 
 (`json` is not usable as a flag name anywhere: it is reserved for machine mode.)
-
 ## Dependencies
 
-Three dependency types control relationships between flags, enforcing
-constraints that go beyond simple mutual exclusion. `CoRequired` ensures flags
-appear together, `Requires` creates one-way dependencies, and `Implies`
+Three dependency types control relationships between flags. `CoRequired` ensures
+flags appear together, `Requires` creates one-way dependencies, and `Implies`
 automatically sets a target flag's value when a trigger flag is provided.
+Exactly-one selection is not among them -- that is a
+[choice flag](#choice-flags-a-choice-is-a-declaration-scope) -- and a dependency
+naming a scoped flag is a registration error.
 
 ```python
 @app.command(
