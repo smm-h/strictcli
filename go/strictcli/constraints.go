@@ -418,6 +418,13 @@ func (c *Command) resolveConstraintFlag(cmdName, constraintName, flagName string
 // memberValueShape answers the three questions the election guards ask of a
 // member's declaration: the framework's own type word, whether the value has a
 // size, and whether it is a bool.
+//
+// A value with a size is never a bool, whatever its element type: a VARIADIC
+// bool arg's value is a sequence, so `non_empty` tests it, `true` cannot, and
+// omitting `when` is legal -- the mandatory-election refusal exists because
+// `present` on a bool lets `--no-x` engage a constraint while selecting nothing,
+// and a variadic arg has no negated spelling at all (§26.3). There is no
+// flag-side twin: a repeatable bool flag is refused at declaration.
 func (c *Command) memberValueShape(r resolvedMember) (typeWord string, sized bool, isBool bool) {
 	var t FlagType
 	var repeatable bool
@@ -429,9 +436,30 @@ func (c *Command) memberValueShape(r resolvedMember) (typeWord string, sized boo
 		a := &c.args[r.idx]
 		t, repeatable = a.Type, a.IsVariadic
 	}
-	isBool = t == TypeBool
+	isBool = t == TypeBool && !repeatable
 	sized = t == TypeStr || IsCompoundType(t) || repeatable
-	return flagTypeName[t], sized, isBool
+	return memberTypeWord(t, repeatable), sized, isBool
+}
+
+// memberTypeWord renders §12.15's closed `<t>` vocabulary: the four scalar
+// words, the collection spellings `list[<elem>]` and `dict[<value>]` formed from
+// them, and `choice flag`.
+//
+// A value with a size renders its COLLECTION spelling, because what the sentence
+// describes is the value the selector would be evaluated against; the element
+// word alone would name the type of a thing the member does not hold. A declared
+// compound type already carries its collection word and is never wrapped twice.
+// A selector renders the CONSTRUCT: its value is a record neither selector can
+// test, and `choice` alone is the dump's enum spelling, which reads here as a
+// value word for a value that does not exist.
+func memberTypeWord(t FlagType, repeatable bool) string {
+	if t == TypeChoice {
+		return "choice flag"
+	}
+	if repeatable && IsScalarType(t) {
+		return "list[" + flagTypeName[t] + "]"
+	}
+	return flagTypeName[t]
 }
 
 // checkConstraintCycles walks the nesting graph depth-first from every
@@ -710,30 +738,29 @@ func (ev *constraintEval) memberValue(r resolvedMember) (bool, interface{}) {
 // declaration order. There is deliberately no analogous clause for an empty
 // WhenNonEmpty() member: empty-value legality belongs to the flag's own value
 // validation, never to the layer above it (§12.15).
+//
+// The scan runs the violated constraint's own member list and does NOT descend
+// into a nested constraint's members. The clause teaches about the sentence it
+// is appended to, and that sentence lists the parent's operands: a nested
+// constraint renders structurally, so a `--no-<x>` two levels down names a token
+// the reader is not looking at, and that nested constraint has its own line and
+// its own sentence to carry it. A decline inside a nested group also leaves that
+// group vacuous rather than violated (§26.4), so the fact the clause would teach
+// is not the fact the parent's violation reports.
 func (ev *constraintEval) declineClause(c *constraintDecl) string {
-	var scan func(decl *constraintDecl) string
-	scan = func(decl *constraintDecl) string {
-		for _, r := range decl.resolved {
-			if r.kind == memberKindConstraint {
-				if clause := scan(&ev.cmd.constraints[r.idx]); clause != "" {
-					return clause
-				}
-				continue
-			}
-			if r.when != whenTrueSel {
-				continue
-			}
-			provided, value := ev.memberValue(r)
-			if !provided {
-				continue
-			}
-			if b, ok := value.(bool); ok && !b {
-				return errMutexDeclineClause(r.name)
-			}
+	for _, r := range c.resolved {
+		if r.kind == memberKindConstraint || r.when != whenTrueSel {
+			continue
 		}
-		return ""
+		provided, value := ev.memberValue(r)
+		if !provided {
+			continue
+		}
+		if b, ok := value.(bool); ok && !b {
+			return errMutexDeclineClause(r.name)
+		}
 	}
-	return scan(c)
+	return ""
 }
 
 // isNonEmptyValue is the `non_empty` predicate over every shape a provided value
@@ -1016,7 +1043,12 @@ func (c *Command) constraintDescriptionSentence(decl *constraintDecl) string {
 	case familyRequires:
 		return fmt.Sprintf("%s requires %s", flagParamName(decl.flag), flagParamName(decl.dependsOn))
 	default:
-		return fmt.Sprintf("%s implies %s=%v", flagParamName(decl.flag), flagParamName(decl.implies), decl.value)
+		// A false value is a VALUE rather than a name: rendering it by
+		// prefixing the property with `no_` would describe a key the schema
+		// does not carry and the caller can never send, and it would hide the
+		// one fact the line exists to publish -- what the framework will set.
+		// The CLI's `--no-` negation stays where a reader types tokens (§26.10).
+		return fmt.Sprintf("%s implies %s = %v", flagParamName(decl.flag), flagParamName(decl.implies), decl.value)
 	}
 }
 

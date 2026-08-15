@@ -208,9 +208,12 @@ func TestWhenNonEmptyOnAnIntIsRefused(t *testing.T) {
 }
 
 // A selector's value is a record, so `true` and `non_empty` have nothing to test
-// on it and `present` is the only election it takes (§26.2).
+// on it and `present` is the only election it takes (§26.2). The word names the
+// CONSTRUCT rather than a value: `choice` alone is the dump's enum spelling and
+// would read here as a value word for a value that does not exist (§12.15,
+// §18.31 item 289).
 func TestWhenNonEmptyOnASelectorIsRefused(t *testing.T) {
-	expectPanic(t, `command "cmd": constraint "sel" member '--mode' declares WhenNonEmpty(), which needs a string or a collection; '--mode' is a choice`, func() {
+	expectPanic(t, `command "cmd": constraint "sel" member '--mode' declares WhenNonEmpty(), which needs a string or a collection; '--mode' is a choice flag`, func() {
 		simpleApp("cmd", "a command", "ok",
 			WithFlags(
 				ChoiceFlag("mode", "the mode", Required(),
@@ -229,6 +232,79 @@ func TestWhenNonEmptyIsLegalOnAListFlagAndAVariadicArg(t *testing.T) {
 	if r := app.Test([]string{"cmd", "one"}); r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
+}
+
+// A value with a SIZE renders its collection spelling, because what the sentence
+// describes is the value the selector would be evaluated against and that value
+// is a sequence. The element word alone would name the type of a thing the
+// member does not hold (§12.15, §18.31 item 289).
+func TestSizedMembersRenderTheirCollectionSpelling(t *testing.T) {
+	// A repeatable scalar flag: `str` names its element, `list[str]` its value.
+	expectPanic(t, `command "cmd": constraint "sel" member '--tag' declares WhenTrue(), which needs a bool; '--tag' is a list[str]`, func() {
+		simpleApp("cmd", "a command", "ok",
+			WithFlags(
+				StringFlag("tag", "a tag", Repeatable(), Unique(false), Optional()),
+				StringFlag("larger-than", "a size", Optional()),
+			),
+			WithConstraints(AtLeastOne("sel", Member("tag", WhenTrue()), Member("larger-than"))))
+	})
+	// A variadic arg, rendered bare by §12.15's member rule in both halves.
+	expectPanic(t, `command "cmd": constraint "sel" member 'targets' declares WhenTrue(), which needs a bool; 'targets' is a list[str]`, func() {
+		simpleApp("cmd", "a command", "ok",
+			WithFlags(StringFlag("larger-than", "a size", Optional())),
+			WithArgs(NewArg("targets", "the targets", Variadic(), ArgOptional())),
+			WithConstraints(AtLeastOne("sel", Member("targets", WhenTrue()), Member("larger-than"))))
+	})
+	// A declared list flag already carries its collection type and is not
+	// wrapped a second time.
+	expectPanic(t, `command "cmd": constraint "sel" member '--tag' declares WhenTrue(), which needs a bool; '--tag' is a list[int]`, func() {
+		simpleApp("cmd", "a command", "ok",
+			WithFlags(
+				ListFlag(TypeInt, "tag", "a tag", Unique(true), Optional()),
+				StringFlag("larger-than", "a size", Optional()),
+			),
+			WithConstraints(AtLeastOne("sel", Member("tag", WhenTrue()), Member("larger-than"))))
+	})
+	// A dict renders its VALUE type in one argument: the key type is `str` by
+	// construction, so a two-argument word states a fact no declaration varies.
+	expectPanic(t, `command "cmd": constraint "sel" member '--env' declares WhenTrue(), which needs a bool; '--env' is a dict[int]`, func() {
+		simpleApp("cmd", "a command", "ok",
+			WithFlags(
+				DictFlag(TypeInt, "env", "an env pair", Unique(true), Optional()),
+				StringFlag("larger-than", "a size", Optional()),
+			),
+			WithConstraints(AtLeastOne("sel", Member("env", WhenTrue()), Member("larger-than"))))
+	})
+}
+
+// A variadic bool arg's value is a sequence whatever its element type, so it
+// classifies as SIZED and never as bool: `non_empty` tests it, omitting `when`
+// is legal, and `true` is refused with `<t>` reading `list[bool]`. The
+// mandatory-election refusal's own reason has no referent here -- a variadic arg
+// has no `--no-` spelling and no way to be provided while selecting nothing
+// (§26.3, §18.31 item 290).
+func TestVariadicBoolArgClassifiesAsSized(t *testing.T) {
+	sizedApp := func(opts ...MemberOption) *App {
+		return simpleApp("cmd", "a command", "ok",
+			WithFlags(StringFlag("older-than", "a duration", Optional())),
+			WithArgs(NewArg("flags", "the flags", ArgType(TypeBool), Variadic(), ArgOptional())),
+			WithConstraints(AtLeastOne("sel", Member("flags", opts...), Member("older-than"))))
+	}
+	// Omitting `when` registers, and the arg's tokens engage the member.
+	if r := sizedApp().Test([]string{"cmd", "true"}); r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if r := sizedApp().Test([]string{"cmd"}); r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d; stdout=%q", r.ExitCode, r.Stdout)
+	}
+	// `non_empty` is legal on it.
+	if r := sizedApp(WhenNonEmpty()).Test([]string{"cmd", "false"}); r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+	// `true` is not, and the sentence names the sequence.
+	expectPanic(t, `command "cmd": constraint "sel" member 'flags' declares WhenTrue(), which needs a bool; 'flags' is a list[bool]`, func() {
+		sizedApp(WhenTrue())
+	})
 }
 
 // --- Registration: presence legality (§26.8 pass 7, §26.5) ---
@@ -333,6 +409,48 @@ func TestAtLeastOneDeclineClause(t *testing.T) {
 	// `--all` itself engages the constraint.
 	if r := purgeApp().Test([]string{"purge", "--all"}); r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
+	}
+}
+
+// The clause searches DIRECT members only. It teaches about the sentence it is
+// appended to, and that sentence lists the PARENT's operands: a `--no-<x>` two
+// levels down names a token the reader is not looking at, and a decline inside a
+// nested group leaves that group vacuous rather than violated, so the fact the
+// clause would teach is not the fact the parent reports (§12.15, §18.31 item
+// 290).
+func TestDeclineClauseSearchesDirectMembersOnly(t *testing.T) {
+	app := func() *App {
+		return simpleApp("cmd", "a command", "ok",
+			WithFlags(
+				BoolFlag("all", "everything", Default(false)),
+				StringFlag("scope", "the scope", Optional()),
+				StringFlag("older-than", "a duration", Optional()),
+			),
+			WithConstraints(
+				AllOrNone("inner", Member("all", WhenTrue()), Member("scope")),
+				AtLeastOne("outer", Member("inner"), Member("older-than")),
+			))
+	}
+	r := app().Test([]string{"cmd", "--no-all"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	want := "error: constraint \"outer\": at least one of (--all with --scope), --older-than is required\ntry 'myapp cmd --help'\n"
+	if r.Stderr != want {
+		t.Fatalf("stderr = %q, want %q", r.Stderr, want)
+	}
+	// The same declined bool as a DIRECT member of the violated constraint does
+	// carry the clause: the token is in the sentence the reader is looking at.
+	direct := simpleApp("cmd", "a command", "ok",
+		WithFlags(
+			BoolFlag("all", "everything", Default(false)),
+			StringFlag("older-than", "a duration", Optional()),
+		),
+		WithConstraints(AtLeastOne("outer", Member("all", WhenTrue()), Member("older-than"))))
+	r = direct.Test([]string{"cmd", "--no-all"})
+	want = "error: constraint \"outer\": at least one of --all, --older-than is required (--no-all declines an option; it does not choose one)\ntry 'myapp cmd --help'\n"
+	if r.Stderr != want {
+		t.Fatalf("stderr = %q, want %q", r.Stderr, want)
 	}
 }
 
@@ -707,6 +825,33 @@ func TestAtLeastOneProjectsAnyOfBranches(t *testing.T) {
 
 // safegit's site projects with NO loss at all: a nested all-or-none becomes ONE
 // branch listing its leaves.
+// One object schema carries one `anyOf`, so a command declaring TWO at-least-one
+// constraints emits a conjunction of them: merging their branches would publish
+// "satisfy either rule" where the declaration says both must hold, and dropping
+// one is the silent omission §26.12 forbids (§18.31 item 284).
+func TestTwoAtLeastOnesWrapInAllOf(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(
+			StringFlag("a", "the a", Optional()),
+			StringFlag("b", "the b", Optional()),
+			StringFlag("c", "the c", Optional()),
+			StringFlag("d", "the d", Optional()),
+		),
+		WithConstraints(
+			AtLeastOne("first", Member("a"), Member("b")),
+			AtLeastOne("second", Member("c"), Member("d")),
+		))
+	schema := app.JsonSchema("cmd")
+	if _, present := schema["anyOf"]; present {
+		t.Fatalf("two at-least-one constraints emit no bare anyOf, got %v", schema["anyOf"])
+	}
+	got, _ := json.Marshal(schema["allOf"])
+	want := `[{"anyOf":[{"required":["a"]},{"required":["b"]}]},{"anyOf":[{"required":["c"]},{"required":["d"]}]}]`
+	if string(got) != want {
+		t.Fatalf("allOf = %s, want %s", got, want)
+	}
+}
+
 func TestNestedAllOrNoneBecomesOneAnyOfBranch(t *testing.T) {
 	app := authorRewriteApp()
 	schema := app.JsonSchema("rewrite")
@@ -797,8 +942,33 @@ func TestPartialProjectionReasons(t *testing.T) {
 	if !strings.Contains(desc, "  all or none of: (a with b), target -- not expressed in the schema: the nested grouping") {
 		t.Fatalf("expected the nested-grouping reason, got %q", desc)
 	}
-	if !strings.Contains(desc, "  trigger implies target=true -- not expressed in the schema: the injection") {
+	if !strings.Contains(desc, "  trigger implies target = true -- not expressed in the schema: the injection") {
 		t.Fatalf("expected the injection reason, got %q", desc)
+	}
+}
+
+// The two dependency families' MCP sentences, in property names: no `--` prefix
+// and no `--no-` spelling, because the caller writes keys rather than argv, and
+// a FALSE value is a value rather than a name -- `no_<target>` would describe a
+// key the schema does not carry (§26.12, §18.31 item 283).
+func TestDependencySentencesInThePropertyNameBlock(t *testing.T) {
+	app := simpleApp("cmd", "a command", "ok",
+		WithFlags(
+			BoolFlag("fast-path", "the trigger", Default(false)),
+			BoolFlag("embeddings", "the target", Optional()),
+			StringFlag("sign-with", "the signer", Optional()),
+			StringFlag("key-id", "the key", Optional()),
+		),
+		WithConstraints(
+			Requires("signing", "sign-with", "key-id"),
+			Implies("fast-path-implies", "fast-path", "embeddings", false),
+		))
+	desc := app.AsTools()[0].Description
+	want := "Constraints (enforced at call time):\n" +
+		"  sign_with requires key_id\n" +
+		"  fast_path implies embeddings = false -- not expressed in the schema: the injection"
+	if !strings.Contains(desc, want) {
+		t.Fatalf("description = %q, want it to contain %q", desc, want)
 	}
 }
 
