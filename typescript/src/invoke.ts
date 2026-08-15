@@ -487,12 +487,12 @@ export async function invokeApp(
 	// never settled is skipped: its refusal is already recorded, and there is
 	// no elected scope to read values from.
 	const recordValue = (f: AnyFlag, value: unknown): void => {
-		const refusal = preTypedValueRefusal(f, value);
-		if (refusal !== undefined) {
-			problems.push({ stage: STAGE.value, message: refusal });
+		const outcome = preTypedValueOutcome(f, value);
+		if (!outcome.ok) {
+			problems.push({ stage: STAGE.value, message: outcome.message });
 			return;
 		}
-		store.set(f.name, coerceInvokeValue(f, value), "cli");
+		store.set(f.name, outcome.value, "cli");
 	};
 	for (const d of def.allDecls) {
 		const supplied = suppliedByFlagName.has(d.name);
@@ -861,12 +861,12 @@ function buildElectedRecord(
 			out[key] = undefined;
 			return;
 		}
-		const refusal = preTypedValueRefusal(f, value);
-		if (refusal !== undefined) {
-			problems.push({ stage: STAGE.value, message: refusal });
+		const outcome = preTypedValueOutcome(f, value);
+		if (!outcome.ok) {
+			problems.push({ stage: STAGE.value, message: outcome.message });
 			return;
 		}
-		out[key] = coerceInvokeValue(f, value);
+		out[key] = outcome.value;
 	};
 	if (chosen.value !== undefined) {
 		// The member's payload is declared by its own flag -- named by the
