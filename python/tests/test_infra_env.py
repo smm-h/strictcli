@@ -416,3 +416,228 @@ def test_infra_config_show_surface(monkeypatch, tmp_path):
     assert infra["MYAPP_HOME"]["resolved"] == "/opt/data"
     assert infra["MYAPP_HOME"]["source"] == "env"
     assert infra["CI_TOKEN"]["set"] is False
+
+
+# --- The same marker, carried by a DEFAULTED SELECTION's declared instance ---
+#
+# A defaulted selection is COMPLETE by declaration (§24.5) and the walk stops at
+# it: nothing under it was supplied, so nothing under it is read from the
+# invocation. Its fields are still DECLARED DEFAULTS, and a `RelativeToRoot`
+# default is resolved wherever a declared default is applied -- so the marker is
+# resolved at DELIVERY, at every door, and the handler reads the path rather
+# than a marker it would have to resolve itself.
+
+
+@choice("deep", help="deeper still")
+class _Deep:
+    trace: str = sub_flag(
+        help="where the trace goes",
+        default=RelativeToRoot("MYAPP_HOME", "trace"),
+    )
+
+
+@choice("shallow", help="not deep")
+class _Shallow:
+    pass
+
+
+@choice("file", help="write to a file")
+class _ToFile:
+    path: str = sub_flag(
+        help="where to write",
+        default=RelativeToRoot("MYAPP_HOME", "out", "log.txt"),
+    )
+    depth: "_Deep | _Shallow" = strictcli.sub_choice_flag(
+        help="how deep", default=_Deep(), elect_by="selector-token",
+        choices=[_Deep, _Shallow],
+    )
+
+
+@choice("silent", help="no delivery")
+class _Silent:
+    pass
+
+
+def _make_defaulted_selection_app():
+    app = App(name="myapp", version="1.0.0", help="t",
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+    captured: dict = {}
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag("via", help="delivery channel", default=_ToFile(),
+                 elect_by="selector-token", choices=[_ToFile, _Silent])
+    def run(ctx, via: "_ToFile | _Silent"):
+        captured["via"] = via
+        return 0
+
+    return app, captured
+
+
+def test_defaulted_selection_marker_resolves_on_the_command_line(monkeypatch):
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, captured = _make_defaulted_selection_app()
+    r = app.test(["run"])
+    assert r.exit_code == 0, r.stderr
+    assert captured["via"].path == "/var/lib/myapp/out/log.txt"
+
+
+def test_defaulted_selection_marker_resolves_at_the_flat_boundary(monkeypatch):
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, captured = _make_defaulted_selection_app()
+    app._call_with_kwargs(
+        "run", {}, approve_consequential=False, flat=True,
+    )
+    assert captured["via"].path == "/var/lib/myapp/out/log.txt"
+
+
+def test_defaulted_selection_marker_resolves_at_the_record_door(monkeypatch):
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, captured = _make_defaulted_selection_app()
+    app.call("run")
+    assert captured["via"].path == "/var/lib/myapp/out/log.txt"
+
+
+def test_defaulted_selection_marker_resolves_at_every_depth(monkeypatch):
+    """A selection defaulted inside a defaulted selection is the same fact one
+    level down."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    for delivered in _each_door_delivery():
+        assert delivered.depth.trace == "/var/lib/myapp/trace"
+
+
+def _each_door_delivery():
+    """The delivered `via` record from all three doors, in turn."""
+    app, captured = _make_defaulted_selection_app()
+    app.test(["run"])
+    yield captured["via"]
+    app, captured = _make_defaulted_selection_app()
+    app._call_with_kwargs("run", {}, approve_consequential=False, flat=True)
+    yield captured["via"]
+    app, captured = _make_defaulted_selection_app()
+    app.call("run")
+    yield captured["via"]
+
+
+def test_defaulted_selection_marker_reads_the_env_root(monkeypatch):
+    monkeypatch.setenv("MYAPP_HOME", "/opt/data")
+    for delivered in _each_door_delivery():
+        assert delivered.path == "/opt/data/out/log.txt"
+
+
+def test_defaulted_selection_marker_reports_infra_and_is_not_provided(monkeypatch):
+    """Source `infra` says WHICH default it was, exactly as it does for a
+    marker inside an elected scope."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    for delivered in _each_door_delivery():
+        sources = getattr(delivered, strictcli._RECORD_SOURCES_ATTR)
+        assert sources["path"] == "infra"
+        assert sources["depth"] == "default"
+        assert strictcli.provided(delivered, "path") is False
+
+
+def test_a_defaulted_selection_still_delivers_its_plain_defaults(monkeypatch):
+    """Only the markers are resolved: every other field is the value the
+    declaration wrote, untouched."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+
+    @choice("plainly", help="plainly")
+    class Plainly:
+        retries: int = sub_flag(help="how many", default=3)
+
+    @choice("otherwise", help="otherwise")
+    class Otherwise:
+        pass
+
+    app = App(name="myapp", version="1.0.0", help="t",
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+    captured: dict = {}
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag("via", help="delivery channel", default=Plainly(),
+                 elect_by="selector-token", choices=[Plainly, Otherwise])
+    def run(ctx, via: "Plainly | Otherwise"):
+        captured["via"] = via
+        return 0
+
+    app.call("run")
+    assert captured["via"].retries == 3
+    # Nothing needed resolving, so the declaration's own object is delivered.
+    assert captured["via"] is app._commands["run"].selectors[0].default
+
+
+def test_defaulted_selection_marker_naming_an_undeclared_root_is_refused(monkeypatch):
+    """Registration does not see inside a scope, so the refusal arrives at
+    delivery -- carrying the scope the declaration lives in."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+
+    @choice("elsewhere", help="write elsewhere")
+    class Elsewhere:
+        path: str = sub_flag(
+            help="where to write", default=RelativeToRoot("NOPE", "out"),
+        )
+
+    @choice("silent", help="no delivery")
+    class Silent:
+        pass
+
+    app = App(name="myapp", version="1.0.0", help="t",
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag("via", help="delivery channel", default=Elsewhere(),
+                 elect_by="selector-token", choices=[Elsewhere, Silent])
+    def run(ctx, via: "Elsewhere | Silent"):
+        return 0
+
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert (
+        'error: RelativeToRoot references undeclared infra root "NOPE"; '
+        "declare it as an infra root under '--via elsewhere'\n"
+    ) in r.stderr
+    with pytest.raises(strictcli.InvokeError) as exc:
+        app.call("run")
+    assert str(exc.value) == (
+        'RelativeToRoot references undeclared infra root "NOPE"; '
+        "declare it as an infra root under '--via elsewhere'"
+    )
+
+
+def test_a_defaulted_selection_copies_its_compound_defaults(monkeypatch):
+    """§24.5: "delivered as declared" is the declaration's SEMANTICS, so a
+    compound default is copied at delivery exactly as it is anywhere else --
+    a handler that appends to what it was handed cannot reach into the
+    declaration every later run reads."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+
+    @choice("batched", help="in batches")
+    class Batched:
+        tags: list[str] = sub_flag(
+            help="the tags", repeatable=True, unique=False, default=[],
+        )
+        limits: dict[str, str] = sub_flag(help="the limits", default={})
+
+    @choice("single", help="one at a time")
+    class Single:
+        pass
+
+    app = App(name="myapp", version="1.0.0", help="t",
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+    captured: dict = {}
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag("via", help="delivery channel", default=Batched(),
+                 elect_by="selector-token", choices=[Batched, Single])
+    def run(ctx, via: "Batched | Single"):
+        captured["via"] = via
+        return 0
+
+    app.call("run")
+    captured["via"].tags.append("mutated")
+    captured["via"].limits["cpu"] = "2"
+    declared = app._commands["run"].selectors[0].default
+    assert declared.tags == []
+    assert declared.limits == {}
+    app.call("run")
+    assert captured["via"].tags == []
+    assert captured["via"].limits == {}

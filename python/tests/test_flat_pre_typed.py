@@ -251,12 +251,15 @@ def test_an_election_refusal_outranks_a_value_refusal():
     )
 
 
-def test_a_scoped_value_refusal_outranks_a_root_one():
-    """Declaration order: the scopes the walk collected, then the command's
-    own flags."""
+def test_a_scoped_value_and_a_root_one_are_ordered_by_the_declarations():
+    """ONE sweep in the command's own declaration order, with the scope taking
+    its position in it (§18.25 item 249): `count` is declared above `--via`,
+    so it answers ahead of anything inside that selector's scope. The full
+    rule, at every depth and from both doors, is in
+    `test_value_sweep_order.py`."""
     assert _refusal(
         mode="all-profiles", via="email", retries="3", count="7",
-    ) == "--retries: expected integer, got str"
+    ) == "--count: expected integer, got str"
 
 
 def test_a_value_refusal_outranks_a_missing_required_flag():
@@ -735,10 +738,16 @@ def test_an_unknown_key_still_outranks_every_election_refusal():
     )
 
 
-def test_a_root_value_problem_never_precedes_a_missing_election():
-    """Value is stage four and election is stage two, so the call that gets
-    both wrong reports the election."""
+def test_a_root_value_problem_outranks_a_selector_nobody_elected():
+    """A selector nothing elected is a PRESENCE fact, and presence is the last
+    stage: every value in the call is read before it is reported."""
     assert _record_refusal(mode=AllProfiles(), count="7") == (
+        "--count: expected integer, got str"
+    )
+
+
+def test_the_missing_selector_is_what_is_left_when_the_values_check_out():
+    assert _record_refusal(mode=AllProfiles(), count=7) == (
         "flag '--via' is required"
     )
 
@@ -747,3 +756,136 @@ def test_the_root_value_problem_is_reported_once_every_election_is_settled():
     assert _record_refusal(
         via=NoDelivery(), mode=AllProfiles(), count="7",
     ) == "--count: expected integer, got str"
+
+
+# ---------------------------------------------------------------------------
+# An integral number satisfies an `int` declaration (§18.25 item 247)
+#
+# JSON has one number type, and a document may write an integer as `7.0`. Go's
+# decoder produces a float64 for every number and TypeScript's a number, so
+# refusing an integral float at the machine boundary would refuse every integer
+# that door can carry -- both already accommodate it. Python's decoder keeps the
+# distinction, so the accommodation is the DOOR's rather than the decoder's: at
+# the flat machine boundary an integral number satisfies an `int` declaration,
+# for flags and positionals alike, and nowhere else. A fractional number is
+# refused with the sentence it always had.
+# ---------------------------------------------------------------------------
+
+
+def _widening_app(captured=None):
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @strictcli.flag("count", type=int, help="a count", presence="optional")
+    @strictcli.flag("label", type=str, help="a label", presence="optional")
+    @strictcli.flag("flip", type=bool, help="a switch", presence="optional")
+    @strictcli.flag(
+        "port", type=int, help="a port", repeatable=True, unique=False,
+        default=[],
+    )
+    @strictcli.flag("limit", type=dict[str, int], help="limits", default={})
+    @strictcli.arg("size", type=int, help="how big", presence="optional")
+    def run(ctx, count, label, flip, port, limit, size):
+        if captured is not None:
+            captured.update(
+                count=count, label=label, flip=flip, port=port, limit=limit,
+                size=size,
+            )
+
+    return app
+
+
+def _widened(**arguments):
+    captured: dict = {}
+    _widening_app(captured)._call_with_kwargs(
+        "run", dict(arguments), approve_consequential=False, flat=True,
+    )
+    return captured
+
+
+def _widening_refusal(**arguments):
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _widening_app()._call_with_kwargs(
+            "run", dict(arguments), approve_consequential=False, flat=True,
+        )
+    return str(exc.value)
+
+
+def test_an_integral_float_satisfies_an_int_flag():
+    captured = _widened(count=7.0)
+    assert captured["count"] == 7
+    assert isinstance(captured["count"], int)
+
+
+def test_a_fractional_float_is_still_refused():
+    assert _widening_refusal(count=7.5) == (
+        "--count: expected integer, got float"
+    )
+
+
+def test_an_integral_float_satisfies_an_int_positional():
+    captured = _widened(size=7.0)
+    assert captured["size"] == 7
+    assert isinstance(captured["size"], int)
+
+
+def test_a_fractional_positional_is_still_refused():
+    assert _widening_refusal(size=7.5) == (
+        "argument 'size': expected integer, got float"
+    )
+
+
+def test_an_integral_float_satisfies_a_repeatable_int_element():
+    captured = _widened(port=[80.0, 443])
+    assert captured["port"] == [80, 443]
+    assert all(isinstance(p, int) for p in captured["port"])
+
+
+def test_a_fractional_element_is_still_refused():
+    assert _widening_refusal(port=[80.5]) == (
+        "--port: element 0: expected int, got float"
+    )
+
+
+def test_an_integral_float_satisfies_a_dict_int_value():
+    captured = _widened(limit={"cpu": 2.0})
+    assert captured["limit"] == {"cpu": 2}
+    assert isinstance(captured["limit"]["cpu"], int)
+
+
+def test_a_fractional_dict_value_is_still_refused():
+    assert _widening_refusal(limit={"cpu": 2.5}) == (
+        "--limit: key 'cpu': expected int, got float"
+    )
+
+
+def test_an_integral_float_satisfies_a_scoped_int():
+    """Depth changes nothing: the boundary is the door, not the level."""
+    captured: dict = {}
+    _flat(_app(captured), mode="all-profiles", via="email", retries=7.0)
+    assert captured["via"].retries == 7
+    assert isinstance(captured["via"].retries, int)
+
+
+def test_the_widening_reaches_only_an_int_declaration():
+    """A float is not a string and not a boolean, and the type NAME a refusal
+    quotes is Python's own reading of the value it was handed."""
+    assert _widening_refusal(label=7.0) == "--label: expected string, got float"
+    assert _widening_refusal(flip=1.0) == "--flip: expected boolean, got float"
+
+
+def test_a_bool_is_still_not_an_integer():
+    assert _widening_refusal(count=True) == "--count: expected integer, got bool"
+
+
+def test_the_native_record_door_keeps_python_s_own_numeric_model():
+    """The accommodation is the machine boundary's. `call()` takes Python's
+    own values, and nothing in Python's numeric model makes a float an
+    integer -- an acknowledged divergence from the two runtimes that cannot
+    see that a number was written with a point."""
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _widening_app().call("run", count=7.0)
+    assert str(exc.value) == "--count: expected integer, got float"
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _widening_app().call("run", size=7.0)
+    assert str(exc.value) == "argument 'size': expected integer, got float"

@@ -10189,41 +10189,61 @@ class App:
         # A selector's value is the same record a handler receives: a choice
         # instance, pre-typed (§24.11). The flat machine form is converted into
         # one at the protocol boundary instead, through the SAME election,
-        # scope and presence machinery the argv path uses.
+        # scope and presence machinery the argv path uses. Either door is run
+        # in STAGES rather than end to end, because the value stage is shared
+        # with the command's own flags (below).
         selector_result: _SelectorResult | None = None
+        door: _FlatSelectorDoor | _RecordSelectorDoor | None = None
         if cmd.selectors:
-            if flat:
-                selector_result = _resolve_selectors(
-                    cmd, _flat_occurrences(cmd, kwargs), pre_typed=True,
-                    infra_roots=self._infra_roots,
-                )
-                kwargs = {
-                    k: v for k, v in kwargs.items()
-                    if k not in _flat_selector_params(cmd)
-                }
-            else:
-                selector_result = _selector_result_from_records(
+            door = (
+                _FlatSelectorDoor(cmd, kwargs, infra_roots=self._infra_roots)
+                if flat
+                else _RecordSelectorDoor(
                     cmd, kwargs, infra_roots=self._infra_roots,
                 )
-                kwargs = {
-                    k: v for k, v in kwargs.items()
-                    if k not in selector_result.values
-                }
+            )
+            kwargs = {
+                k: v for k, v in kwargs.items() if k not in door.consumed
+            }
 
-        # Populate sourced store from kwargs. Provided kwargs are marked
-        # _Source.CLI; absent flags will get _Source.DEFAULT when
-        # _validate_and_build_kwargs applies defaults. A supplied value is
-        # checked against its declaration here: the value phase for the
-        # command's own flags, running after every selector's election, scope
-        # and scoped value, which is the order this boundary already uses
-        # (§24.3, §24.11).
+        # The VALUE stage: ONE sweep in the COMMAND's own declaration order
+        # (§24.3, §24.11, §18.25 item 249). Each declaration in the order it
+        # was written, a selector taking its POSITION in that walk and the
+        # values of its elected record read there, at every depth -- root flags
+        # and selectors interleaved, never partitioned into scoped-first and
+        # root-second. An object has no order of its own, so the order the
+        # caller happened to write its keys in decides nothing (§21.4's
+        # reason). Supplied values are marked _Source.CLI; absent flags get
+        # _Source.DEFAULT when _validate_and_build_kwargs applies defaults.
         store = _SourcedStore()
+        for m in cmd.members:
+            if isinstance(m, _Selector):
+                if door is not None:
+                    door.read(m)
+                continue
+            key = _flag_param_name(m.name)
+            if key in kwargs:
+                store.set(
+                    m.name,
+                    _check_pre_typed_value(m, kwargs[key], machine_boundary=flat),
+                    _Source.CLI,
+                )
+        # An app-level global is a declaration like any other, and it follows
+        # the command's own: a command declares nothing after them.
+        for gf in self._global_flags:
+            key = _flag_param_name(gf.name)
+            if key in kwargs:
+                store.set(
+                    gf.name,
+                    _check_pre_typed_value(gf, kwargs[key], machine_boundary=flat),
+                    _Source.CLI,
+                )
 
-        for key, value in kwargs.items():
-            f = param_to_flag.get(key)
-            if f is not None:
-                # It's a flag -- store under flag.name (with dashes)
-                store.set(f.name, _check_pre_typed_value(f, value), _Source.CLI)
+        # The PRESENCE stage for the selectors, which runs once every value in
+        # the call has been read: a missing required flag inside a scope, and a
+        # selector nobody elected, are both reported behind every value.
+        if door is not None:
+            selector_result = door.presence()
 
         # A positional's value is pre-typed exactly as a flag's is, so it is
         # handed on AS SUPPLIED -- never stringified into a token the caller
@@ -10237,6 +10257,7 @@ class App:
             cmd, store, [], global_flag_names, self._infra_roots,
             selector_result=selector_result,
             pre_typed_args=supplied_args,
+            machine_boundary=flat,
         )
 
         # Merge global flag values into final kwargs
@@ -10797,6 +10818,7 @@ def _validate_and_build_kwargs(
     infra_roots: dict[str, str] | None = None,
     selector_result: "_SelectorResult | None" = None,
     pre_typed_args: dict[str, object] | None = None,
+    machine_boundary: bool = False,
 ) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
     """Validate parsed values and build the kwargs dict for the command handler.
 
@@ -10817,7 +10839,11 @@ def _validate_and_build_kwargs(
     step 6 checks each supplied value against its declaration instead of
     parsing a token (§24.11's rule read onto §23.3's declaration). The step
     itself is unmoved, so a bad positional value keeps the argv path's own
-    place among the phases at both doors.
+    place among the phases at both doors. ``machine_boundary`` says which door
+    those values came through: the flat machine form accommodates a JSON
+    decoder's integral number for an `int` declaration and the record front
+    door does not (§24.11 item 247). It says nothing on the argv path, where
+    every positional is a token that has yet to be parsed.
 
     Returns (cmd, kwargs, global_cli_set, sources) where sources maps
     flag param names to source labels (cli/env/config/default/implied).
@@ -10919,7 +10945,10 @@ def _validate_and_build_kwargs(
         # that was never typed.
         for a in cmd.args:
             if a.name in pre_typed_args:
-                value = _check_pre_typed_arg_value(a, pre_typed_args[a.name])
+                value = _check_pre_typed_arg_value(
+                    a, pre_typed_args[a.name],
+                    machine_boundary=machine_boundary,
+                )
                 if (
                     a.variadic
                     and a.presence == _PRESENCE_REQUIRED
@@ -11420,7 +11449,47 @@ def _report_skipped_bindings(
             )
 
 
-def _check_pre_typed_value(f: Flag, value: object) -> object:
+def _widen_integral_number(value: object, declared: type) -> object:
+    """An integral number satisfies an `int` declaration (§24.11 item 247).
+
+    JSON has ONE number type, and a document may write an integer as ``7.0``.
+    Go's decoder produces a `float64` for every number and TypeScript's a
+    `number`, so refusing an integral float at the machine boundary would
+    refuse every integer that door can carry -- both accommodate it already.
+    Python's decoder is the one that keeps the distinction, so the
+    accommodation is the DOOR's rather than the decoder's: it applies where a
+    machine boundary produced the value and nowhere else, which is why the
+    caller has to ask for it.
+
+    A FRACTIONAL number is left exactly as it is and earns the declaration's
+    own refusal, and the widening reaches an `int` declaration only -- a float
+    handed to a `str` or a `bool` is still a float, which is what Python's
+    runtime holds and therefore what a refusal names.
+    """
+    if declared is int and isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+def _widen_pre_typed_value(f: Flag, value: object) -> object:
+    """:func:`_widen_integral_number` over one flag's whole value shape."""
+    if f.compound == "dict":
+        if isinstance(value, dict):
+            return {
+                k: _widen_integral_number(v, f.value_type)
+                for k, v in value.items()
+            }
+        return value
+    if f.repeatable:
+        if isinstance(value, list):
+            return [_widen_integral_number(v, f.type) for v in value]
+        return value
+    return _widen_integral_number(value, f.type)
+
+
+def _check_pre_typed_value(
+    f: Flag, value: object, *, machine_boundary: bool,
+) -> object:
     """Check one PRE-TYPED value against its declaration (§24.11).
 
     The flat machine form and the programmatic front door hand the framework
@@ -11439,14 +11508,25 @@ def _check_pre_typed_value(f: Flag, value: object) -> object:
     declaration cannot already say -- and a flag that may NOT be absent would
     otherwise have its presence rule answered by a value the declaration
     forbids.
+
+    ``machine_boundary`` says which DOOR the value came through, because one
+    thing about a value depends on it: an integral number satisfies an `int`
+    declaration where a JSON decoder produced it (§24.11 item 247), and
+    Python's own numeric model governs where one did not. The flat machine form
+    passes it; the record front door -- `call()`, which takes Python's own
+    values -- does not.
     """
+    if machine_boundary:
+        value = _widen_pre_typed_value(f, value)
     try:
         return _coerce_config_value(value, f)
     except ValueError as e:
         raise _ParseError(f"--{f.name}: {e}")
 
 
-def _check_pre_typed_arg_value(a: Arg, value: object) -> object:
+def _check_pre_typed_arg_value(
+    a: Arg, value: object, *, machine_boundary: bool,
+) -> object:
     """:func:`_check_pre_typed_value` for a POSITIONAL (§23.3, §24.11).
 
     Same machinery and the same closed set of four types -- a positional's
@@ -11463,12 +11543,27 @@ def _check_pre_typed_arg_value(a: Arg, value: object) -> object:
     """
     if a.variadic:
         items = value if isinstance(value, list) else [value]
-        return [_check_pre_typed_arg_element(a, item) for item in items]
-    return _check_pre_typed_arg_element(a, value)
+        return [
+            _check_pre_typed_arg_element(
+                a, item, machine_boundary=machine_boundary,
+            )
+            for item in items
+        ]
+    return _check_pre_typed_arg_element(
+        a, value, machine_boundary=machine_boundary,
+    )
 
 
-def _check_pre_typed_arg_element(a: Arg, value: object) -> object:
-    """One pre-typed positional value against the type its arg declares."""
+def _check_pre_typed_arg_element(
+    a: Arg, value: object, *, machine_boundary: bool,
+) -> object:
+    """One pre-typed positional value against the type its arg declares.
+
+    A positional is a declaration exactly as a flag is, so the machine
+    boundary's number accommodation reaches it too (§24.11 item 247).
+    """
+    if machine_boundary:
+        value = _widen_integral_number(value, a.type)
     try:
         return _coerce_config_scalar(value, a.type)
     except ValueError as e:
@@ -11550,7 +11645,12 @@ def _resolve_scoped_value(
     hits = [o for o in occs if o.name == f.name]
     if hits:
         if pre_typed:
-            value = _check_pre_typed_value(f, hits[-1].raw)
+            # A scoped value is only ever pre-typed at the FLAT machine
+            # boundary: the record front door reads a record's fields through
+            # its own walk and never reaches this machinery. So `pre_typed`
+            # here IS the machine boundary, and the number accommodation it
+            # carries applies (§24.11 item 247).
+            value = _check_pre_typed_value(f, hits[-1].raw, machine_boundary=True)
         elif f.compound == "dict":
             store: dict = {}
             for o in hits:
@@ -11678,7 +11778,10 @@ def _coerce_member_payload(
     if raw is _MISSING:
         raise _ParseError(f"flag '--{spec.name}' requires a value")
     value = (
-        _check_pre_typed_value(spec.payload, raw) if pre_typed
+        # Pre-typed here is the flat machine boundary, as it is for every other
+        # scoped value (§24.11 item 247).
+        _check_pre_typed_value(spec.payload, raw, machine_boundary=True)
+        if pre_typed
         else _coerce_scoped_value(spec.payload, raw, stdin_consumed_by)
     )
     # §21.3's `config_conflict_mode="error"` carve-out survives untouched
@@ -11783,19 +11886,105 @@ def _instantiate_choice(
     return record
 
 
-def _declared_default_record(instance: object) -> object:
+def _resolve_declared_marker(
+    ref: RelativeToRoot,
+    path: tuple,
+    *,
+    member_spelled: dict[str, bool],
+    infra_roots: dict[str, str] | None,
+) -> str:
+    """One `RelativeToRoot` default declared inside a scope, resolved (§24.6).
+
+    The marker's own sentence plus §12.13's scope suffix: registration never
+    sees inside a scope, so an undeclared root is reported where the default is
+    applied, naming the scope the declaration lives in.
+    """
+    try:
+        return _resolve_infra_root_path(ref, infra_roots or {})
+    except ValueError as e:
+        suffix = _msg_scope_suffix(_render_scope_path(path, member_spelled))
+        raise _ParseError(str(e) + suffix) from None
+
+
+def _declared_default_record(
+    sel: "_Selector",
+    instance: object,
+    parent_path: tuple,
+    *,
+    member_spelled: dict[str, bool],
+    infra_roots: dict[str, str] | None,
+) -> object:
     """A defaulted selection is complete and delivered as declared (§24.5).
 
     Electing a choice on the command line never borrows the default's values,
     and a default is never rebuilt from the invocation: it is one complete
     selection, and every field of it was decided by the declaration.
+
+    "Decided by the declaration" is exactly what makes a `RelativeToRoot` field
+    of one the framework's job: the marker is the declaration's spelling of
+    "resolve this one through the declared infrastructure roots", so it is
+    resolved HERE, at delivery, labelled `infra` -- at every door, argv
+    included -- rather than handed to a handler that would have to resolve it
+    itself (§24.6, §18.23 item 237). The rule reaches every depth: a selection
+    defaulted inside a defaulted selection is the same fact one level down.
+
+    A COMPOUND default is copied for the same reason it is copied everywhere
+    else (§24.5): the declaration is read again by every later run of the
+    process, so a handler that appends to the list it was handed must not be
+    able to reach it.
+
+    The declared instance IS the declaration, so it is never rewritten. When a
+    field has to be resolved or copied (at any depth), the delivered record is
+    a new one built from the same class; when none does, the declaration's own
+    object is delivered, as it always was.
     """
-    if getattr(instance, _RECORD_SOURCES_ATTR, None) is None:
-        sources = {
-            f.name: "default" for f in dataclasses.fields(instance)
-        }
-        object.__setattr__(instance, _RECORD_SOURCES_ATTR, sources)
-    return instance
+    spec = sel.choice_by_class(type(instance))
+    if spec is None:  # pragma: no cover - registration proves the default's class
+        return instance
+    path = parent_path + ((sel.name, spec.name),)
+    values: dict[str, object] = {}
+    sources: dict[str, str] = {}
+    rebuilt = False
+    if spec.payload is not None:
+        values[_SCOPE_RESERVED_VALUE] = getattr(instance, _SCOPE_RESERVED_VALUE)
+        sources[_SCOPE_RESERVED_VALUE] = "default"
+    for m in spec.members:
+        key = _flag_param_name(m.name)
+        raw = getattr(instance, key)
+        if isinstance(m, Flag):
+            sources[key] = "default"
+            if isinstance(raw, RelativeToRoot):
+                values[key] = _resolve_declared_marker(
+                    raw, path, member_spelled=member_spelled,
+                    infra_roots=infra_roots,
+                )
+                sources[key] = "infra"
+                rebuilt = True
+                continue
+            if m.compound == "dict" and isinstance(raw, dict):
+                values[key] = dict(raw)
+                rebuilt = True
+                continue
+            if m.repeatable and isinstance(raw, list):
+                values[key] = list(raw)
+                rebuilt = True
+                continue
+            values[key] = raw
+            continue
+        nested = _declared_default_record(
+            m, raw, path, member_spelled=member_spelled,
+            infra_roots=infra_roots,
+        )
+        values[key] = nested
+        sources[key] = "default"
+        rebuilt = rebuilt or nested is not raw
+    if not rebuilt:
+        if getattr(instance, _RECORD_SOURCES_ATTR, None) is None:
+            object.__setattr__(instance, _RECORD_SOURCES_ATTR, sources)
+        return instance
+    record = spec.cls(**values)
+    object.__setattr__(record, _RECORD_SOURCES_ATTR, sources)
+    return record
 
 
 def _build_scope_values(
@@ -11860,7 +12049,10 @@ def _build_scope_values(
                 f"flag '--{m.name}' is required{scope_suffix}{origin_suffix}"
             )
         if key in state.from_default:
-            result.values[param] = _declared_default_record(m.default)
+            result.values[param] = _declared_default_record(
+                m, m.default, path, member_spelled=member_spelled,
+                infra_roots=infra_roots,
+            )
             result.sources[param] = "default"
             continue
         result.values[param] = _instantiate_choice(
@@ -12054,10 +12246,7 @@ def _flat_occurrences(cmd: Command, arguments: dict) -> list[_Occ]:
     return occs
 
 
-def _selector_result_from_records(
-    cmd: Command, kwargs: dict[str, object],
-    *, infra_roots: dict[str, str] | None = None,
-) -> _SelectorResult:
+class _RecordSelectorDoor:
     """`call()` takes the elected record, pre-typed (§24.11).
 
     The phase order is the PARSER's, so it governs this door too (§24.3,
@@ -12073,43 +12262,120 @@ def _selector_result_from_records(
     every value one carries is checked against the declaration it was supplied
     against, exactly as the flat door checks the same value under the same
     declaration.
+
+    The door is split into its three stages rather than run end to end, because
+    the value stage is ONE declaration-ordered sweep the command's own flags
+    take part in (§18.25 item 249): :meth:`read` is called where the selector
+    stands among the command's declarations, and :meth:`presence` runs once
+    every value in the call has been read.
     """
-    result = _SelectorResult()
-    member_spelled = _member_spelling_map(cmd.selectors)
-    # Phase 1 -- SHAPE, over the whole command and to unlimited depth, before
-    # any value is read anywhere.
-    supplied: list[tuple[str, _Selector, _ChoiceSpec, object]] = []
-    for sel in cmd.selectors:
-        param = _flag_param_name(sel.name)
-        if param not in kwargs:
-            continue
-        record = kwargs[param]
-        spec = _record_choice_spec(cmd.name, sel, record)
-        _walk_record_shape(cmd.name, spec, record)
-        supplied.append((param, sel, spec, record))
-    # Phase 2 -- VALUE, in declaration order, at every depth.
-    built: dict[str, object] = {}
-    for param, sel, spec, record in supplied:
-        built[param] = _record_from_caller(
-            cmd.name, sel, spec, record, ((sel.name, spec.name),),
-            member_spelled=member_spelled, infra_roots=infra_roots,
+
+    def __init__(
+        self, cmd: Command, kwargs: dict[str, object],
+        *, infra_roots: dict[str, str] | None,
+    ) -> None:
+        self._cmd = cmd
+        self._infra_roots = infra_roots
+        self._member_spelled = _member_spelling_map(cmd.selectors)
+        self._built: dict[str, object] = {}
+        # The keys the door itself consumes: a selector's own parameter, which
+        # the command's flag sweep must not read again.
+        self.consumed = {_flag_param_name(s.name) for s in cmd.selectors}
+        # Stage 1 -- SHAPE, over the whole command and to unlimited depth,
+        # before any value is read anywhere.
+        self._supplied: list[tuple[str, _Selector, _ChoiceSpec, object]] = []
+        for sel in cmd.selectors:
+            param = _flag_param_name(sel.name)
+            if param not in kwargs:
+                continue
+            record = kwargs[param]
+            spec = _record_choice_spec(cmd.name, sel, record)
+            _walk_record_shape(cmd.name, spec, record)
+            self._supplied.append((param, sel, spec, record))
+
+    def read(self, sel: _Selector) -> None:
+        """Stage 2 for ONE selector: its record's values, at every depth."""
+        for param, supplied_sel, spec, record in self._supplied:
+            if supplied_sel is not sel:
+                continue
+            self._built[param] = _record_from_caller(
+                self._cmd.name, sel, spec, record, ((sel.name, spec.name),),
+                member_spelled=self._member_spelled,
+                infra_roots=self._infra_roots,
+            )
+
+    def presence(self) -> _SelectorResult:
+        """Stage 3 -- what is left once nothing above refused."""
+        result = _SelectorResult()
+        for sel in self._cmd.selectors:
+            param = _flag_param_name(sel.name)
+            if param in self._built:
+                result.values[param] = self._built[param]
+                result.sources[param] = "cli"
+                continue
+            if sel.presence == _PRESENCE_DEFAULT:
+                result.values[param] = _declared_default_record(
+                    sel, sel.default, (),
+                    member_spelled=self._member_spelled,
+                    infra_roots=self._infra_roots,
+                )
+                result.sources[param] = "default"
+                continue
+            if sel.is_member_spelled:
+                names = ", ".join(f"--{c.name}" for c in sel.choices)
+                raise _ParseError(f"one of {names} is required")
+            raise _ParseError(f"flag '--{sel.name}' is required")
+        return result
+
+
+class _FlatSelectorDoor:
+    """The flat machine form's selector resolution, split into its stages.
+
+    The flat object is converted into the SAME occurrences the argv path
+    produces and run through the same four phases (§24.11), with the value
+    phase split out so it can take its position in the command's own
+    declaration-ordered sweep (§18.25 item 249): election and scope are settled
+    command-wide in the constructor, :meth:`read` interprets one selector's
+    scoped values where that selector is declared, and :meth:`presence` builds
+    every record once no value is left to read.
+    """
+
+    def __init__(
+        self, cmd: Command, kwargs: dict[str, object],
+        *, infra_roots: dict[str, str] | None,
+    ) -> None:
+        self._cmd = cmd
+        self._infra_roots = infra_roots
+        self._occs = _flat_occurrences(cmd, kwargs)
+        self._member_spelled = _member_spelling_map(cmd.selectors)
+        self._values: dict = {}
+        # Nothing on this door can consume stdin: every value is pre-typed, so
+        # no @-prefix is ever resolved. The list is the shared machinery's.
+        self._stdin_consumed_by: list = [None]
+        # Every property name a selector contributes to the flat schema -- the
+        # selector's own name plus every scoped name at every depth.
+        self.consumed = _flat_selector_params(cmd)
+        # Stages 1-3 -- ELECTION and SCOPE, command-wide, before any value.
+        self._state = _elect_and_validate_scopes(cmd, self._occs, pre_typed=True)
+
+    def read(self, sel: _Selector) -> None:
+        """The VALUE phase for ONE selector's live scopes, at every depth."""
+        _run_scope_value_phase(
+            (sel,), (), self._occs, self._state, self._values,
+            config_data=None, hermetic=False, pre_typed=True,
+            stdin_consumed_by=self._stdin_consumed_by,
+            conflict_mode="cli-wins",
         )
-    # Phase 3 -- PRESENCE, which is what is left once nothing above refused.
-    for sel in cmd.selectors:
-        param = _flag_param_name(sel.name)
-        if param in built:
-            result.values[param] = built[param]
-            result.sources[param] = "cli"
-            continue
-        if sel.presence == _PRESENCE_DEFAULT:
-            result.values[param] = _declared_default_record(sel.default)
-            result.sources[param] = "default"
-            continue
-        if sel.is_member_spelled:
-            names = ", ".join(f"--{c.name}" for c in sel.choices)
-            raise _ParseError(f"one of {names} is required")
-        raise _ParseError(f"flag '--{sel.name}' is required")
-    return result
+
+    def presence(self) -> _SelectorResult:
+        """The PRESENCE phase, building the records the value phase filled."""
+        return _build_scope_values(
+            self._cmd.selectors, (), self._occs, self._state, self._values,
+            config_data=None, hermetic=False, pre_typed=True,
+            stdin_consumed_by=self._stdin_consumed_by,
+            member_spelled=self._member_spelled, conflict_mode="cli-wins",
+            infra_roots=self._infra_roots,
+        )
 
 
 def _record_choice_spec(
@@ -12180,17 +12446,14 @@ def _record_field_value(
     through.
     """
     if f.presence == _PRESENCE_DEFAULT and isinstance(raw, RelativeToRoot):
-        try:
-            return _resolve_infra_root_path(raw, infra_roots or {}), "infra"
-        except ValueError as e:
-            # The marker's own sentence plus §12.13's scope suffix, exactly as
-            # the scoped presence path raises it: registration never sees
-            # inside a scope, so an undeclared root is reported here.
-            suffix = _msg_scope_suffix(_render_scope_path(path, member_spelled))
-            raise _ParseError(str(e) + suffix) from None
+        return _resolve_declared_marker(
+            raw, path, member_spelled=member_spelled, infra_roots=infra_roots,
+        ), "infra"
     if f.presence == _PRESENCE_OPTIONAL and raw is None:
         return None, "default"
-    return _check_pre_typed_value(f, raw), "default"
+    # The RECORD door takes Python's own values, so Python's own numeric model
+    # governs them: an integral float is a float here (§24.11 item 247).
+    return _check_pre_typed_value(f, raw, machine_boundary=False), "default"
 
 
 def _record_from_caller(
@@ -12219,6 +12482,7 @@ def _record_from_caller(
     if spec.payload is not None:
         values[_SCOPE_RESERVED_VALUE] = _check_pre_typed_value(
             spec.payload, getattr(record, _SCOPE_RESERVED_VALUE),
+            machine_boundary=False,
         )
         # Which label a supplied field earns is not this round's question: the
         # record door has reported `default` for every field it delivers since
@@ -12234,7 +12498,10 @@ def _record_from_caller(
             )
             continue
         if _is_declared_selection_default(m, raw):
-            values[key] = _declared_default_record(raw)
+            values[key] = _declared_default_record(
+                m, raw, path, member_spelled=member_spelled,
+                infra_roots=infra_roots,
+            )
             sources[key] = "default"
             continue
         # Phase 1 already proved this field holds a declared choice, so the
