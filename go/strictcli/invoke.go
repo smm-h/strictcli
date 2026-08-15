@@ -247,21 +247,35 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	}
 
 	// Phase 4 begins here: election and scope are settled command-wide, so a
-	// value may now be refused. A flat object has no order of its own, so the
-	// sweep is DECLARATION order -- scoped values as the walk collected them,
-	// then the command's own flags, then the app's globals -- which is what
+	// value may now be refused. A flat object and an elected record have no
+	// order of their own, so the sweep is DECLARATION order -- which is what
 	// §21.4 already uses wherever an order-free object has to be reported in
-	// some order. The positionals are checked where every positional is
-	// resolved, in the shared pipeline's own positional phase.
-	for _, b := range scopedBinds {
-		checked, errStr := checkPreTypedValue(b.flag, b.raw)
-		if errStr != "" {
-			return invokeResult{exitCode: 1, err: errStr}
-		}
-		cliByFlag[b.flag] = checked
-	}
+	// some order -- and it is ONE sweep over the command's declarations rather
+	// than one pass per kind: the command's own flags and the values inside
+	// each elected scope interleave exactly where the declarations sit, at
+	// every depth, so a flag declared before a selector reports its value
+	// problem ahead of anything inside that selector's scope and a nested
+	// selector's values sit where the nested selector is declared. Sweeping
+	// every scope first would let a value one level down outrank one on a flag
+	// declared above the selector, which is the order neither the declarations
+	// nor an argv written in their order produces. The app's globals follow the
+	// command's own declarations, and the positionals are checked where every
+	// positional is resolved, in the shared pipeline's own positional phase.
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
+		if f.Type == TypeChoice {
+			for _, b := range scopedBinds {
+				if b.sel != f {
+					continue
+				}
+				checked, errStr := checkPreTypedValue(b.flag, b.raw)
+				if errStr != "" {
+					return invokeResult{exitCode: 1, err: errStr}
+				}
+				cliByFlag[b.flag] = checked
+			}
+			continue
+		}
 		raw, ok := rootValues[f]
 		if !ok {
 			continue
@@ -639,9 +653,15 @@ func (a *App) Call(commandPath string, kwargs map[string]interface{}, opts ...Ca
 // pendingBind is one value an elected scope was given, held until the election
 // phase has run command-wide. Collecting rather than coercing is what keeps a
 // value refusal behind every selector's election refusal (§24.3, §24.11).
+//
+// sel is the command-level selector the value's scope descends from, at any
+// depth. The value sweep is one declaration-ordered pass over the command's own
+// flags, and sel is what lets a scope's values be swept AT the selector that
+// owns them rather than before every flag the command declares.
 type pendingBind struct {
 	flag *Flag
 	raw  interface{}
+	sel  *Flag
 }
 
 // collectInvokeElections converts a programmatic call's selector arguments into
@@ -656,6 +676,12 @@ type pendingBind struct {
 // It returns the values the elected scopes were given, in declaration order,
 // for the caller to coerce once every election is settled. Nothing here refuses
 // a value: a walk over declarations is not a licence to refuse mid-walk.
+//
+// The two duties run as two passes, and the split is what makes the second one
+// declaration-ordered: the ELECTION walk settles every selector at every depth
+// first, and the BIND pass then descends the declarations of each elected scope
+// in the order they are written, recursing into a nested selector where the
+// nested selector is declared rather than after the scope that holds it.
 func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *suppliedElections, scoped map[string]*Flag) ([]pendingBind, string) {
 	// Every scoped parameter this call named is marked supplied, so a parameter
 	// belonging to a scope that was NOT elected reaches scope validation and is
@@ -666,7 +692,6 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 		}
 	}
 
-	var binds []pendingBind
 	var walk func(flags []Flag, args map[string]interface{}) string
 	walk = func(flags []Flag, args map[string]interface{}) string {
 		for i := range flags {
@@ -684,14 +709,13 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 				}
 				sup.suppliedNames[f.Name] = true
 				sup.preElected[f] = ch
-				bindElectedFields(ch, rec.Fields, sup, &binds)
 				if errStr := walk(ch.Flags, rec.Fields); errStr != "" {
 					return errStr
 				}
 				continue
 			}
 			if f.memberSpelled {
-				if errStr := collectFlatMemberElections(f, args, named, raw, sup, &binds, walk); errStr != "" {
+				if errStr := collectFlatMemberElections(f, args, named, raw, sup, walk); errStr != "" {
 					return errStr
 				}
 				continue
@@ -711,7 +735,6 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 			sup.preElected[f] = ch
 			// The flat form's scoped parameters sit beside the selector, so
 			// the same top-level object supplies the next level too.
-			bindElectedFields(ch, Fields(args), sup, &binds)
 			if errStr := walk(ch.Flags, args); errStr != "" {
 				return errStr
 			}
@@ -721,7 +744,101 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 	if errStr := walk(cmd.flags, kwargs); errStr != "" {
 		return nil, errStr
 	}
+
+	var binds []pendingBind
+	for i := range cmd.flags {
+		f := &cmd.flags[i]
+		if f.Type != TypeChoice {
+			continue
+		}
+		bindSelectorValues(f, kwargs, sup, &binds, f)
+	}
 	return binds, ""
+}
+
+// bindSelectorValues collects the values one selector's elected scope was given,
+// from whichever of the two doors supplied them.
+func bindSelectorValues(sel *Flag, args map[string]interface{}, sup *suppliedElections, binds *[]pendingBind, root *Flag) {
+	if rec, isRecord := args[flagParamName(sel.Name)].(*Elected); isRecord {
+		// The record door: the scope's values are the record's own fields, and
+		// a nested selector's are the nested record's.
+		if findChoice(sel, rec.decl.Name) == rec.decl {
+			bindScopeValues(rec.decl, rec.Fields, nil, sup, binds, root)
+		}
+		return
+	}
+	// The flat door: every scoped parameter sits beside the selector in the one
+	// top-level object, at every depth.
+	if ch := electedScope(sel, sup); ch != nil {
+		bindScopeValues(ch, Fields(args), args, sup, binds, root)
+	}
+}
+
+// electedScope reports the choice one selector elected at the flat door, or nil
+// when the election did not settle -- which the election phase has already
+// refused, and which is not this pass's question.
+func electedScope(sel *Flag, sup *suppliedElections) *ChoiceDecl {
+	if ch, ok := sup.preElected[sel]; ok {
+		return ch
+	}
+	var only *ChoiceDecl
+	for _, ch := range sel.choiceDecls {
+		if !sup.memberElected[ch.Name] {
+			continue
+		}
+		if only != nil {
+			return nil
+		}
+		only = ch
+	}
+	return only
+}
+
+// bindScopeValues records the values one elected scope's flags were given,
+// keyed by the declaration and IN DECLARATION ORDER, and marks every named flag
+// as supplied so scope validation sees it. It refuses nothing: the values it
+// collects are coerced once every election is settled (§24.3's phase order).
+//
+// A nested selector is descended WHERE IT IS DECLARED, so the values one level
+// down sit between the scoped flags declared before and after it, exactly as an
+// argv written in declaration order would type them. flatArgs is the flat
+// door's one top-level object, and nil at the record door, where each level's
+// values are the record's own fields.
+func bindScopeValues(ch *ChoiceDecl, fields Fields, flatArgs map[string]interface{}, sup *suppliedElections, binds *[]pendingBind, root *Flag) {
+	for i := range ch.Flags {
+		sub := &ch.Flags[i]
+		key := flagParamName(sub.Name)
+		isMember := ch.member && i == 0
+		if isMember {
+			if !choiceCarriesPayload(ch) {
+				continue
+			}
+			// A member-spelled choice's payload arrives under the reserved name
+			// "value" in a record, and under the member's OWN flag name in the
+			// flat machine form -- which is the property name §24.11 publishes.
+			if v, ok := fields["value"]; ok {
+				*binds = append(*binds, pendingBind{flag: sub, raw: v, sel: root})
+				sup.suppliedNames[sub.Name] = true
+				continue
+			}
+		}
+		if sub.Type == TypeChoice {
+			if flatArgs != nil {
+				if nested := electedScope(sub, sup); nested != nil {
+					bindScopeValues(nested, Fields(flatArgs), flatArgs, sup, binds, root)
+				}
+				continue
+			}
+			if rec, isRecord := fields[key].(*Elected); isRecord && findChoice(sub, rec.decl.Name) == rec.decl {
+				bindScopeValues(rec.decl, rec.Fields, nil, sup, binds, root)
+			}
+			continue
+		}
+		if v, ok := fields[key]; ok {
+			*binds = append(*binds, pendingBind{flag: sub, raw: v, sel: root})
+			sup.suppliedNames[sub.Name] = true
+		}
+	}
 }
 
 // collectFlatMemberElections reads a member-spelled selector's elections out of
@@ -740,7 +857,6 @@ func collectFlatMemberElections(
 	named bool,
 	raw interface{},
 	sup *suppliedElections,
-	binds *[]pendingBind,
 	walk func([]Flag, map[string]interface{}) string,
 ) string {
 	elected := map[string]bool{}
@@ -787,38 +903,5 @@ func collectFlatMemberElections(
 			only = ch
 		}
 	}
-	bindElectedFields(only, Fields(args), sup, binds)
 	return walk(only.Flags, args)
-}
-
-// bindElectedFields records the values a scope's flags were given, keyed by the
-// declaration and in declaration order, and marks every named flag as supplied
-// so scope validation sees it. It refuses nothing: the values it collects are
-// coerced once every election is settled (§24.3's phase order).
-func bindElectedFields(ch *ChoiceDecl, fields Fields, sup *suppliedElections, binds *[]pendingBind) {
-	for i := range ch.Flags {
-		sub := &ch.Flags[i]
-		key := flagParamName(sub.Name)
-		isMember := ch.member && i == 0
-		if isMember {
-			if !choiceCarriesPayload(ch) {
-				continue
-			}
-			// A member-spelled choice's payload arrives under the reserved name
-			// "value" in a record, and under the member's OWN flag name in the
-			// flat machine form -- which is the property name §24.11 publishes.
-			if v, ok := fields["value"]; ok {
-				*binds = append(*binds, pendingBind{flag: sub, raw: v})
-				sup.suppliedNames[sub.Name] = true
-				continue
-			}
-		}
-		if v, ok := fields[key]; ok {
-			if sub.Type == TypeChoice {
-				continue // handled by the recursive walk
-			}
-			*binds = append(*binds, pendingBind{flag: sub, raw: v})
-			sup.suppliedNames[sub.Name] = true
-		}
-	}
 }

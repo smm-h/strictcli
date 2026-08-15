@@ -332,10 +332,14 @@ func TestPreTypedElectionRefusalOutranksAValueRefusal(t *testing.T) {
 	}), flatDoubleElection)
 }
 
-func TestPreTypedScopedValueRefusalOutranksARootOne(t *testing.T) {
+// Inside the value phase the sweep is DECLARATION order, and a scope is not a
+// place it visits early: preTypedApp declares --count before --via, so the root
+// flag's value problem is the one reported. The whole shape of that sweep --
+// both directions and every depth -- is in flat_staging_test.go.
+func TestPreTypedRootValueDeclaredBeforeAScopeOutranksTheScopesOwn(t *testing.T) {
 	wantRefusal(t, flatRefusal(t, base(map[string]interface{}{
 		"via": "email", "retries": "3", "count": "7",
-	})), "--retries: expected integer, got str")
+	})), "--count: expected integer, got str")
 }
 
 func TestPreTypedValueRefusalOutranksAMissingRequiredFlag(t *testing.T) {
