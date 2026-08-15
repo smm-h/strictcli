@@ -10216,7 +10216,6 @@ class App:
         # and scoped value, which is the order this boundary already uses
         # (§24.3, §24.11).
         store = _SourcedStore()
-        positionals: list[str] = []
 
         for key, value in kwargs.items():
             f = param_to_flag.get(key)
@@ -10224,23 +10223,18 @@ class App:
                 # It's a flag -- store under flag.name (with dashes)
                 store.set(f.name, _check_pre_typed_value(f, value), _Source.CLI)
 
-        # Build positionals list in declared arg order from kwargs
-        for a in cmd.args:
-            if a.name in kwargs:
-                val = kwargs[a.name]
-                if a.variadic:
-                    # Variadic args expect a list
-                    if isinstance(val, list):
-                        positionals.extend(str(v) for v in val)
-                    else:
-                        positionals.append(str(val))
-                else:
-                    positionals.append(str(val))
+        # A positional's value is pre-typed exactly as a flag's is, so it is
+        # handed on AS SUPPLIED -- never stringified into a token the caller
+        # did not write. The declaration decides what it may be, in the
+        # positional phase where the argv path already decides it (§24.11's
+        # rule read onto §23.3's declaration).
+        supplied_args = {a.name: kwargs[a.name] for a in cmd.args if a.name in kwargs}
 
         # Validate and build final kwargs via the shared validation pipeline
         _cmd, final_kwargs, _global_cli_set, invoke_sources = _validate_and_build_kwargs(
-            cmd, store, positionals, global_flag_names, self._infra_roots,
+            cmd, store, [], global_flag_names, self._infra_roots,
             selector_result=selector_result,
+            pre_typed_args=supplied_args,
         )
 
         # Merge global flag values into final kwargs
@@ -10777,6 +10771,7 @@ def _validate_and_build_kwargs(
     global_flag_names: set[str],
     infra_roots: dict[str, str] | None = None,
     selector_result: "_SelectorResult | None" = None,
+    pre_typed_args: dict[str, object] | None = None,
 ) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
     """Validate parsed values and build the kwargs dict for the command handler.
 
@@ -10789,6 +10784,15 @@ def _validate_and_build_kwargs(
     selector's four parse phases run before this function, because a scope
     violation must be reported before any missing-required-flag consequence of
     it (§24.3's precedence rule).
+
+    ``pre_typed_args`` carries the positionals of a PROGRAMMATIC call, keyed by
+    arg name and already of the caller's own types -- the argv path's
+    ``positionals`` is a list of tokens waiting to be parsed, and the two
+    cannot be the same list. When it is supplied, ``positionals`` is empty and
+    step 6 checks each supplied value against its declaration instead of
+    parsing a token (§24.11's rule read onto §23.3's declaration). The step
+    itself is unmoved, so a bad positional value keeps the argv path's own
+    place among the phases at both doors.
 
     Returns (cmd, kwargs, global_cli_set, sources) where sources maps
     flag param names to source labels (cli/env/config/default/implied).
@@ -10891,27 +10895,55 @@ def _validate_and_build_kwargs(
     arg_values: dict[str, object] = {}
     has_variadic = cmd.args and cmd.args[-1].variadic
     fixed_args = cmd.args[:-1] if has_variadic else cmd.args
-    for idx, a in enumerate(fixed_args):
-        if idx < len(positionals):
-            arg_values[a.name] = _coerce_arg_value(a, positionals[idx])
-        elif a.presence == _PRESENCE_REQUIRED:
-            raise _ParseError(f"missing required argument '{a.name}'")
-        elif a.presence == _PRESENCE_DEFAULT:
-            arg_values[a.name] = a.default
-        else:
-            # An optional arg delivers absence as a PRESENT key, never as a
-            # missing kwarg (contract §23.3).
-            arg_values[a.name] = None
-    if has_variadic:
-        va = cmd.args[-1]
-        remaining_positionals = positionals[len(fixed_args):]
-        if va.presence == _PRESENCE_REQUIRED and len(remaining_positionals) == 0:
-            raise _ParseError(f"missing required argument '{va.name}'")
-        arg_values[va.name] = [
-            _coerce_arg_value(va, p) for p in remaining_positionals
-        ]
-    elif len(positionals) > len(cmd.args):
-        raise _ParseError(f"unexpected argument '{positionals[len(cmd.args)]}'")
+    if pre_typed_args is not None:
+        # The programmatic doors: the value is the caller's own, so nothing
+        # parses it and nothing stringifies it -- the declaration checks it
+        # (§24.11 item 240, read onto a positional). Presence is answered by
+        # the key's absence, exactly as an argv path answers it with a token
+        # that was never typed.
+        for a in cmd.args:
+            if a.name in pre_typed_args:
+                value = _check_pre_typed_arg_value(a, pre_typed_args[a.name])
+                if (
+                    a.variadic
+                    and a.presence == _PRESENCE_REQUIRED
+                    and len(value) == 0  # type: ignore[arg-type]
+                ):
+                    # An empty array is the flat spelling of no tokens at all.
+                    raise _ParseError(f"missing required argument '{a.name}'")
+                arg_values[a.name] = value
+            elif a.variadic:
+                if a.presence == _PRESENCE_REQUIRED:
+                    raise _ParseError(f"missing required argument '{a.name}'")
+                arg_values[a.name] = []
+            elif a.presence == _PRESENCE_REQUIRED:
+                raise _ParseError(f"missing required argument '{a.name}'")
+            elif a.presence == _PRESENCE_DEFAULT:
+                arg_values[a.name] = a.default
+            else:
+                arg_values[a.name] = None
+    else:
+        for idx, a in enumerate(fixed_args):
+            if idx < len(positionals):
+                arg_values[a.name] = _coerce_arg_value(a, positionals[idx])
+            elif a.presence == _PRESENCE_REQUIRED:
+                raise _ParseError(f"missing required argument '{a.name}'")
+            elif a.presence == _PRESENCE_DEFAULT:
+                arg_values[a.name] = a.default
+            else:
+                # An optional arg delivers absence as a PRESENT key, never as a
+                # missing kwarg (contract §23.3).
+                arg_values[a.name] = None
+        if has_variadic:
+            va = cmd.args[-1]
+            remaining_positionals = positionals[len(fixed_args):]
+            if va.presence == _PRESENCE_REQUIRED and len(remaining_positionals) == 0:
+                raise _ParseError(f"missing required argument '{va.name}'")
+            arg_values[va.name] = [
+                _coerce_arg_value(va, p) for p in remaining_positionals
+            ]
+        elif len(positionals) > len(cmd.args):
+            raise _ParseError(f"unexpected argument '{positionals[len(cmd.args)]}'")
 
     # Step 6.5: validate arg choices
     for a in cmd.args:
@@ -11396,6 +11428,35 @@ def _check_pre_typed_value(f: Flag, value: object) -> object:
         return _coerce_config_value(value, f)
     except ValueError as e:
         raise _ParseError(f"--{f.name}: {e}")
+
+
+def _check_pre_typed_arg_value(a: Arg, value: object) -> object:
+    """:func:`_check_pre_typed_value` for a POSITIONAL (§23.3, §24.11).
+
+    Same machinery and the same closed set of four types -- a positional's
+    declaration says what a value may be exactly as a flag's does, so the
+    programmatic doors may not deliver a value it forbids, and may not turn one
+    into a token by stringifying it either. Only the wrapper differs: the arg's
+    own name in the prefix every arg-side value refusal already uses
+    (``argument '<name>'``), never ``--<name>``.
+
+    A variadic arg is a SEQUENCE of positionals rather than one value of a
+    collection type, so an array spreads into one element per entry and each
+    element is checked on its own -- and anything else is the single element it
+    looks like, which is the one positional a command line would have typed.
+    """
+    if a.variadic:
+        items = value if isinstance(value, list) else [value]
+        return [_check_pre_typed_arg_element(a, item) for item in items]
+    return _check_pre_typed_arg_element(a, value)
+
+
+def _check_pre_typed_arg_element(a: Arg, value: object) -> object:
+    """One pre-typed positional value against the type its arg declares."""
+    try:
+        return _coerce_config_scalar(value, a.type)
+    except ValueError as e:
+        raise _ParseError(f"argument '{a.name}': {e}")
 
 
 def _coerce_scoped_value(

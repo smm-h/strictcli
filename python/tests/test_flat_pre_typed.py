@@ -338,3 +338,222 @@ def test_a_scoped_flags_own_key_is_not_unknown_at_the_flat_boundary():
         "flag '--retries' is only valid under '--via email', but "
         "'--via none' was elected by default"
     )
+
+
+# ---------------------------------------------------------------------------
+# A POSITIONAL's value (§23.3's declaration, item 240's rule)
+#
+# A positional is declared with the same closed set of four types and the same
+# presence rule as a flag, so a pre-typed value is checked against it the same
+# way -- and the boundary never turns a value into a token by stringifying it,
+# which is what made `target=None` arrive as the four characters "None".
+# ---------------------------------------------------------------------------
+
+
+def _args_app(captured=None):
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @strictcli.flag("need", type=str, help="a needed flag", presence="required")
+    @strictcli.arg("target", help="the target", presence="required")
+    @strictcli.arg("count", type=int, help="how many", presence="optional")
+    def run(ctx, need, target, count):
+        if captured is not None:
+            captured.update(need=need, target=target, count=count)
+
+    @app.command("many", effect="read_only", help="many of them")
+    @strictcli.arg("names", help="the names", variadic=True, presence="optional")
+    def many(ctx, names):
+        if captured is not None:
+            captured.update(names=names)
+
+    @app.command("all", effect="read_only", help="all of them")
+    @strictcli.arg("names", help="the names", variadic=True, presence="required")
+    def all_of_them(ctx, names):
+        if captured is not None:
+            captured.update(names=names)
+
+    @app.command("mixed", effect="read_only", help="one then many")
+    @strictcli.arg("head", help="the first one", presence="optional")
+    @strictcli.arg("rest", help="the others", variadic=True, presence="optional")
+    def mixed(ctx, head, rest):
+        if captured is not None:
+            captured.update(head=head, rest=rest)
+
+    return app
+
+
+def _arg_refusal(command, **arguments):
+    """The flat machine form, which carries positionals under their own names."""
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _args_app()._call_with_kwargs(
+            command, dict(arguments), approve_consequential=False, flat=True,
+        )
+    return str(exc.value)
+
+
+def test_a_null_positional_is_refused():
+    """It used to arrive as the string 'None' -- a value no command line could
+    produce, since the caller never typed those four characters."""
+    assert _arg_refusal("run", need="x", target=None) == (
+        "argument 'target': expected string, got null"
+    )
+
+
+def test_an_optional_positional_refuses_an_explicit_null_too():
+    """Optionality has one spelling here as well: the declaration plus an
+    absent key, which is what delivers absence."""
+    assert _arg_refusal("run", need="x", target="t", count=None) == (
+        "argument 'count': expected integer, got null"
+    )
+
+
+def test_an_omitted_optional_positional_is_delivered_absent():
+    captured: dict = {}
+    _args_app(captured)._call_with_kwargs(
+        "run", {"need": "x", "target": "t"}, approve_consequential=False,
+        flat=True,
+    )
+    assert captured["count"] is None
+
+
+def test_a_wrong_typed_positional_is_refused():
+    """`target=5` used to reach the handler as the string '5'."""
+    assert _arg_refusal("run", need="x", target=5) == (
+        "argument 'target': expected string, got int"
+    )
+
+
+def test_a_bool_is_not_a_string_positional():
+    assert _arg_refusal("run", need="x", target=True) == (
+        "argument 'target': expected string, got bool"
+    )
+
+
+def test_an_int_positional_refuses_a_numeral_string():
+    """Nothing re-parses a pre-typed value: the numeral's TEXT is not an
+    integer, exactly as it is not one for a flag."""
+    assert _arg_refusal("run", need="x", target="t", count="7") == (
+        "argument 'count': expected integer, got str"
+    )
+
+
+def test_an_int_positional_refuses_a_float():
+    assert _arg_refusal("run", need="x", target="t", count=1.5) == (
+        "argument 'count': expected integer, got float"
+    )
+
+
+def test_a_well_typed_positional_reaches_the_handler_as_supplied():
+    captured: dict = {}
+    _args_app(captured)._call_with_kwargs(
+        "run", {"need": "x", "target": "t", "count": 7},
+        approve_consequential=False, flat=True,
+    )
+    assert captured["target"] == "t"
+    assert captured["count"] == 7
+    assert isinstance(captured["count"], int)
+
+
+def test_a_variadic_positional_takes_an_array():
+    captured: dict = {}
+    _args_app(captured)._call_with_kwargs(
+        "many", {"names": ["a", "b"]}, approve_consequential=False, flat=True,
+    )
+    assert captured["names"] == ["a", "b"]
+
+
+def test_a_variadic_positional_refuses_a_wrong_typed_element():
+    """Each element is one positional and is checked as one, so the sentence
+    is the arg's own -- there is no collection type here to name."""
+    assert _arg_refusal("many", names=["a", 2]) == (
+        "argument 'names': expected string, got int"
+    )
+
+
+def test_a_variadic_positional_takes_a_scalar_as_its_one_element():
+    """A variadic arg is a SEQUENCE of positionals: one value is the one
+    positional a command line would have typed."""
+    captured: dict = {}
+    _args_app(captured)._call_with_kwargs(
+        "many", {"names": "a"}, approve_consequential=False, flat=True,
+    )
+    assert captured["names"] == ["a"]
+
+
+def test_a_variadic_positional_refuses_a_null_element():
+    assert _arg_refusal("many", names=None) == (
+        "argument 'names': expected string, got null"
+    )
+
+
+def test_an_omitted_optional_variadic_is_delivered_empty():
+    captured: dict = {}
+    _args_app(captured)._call_with_kwargs(
+        "many", {}, approve_consequential=False, flat=True,
+    )
+    assert captured["names"] == []
+
+
+def test_an_empty_array_does_not_satisfy_a_required_variadic():
+    """An empty array is the flat spelling of no tokens at all, and no tokens
+    is what the argv path refuses here."""
+    assert _arg_refusal("all", names=[]) == (
+        "missing required argument 'names'"
+    )
+
+
+def test_an_absent_required_positional_keeps_its_own_sentence():
+    assert _arg_refusal("run", need="x") == (
+        "missing required argument 'target'"
+    )
+
+
+def test_the_same_refusals_reach_the_record_front_door():
+    """`call()` and the flat form are two spellings of one declaration, so a
+    positional's value is decided the same way at both."""
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _args_app().call("run", need="x", target=None)
+    assert str(exc.value) == "argument 'target': expected string, got null"
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _args_app().call("run", need="x", target=5)
+    assert str(exc.value) == "argument 'target': expected string, got int"
+
+
+def test_a_positional_value_refusal_keeps_the_command_lines_own_place():
+    """The argv path reports a missing required FLAG before it parses a
+    positional token, and the programmatic doors report the same order for the
+    same state -- the step is unmoved, only what it does inside it changed."""
+    r = _args_app().test(["run", "abc"])
+    assert r.exit_code == 1
+    assert "error: flag '--need' is required\n" in r.stderr
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _args_app().call("run", target=5)
+    assert str(exc.value) == "flag '--need' is required"
+
+
+def test_the_command_line_still_parses_its_own_tokens():
+    """Nothing about the argv path changed: a token IS text, and it is parsed
+    into the declared type as it always was."""
+    captured: dict = {}
+    r = _args_app(captured).test(["run", "--need", "x", "t", "7"])
+    assert r.exit_code == 0
+    assert captured["target"] == "t"
+    assert captured["count"] == 7
+
+
+def test_each_positional_is_read_under_its_own_name():
+    """A flat object has no positions, so the variadic's elements can never
+    slide into a fixed arg the object did not name."""
+    captured: dict = {}
+    _args_app(captured)._call_with_kwargs(
+        "mixed", {"rest": ["a", "b"]}, approve_consequential=False, flat=True,
+    )
+    assert captured["head"] is None
+    assert captured["rest"] == ["a", "b"]
+
+
+def test_a_variadic_element_is_refused_under_the_variadic_own_name():
+    assert _arg_refusal("mixed", head="h", rest=["a", 2]) == (
+        "argument 'rest': expected string, got int"
+    )
