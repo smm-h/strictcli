@@ -534,6 +534,113 @@ test("sources: a default election produces the ' by default' origin", async () =
 	);
 });
 
+/** Two nested token-spelled selectors, each electable from its own env var. */
+function nestedAmbientApp(): App {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("add", {
+			help: "add an entry",
+			flags: {
+				visibility: choiceFlag(
+					"visibility",
+					{
+						"user-facing": choice({
+							help: "a change users read about",
+							flags: {
+								type: choiceFlag(
+									"type",
+									{
+										feature: choice({
+											help: "a feature",
+											flags: {
+												headline: flag("headline", t.str, {
+													help: "the headline",
+													presence: "required",
+												}),
+											},
+										}),
+										fix: choice({ help: "a fix" }),
+									},
+									{
+										help: "the kind of change",
+										presence: "required",
+										env: "MYAPP_TYPE",
+									},
+								),
+							},
+						}),
+						internal: choice({ help: "a change nobody upgrades for" }),
+					},
+					{
+						help: "who the entry is for",
+						presence: "required",
+						env: "MYAPP_VISIBILITY",
+					},
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("sources: the origin clause names the OUTERMOST non-CLI election", async () => {
+	// §18.19 item 216: the ambient cause a reader cannot see in their own
+	// command line is the OUTER one -- naming the inner election tells them to
+	// change a token that was not the cause, and blaming nothing at all when the
+	// inner election WAS typed hides the cause entirely.
+	const path = "'--visibility user-facing --type feature'";
+	// Two ambient elections: the outermost is named.
+	await withEnv(
+		{ MYAPP_VISIBILITY: "user-facing", MYAPP_TYPE: "feature" },
+		async () => {
+			assert.equal(
+				(await nestedAmbientApp().test(["add"])).stderr,
+				errOut(
+					`flag '--headline' is required under ${path} (elected from env var 'MYAPP_VISIBILITY')`,
+					"myapp add",
+				),
+			);
+		},
+	);
+	// An ambient OUTER election beside a typed inner one: still named, never
+	// empty -- the typed token is not what a reader would have to change.
+	await withEnv({ MYAPP_VISIBILITY: "user-facing" }, async () => {
+		assert.equal(
+			(await nestedAmbientApp().test(["add", "--type", "feature"])).stderr,
+			errOut(
+				`flag '--headline' is required under ${path} (elected from env var 'MYAPP_VISIBILITY')`,
+				"myapp add",
+			),
+		);
+	});
+	// A typed outer election beside an ambient inner one names the inner one:
+	// the walk reports the first non-CLI election, outermost first.
+	await withEnv({ MYAPP_TYPE: "feature" }, async () => {
+		assert.equal(
+			(await nestedAmbientApp().test(["add", "--visibility", "user-facing"]))
+				.stderr,
+			errOut(
+				`flag '--headline' is required under ${path} (elected from env var 'MYAPP_TYPE')`,
+				"myapp add",
+			),
+		);
+	});
+	// Every election typed: no origin clause at all.
+	assert.equal(
+		(
+			await nestedAmbientApp().test([
+				"add",
+				"--visibility",
+				"user-facing",
+				"--type",
+				"feature",
+			])
+		).stderr,
+		errOut(`flag '--headline' is required under ${path}`, "myapp add"),
+	);
+});
+
 test("sources: a scoped env binding is consulted when its scope is elected", async () => {
 	const out = await withEnv({ MYAPP_PHONE: "+15550100" }, async () =>
 		notifyApp().test(["send", "--via", "sms"]),

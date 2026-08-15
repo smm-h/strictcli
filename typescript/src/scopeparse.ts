@@ -652,13 +652,21 @@ function resolveScopedFlag(
 	out.provided.add(key);
 }
 
-/** The origin clause of the innermost election on a path, for a nested refusal. */
+/**
+ * The origin clause of the OUTERMOST non-CLI election on a path (§18.19 item
+ * 216) -- the ambient cause a reader cannot see in their own command line.
+ * Empty when every election on the path was typed. Naming the innermost
+ * election instead would blame a token the reader did not have to change, and
+ * would fall silent entirely whenever the inner election was the typed one.
+ */
 function electionOriginOf(path: readonly ScopeStep[], run: Run): Origin {
-	const last = path[path.length - 1];
-	if (last === undefined) {
-		return "";
+	for (const step of path) {
+		const origin = run.elections.get(step.selector)?.origin ?? "";
+		if (origin !== "") {
+			return origin;
+		}
 	}
-	return run.elections.get(last.selector)?.origin ?? "";
+	return "";
 }
 
 /** Copies a declared compound default so a handler cannot mutate the declaration. */
