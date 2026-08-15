@@ -3294,5 +3294,1418 @@
       "stdout_equals": "",
       "stderr_equals": "error: command \"cmd\": constraint \"pair\" references 'subject', which is declared under '--via email': constraints operate at root scope only\n"
     }
+  },
+  {
+    "name": "constraint registration: the member-shape step is set-wide -- a bare name in a LATER constraint outranks an earlier constraint's unknown member (python)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "optional"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "nope"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "other",
+              "members": [
+                "a",
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"other\" member 0 is a bare name: declare it as Member(\"<x>\")\n"
+    },
+    "targets": [
+      "python"
+    ]
+  },
+  {
+    "name": "constraint registration: the member-shape step is set-wide -- a bare name in a LATER constraint outranks an earlier constraint's unknown member (typescript)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "optional"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "nope"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "other",
+              "members": [
+                "a",
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"other\" member 0 is a bare name: declare it as { name: \"<x>\" }\n"
+    },
+    "targets": [
+      "typescript"
+    ]
+  },
+  {
+    "name": "constraint registration: the member-shape step precedes the arity count -- a later bare name outranks an earlier one-member constraint (python)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "optional"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "lonely",
+              "members": [
+                {
+                  "name": "a"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "other",
+              "members": [
+                "a",
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"other\" member 0 is a bare name: declare it as Member(\"<x>\")\n"
+    },
+    "targets": [
+      "python"
+    ]
+  },
+  {
+    "name": "constraint registration: the member-shape step precedes the arity count -- a later bare name outranks an earlier one-member constraint (typescript)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "optional"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "lonely",
+              "members": [
+                {
+                  "name": "a"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "other",
+              "members": [
+                "a",
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"other\" member 0 is a bare name: declare it as { name: \"<x>\" }\n"
+    },
+    "targets": [
+      "typescript"
+    ]
+  },
+  {
+    "name": "constraint registration: a Requires whose two operands are the same unknown name reports the unknown flag, not the coincidence that both operands spell it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "optional"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "requires",
+              "name": "rr",
+              "flag": "zzz",
+              "depends_on": "zzz"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"rr\" references unknown flag \"zzz\"\n"
+    }
+  },
+  {
+    "name": "constraint registration: an unknown dependency operand (step 3) outranks a required member (step 7), whichever is declared first",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "required"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            },
+            {
+              "type": "requires",
+              "name": "rr",
+              "flag": "zzz",
+              "depends_on": "zzz"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"rr\" references unknown flag \"zzz\"\n"
+    }
+  },
+  {
+    "name": "constraint registration: a required member (step 7) outranks a non-bool Implies trigger, which the trailing phase holds (python)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "s",
+              "type": "str",
+              "help": "the s",
+              "presence": "optional"
+            },
+            {
+              "name": "t",
+              "type": "bool",
+              "help": "the t",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "required"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "ii",
+              "flag": "s",
+              "implies": "t",
+              "value": true
+            },
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pair\" member '--a' declares presence=\"required\": a member the invocation must always supply leaves the constraint nothing to decide\n"
+    },
+    "targets": [
+      "python"
+    ]
+  },
+  {
+    "name": "constraint registration: a required member (step 7) outranks a same-flag Requires over operands that both resolve (python)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "s",
+              "type": "str",
+              "help": "the s",
+              "presence": "optional"
+            },
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "required"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "requires",
+              "name": "rr",
+              "flag": "s",
+              "depends_on": "s"
+            },
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pair\" member '--a' declares presence=\"required\": a member the invocation must always supply leaves the constraint nothing to decide\n"
+    },
+    "targets": [
+      "python"
+    ]
+  },
+  {
+    "name": "constraint registration: a required member (step 7) outranks a non-bool Implies trigger, which the trailing phase holds (go)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "s",
+              "type": "str",
+              "help": "the s",
+              "presence": "optional"
+            },
+            {
+              "name": "t",
+              "type": "bool",
+              "help": "the t",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "required"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "ii",
+              "flag": "s",
+              "implies": "t",
+              "value": true
+            },
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pair\" member '--a' declares Required(): a member the invocation must always supply leaves the constraint nothing to decide\n"
+    },
+    "targets": [
+      "go"
+    ]
+  },
+  {
+    "name": "constraint registration: a required member (step 7) outranks a same-flag Requires over operands that both resolve (go)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "s",
+              "type": "str",
+              "help": "the s",
+              "presence": "optional"
+            },
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "required"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "requires",
+              "name": "rr",
+              "flag": "s",
+              "depends_on": "s"
+            },
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pair\" member '--a' declares Required(): a member the invocation must always supply leaves the constraint nothing to decide\n"
+    },
+    "targets": [
+      "go"
+    ]
+  },
+  {
+    "name": "constraint registration: a required member (step 7) outranks a non-bool Implies trigger, which the trailing phase holds (typescript)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "s",
+              "type": "str",
+              "help": "the s",
+              "presence": "optional"
+            },
+            {
+              "name": "t",
+              "type": "bool",
+              "help": "the t",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "required"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "ii",
+              "flag": "s",
+              "implies": "t",
+              "value": true
+            },
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pair\" member '--a' declares presence: \"required\": a member the invocation must always supply leaves the constraint nothing to decide\n"
+    },
+    "targets": [
+      "typescript"
+    ]
+  },
+  {
+    "name": "constraint registration: a required member (step 7) outranks a same-flag Requires over operands that both resolve (typescript)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "s",
+              "type": "str",
+              "help": "the s",
+              "presence": "optional"
+            },
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "required"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "requires",
+              "name": "rr",
+              "flag": "s",
+              "depends_on": "s"
+            },
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pair\" member '--a' declares presence: \"required\": a member the invocation must always supply leaves the constraint nothing to decide\n"
+    },
+    "targets": [
+      "typescript"
+    ]
+  },
+  {
+    "name": "constraint registration: a cycle entered at a later participant opens on the earliest-declared one",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "f1",
+              "type": "str",
+              "help": "the f1",
+              "presence": "optional"
+            },
+            {
+              "name": "f2",
+              "type": "str",
+              "help": "the f2",
+              "presence": "optional"
+            },
+            {
+              "name": "f3",
+              "type": "str",
+              "help": "the f3",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "a",
+              "members": [
+                {
+                  "name": "c"
+                },
+                {
+                  "name": "f1"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "b",
+              "members": [
+                {
+                  "name": "c"
+                },
+                {
+                  "name": "f2"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "c",
+              "members": [
+                {
+                  "name": "b"
+                },
+                {
+                  "name": "f3"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraints form a cycle: b -> c -> b\n"
+    }
+  },
+  {
+    "name": "constraint registration: a cycle reached through a root that is not in it names only its participants",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "f1",
+              "type": "str",
+              "help": "the f1",
+              "presence": "optional"
+            },
+            {
+              "name": "f2",
+              "type": "str",
+              "help": "the f2",
+              "presence": "optional"
+            },
+            {
+              "name": "f3",
+              "type": "str",
+              "help": "the f3",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "a",
+              "members": [
+                {
+                  "name": "b"
+                },
+                {
+                  "name": "f1"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "b",
+              "members": [
+                {
+                  "name": "c"
+                },
+                {
+                  "name": "f2"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "c",
+              "members": [
+                {
+                  "name": "b"
+                },
+                {
+                  "name": "f3"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraints form a cycle: b -> c -> b\n"
+    }
+  },
+  {
+    "name": "constraint registration: a member naming a member flag of a member-spelled selector takes the scoped-operand refusal, whose path is the member's own flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "source",
+              "help": "where to read from",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "file",
+                  "help": "read from file"
+                },
+                {
+                  "name": "url",
+                  "help": "read from URL"
+                }
+              ]
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "file"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pair\" references 'file', which is declared under '--file': constraints operate at root scope only\n"
+    }
+  },
+  {
+    "name": "constraint registration: one name declared twice as a member of the same constraint",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "optional"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "a"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pair\" declares member \"a\" twice\n"
+    }
+  },
+  {
+    "name": "constraint registration: a bool ARG member declaring no election renders its bare name (python)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "switch",
+              "type": "bool",
+              "help": "the switch",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pick",
+              "members": [
+                {
+                  "name": "switch"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pick\" member 'switch' is a bool and must declare its election: when=\"true\" counts only a true value, when=\"present\" counts any\n"
+    },
+    "targets": [
+      "python"
+    ]
+  },
+  {
+    "name": "constraint registration: when=non_empty on an int ARG member renders its bare name in both halves of the sentence (python)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "count",
+              "type": "int",
+              "help": "the count",
+              "presence": "default",
+              "default": 0
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pick",
+              "members": [
+                {
+                  "name": "count",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pick\" member 'count' declares when=\"non_empty\", which needs a string or a collection; 'count' is a int\n"
+    },
+    "targets": [
+      "python"
+    ]
+  },
+  {
+    "name": "constraint registration: a bool ARG member declaring no election renders its bare name (go)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "switch",
+              "type": "bool",
+              "help": "the switch",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pick",
+              "members": [
+                {
+                  "name": "switch"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pick\" member 'switch' is a bool and must declare its election: WhenTrue() counts only a true value, WhenPresent() counts any\n"
+    },
+    "targets": [
+      "go"
+    ]
+  },
+  {
+    "name": "constraint registration: when=non_empty on an int ARG member renders its bare name in both halves of the sentence (go)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "count",
+              "type": "int",
+              "help": "the count",
+              "presence": "default",
+              "default": 0
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pick",
+              "members": [
+                {
+                  "name": "count",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pick\" member 'count' declares WhenNonEmpty(), which needs a string or a collection; 'count' is a int\n"
+    },
+    "targets": [
+      "go"
+    ]
+  },
+  {
+    "name": "constraint registration: a bool ARG member declaring no election renders its bare name (typescript)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "switch",
+              "type": "bool",
+              "help": "the switch",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pick",
+              "members": [
+                {
+                  "name": "switch"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pick\" member 'switch' is a bool and must declare its election: when: \"true\" counts only a true value, when: \"present\" counts any\n"
+    },
+    "targets": [
+      "typescript"
+    ]
+  },
+  {
+    "name": "constraint registration: when=non_empty on an int ARG member renders its bare name in both halves of the sentence (typescript)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "count",
+              "type": "int",
+              "help": "the count",
+              "presence": "default",
+              "default": 0
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pick",
+              "members": [
+                {
+                  "name": "count",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": constraint \"pick\" member 'count' declares when: \"non_empty\", which needs a string or a collection; 'count' is a int\n"
+    },
+    "targets": [
+      "typescript"
+    ]
   }
 ]
