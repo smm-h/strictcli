@@ -3501,10 +3501,12 @@ amendment** rather than a silent rewrite, because the bytes a user reads change:
 
 **Category and coverage.** The two violation templates are **parse-time** and take the covering
 conformance case every parse template takes. The guards are registration-time and are asserted **per
-target**, as `conformance/cases/presence_registration.json` asserts §12.12's. The three
-implementation-specific exclusions above (`errConstraintMinMembers` in Go,
-`errConstraintMemberNotRecord` in Go) are `excluded:` entries in `check_error_parity.py` with the
-rationale in their rows -- §12.12's precedent, applied for §12.12's reason.
+target**, as `conformance/cases/presence_registration.json` asserts §12.12's. The
+implementation-specific exclusions above are `excluded:` entries in `check_error_parity.py` with the
+rationale in their rows -- §12.12's precedent, applied for §12.12's reason. *(Corrected 2026-08-15,
+reconciliation round, §18.31 item 288: the authored sentence said "three" and named two.)* They are
+`errConstraintMinMembers` excluded in Go, `errConstraintMemberNotRecord` excluded in Go, and the
+Python-only `Member(when=...)` vocabulary guard excluded in Go **and** TypeScript.
 
 ---
 
