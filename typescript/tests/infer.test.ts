@@ -150,7 +150,10 @@ const pick = defineReadOnlyCommand("pick", {
 		source: memberChoiceFlag(
 			"source",
 			{
-				"from-file": choice({ help: "From a file", value: t.str }),
+				"from-file": choice({
+					help: "From a file",
+					value: { carrier: t.str, help: "path to the file" },
+				}),
 				"from-url": choice({
 					help: "From a URL",
 					flags: {

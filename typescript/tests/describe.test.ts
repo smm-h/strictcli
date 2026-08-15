@@ -524,7 +524,9 @@ test("registry: runtime keys of factory-built carriers match declaration order",
 		runtimeMembers("ChoiceDef"),
 	);
 	assert.deepEqual(
-		Object.keys(api.choice({ help: "h", value: api.t.str })),
+		Object.keys(
+			api.choice({ help: "h", value: { carrier: api.t.str, help: "h" } }),
+		),
 		runtimeMembers("ValueChoiceDef"),
 	);
 	assert.deepEqual(

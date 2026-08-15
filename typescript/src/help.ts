@@ -359,9 +359,9 @@ function buildMemberSpec(choiceName: string, c: AnyChoice): string {
 	// A payload-less member and a bool-payload member are both typed as a bare
 	// flag; only a value-carrying member renders the value it takes.
 	const payload = c.value;
-	return payload === undefined || payload.schema === "bool"
+	return payload === undefined || payload.carrier.schema === "bool"
 		? `--${choiceName}`
-		: `--${choiceName} <${payload.schema}>`;
+		: `--${choiceName} <${payload.carrier.schema}>`;
 }
 
 /** The selector block: its own line, then one line per choice, then each scope. */

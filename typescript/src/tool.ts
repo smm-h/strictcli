@@ -108,9 +108,12 @@ export function buildJSONSchema(
 			};
 			for (const [choiceName, c] of Object.entries(d.choices)) {
 				if (c.value !== undefined) {
+					// The payload's OWN help documents the flattened property: the
+					// property carries the value, not the election, so the choice's
+					// help would describe something else entirely.
 					properties[flagParamName(choiceName)] = {
-						...scalarFragment(c.value.schema, undefined),
-						description: c.help,
+						...scalarFragment(c.value.carrier.schema, undefined),
+						description: c.value.help,
 					};
 				}
 				flattenScope(Object.values(c.flags));

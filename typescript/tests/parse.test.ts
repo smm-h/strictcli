@@ -1192,8 +1192,14 @@ function memberPayloadApp(out: string[]): AppImpl {
 				source: memberChoiceFlag(
 					"source",
 					{
-						file: choice({ help: "read from file", value: t.str }),
-						url: choice({ help: "read from URL", value: t.str }),
+						file: choice({
+							help: "read from file",
+							value: { carrier: t.str, help: "path to the file" },
+						}),
+						url: choice({
+							help: "read from URL",
+							value: { carrier: t.str, help: "the URL to read" },
+						}),
 					},
 					{ help: "where to read from", presence: "required" },
 				),
@@ -1236,8 +1242,14 @@ test("member spelling: env elects nothing (contract §21.3, carried over)", asyn
 					source: memberChoiceFlag(
 						"source",
 						{
-							file: choice({ help: "read from file", value: t.str }),
-							url: choice({ help: "read from URL", value: t.str }),
+							file: choice({
+								help: "read from file",
+								value: { carrier: t.str, help: "path to the file" },
+							}),
+							url: choice({
+								help: "read from URL",
+								value: { carrier: t.str, help: "the URL to read" },
+							}),
 						},
 						{ help: "where to read from", presence: "required" },
 					),
@@ -1291,7 +1303,10 @@ function electionApp(out: string[]): AppImpl {
 				scope: memberChoiceFlag(
 					"scope",
 					{
-						profile: choice({ help: "a profile", value: t.str }),
+						profile: choice({
+							help: "a profile",
+							value: { carrier: t.str, help: "profile name" },
+						}),
 						"all-profiles": choice({ help: "every profile" }),
 						"current-profile": choice({ help: "the current profile" }),
 					},

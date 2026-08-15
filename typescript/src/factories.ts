@@ -1186,6 +1186,19 @@ export interface ChoiceDef<F extends FlagMap> {
 }
 
 /**
+ * A member-spelled choice's own payload: the carrier that types it plus the
+ * help that documents it. Help is MANDATORY here for the same reason it is
+ * mandatory on a flag -- the payload is a separate documented thing from the
+ * choice that carries it, and §25.6's `value` entry publishes its own
+ * `{type, help}` pair. The choice's help says what electing it means; the
+ * payload's help says what the value it takes is.
+ */
+type ChoicePayload<Out> = {
+	readonly carrier: Carrier<Out, ScalarSchema>;
+	readonly help: string;
+};
+
+/**
  * A choice that carries a payload of its own, delivered under the reserved
  * name `value`. Only member spelling can carry one: a token-spelled choice is
  * named by the token itself and has nowhere to put a payload (§24.4).
@@ -1194,7 +1207,7 @@ export interface ValueChoiceDef<Out, F extends FlagMap> {
 	readonly kind: "choice";
 	readonly help: string;
 	readonly flags: F;
-	readonly value: Carrier<Out, ScalarSchema>;
+	readonly value: ChoicePayload<Out>;
 }
 
 /** Structural supertype of every choice descriptor. */
@@ -1202,7 +1215,7 @@ export interface AnyChoice {
 	readonly kind: "choice";
 	readonly help: string;
 	readonly flags: FlagMap;
-	readonly value?: Carrier<unknown, ScalarSchema>;
+	readonly value?: ChoicePayload<unknown>;
 }
 
 /** A selector's choice map: the choice name (as typed) to the choice it declares. */
@@ -1212,7 +1225,9 @@ export type ChoiceMap = Readonly<Record<string, AnyChoice>>;
  * Declares one choice of a selector. `flags` is the scope it owns -- omitted
  * for a choice that owns none, which is the degenerate case that makes this
  * construct subsume a plain constrained value with per-choice documentation.
- * `value` declares the payload a member-spelled choice's own token carries.
+ * `value` declares the payload a member-spelled choice's own token carries:
+ * its carrier and its own help, the same pair `flag()` takes for an ordinary
+ * flag's type and documentation.
  */
 export function choice<const F extends FlagMap = Record<never, never>>(spec: {
 	readonly help: string;
@@ -1223,12 +1238,12 @@ export function choice<
 	const F extends FlagMap = Record<never, never>,
 >(spec: {
 	readonly help: string;
-	readonly value: Carrier<Out, ScalarSchema>;
+	readonly value: ChoicePayload<Out>;
 	readonly flags?: F;
 }): ValueChoiceDef<Out, F>;
 export function choice(spec: {
 	readonly help: string;
-	readonly value?: Carrier<unknown, ScalarSchema>;
+	readonly value?: ChoicePayload<unknown>;
 	readonly flags?: FlagMap;
 }): AnyChoice {
 	const flags = spec.flags ?? {};
@@ -1605,7 +1620,7 @@ export function surfaceNames(decl: AnyDecl): SurfaceName[] {
 	return Object.entries(decl.choices).map(([choiceName, c]) => ({
 		name: choiceName,
 		takesValue: c.value !== undefined,
-		shape: c.value === undefined ? "bool" : c.value.schema,
+		shape: c.value === undefined ? "bool" : c.value.carrier.schema,
 		elects: choiceName,
 		decl,
 	}));

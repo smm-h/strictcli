@@ -587,8 +587,14 @@ test("member spelling: a config value elects nothing and is never delivered (A5)
 					source: memberChoiceFlag(
 						"source",
 						{
-							file: choice({ help: "read from file", value: t.str }),
-							url: choice({ help: "read from URL", value: t.str }),
+							file: choice({
+								help: "read from file",
+								value: { carrier: t.str, help: "path to the file" },
+							}),
+							url: choice({
+								help: "read from URL",
+								value: { carrier: t.str, help: "the URL to read" },
+							}),
 						},
 						{ help: "where to read from", presence: "required" },
 					),

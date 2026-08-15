@@ -296,14 +296,14 @@ function serializeChoiceObject(
 	const entry: Record<string, unknown> = { name, help: c.help };
 	const scope: Record<string, unknown>[] = [];
 	if (c.value !== undefined) {
-		// TypeScript's member payload is a bare carrier declared beside the
-		// choice's own help, so the choice's help IS the payload's help -- it is
-		// the only help the declaration carries, and the same one the member's
-		// help line renders.
+		// The payload carries its OWN help, declared beside its carrier: §25.6's
+		// `value` entry is an ordinary scoped-flag entry and its `help` is the
+		// payload's, never the choice's. The choice's help documents what
+		// electing it means and is what the member's help line renders.
 		scope.push({
 			name: CHOICE_VALUE_KEY,
-			help: c.help,
-			value_schema: scalarFragment(c.value.schema, undefined),
+			help: c.value.help,
+			value_schema: scalarFragment(c.value.carrier.schema, undefined),
 			presence: "required",
 		});
 	}

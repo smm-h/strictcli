@@ -310,7 +310,7 @@ function resolveSelector(
 		const raw = run.input.occ.get(election.elected)?.positive[0];
 		if (raw !== undefined) {
 			try {
-				record[CHOICE_VALUE_KEY] = chosen.value.parse(raw);
+				record[CHOICE_VALUE_KEY] = chosen.value.carrier.parse(raw);
 				provided.add(CHOICE_VALUE_KEY);
 			} catch (e) {
 				run.problems.push({

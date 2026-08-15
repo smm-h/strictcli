@@ -382,8 +382,14 @@ test("call: a bad elected record raises InvokeError", async () => {
 					source: memberChoiceFlag(
 						"source",
 						{
-							url: choice({ help: "url", value: t.str }),
-							file: choice({ help: "file", value: t.str }),
+							url: choice({
+								help: "url",
+								value: { carrier: t.str, help: "the URL to read" },
+							}),
+							file: choice({
+								help: "file",
+								value: { carrier: t.str, help: "path to the file" },
+							}),
 						},
 						{ help: "where to read from", presence: "required" },
 					),
@@ -421,7 +427,10 @@ test("call: a selector with no kwarg elects from its declaration", async () => {
 				scope: memberChoiceFlag(
 					"scope",
 					{
-						profile: choice({ help: "a profile", value: t.str }),
+						profile: choice({
+							help: "a profile",
+							value: { carrier: t.str, help: "profile name" },
+						}),
 						"all-profiles": choice({ help: "every profile" }),
 					},
 					{ help: "which profiles", presence: "required" },

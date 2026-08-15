@@ -220,7 +220,10 @@ function buildChoice(cd) {
 		spec.flags = flagMapOf(cd.flags, (fn) => errCommandDuplicateFlag(cd.name, fn));
 	}
 	if ("value" in cd) {
-		spec.value = scalarCarrier(cd.value.type);
+		// The payload is a carrier plus its OWN help, which is what §25.6's
+		// `value` entry publishes and what the member's flattened MCP property
+		// is described by -- the choice's help documents electing it instead.
+		spec.value = { carrier: scalarCarrier(cd.value.type), help: cd.value.help };
 	}
 	if ("args" in cd) {
 		// A positional inside a scope is inexpressible through the declared

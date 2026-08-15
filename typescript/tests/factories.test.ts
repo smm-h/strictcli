@@ -121,14 +121,23 @@ test("flagSet and memberChoiceFlag hold keyed maps", () => {
 	const sel = memberChoiceFlag(
 		"source",
 		{
-			file: choice({ help: "From file", value: t.str }),
-			url: choice({ help: "From URL", value: t.str }),
+			file: choice({
+				help: "From file",
+				value: { carrier: t.str, help: "path to the file" },
+			}),
+			url: choice({
+				help: "From URL",
+				value: { carrier: t.str, help: "the URL to read" },
+			}),
 		},
 		{ help: "Where to read from", presence: "required" },
 	);
 	assert.equal(sel.kind, "choice-flag");
 	assert.equal(sel.electBy, "member-flags");
-	assert.equal(sel.choices.file.value?.schema, "str");
+	// The payload is a carrier plus its own help, and both are readable off the
+	// built descriptor: the schema dump publishes the pair.
+	assert.equal(sel.choices.file.value?.carrier.schema, "str");
+	assert.equal(sel.choices.file.value?.help, "path to the file");
 });
 
 test("defineReadOnlyCommand validates help, tags, and flag-map keys", () => {

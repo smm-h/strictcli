@@ -585,7 +585,7 @@ test("member spelling: a member may own a scope, which a group could not express
 					{
 						profile: choice({
 							help: "one profile",
-							value: t.str,
+							value: { carrier: t.str, help: "profile name" },
 							flags: {
 								create_missing: flag("create-missing", t.bool, {
 									help: "create it when absent",
@@ -634,7 +634,10 @@ test("member spelling: a member-spelled selector may default to a payload-less m
 				target: memberChoiceFlag(
 					"target",
 					{
-						profile: choice({ help: "one profile", value: t.str }),
+						profile: choice({
+							help: "one profile",
+							value: { carrier: t.str, help: "profile name" },
+						}),
 						"all-profiles": choice({ help: "every profile" }),
 					},
 					{
@@ -737,7 +740,10 @@ test("guard: a member-spelled default may only elect a payload-less member", () 
 			memberChoiceFlag(
 				"target",
 				{
-					profile: choice({ help: "one profile", value: t.str }),
+					profile: choice({
+						help: "one profile",
+						value: { carrier: t.str, help: "profile name" },
+					}),
 					"all-profiles": choice({ help: "every profile" }),
 				},
 				{ help: "h", presence: "default", default: "profile" },
@@ -764,7 +770,10 @@ test("guard: a token-spelled choice cannot carry a payload", () => {
 			choiceFlag(
 				"via",
 				{
-					email: choice({ help: "email", value: t.str }),
+					email: choice({
+						help: "email",
+						value: { carrier: t.str, help: "the address to deliver to" },
+					}),
 					sms: choice({ help: "sms" }),
 				},
 				{ help: "h", presence: "required" },
@@ -1110,7 +1119,7 @@ test("guard: the short-claim table walks member scopes too", () => {
 						{
 							profile: choice({
 								help: "one profile",
-								value: t.str,
+								value: { carrier: t.str, help: "profile name" },
 								flags: {
 									subject: flag("subject", t.str, {
 										help: "h",
@@ -1574,6 +1583,42 @@ test("mcp: the projection flattens, and a scoped flag is never required", () => 
 	assert.deepEqual(schema.required, ["via"]);
 });
 
+test("mcp: a member's flattened property is described by the payload's own help", () => {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			flags: {
+				target: memberChoiceFlag(
+					"target",
+					{
+						profile: choice({
+							help: "operate on one named profile",
+							value: { carrier: t.str, help: "profile name" },
+						}),
+						"all-profiles": choice({ help: "operate on every profile" }),
+					},
+					{ help: "which profiles to operate on", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	const schema = app.jsonSchema("run") as {
+		properties: Record<string, { type?: string; description?: string }>;
+	};
+	// The property carries the VALUE, so the payload's help describes it; the
+	// selector's own property carries the election and takes the selector's.
+	assert.deepEqual(schema.properties.profile, {
+		type: "string",
+		description: "profile name",
+	});
+	assert.equal(
+		schema.properties.target?.description,
+		"which profiles to operate on",
+	);
+});
+
 test("mcp: the scope structure rides the tool description", () => {
 	const tools = notifyApp().asTools();
 	const send = tools.find((t2) => t2.name === "send");
@@ -1678,7 +1723,7 @@ test("member spelling: an out-of-scope flag under an unelected member names no t
 					{
 						profile: choice({
 							help: "one profile",
-							value: t.str,
+							value: { carrier: t.str, help: "profile name" },
 							flags: {
 								create_missing: flag("create-missing", t.bool, {
 									help: "create it when absent",
@@ -1906,7 +1951,7 @@ test("schema: a member-spelled choice's payload is the first scope entry", () =>
 					{
 						profile: choice({
 							help: "operate on one named profile",
-							value: t.str,
+							value: { carrier: t.str, help: "profile name" },
 							flags: {
 								create_missing: flag("create-missing", t.bool, {
 									help: "create the profile when absent",
@@ -1926,7 +1971,9 @@ test("schema: a member-spelled choice's payload is the first scope entry", () =>
 	const entry = dumpedFlags(app)[0] as Record<string, unknown>;
 	// The payload is supplied by electing the member, and required-once-elected
 	// is exactly what a member flag's presence means. A payload-less member has
-	// no `value` entry, and an empty scope omits `flags` entirely.
+	// no `value` entry, and an empty scope omits `flags` entirely. The `value`
+	// entry's help is the PAYLOAD's own, never the choice's: the choice's help
+	// says what electing it means, the payload's what the value is (§25.6).
 	assert.deepEqual(entry.choices, [
 		{
 			name: "profile",
@@ -1934,7 +1981,7 @@ test("schema: a member-spelled choice's payload is the first scope entry", () =>
 			flags: [
 				{
 					name: "value",
-					help: "operate on one named profile",
+					help: "profile name",
 					value_schema: { type: "string" },
 					presence: "required",
 				},

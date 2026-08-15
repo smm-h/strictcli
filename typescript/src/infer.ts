@@ -66,7 +66,7 @@ type KeyIsOptional<D extends AnyDecl> = D["opts"] extends {
  * nothing at all.
  */
 type ChoiceValuePart<C> = C extends {
-	readonly value: { readonly _out?: infer V };
+	readonly value: { readonly carrier: { readonly _out?: infer V } };
 }
 	? { value: NonNullable<V> }
 	: unknown;

@@ -1165,8 +1165,14 @@ test("app.command: merged declaration order is flags, then flag sets", () => {
 				source: memberChoiceFlag(
 					"source",
 					{
-						"from-file": choice({ help: "h", value: t.str }),
-						"from-url": choice({ help: "h", value: t.str }),
+						"from-file": choice({
+							help: "h",
+							value: { carrier: t.str, help: "path to the file" },
+						}),
+						"from-url": choice({
+							help: "h",
+							value: { carrier: t.str, help: "the URL to read" },
+						}),
 					},
 					{ help: "h", presence: "required" },
 				),
