@@ -192,6 +192,15 @@ both siblings, so the template is cross-language), and records six places where 
 already pins is implemented differently by one of the three -- there, the implementations are what
 change.
 
+Fixing the implementations against that audit then walked the **flat machine boundary's remaining
+edge states**. §18.22 carries that as items 232-235, continuing the same numbering, and it too
+reverses no ruling and adds no section: it extends item 229's command-line mapping to three states
+that mapping did not name -- every selector's election resolves before any scope, value or presence
+problem is reported, a payload-carrying member elected with its payload absent takes the CLI's own
+`requires a value` sentence, and a payload-less member's own key elects on `true` and declines on
+`false` -- and records one divergence against item 230's pinned charset-before-bans order that the
+fix round had reported as unobservable.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -6427,7 +6436,8 @@ member's payload key does at the machine boundary).
        block already agrees in all three (Go's `scopeParameterList` skips a payload-less member),
        which is what makes this a defect in one projection rather than a disagreement about the
        rule.
-     - **Three orphan templates die.** Go's `errCommandMutexMinFlags` and
+     - **~~Three~~ Four orphan templates die** *(count corrected 2026-08-15, contract-pin round,
+       §18.22 item 235; the bullet named four from the start)*. Go's `errCommandMutexMinFlags` and
        `errCommandFlagInMultipleMutex` have no caller and describe a declaration that can no longer
        exist: `MutexGroup` is deleted (§21's supersession box, §24.14), and Python and TypeScript
        both removed their twins -- TypeScript leaving a comment in `errors.ts` saying why. Going
@@ -6436,6 +6446,114 @@ member's payload key does at the machine boundary).
        **found by this audit rather than named on its list** -- `errFlagChoicesIncompatibleCompound`,
        which no TypeScript path calls (its dict branch raises `errFlagDictCannotCombineChoices` and
        its list branch accepts choices) and which the bullet above guarantees can never gain one.
+
+### 18.22 Pins forced by the flat boundary's edge states (2026-08-15)
+
+§18.21's phase audit pinned what a member's payload key *does* at the flat machine boundary (item
+229). Fixing the three implementations against that pin walked the rest of that boundary, and every
+edge it reached is the same question item 229 answered -- *what would this be on the command line?*
+-- asked of a state item 229's bullets did not name. This section is that sweep. Numbering continues
+§18.21's, for the reason §18.14 gave: the same campaign's ledger.
+
+**Nothing below changes a guarantee.** Items 232-234 are **extensions of item 229's mapping**, each
+pinning one state the flat form can spell and the pinned bullets did not reach; each is answered by
+the mapping rather than by a new rule, and none of the three authors a sentence -- 233 reuses a
+template §12.13 has always had, and 232 and 234 reuse behaviour §24.3 and §24.4 already pin for the
+argv path. Item 235 is a **record**: one divergence found while fixing them, against a rule item 230
+already pinned, plus one confirmation that §18.21's own text already covers a deletion.
+
+**Origin tags**, per §18.14's preamble. Every item here is **untagged**: none is a `(D)` directive
+and none is a `[%%]` adopted recommendation. They are implementation-forced pins in the §18.3 class.
+
+**Sites amended in place**: §24.11 (three new blocks after item 229's, and one clause of item 229's
+own block struck) and §18.21 item 231 (one stale count corrected).
+
+232. **Elections stage command-wide before any refusal at the flat boundary (§24.11, §24.3).** The
+     flat form is converted through the same election, scope and presence machinery the argv path
+     uses -- §24.11 has said so since the round that authored it -- and that machinery is **phased**.
+     So the election phase at this boundary is command-wide exactly as it is on the command line:
+     every selector's election, at every depth, in declaration order, resolves before any scope,
+     value or presence problem is reported. Nothing is decided here that §24.3 did not decide; what
+     is pinned is that a walk over declarations is not a licence to refuse mid-walk, for the reason
+     item 224 gave when it made the phase order normative for selector-free commands too -- the order
+     is a property of the parser, not of the input. **Python and Go already stage.** Python's
+     `_flat_occurrences` turns every selector's elections into occurrences and hands the whole list
+     to `_resolve_selectors`; Go's `walk` collects into `suppliedElections` and lets `electMembers`
+     refuse in the shared election phase. **TypeScript converts depth-first, one selector at a
+     time**, and `buildRecord` throws where it stands: on a command declaring a required `mode`
+     before a member-spelled `target`, the object `{"target": "all-profiles", "profile": "work"}`
+     prints `one of --fast, --slow is required` in TypeScript where Python and Go print `--profile
+     and --all-profiles are mutually exclusive` -- an earlier selector's **presence** refusal
+     outranking a later selector's **election** refusal, which inverts the pinned order. **Go has the
+     same defect one phase over**: `collectFlatMemberElections` binds and coerces an elected scope's
+     values inside the walk (`bindElectedFields` -> `coerceInvokeValue`), so an earlier scope's
+     **value** problem outranks a later selector's double election there. One staging rule closes
+     both.
+
+233. **A member elected by the selector's property, with its payload property absent, is refused with
+     the CLI's own missing-value sentence (§24.11, §12.13).** `{"target": "profile"}` where `profile`
+     carries a payload is the flat spelling of `--profile` typed with nothing after it, and it takes
+     that command line's refusal verbatim: **`flag '--profile' requires a value`**, which is
+     §12.13's `errFlagRequiresValue` with the member's own token in the slot. No template is authored
+     -- the bytes are the ones Python's parser already prints for the same mistake typed. The two
+     answers this displaces are both live today. **TypeScript refuses with a self-owning scope
+     path**: the record is built with no `value`, the member flag's own `required` declaration then
+     fails downstream, and the sentence is `flag '--profile' is required under '--profile'`, naming
+     the flag as its own owner -- the same defect item 229 refused on the out-of-scope path, reached
+     on the presence path instead. **Go reaches that class through a different site**:
+     `bindElectedFields` finds neither the reserved `value` key nor the member's own name in the flat
+     object, binds nothing, and the member flag falls to `applyFlagDefault`'s `flag '--<name>' is
+     required` with §12.13's scope suffix appended -- the suffix item 231's second bullet already
+     records against Go's `<owners>` rendering. **Python delivers the absence**: `_flat_occurrences`
+     reads the payload with `arguments.get(...)`, so the missing key becomes `None` and the handler
+     receives `Profile(value=None)` -- a `str`-annotated, `required` field holding a value no command
+     line can put there. Presence is the wrong noun (the member *was* elected, and the CLI does not
+     say "required" for a token typed without its value) and silence is refused for §3.5's reason.
+
+234. **A payload-less member's own key elects on `true` and declines on `false` (§24.11, §24.4).**
+     §24.4 carries §21's election semantics over verbatim -- a bool member elects only on **true**,
+     and `--no-<name>` **declines** rather than choosing -- so the flat key spells both, and it
+     spells them through the same election machinery rather than through a rule written at the
+     boundary. `{"all-profiles": false}` therefore carries §21.4's decline clause into whatever the
+     election phase then says: `one of --profile, --all-profiles is required (--no-all-profiles
+     declines an option; it does not choose one)` when nothing else elected, and the
+     redundant-negation refusal when something did. **Go already implements this**:
+     `collectFlatMemberElections` writes `memberElected[<name>] = false` on an explicit `false` and
+     `true` otherwise, into the same map the argv path fills, so `electMembers` produces both
+     sentences unchanged. **Python and TypeScript both ignore the key** -- Python's loop skips a
+     choice whose `payload is None`, TypeScript's `electedMembers` filters on `c.value !==
+     undefined` -- so `{"all-profiles": true}` prints `one of --profile, --all-profiles is required`
+     in both, where the command line's `--all-profiles` elects. Item 229's own block said the
+     selector's property was the only way to elect a payload-less member; that clause is struck,
+     because it read a fact about the **published** property map (item 231 keeps a payload-less
+     member out of it) as a fact about what the boundary may **read**. The map publishes what a
+     caller should send; the boundary reads the command line the flat object spells.
+
+235. **Two records from the fix round, one of them false as reported (§12.13, §18.21).** Neither
+     authors anything; both are recorded because the next reader of one of these sites needs to know
+     which side was wrong.
+
+     - **The charset-versus-ban ordering is observable after all, on exactly one name.** Item 230
+       pinned the order in passing -- "Python enforces the charset in both spellings and *before* the
+       bans, which is the order the promoted template keeps" -- and the fix round reported the order
+       as structural per language and harmless, on the ground that no name can fail both. That ground
+       does not hold. **`approve_consequential` fails both**: it is banned by name as the
+       programmatic consent parameter (§12.1) *and* its underscore fails `[a-z][a-z0-9-]*`. Python
+       and TypeScript print the charset message (`Flag "mode": choice name "approve_consequential"
+       must match [a-z][a-z0-9-]*`); Go prints the ban (`flag name 'approve_consequential' is
+       reserved by the framework: it names the programmatic consent parameter`), because a Go
+       member choice is spelled `MemberChoice(StringFlag("approve_consequential", ...), ...)` and
+       `StringFlag` runs `validateFlagConfig` at construction, before a `MemberChoiceFlag` exists to
+       check any charset. Every other banned name -- `force`, the reserved quartet, `json`, `yes`,
+       and every `no-` prefixed name -- clears the charset, so this one name is the whole exposure,
+       and one input producing two different sentences is a plain divergence rather than the
+       unconstructable-state class of items 213 and 227. It sits in item 231's class: the
+       implementation is what changes, and the obstacle is named -- Go validates a flag's name
+       inside the flag constructor, so nothing evaluated later can reach the charset first.
+     - **`errFlagChoicesIncompatibleCompound`'s death is already covered**, by item 231's last
+       bullet, which names it and says why no TypeScript path can ever call it. Only the bullet's
+       headline was wrong: it said three orphan templates die and then named four. The count is
+       corrected in place and no other word of it changes.
 
 ---
 
@@ -8275,9 +8393,12 @@ partial encoding would restore -- so the two amendments ship into one release.
 *(added 2026-08-15, phase-audit round, §18.21 item 229)*. The flat form maps onto the command line
 exactly: a member is elected by typing its own flag, so at this boundary **supplying the property
 that flattens under the member's own flag name IS that election**, whether or not the selector's own
-property is supplied beside it. A payload-less member has no property of its own to supply (§18.21
-item 231), so the selector's property is the only way to elect one. Three consequences, none of them
-a new rule -- they are §21.4 read through the flattening the bullets above already pin:
+property is supplied beside it. A payload-less member ~~has no property of its own to supply (§18.21
+item 231), so the selector's property is the only way to elect one~~ *(amended 2026-08-15,
+contract-pin round, §18.22 item 234)* **publishes no property of its own (§18.21 item 231), but a
+key under its own name is still read as the token it spells: `true` elects it and `false`
+declines**. Three consequences, none of them a new rule -- they are §21.4 read through the
+flattening the bullets above already pin:
 
 - `{"profile": "work"}` alone elects `profile` and carries its payload, exactly as `--profile work`
   does. The selector's own property need not repeat what the payload key already named.
@@ -8297,6 +8418,42 @@ losing key discards a whole scope without saying so, which is the answer §3.5 r
 else; and `errFlagOutOfScope` names the wrong condition -- a member's payload key is an election, not
 a flag supplied outside its scope -- and would render an owner path that names the flag as its own
 owner, because a member flag's path stops at the **owning** scope (§12.13).
+
+**Every election stages before any refusal, across every selector** *(added 2026-08-15, contract-pin
+round, §18.22 item 232)*. The conversion runs §24.3's phases, and the election phase is
+**command-wide**: every selector's election, at every depth, in declaration order, is resolved
+before **any** scope, value or presence problem is reported. A boundary that converts one selector
+at a time and refuses as it goes reports whichever problem its walk reached first, which is exactly
+the outcome the phase order exists to prevent -- and that the walk is over declarations rather than
+over argv changes nothing, because the phase order is a property of the parser and not of the input
+(§18.19 item 224). So a command whose first selector elected nothing and whose second was elected
+twice reports the double election, and a command whose first elected scope carries an uncoercible
+value and whose second was elected twice reports the double election too.
+
+**A member elected by the selector's property, with its payload property absent, takes the CLI's
+missing-value sentence** *(added 2026-08-15, contract-pin round, §18.22 item 233)*. `{"target":
+"profile"}`, where `profile` carries a payload, is the flat form of `--profile` typed with nothing
+after it, and it takes that command line's refusal verbatim: **`flag '--profile' requires a value`**
+-- §12.13's `errFlagRequiresValue` with the member's own token in the slot, no new template and no
+new sentence. The two answers it displaces are refused by name. It is **not** a presence refusal
+naming the member flag under a scope path: a member flag's path stops at the owning scope (§12.13),
+so at top level that sentence renders `flag '--profile' is required under '--profile'` and names the
+flag as its own owner, the same defect item 229 refused on the out-of-scope path. And it is **not**
+a silent delivery of an absent payload: the payload is the member flag's own `required` declaration
+(§24.4), so putting an untyped absent value in the delivered record puts a value there that no
+command line could produce and that the record's own declared type forbids.
+
+**A payload-less member's own key elects on `true` and declines on `false`** *(added 2026-08-15,
+contract-pin round, §18.22 item 234)*. §24.4 carries §21's election semantics over verbatim -- a
+bool member elects only on **true**, and `--no-<name>` **declines** rather than choosing -- and the
+flat form is the command line with the tokens removed, so the key spells both. `{"all-profiles":
+true}` elects; `{"all-profiles": false}` is `--no-all-profiles`, elects nothing, and carries §21.4's
+decline clause into whatever the election phase then says -- `one of --profile, --all-profiles is
+required (--no-all-profiles declines an option; it does not choose one)` when nothing else elected,
+and the redundant-negation refusal when something did. Reading a key the flattened property map does
+not publish (§18.21 item 231) is not a contradiction: the map publishes what a caller should send,
+and this boundary reads the command line the flat object spells. Ignoring the key is refused for
+§3.5's reason, the same one that refuses dropping a losing election above.
 
 **Choice names ride the description map exactly as declared** *(added 2026-08-15, implementation
 round, §18.19 item 222)*. The block's key is `<selector>=<choice>` where the **selector** is the
