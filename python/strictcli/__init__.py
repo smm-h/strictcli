@@ -10154,15 +10154,15 @@ class App:
                 return None
             return result
 
-        # Build reverse mapping: param_name (underscore) -> flag.name (dashes)
-        param_to_flag: dict[str, str] = {}
+        # Build reverse mapping: param_name (underscore) -> the declared Flag
+        param_to_flag: dict[str, Flag] = {}
         for f in cmd.flags:
-            param_to_flag[_flag_param_name(f.name)] = f.name
+            param_to_flag[_flag_param_name(f.name)] = f
 
         # Also map global flags
         global_flag_names: set[str] = set()
         for gf in self._global_flags:
-            param_to_flag[_flag_param_name(gf.name)] = gf.name
+            param_to_flag[_flag_param_name(gf.name)] = gf
             global_flag_names.add(gf.name)
 
         # Collect arg names for this command
@@ -10210,15 +10210,19 @@ class App:
 
         # Populate sourced store from kwargs. Provided kwargs are marked
         # _Source.CLI; absent flags will get _Source.DEFAULT when
-        # _validate_and_build_kwargs applies defaults.
+        # _validate_and_build_kwargs applies defaults. A supplied value is
+        # checked against its declaration here: the value phase for the
+        # command's own flags, running after every selector's election, scope
+        # and scoped value, which is the order this boundary already uses
+        # (§24.3, §24.11).
         store = _SourcedStore()
         positionals: list[str] = []
 
         for key, value in kwargs.items():
-            if key in param_to_flag:
+            f = param_to_flag.get(key)
+            if f is not None:
                 # It's a flag -- store under flag.name (with dashes)
-                flag_name = param_to_flag[key]
-                store.set(flag_name, value, _Source.CLI)
+                store.set(f.name, _check_pre_typed_value(f, value), _Source.CLI)
 
         # Build positionals list in declared arg order from kwargs
         for a in cmd.args:
@@ -11368,6 +11372,32 @@ def _report_skipped_bindings(
             )
 
 
+def _check_pre_typed_value(f: Flag, value: object) -> object:
+    """Check one PRE-TYPED value against its declaration (§24.11).
+
+    The flat machine form and the programmatic front door hand the framework
+    values that are already typed, so nothing parses them -- but the
+    declaration still decides what they may be, exactly as it does for a token
+    that has to be parsed first. *Pre-typed* means ALREADY OF THE DECLARED
+    TYPE, never exempt from the declaration. The check is the one the config
+    reader already runs over an already-typed document
+    (:func:`_coerce_config_value`, the same closed set of four types with the
+    same sentences), because a flat object and a config document pose the
+    identical question: does this value satisfy the flag's declared type?
+
+    ``None`` is not a legal value for anything. Optionality has ONE spelling
+    (§23.4): a flag that may be absent declares ``optional`` and is delivered
+    absent when the key is simply not there, so a null carries nothing the
+    declaration cannot already say -- and a flag that may NOT be absent would
+    otherwise have its presence rule answered by a value the declaration
+    forbids.
+    """
+    try:
+        return _coerce_config_value(value, f)
+    except ValueError as e:
+        raise _ParseError(f"--{f.name}: {e}")
+
+
 def _coerce_scoped_value(
     f: Flag, raw: object, stdin_consumed_by: list,
 ) -> object:
@@ -11443,7 +11473,7 @@ def _resolve_scoped_value(
     hits = [o for o in occs if o.name == f.name]
     if hits:
         if pre_typed:
-            value = hits[-1].raw
+            value = _check_pre_typed_value(f, hits[-1].raw)
         elif f.compound == "dict":
             store: dict = {}
             for o in hits:
@@ -11565,7 +11595,7 @@ def _coerce_member_payload(
     if raw is _MISSING:
         raise _ParseError(f"flag '--{spec.name}' requires a value")
     value = (
-        raw if pre_typed
+        _check_pre_typed_value(spec.payload, raw) if pre_typed
         else _coerce_scoped_value(spec.payload, raw, stdin_consumed_by)
     )
     # §21.3's `config_conflict_mode="error"` carve-out survives untouched
