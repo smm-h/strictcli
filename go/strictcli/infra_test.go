@@ -527,6 +527,12 @@ func TestConfigShowMarkerDefaultMachineForm(t *testing.T) {
 	if string(got) != want {
 		t.Fatalf("value = %s, want %s", got, want)
 	}
+	// The WRITTEN bytes carry the same shape in the same key order: the payload
+	// is one object per entry, so what the envelope emits is what a sibling
+	// implementation's payload is byte-compared against.
+	if !strings.Contains(r.Stdout, `"value":`+want) {
+		t.Fatalf("emitted payload does not carry %s: %s", want, r.Stdout)
+	}
 	// The human rendering rides the envelope's diagnostics unchanged (§19.1).
 	if !strings.Contains(r.Stderr+r.Stdout, "db = RelativeToRoot('MYAPP_HOME', 'db.sqlite')  (source: default)") {
 		t.Fatalf("machine-mode diagnostics lost the human line: stdout=%q stderr=%q", r.Stdout, r.Stderr)
