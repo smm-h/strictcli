@@ -1679,7 +1679,7 @@ def test_conflict_mode_implied_excluded(tmp_path, monkeypatch):
     )
 
     @app.command("run", effect="read_only", help="run",
-                 dependencies=[strictcli.Implies(flag="debug", implies="loud", value=True)])
+                 constraints=[strictcli.Implies("debug-implies-loud", flag="debug", implies="loud", value=True)])
     @strictcli.flag("debug", type=bool, help="enable debug", default=False)
     @strictcli.flag("loud", type=bool, help="be loud", default=False)
     def run(ctx, debug, loud):

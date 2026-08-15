@@ -117,11 +117,11 @@ def test_requires_implied_source_counts_as_present():
 
     @app.command(
         "deploy", effect="read_only", help="deploy",
-        dependencies=[
+        constraints=[
             # --all implies --loud=true
-            strictcli.Implies(flag="all", implies="loud", value=True),
+            strictcli.Implies("all-implies-loud", flag="all", implies="loud", value=True),
             # --target requires --loud
-            strictcli.Requires(flag="target", depends_on="loud"),
+            strictcli.Requires("target-needs-loud", flag="target", depends_on="loud"),
         ],
     )
     @strictcli.flag("all", type=bool, default=False, help="deploy all")
@@ -146,9 +146,9 @@ def test_requires_default_source_not_present():
 
     @app.command(
         "deploy", effect="read_only", help="deploy",
-        dependencies=[
+        constraints=[
             # --target requires --loud
-            strictcli.Requires(flag="target", depends_on="loud"),
+            strictcli.Requires("target-needs-loud", flag="target", depends_on="loud"),
         ],
     )
     @strictcli.flag("target", type=str, help="deploy target", presence="required")
@@ -199,8 +199,8 @@ def test_invoke_defaulted_not_present_for_requires():
 
     @app.command(
         "deploy", effect="read_only", help="deploy",
-        dependencies=[
-            strictcli.Requires(flag="target", depends_on="loud"),
+        constraints=[
+            strictcli.Requires("target-needs-loud", flag="target", depends_on="loud"),
         ],
     )
     @strictcli.flag("target", type=str, help="deploy target", presence="required")

@@ -5,8 +5,10 @@ from __future__ import annotations
 __version__ = "0.40.0"
 
 __all__ = [
-    "App", "Flag", "Arg", "FlagSet", "CoRequired", "Requires",
-    "Implies", "Passthrough", "Forwarding", "DeprecatedCommand", "Result",
+    "App", "Flag", "Arg", "FlagSet",
+    # The constraint system (contract §26)
+    "AtLeastOne", "AllOrNone", "Requires", "Implies", "Member",
+    "Passthrough", "Forwarding", "DeprecatedCommand", "Result",
     "InvokeError",
     # The scoped-selector construct (contract §24)
     "Choice", "choice", "choice_flag", "sub_flag", "sub_choice_flag",
@@ -52,7 +54,7 @@ import typing
 import tomlkit
 from tomlkit.items import InlineTable, Table
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
@@ -226,8 +228,8 @@ class _SourcedStore:
         self._entries.pop(name, None)
 
     def is_present_for_deps(self, name: str) -> bool:
-        """Present for deps (CoRequired, Requires, Implies): the invocation
-        caused the value.
+        """Present for the constraint system (§26): the invocation caused the
+        value.
 
         This is the single definition of "was this supplied" (contract §23.6):
         `cli`, `env`, `config` and `implied` count; `default` and `infra` do
@@ -5279,11 +5281,153 @@ def _raise_scoped_positional(c: str, sel: str):
 
 
 def _raise_constraint_references_scoped_flag(
-    name: str, family: str, x: str, path: str,
+    name: str, c: str, x: str, path: str,
+):
+    """§12.13, amended by §18.30 item 270: the sentence names the CONSTRAINT.
+
+    `<Family>` had both a value that no longer exists (`CoRequired`) and a
+    better replacement, and the trailing clause loses the word `dependency`
+    because after §26 the noun for all four kinds is `constraint`.
+    """
+    raise ValueError(
+        f'command "{name}": constraint "{c}" references \'{x}\', which is '
+        f"declared under '{path}': constraints operate at root scope only"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Constraint registration guards (contract §12.15)
+#
+# Every one carries the `command "<name>": ` prefix family, and the constraint
+# name is in DOUBLE quotes: the catalog quotes by kind of thing rather than by
+# category of message, and a constraint name is a declared identifier that no
+# invocation ever contains.
+# ---------------------------------------------------------------------------
+
+def _raise_constraint_name_charset(name: str, c: str):
+    raise ValueError(
+        f'command "{name}": constraint name "{c}" must match [a-z][a-z0-9-]*'
+    )
+
+
+def _raise_constraint_name_duplicate(name: str, c: str):
+    raise ValueError(f'command "{name}": duplicate constraint name "{c}"')
+
+
+def _raise_constraint_name_collides(name: str, c: str):
+    raise ValueError(
+        f'command "{name}": constraint name "{c}" is already a flag or arg '
+        f"name: a member reference resolves by name and would be ambiguous"
+    )
+
+
+def _raise_constraint_min_members(name: str, c: str, n: int):
+    raise ValueError(
+        f'command "{name}": constraint "{c}" must declare at least two '
+        f"members, got {n}"
+    )
+
+
+def _raise_constraint_member_not_record(name: str, c: str, i: int):
+    """Python and TypeScript only: Go's members are a typed value.
+
+    `errChoicesEntryNotRecord`'s exact discipline one construct over -- a
+    spelling that lets one member carry an election and another not carry the
+    WORD for it is two spellings for one fact.
+    """
+    raise ValueError(
+        f'command "{name}": constraint "{c}" member {i} is a bare name: '
+        f'declare it as Member("<x>")'
+    )
+
+
+def _raise_constraint_member_unknown(name: str, c: str, x: str):
+    raise ValueError(
+        f'command "{name}": constraint "{c}" references unknown member "{x}"'
+    )
+
+
+def _raise_constraint_member_ambiguous(name: str, c: str, x: str):
+    raise ValueError(
+        f'command "{name}": constraint "{c}" references "{x}", which names '
+        f"both a flag and a positional arg"
+    )
+
+
+def _raise_constraint_member_duplicate(name: str, c: str, x: str):
+    raise ValueError(
+        f'command "{name}": constraint "{c}" declares member "{x}" twice'
+    )
+
+
+def _raise_constraint_member_required(name: str, c: str, token: str):
+    """§26.5's inversion: a member may not declare requiredness.
+
+    One template with one substitution, not a Flag/Arg twin pair -- §12.12's
+    twinning rule applies to messages whose PREFIX names a surface, and this
+    one's prefix names the constraint. ``token`` is §12.15's member rendering,
+    so an arg member reads `member 'targets'`.
+    """
+    raise ValueError(
+        f'command "{name}": constraint "{c}" member \'{token}\' declares '
+        f'presence="required": a member the invocation must always supply '
+        f"leaves the constraint nothing to decide"
+    )
+
+
+def _raise_constraint_member_bool_when(name: str, c: str, token: str):
+    raise ValueError(
+        f'command "{name}": constraint "{c}" member \'{token}\' is a bool and '
+        f'must declare its election: when="true" counts only a true value, '
+        f'when="present" counts any'
+    )
+
+
+def _raise_constraint_when_true_not_bool(
+    name: str, c: str, token: str, t: str,
 ):
     raise ValueError(
-        f'command "{name}": {family} references \'{x}\', which is declared '
-        f"under '{path}': dependency constraints operate at root scope only"
+        f'command "{name}": constraint "{c}" member \'{token}\' declares '
+        f'when="true", which needs a bool; \'{token}\' is a {t}'
+    )
+
+
+def _raise_constraint_when_non_empty_not_sized(
+    name: str, c: str, token: str, t: str,
+):
+    raise ValueError(
+        f'command "{name}": constraint "{c}" member \'{token}\' declares '
+        f'when="non_empty", which needs a string or a collection; '
+        f"'{token}' is a {t}"
+    )
+
+
+def _raise_constraint_nested_when(name: str, c: str, x: str):
+    raise ValueError(
+        f'command "{name}": constraint "{c}" member "{x}" is a constraint and '
+        f"cannot declare an election: a nested constraint is engaged when its "
+        f"own members are"
+    )
+
+
+def _raise_constraint_nested_family(name: str, c: str, x: str):
+    raise ValueError(
+        f'command "{name}": constraint "{c}" references constraint "{x}", '
+        f"which declares a one-way dependency rather than a co-occurrence "
+        f"rule: only at-least-one and all-or-none can be members of another "
+        f"constraint"
+    )
+
+
+def _raise_constraint_cycle(name: str, path: str):
+    raise ValueError(f'command "{name}": constraints form a cycle: {path}')
+
+
+def _raise_constraint_unknown_flag(name: str, c: str, x: str):
+    """`Requires` / `Implies` keep the flag noun: their operand vocabulary is
+    flags only (§26.13), so an unknown name there is an unknown FLAG."""
+    raise ValueError(
+        f'command "{name}": constraint "{c}" references unknown flag "{x}"'
     )
 
 
@@ -6126,28 +6270,658 @@ def _validate_scoped_names(
             _raise_short_collides_across_scopes(cmd_name, s1, a.name, b.name)
 
 
-@dataclass
-class CoRequired:
-    """Flags that must all appear together or none."""
+# ---------------------------------------------------------------------------
+# The constraint system (contract §26)
+#
+# Four kinds, one container. The two CO-OCCURRENCE families are predicates over
+# a member list -- at-least-one and all-or-none -- and the two dependency rules
+# keep the semantics they always had. `CoRequired` is DELETED by rename
+# (§26.1): all-or-none absorbs it, there is no alias and no deprecation period.
+#
+# at-least-one is NOT exclusivity. It has no upper bound and never refuses a
+# second member; nothing in this file may describe it with §21.4's vocabulary.
+# ---------------------------------------------------------------------------
 
-    flags: list[str]
+# The closed election vocabulary a member declares (§26.3). `present` is the
+# default for every type; a BOOL member must declare one of the two explicitly,
+# because `present` on a bool would let `--no-x` engage a constraint while
+# selecting nothing -- the shipped-dangerous class A1, arriving by omission.
+_WHEN_PRESENT = "present"
+_WHEN_TRUE = "true"
+_WHEN_NON_EMPTY = "non_empty"
+_WHEN_VALUES = (_WHEN_PRESENT, _WHEN_TRUE, _WHEN_NON_EMPTY)
+
+# The resolved member kinds published in the schema (§25.7's amendment).
+_MEMBER_KIND_FLAG = "flag"
+_MEMBER_KIND_ARG = "arg"
+_MEMBER_KIND_CONSTRAINT = "constraint"
 
 
-@dataclass
+@dataclass(frozen=True)
+class Member:
+    """One operand of a co-occurrence constraint, referenced BY NAME (§26.2).
+
+    The name resolves in one namespace -- the command's flags, its positional
+    args and its other named constraints -- and a member declares no presence
+    and no help of its own: the declaration it refers to carries every fact
+    about the value.
+
+    ``when`` is the election selector (§26.3). Left unwritten it means
+    ``"present"`` for every type except ``bool``, where omitting it is a
+    registration error. The field keeps the declaration AS WRITTEN (``None``
+    for "not declared") so the bool refusal can tell an omission from an
+    explicit ``when="present"``; registration resolves it.
+    """
+
+    name: str
+    when: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError("Member name must be a non-empty string")
+        if self.when is not None and self.when not in _WHEN_VALUES:
+            # Authored, not pinned by §12.15: the pinned `when` guards all name
+            # a declared value that cannot apply to the member's TYPE, and none
+            # of them describes a typo in the keyword's own vocabulary. Python
+            # alone can write one, `when=` being a keyword taking a string.
+            raise ValueError(
+                f'Member "{self.name}": when must be "present", "true" or '
+                f'"non_empty", got {self.when!r}'
+            )
+
+    @property
+    def resolved_when(self) -> str:
+        """The declared selector, or the uniform default (§26.3)."""
+        return self.when if self.when is not None else _WHEN_PRESENT
+
+
+def _normalize_members(constraint: str, members: object) -> tuple:
+    """Freeze a declared member sequence, leaving non-records intact.
+
+    A bare string is NOT rejected here: `errConstraintMemberNotRecord` names
+    the command and the member's index, and neither is known at construction.
+    """
+    if isinstance(members, (str, bytes)) or not isinstance(members, Iterable):
+        raise ValueError(
+            f'constraint "{constraint}": members must be a list of '
+            f"{Member.__name__} records"
+        )
+    return tuple(members)
+
+
+@dataclass(frozen=True)
+class AtLeastOne:
+    """At least one member must be ENGAGED (§26.1).
+
+    Members may co-occur: engaging two, or all, satisfies it exactly as
+    engaging one does. With nothing engaged it is violated, which is the whole
+    of what it says.
+    """
+
+    name: str
+    members: tuple
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "members", _normalize_members(self.name, self.members),
+        )
+
+
+@dataclass(frozen=True)
+class AllOrNone:
+    """Either every member is engaged or none is (§26.1).
+
+    With nothing engaged it is VACUOUSLY TRUE -- that is the "none" half of its
+    own name, not a loophole. This family absorbs the deleted ``CoRequired``.
+    """
+
+    name: str
+    members: tuple
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "members", _normalize_members(self.name, self.members),
+        )
+
+
+@dataclass(frozen=True)
 class Requires:
-    """Flag that depends on another flag being present."""
+    """Flag that depends on another flag being present.
 
+    Semantics are untouched by §26 (§26.13): the predicate is §23.6's
+    *provided*, the operand vocabulary is flags only, by name, at root scope --
+    no args, no nesting, no ``when``. What it joins is the mandatory name, the
+    ``constraints=`` container, the ``constraint "<c>": `` prefix, the help
+    block and the schema encoding.
+    """
+
+    name: str
     flag: str
     depends_on: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class Implies:
-    """When a trigger flag is provided, automatically set a target flag to a value."""
+    """When a trigger flag is provided, automatically set a target flag to a value.
 
+    Semantics untouched by §26 (§26.13), including the injection order: the
+    implication resolves BEFORE the co-occurrence families, so an implied value
+    can engage a member.
+    """
+
+    name: str
     flag: str       # trigger flag name
     implies: str    # target flag name
     value: bool     # value to set on target when trigger is present
+
+
+# The two families whose members are a list, and which may be nested.
+_CO_OCCURRENCE_FAMILIES = (AtLeastOne, AllOrNone)
+_CONSTRAINT_FAMILIES = (AtLeastOne, AllOrNone, Requires, Implies)
+
+
+_CONSTRAINT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+
+
+def _declared_type_word(decl: object) -> str:
+    """strictcli's own type word for a flag or arg (§12.15's `<t>`).
+
+    Never a Python type name: the compound spellings are the ones the existing
+    type errors already use, so the sentence reads the same in all three
+    implementations.
+    """
+    compound = getattr(decl, "compound", "scalar")
+    if compound == "dict":
+        value_type = getattr(decl, "value_type", None) or str
+        return f"dict[{value_type.__name__}]"
+    if compound == "list" or getattr(decl, "repeatable", False):
+        item = getattr(decl, "item_type", None) or decl.type
+        return f"list[{item.__name__}]"
+    if getattr(decl, "variadic", False):
+        return f"list[{decl.type.__name__}]"
+    return decl.type.__name__
+
+
+def _member_is_sized(decl: object) -> bool:
+    """Can `when="non_empty"` be evaluated against this declaration (§26.3)?
+
+    A string or a collection can; a bool, an int or a float cannot -- a
+    selector that cannot be evaluated against the declared type is a
+    mis-declaration, not a no-op.
+    """
+    if getattr(decl, "compound", "scalar") != "scalar":
+        return True
+    if getattr(decl, "repeatable", False) or getattr(decl, "variadic", False):
+        return True
+    return decl.type is str
+
+
+def _validate_constraint_set(
+    name: str,
+    constraints: list,
+    all_flags: list,
+    all_args: list,
+    scoped_paths: dict[str, str],
+) -> None:
+    """§26.8's resolution order, pinned because three implementations must
+    report the same first error for a declaration with two faults.
+
+    The order runs from the constraint's own identity outward to the
+    declarations it names, so a message never blames a member for a fault in
+    the constraint that names it.
+    """
+    if not constraints:
+        return
+    flags_by_name = {f.name: f for f in all_flags}
+    args_by_name = {a.name: a for a in all_args}
+
+    # 1. Name legality -- charset, duplicates, collision with a flag or arg.
+    seen_names: set[str] = set()
+    for c in constraints:
+        if not isinstance(c, _CONSTRAINT_FAMILIES):
+            raise ValueError(
+                f'command "{name}": constraints must be AtLeastOne, '
+                f"AllOrNone, Requires or Implies declarations, got "
+                f"{type(c).__name__!r}"
+            )
+        if not isinstance(c.name, str) or not _CONSTRAINT_NAME_RE.match(c.name):
+            _raise_constraint_name_charset(name, c.name)
+        if c.name in seen_names:
+            _raise_constraint_name_duplicate(name, c.name)
+        seen_names.add(c.name)
+        if c.name in flags_by_name or c.name in args_by_name:
+            _raise_constraint_name_collides(name, c.name)
+
+    co_occurrence = [c for c in constraints if isinstance(c, _CO_OCCURRENCE_FAMILIES)]
+    by_name = {c.name: c for c in constraints}
+
+    # 2. Member arity -- at least two members.
+    for c in co_occurrence:
+        if len(c.members) < 2:
+            _raise_constraint_min_members(name, c.name, len(c.members))
+
+    # 3. Member resolution -- each name resolves to exactly one flag, arg or
+    #    constraint. A bare name is refused before it is resolved: a spelling
+    #    that lets one member carry an election and another not carry the word
+    #    for it is two spellings for one fact.
+    for c in co_occurrence:
+        seen_members: set[str] = set()
+        for i, m in enumerate(c.members):
+            if not isinstance(m, Member):
+                _raise_constraint_member_not_record(name, c.name, i)
+            is_flag = m.name in flags_by_name
+            is_arg = m.name in args_by_name
+            if is_flag and is_arg:
+                _raise_constraint_member_ambiguous(name, c.name, m.name)
+            if not (is_flag or is_arg or m.name in by_name
+                    or m.name in scoped_paths):
+                _raise_constraint_member_unknown(name, c.name, m.name)
+            if m.name in seen_members:
+                _raise_constraint_member_duplicate(name, c.name, m.name)
+            seen_members.add(m.name)
+    for c in constraints:
+        if isinstance(c, Requires):
+            operands = (c.flag, c.depends_on)
+        elif isinstance(c, Implies):
+            operands = (c.flag, c.implies)
+        else:
+            continue
+        for x in operands:
+            if x not in flags_by_name and x not in scoped_paths:
+                _raise_constraint_unknown_flag(name, c.name, x)
+
+    # 4. Scope -- a resolved flag declared inside a choice scope refuses
+    #    (§24.8): the scope already IS the constraint, and expressing one fact
+    #    in two mechanisms is how the two disagree later.
+    for c in constraints:
+        if isinstance(c, _CO_OCCURRENCE_FAMILIES):
+            operand_names = [m.name for m in c.members]
+        elif isinstance(c, Requires):
+            operand_names = [c.flag, c.depends_on]
+        else:
+            operand_names = [c.flag, c.implies]
+        for x in operand_names:
+            path = scoped_paths.get(x)
+            if path is not None:
+                _raise_constraint_references_scoped_flag(name, c.name, x, path)
+
+    # 5. Nesting legality -- a nested member is a co-occurrence constraint,
+    #    carries no `when`, and the reference graph is acyclic.
+    for c in co_occurrence:
+        for m in c.members:
+            if m.name not in by_name:
+                continue
+            nested = by_name[m.name]
+            if not isinstance(nested, _CO_OCCURRENCE_FAMILIES):
+                _raise_constraint_nested_family(name, c.name, m.name)
+            if m.when is not None:
+                _raise_constraint_nested_when(name, c.name, m.name)
+    _check_constraint_cycles(name, co_occurrence, by_name)
+
+    # 6. Election legality -- `when` against the member's declared type,
+    #    including the bool refusal. `present` on a bool would let `--no-x`
+    #    engage a constraint while selecting nothing (A1, by omission).
+    for c in co_occurrence:
+        for m in c.members:
+            if m.name in by_name:
+                continue
+            decl = flags_by_name.get(m.name) or args_by_name[m.name]
+            token = (
+                f"--{m.name}" if m.name in flags_by_name else m.name
+            )
+            is_bool = (
+                decl.type is bool
+                and getattr(decl, "compound", "scalar") == "scalar"
+                and not getattr(decl, "repeatable", False)
+                and not getattr(decl, "variadic", False)
+            )
+            if is_bool and m.when is None:
+                _raise_constraint_member_bool_when(name, c.name, token)
+            if m.when == _WHEN_TRUE and not is_bool:
+                _raise_constraint_when_true_not_bool(
+                    name, c.name, token, _declared_type_word(decl),
+                )
+            if m.when == _WHEN_NON_EMPTY and not _member_is_sized(decl):
+                _raise_constraint_when_non_empty_not_sized(
+                    name, c.name, token, _declared_type_word(decl),
+                )
+
+    # 7. Presence legality -- §26.5's inversion. A constraint never subtracts
+    #    from a declaration; it adds a rule on top of one, and a member the
+    #    invocation must always supply leaves it nothing to decide.
+    for c in co_occurrence:
+        for m in c.members:
+            if m.name in by_name:
+                continue
+            decl = flags_by_name.get(m.name) or args_by_name[m.name]
+            if decl.presence == _PRESENCE_REQUIRED:
+                token = f"--{m.name}" if m.name in flags_by_name else m.name
+                _raise_constraint_member_required(name, c.name, token)
+
+    # The dependency families' own guards, whose sentences §26 leaves alone.
+    for c in constraints:
+        if isinstance(c, Requires):
+            if c.flag == c.depends_on:
+                raise ValueError(
+                    f'command "{name}": Requires flag and depends_on cannot be '
+                    f'the same ("{c.flag}")'
+                )
+        elif isinstance(c, Implies):
+            if c.flag == c.implies:
+                raise ValueError(
+                    f'command "{name}": Implies flag and implies cannot be '
+                    f'the same ("{c.flag}")'
+                )
+            if flags_by_name[c.flag].type is not bool:
+                raise ValueError(
+                    f'command "{name}": Implies trigger flag "{c.flag}" '
+                    f"must be a bool flag"
+                )
+            if flags_by_name[c.implies].type is not bool:
+                raise ValueError(
+                    f'command "{name}": Implies target flag "{c.implies}" '
+                    f"must be a bool flag"
+                )
+            if not isinstance(c.value, bool):
+                raise ValueError(
+                    f'command "{name}": Implies value must be a bool, '
+                    f"got {type(c.value).__name__!r}"
+                )
+
+
+def _check_constraint_cycles(name: str, co_occurrence: list, by_name: dict) -> None:
+    """Nesting is a DAG, cycle-checked at registration (§26.2).
+
+    `<path>` renders the participating names joined by ` -> `, starting AND
+    ending at the same name, beginning at the first participant in declaration
+    order. A constraint naming itself is the degenerate case and takes the same
+    template, never a second one.
+    """
+    WHITE, GREY, BLACK = 0, 1, 2
+    colour: dict[str, int] = {}
+    stack: list[str] = []
+
+    def walk(c) -> None:
+        colour[c.name] = GREY
+        stack.append(c.name)
+        for m in c.members:
+            child = by_name.get(m.name)
+            if child is None or not isinstance(child, _CO_OCCURRENCE_FAMILIES):
+                continue
+            state = colour.get(child.name, WHITE)
+            if state == GREY:
+                start = stack.index(child.name)
+                path = " -> ".join(stack[start:] + [child.name])
+                _raise_constraint_cycle(name, path)
+            if state == WHITE:
+                walk(child)
+        stack.pop()
+        colour[c.name] = BLACK
+
+    for c in co_occurrence:
+        if colour.get(c.name, WHITE) == WHITE:
+            walk(c)
+
+
+def _constraint_index(cmd: "Command") -> tuple[dict, dict]:
+    """(kind by name, constraint by name) for a validated command.
+
+    Registration guarantees the namespace is total and unambiguous -- a name
+    resolves to exactly one flag, arg or constraint -- so one flat map answers
+    every member lookup every surface below needs.
+    """
+    kinds: dict[str, str] = {}
+    for f in cmd.flags:
+        kinds[f.name] = _MEMBER_KIND_FLAG
+    for a in cmd.args:
+        kinds[a.name] = _MEMBER_KIND_ARG
+    by_name: dict[str, object] = {}
+    for c in cmd.constraints:
+        kinds[c.name] = _MEMBER_KIND_CONSTRAINT
+        by_name[c.name] = c
+    return kinds, by_name
+
+
+def _render_member_token(
+    member_name: str, kinds: dict, by_name: dict, cli: bool,
+) -> str:
+    """One member, rendered by §12.15's pinned rule.
+
+    A flag renders `--<name>`, an arg renders its bare `<name>`, and a nested
+    constraint renders its OWN operands in parentheses, joined by its family's
+    connector. The rendering is structural, never nominal: a nested member
+    never renders its name, because the name identifies the rule that failed
+    and appears once, in the prefix.
+
+    ``cli`` picks the token vocabulary: command-line tokens for help and for
+    the parse-time sentences, property names for the MCP description block
+    (§26.12 -- the caller writes keys, not argv).
+    """
+    kind = kinds.get(member_name)
+    if kind == _MEMBER_KIND_FLAG:
+        return f"--{member_name}" if cli else _flag_param_name(member_name)
+    if kind == _MEMBER_KIND_ARG:
+        return member_name
+    nested = by_name[member_name]
+    connector = " with " if isinstance(nested, AllOrNone) else " or "
+    inner = connector.join(
+        _render_member_token(m.name, kinds, by_name, cli)
+        for m in nested.members
+    )
+    return f"({inner})"
+
+
+def _render_member_list(
+    constraint: object, kinds: dict, by_name: dict, cli: bool,
+) -> str:
+    """The whole member list, unquoted and joined by `, ` in declaration order."""
+    return ", ".join(
+        _render_member_token(m.name, kinds, by_name, cli)
+        for m in constraint.members
+    )
+
+
+def _msg_at_least_one_required(c: str, members: str, clause: str) -> str:
+    return f'constraint "{c}": at least one of {members} is required{clause}'
+
+
+def _msg_all_or_none_together(c: str, members: str) -> str:
+    return f'constraint "{c}": {members} must be used together'
+
+
+def _msg_constraint_prefix(c: str) -> str:
+    """The prefix every constraint sentence carries (§12.15).
+
+    `Requires` and `Implies` keep their sentences byte for byte AFTER it.
+    """
+    return f'constraint "{c}": '
+
+
+def _is_non_empty_value(value: object) -> bool:
+    """`non_empty` fires on a non-empty string, list or map (§26.3)."""
+    if value is None:
+        return False
+    if isinstance(value, (str, list, tuple, dict)):
+        return len(value) > 0
+    return True
+
+
+def _arg_engagement_inputs(
+    cmd: "Command",
+    positionals: list[str],
+    pre_typed_args: dict[str, object] | None,
+) -> dict[str, tuple[bool, object]]:
+    """Provided-ness and the raw value of every positional arg (§26.3).
+
+    The flag-side sourced store holds flags only, so this is the arg side of
+    the one `provided` predicate, and it must give the same answer at the argv
+    door and at both machine doors. An arg is provided when the invocation
+    supplied a positional token for it, or a key for it at a machine door, and
+    never when the declaration's default or an optional absence filled it. For
+    a VARIADIC arg, provided means at least one element -- which is why an
+    explicitly supplied empty array is not a provision.
+
+    It runs BEFORE step 6, so the values here are still raw argv tokens on the
+    argv path; nothing is coerced, because a coercion failure is step 6's
+    error to raise, in step 6's place.
+    """
+    out: dict[str, tuple[bool, object]] = {}
+    if not cmd.args:
+        return out
+    if pre_typed_args is not None:
+        for a in cmd.args:
+            if a.name not in pre_typed_args:
+                out[a.name] = (False, None)
+                continue
+            value = pre_typed_args[a.name]
+            if a.variadic:
+                supplied = isinstance(value, (list, tuple)) and len(value) > 0
+                out[a.name] = (supplied, value)
+            else:
+                out[a.name] = (True, value)
+        return out
+    has_variadic = bool(cmd.args) and cmd.args[-1].variadic
+    fixed_args = cmd.args[:-1] if has_variadic else cmd.args
+    for idx, a in enumerate(fixed_args):
+        if idx < len(positionals):
+            out[a.name] = (True, positionals[idx])
+        else:
+            out[a.name] = (False, None)
+    if has_variadic:
+        remaining = positionals[len(fixed_args):]
+        out[cmd.args[-1].name] = (len(remaining) > 0, remaining)
+    return out
+
+
+def _member_engaged(
+    member: Member,
+    kinds: dict,
+    by_name: dict,
+    store: "_SourcedStore",
+    arg_inputs: dict[str, tuple[bool, object]],
+) -> bool:
+    """Is this member engaged in this invocation (§26.4)?
+
+    A flag or arg member is engaged iff its `when` selector fires; a nested
+    constraint member is engaged iff at least one of ITS members is. Engagement
+    propagates upward; satisfaction does not.
+    """
+    kind = kinds.get(member.name)
+    if kind == _MEMBER_KIND_CONSTRAINT:
+        nested = by_name[member.name]
+        return any(
+            _member_engaged(m, kinds, by_name, store, arg_inputs)
+            for m in nested.members
+        )
+    when = member.resolved_when
+    if kind == _MEMBER_KIND_FLAG:
+        if not store.is_present_for_deps(member.name):
+            return False
+        if when == _WHEN_PRESENT:
+            return True
+        value = store[member.name]
+        if when == _WHEN_TRUE:
+            return value is True
+        return _is_non_empty_value(value)
+    provided, value = arg_inputs.get(member.name, (False, None))
+    if not provided:
+        return False
+    if when == _WHEN_PRESENT:
+        return True
+    if when == _WHEN_TRUE:
+        # The argv door has a raw token here; the machine doors have the
+        # caller's own bool. A token that does not parse is not engaged, and
+        # step 6 raises the real coercion error in its own place.
+        if isinstance(value, bool):
+            return value is True
+        if isinstance(value, str):
+            try:
+                return _strict_bool(value) is True
+            except ValueError:
+                return False
+        return False
+    return _is_non_empty_value(value)
+
+
+def _constraint_decline_clause(
+    constraint: object,
+    kinds: dict,
+    store: "_SourcedStore",
+) -> str:
+    """§21.4's decline clause verbatim, when a `when="true"` bool declined.
+
+    Reusing it is not a claim that at-least-one is exclusivity: the clause is
+    about a NEGATED BOOL, which is the same fact under both constructs. There
+    is deliberately no analogous clause for a `non_empty` member supplied
+    empty -- A2 places empty-value legality on the flag's own validation.
+    """
+    for m in constraint.members:
+        if kinds.get(m.name) != _MEMBER_KIND_FLAG:
+            continue
+        if m.resolved_when != _WHEN_TRUE:
+            continue
+        if not store.is_present_for_deps(m.name):
+            continue
+        if store[m.name] is False:
+            return _msg_mutex_decline_clause(m.name)
+    return ""
+
+
+def _enforce_constraints(
+    cmd: "Command",
+    store: "_SourcedStore",
+    arg_inputs: dict[str, tuple[bool, object]],
+) -> None:
+    """Evaluate every constraint, children before parents (§26.4, §26.9).
+
+    Siblings run in declaration order and a violated nested constraint reports
+    its own sentence, its parent never being evaluated. That is not a tie-break
+    convention: an operator who typed one half of a pair must be told the pair
+    is incomplete, not that the whole selection is missing.
+    """
+    if not cmd.constraints:
+        return
+    kinds, by_name = _constraint_index(cmd)
+    evaluated: set[str] = set()
+
+    def visit(c: object) -> None:
+        if c.name in evaluated:
+            return
+        evaluated.add(c.name)
+        for m in c.members:
+            if kinds.get(m.name) == _MEMBER_KIND_CONSTRAINT:
+                visit(by_name[m.name])
+        engaged = [
+            _member_engaged(m, kinds, by_name, store, arg_inputs)
+            for m in c.members
+        ]
+        if isinstance(c, AtLeastOne):
+            if not any(engaged):
+                raise _ParseError(_msg_at_least_one_required(
+                    c.name,
+                    _render_member_list(c, kinds, by_name, cli=True),
+                    _constraint_decline_clause(c, kinds, store),
+                ))
+            return
+        # all-or-none: every member engaged or none. Nothing engaged is
+        # VACUOUSLY TRUE -- the "none" half of its own name.
+        if any(engaged) and not all(engaged):
+            raise _ParseError(_msg_all_or_none_together(
+                c.name, _render_member_list(c, kinds, by_name, cli=True),
+            ))
+
+    for c in cmd.constraints:
+        if isinstance(c, _CO_OCCURRENCE_FAMILIES):
+            visit(c)
+        elif isinstance(c, Requires):
+            if (
+                store.is_present_for_deps(c.flag)
+                and not store.is_present_for_deps(c.depends_on)
+            ):
+                raise _ParseError(
+                    _msg_constraint_prefix(c.name)
+                    + f"flag '--{c.flag}' requires '--{c.depends_on}'"
+                )
 
 
 @dataclass
@@ -6381,7 +7155,7 @@ class Command:
     sites: dict = field(default_factory=dict)
     # Short -> scoped token name, for the shorts scoped declarations claim.
     shorts: dict = field(default_factory=dict)
-    dependencies: tuple[CoRequired | Requires | Implies, ...] = ()
+    constraints: tuple[AtLeastOne | AllOrNone | Requires | Implies, ...] = ()
     passthrough: Passthrough | None = None
     tags: frozenset[str] = frozenset()
     hidden: bool = False
@@ -6505,7 +7279,7 @@ class Group:
         owns_stdout: bool = False,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
-        dependencies: list[CoRequired | Requires | Implies] | None = None,
+        constraints: list[AtLeastOne | AllOrNone | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
         grants: list[Grant] | None = None,
         forwarding: Forwarding | None = None,
@@ -6530,7 +7304,7 @@ class Group:
                 payload_schema=payload_schema,
                 owns_stdout=owns_stdout,
                 handler=func, args=args, flag_sets=flag_sets,
-                dependencies=dependencies,
+                constraints=constraints,
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
                 passthrough=passthrough,
@@ -8245,7 +9019,7 @@ class App:
         owns_stdout: bool = False,
         args: list[Arg] | None = None,
         flag_sets: list[FlagSet] | None = None,
-        dependencies: list[CoRequired | Requires | Implies] | None = None,
+        constraints: list[AtLeastOne | AllOrNone | Requires | Implies] | None = None,
         passthrough: Passthrough | None = None,
         grants: list[Grant] | None = None,
         forwarding: Forwarding | None = None,
@@ -8270,7 +9044,7 @@ class App:
                 handler=func,
                 args=args,
                 flag_sets=flag_sets,
-                dependencies=dependencies,
+                constraints=constraints,
                 env_prefix=self.env_prefix,
                 global_flags=self._global_flags,
                 passthrough=passthrough,
@@ -8538,7 +9312,7 @@ class App:
             handler=handler,
             args=args,
             flag_sets=None,
-            dependencies=None,
+            constraints=None,
             env_prefix=self.env_prefix,
             global_flags=self._global_flags,
             passthrough=None,
@@ -10684,22 +11458,189 @@ def _build_json_schema(cmd: Command) -> dict:
         "required": required,
         "additionalProperties": False,
     }
+    any_of, dependent_required = _constraint_keywords(cmd)
+    if any_of:
+        schema["anyOf"] = any_of
+    if dependent_required:
+        schema["dependentRequired"] = dependent_required
     return schema
 
 
+# The closed set of reasons a partial projection may append (§26.12).
+_MCP_REASON_SELECTORS = 'the "true" and "non_empty" selectors'
+_MCP_REASON_NESTING = "the nested grouping"
+_MCP_REASON_INJECTION = "the injection"
+
+
+def _mcp_member_property(member_name: str, kinds: dict) -> str:
+    """A leaf member's PROPERTY name -- the caller writes keys, not argv."""
+    if kinds.get(member_name) == _MEMBER_KIND_ARG:
+        return member_name
+    return _flag_param_name(member_name)
+
+
+def _constraint_leaf_properties(c: object, kinds: dict, by_name: dict) -> list[str]:
+    """Every leaf property a co-occurrence constraint reaches, in order."""
+    out: list[str] = []
+    for m in c.members:
+        if kinds.get(m.name) == _MEMBER_KIND_CONSTRAINT:
+            for leaf in _constraint_leaf_properties(by_name[m.name], kinds, by_name):
+                if leaf not in out:
+                    out.append(leaf)
+            continue
+        prop = _mcp_member_property(m.name, kinds)
+        if prop not in out:
+            out.append(prop)
+    return out
+
+
+def _constraint_has_non_present_selector(
+    c: object, kinds: dict, by_name: dict,
+) -> bool:
+    for m in c.members:
+        if kinds.get(m.name) == _MEMBER_KIND_CONSTRAINT:
+            if _constraint_has_non_present_selector(by_name[m.name], kinds, by_name):
+                return True
+            continue
+        if m.resolved_when != _WHEN_PRESENT:
+            return True
+    return False
+
+
+def _at_least_one_branches(c: object, kinds: dict, by_name: dict) -> list[dict]:
+    """One `anyOf` branch per member (§26.12).
+
+    An all-or-none member becomes ONE branch listing all of its leaves in
+    `required`; a nested at-least-one's branches are INLINED into the parent's
+    `anyOf`, which is what makes safegit's site project with no loss at all.
+    """
+    branches: list[dict] = []
+    for m in c.members:
+        if kinds.get(m.name) == _MEMBER_KIND_CONSTRAINT:
+            nested = by_name[m.name]
+            if isinstance(nested, AtLeastOne):
+                branches.extend(_at_least_one_branches(nested, kinds, by_name))
+            else:
+                branches.append({
+                    "required": _constraint_leaf_properties(nested, kinds, by_name),
+                })
+            continue
+        branches.append({"required": [_mcp_member_property(m.name, kinds)]})
+    return branches
+
+
+def _constraint_keywords(cmd: Command) -> tuple[list, dict]:
+    """The JSON Schema keywords a command's constraints project (§26.12).
+
+    These sit BESIDE `properties` and `required` on one flat object schema,
+    add no structure, and degrade safely: a client that ignores an unknown
+    keyword sends a call the framework refuses at call time with the parser's
+    own sentence. That runtime refusal is the authority; the schema is
+    advisory, which is why `anyOf` here does not contradict §24.11's refusal of
+    `oneOf` for selectors.
+    """
+    if not cmd.constraints:
+        return [], {}
+    kinds, by_name = _constraint_index(cmd)
+    any_of: list[dict] = []
+    dependent_required: dict[str, list[str]] = {}
+
+    def add_dependency(key: str, values: list[str]) -> None:
+        bucket = dependent_required.setdefault(key, [])
+        for v in values:
+            if v not in bucket:
+                bucket.append(v)
+
+    for c in cmd.constraints:
+        if isinstance(c, AtLeastOne):
+            any_of.extend(_at_least_one_branches(c, kinds, by_name))
+        elif isinstance(c, AllOrNone):
+            nested = any(
+                kinds.get(m.name) == _MEMBER_KIND_CONSTRAINT for m in c.members
+            )
+            if nested or _constraint_has_non_present_selector(c, kinds, by_name):
+                # The keyword cannot carry a group as an operand, and it says a
+                # key is present rather than true or non-empty.
+                continue
+            props = [_mcp_member_property(m.name, kinds) for m in c.members]
+            for p in props:
+                add_dependency(p, [o for o in props if o != p])
+        elif isinstance(c, Requires):
+            add_dependency(
+                _flag_param_name(c.flag), [_flag_param_name(c.depends_on)],
+            )
+    return any_of, dependent_required
+
+
+def _constraint_description_line(
+    c: object, kinds: dict, by_name: dict,
+) -> str:
+    """One line of the `Constraints (enforced at call time):` block (§26.12).
+
+    A PARTIAL projection appends ` -- not expressed in the schema: <reason>`
+    from a closed set; an EXACT one appends no clause at all. The block names
+    every constraint either way, so the presence of a clause tells a reader
+    exactly where the schema is weaker than the rule -- there is no third
+    verdict in which a rule reaches the boundary unstated.
+    """
+    if isinstance(c, _CO_OCCURRENCE_FAMILIES):
+        members = _render_member_list(c, kinds, by_name, cli=False)
+    if isinstance(c, AtLeastOne):
+        line = f"at least one of: {members}"
+        if _constraint_has_non_present_selector(c, kinds, by_name):
+            line += f" -- not expressed in the schema: {_MCP_REASON_SELECTORS}"
+        return line
+    if isinstance(c, AllOrNone):
+        line = f"all or none of: {members}"
+        if any(kinds.get(m.name) == _MEMBER_KIND_CONSTRAINT for m in c.members):
+            line += f" -- not expressed in the schema: {_MCP_REASON_NESTING}"
+        elif _constraint_has_non_present_selector(c, kinds, by_name):
+            line += f" -- not expressed in the schema: {_MCP_REASON_SELECTORS}"
+        return line
+    if isinstance(c, Requires):
+        return (
+            f"{_flag_param_name(c.flag)} requires "
+            f"{_flag_param_name(c.depends_on)}"
+        )
+    target = c.implies if c.value else f"no-{c.implies}"
+    return (
+        f"{_flag_param_name(c.flag)} implies {_flag_param_name(target)} "
+        f"-- not expressed in the schema: {_MCP_REASON_INJECTION}"
+    )
+
+
+def _constraint_description_block(cmd: Command) -> list[str]:
+    if not cmd.constraints:
+        return []
+    kinds, by_name = _constraint_index(cmd)
+    lines = ["Constraints (enforced at call time):"]
+    for c in cmd.constraints:
+        lines.append(f"  {_constraint_description_line(c, kinds, by_name)}")
+    return lines
+
+
 def _tool_description(cmd: Command, help_text: str) -> str:
-    """The tool description, plus the scope block a selector needs (§24.11).
+    """The tool description, plus the scope block a selector needs (§24.11)
+    and the constraint block §26.12 adds beside it.
 
     The scope structure survives in the DESCRIPTION, appended as a
     deterministic block so an agent can read the constraint it cannot see in
     the schema. The cost is stated rather than discovered: an agent cannot see
-    the scope rule before it calls; it learns by being refused.
+    the scope rule before it calls; it learns by being refused. The constraint
+    block follows it, separated by a blank line when both exist, and a
+    constraint is never silently dropped from a tool schema.
     """
-    if not cmd.selectors:
+    blocks: list[str] = []
+    if cmd.selectors:
+        lines: list[str] = ["Scoped parameters (enforced at call time):"]
+        _scope_description_lines(cmd.selectors, (), lines)
+        blocks.append("\n".join(lines))
+    constraint_lines = _constraint_description_block(cmd)
+    if constraint_lines:
+        blocks.append("\n".join(constraint_lines))
+    if not blocks:
         return help_text
-    lines: list[str] = ["Scoped parameters (enforced at call time):"]
-    _scope_description_lines(cmd.selectors, (), lines)
-    return help_text + "\n\n" + "\n".join(lines)
+    return help_text + "\n\n" + "\n\n".join(blocks)
 
 
 def _scope_description_lines(
@@ -10856,10 +11797,10 @@ def _validate_and_build_kwargs(
     Returns (cmd, kwargs, global_cli_set, sources) where sources maps
     flag param names to source labels (cli/env/config/default/implied).
     """
-    # Step 4.55: resolve Implies dependencies (before dependency checks, so
-    # implied values participate in downstream CoRequired/Requires validation).
+    # Step 4.55: resolve Implies injections (before the co-occurrence families,
+    # so an implied value can engage a member -- §26.4's pipeline position).
     # Implied values are stored with _Source.IMPLIED.
-    for dep in cmd.dependencies:
+    for dep in cmd.constraints:
         if isinstance(dep, Implies):
             if store.is_present_for_deps(dep.flag):
                 if store.has(dep.implies):
@@ -10867,25 +11808,19 @@ def _validate_and_build_kwargs(
                         neg = "no-" if not dep.value else ""
                         explicit_neg = "" if not dep.value else "no-"
                         raise _ParseError(
-                            f"flag '--{dep.flag}' implies '--{neg}{dep.implies}', "
+                            _msg_constraint_prefix(dep.name)
+                            + f"flag '--{dep.flag}' implies '--{neg}{dep.implies}', "
                             f"but '--{explicit_neg}{dep.implies}' was explicitly provided"
                         )
                 else:
                     store.set(dep.implies, dep.value, _Source.IMPLIED)
 
-    # Step 4.6: enforce flag dependencies (before defaults).
-    # is_present_for_deps: cli, env, config, implied count. Default does NOT.
-    for dep in cmd.dependencies:
-        if isinstance(dep, CoRequired):
-            present = [f for f in dep.flags if store.is_present_for_deps(f)]
-            if 0 < len(present) < len(dep.flags):
-                names = ", ".join(f"--{f}" for f in dep.flags)
-                raise _ParseError(f"flags {names} must be used together")
-        elif isinstance(dep, Requires):
-            if store.is_present_for_deps(dep.flag) and not store.is_present_for_deps(dep.depends_on):
-                raise _ParseError(
-                    f"flag '--{dep.flag}' requires '--{dep.depends_on}'"
-                )
+    # Step 4.6: enforce the constraint system (before defaults, so a declared
+    # default cannot engage a member). is_present_for_deps: cli, env, config
+    # and implied count; default and infra do NOT.
+    _enforce_constraints(
+        cmd, store, _arg_engagement_inputs(cmd, positionals, pre_typed_args),
+    )
 
     # Step 5: apply the declared presence (contract §23.1). Nothing is derived
     # here any more: no empty-collection default for compound flags, no
@@ -13092,7 +14027,7 @@ def _build_and_validate_command(
     handler: Callable,
     args: list[Arg] | None,
     flag_sets: list[FlagSet] | None,
-    dependencies: list[CoRequired | Requires | Implies] | None = None,
+    constraints: list[AtLeastOne | AllOrNone | Requires | Implies] | None = None,
     env_prefix: str | None,
     global_flags: list[Flag] | None = None,
     passthrough: Passthrough | None = None,
@@ -13472,107 +14407,19 @@ def _build_and_validate_command(
             _raise_handler_param_optional_arg_default(name, pname, decl.name)
         _raise_handler_param_optional_flag_default(name, pname, decl.name)
 
-    # Validate dependencies. A constraint naming a SCOPED flag is refused
-    # outright (§24.8): the scope already IS the constraint -- a co-requirement,
-    # an exclusivity and a conditional requirement in one declaration -- and
-    # expressing one fact in two mechanisms is how the two disagree later.
-    resolved_dependencies = list(dependencies) if dependencies else []
+    # Validate the constraint set (§26.8's pinned resolution order).
+    resolved_constraints = list(constraints) if constraints else []
+    _scoped_paths: dict[str, str] = {}
     if site_list:
         _member_spelled = _member_spelling_map(tuple(selectors))
-        _scoped_paths: dict[str, tuple[tuple[str, str], ...]] = {}
         for _site in site_list:
             if _site.path and _site.name not in _scoped_paths:
-                _scoped_paths[_site.name] = _site.path
-
-        def _refuse_scoped(family: str, flag_name: str) -> None:
-            path = _scoped_paths.get(flag_name)
-            if path is not None:
-                _raise_constraint_references_scoped_flag(
-                    name, family, flag_name,
-                    _render_scope_path(path, _member_spelled),
+                _scoped_paths[_site.name] = _render_scope_path(
+                    _site.path, _member_spelled,
                 )
-
-        for dep in resolved_dependencies:
-            if isinstance(dep, CoRequired):
-                for flag_name in dep.flags:
-                    _refuse_scoped("CoRequired", flag_name)
-            elif isinstance(dep, Requires):
-                _refuse_scoped("Requires", dep.flag)
-                _refuse_scoped("Requires", dep.depends_on)
-            elif isinstance(dep, Implies):
-                _refuse_scoped("Implies", dep.flag)
-                _refuse_scoped("Implies", dep.implies)
-    for dep in resolved_dependencies:
-        if isinstance(dep, CoRequired):
-            if len(dep.flags) < 2:
-                raise ValueError(
-                    f'command "{name}": CoRequired must have at least 2 flags, '
-                    f"got {len(dep.flags)}"
-                )
-            seen_dep_flags: set[str] = set()
-            for flag_name in dep.flags:
-                if flag_name not in seen_flag_names:
-                    raise ValueError(
-                        f'command "{name}": CoRequired references unknown flag '
-                        f'"{flag_name}"'
-                    )
-                if flag_name in seen_dep_flags:
-                    raise ValueError(
-                        f'command "{name}": CoRequired has duplicate flag '
-                        f'"{flag_name}"'
-                    )
-                seen_dep_flags.add(flag_name)
-        elif isinstance(dep, Requires):
-            if dep.flag not in seen_flag_names:
-                raise ValueError(
-                    f'command "{name}": Requires references unknown flag '
-                    f'"{dep.flag}"'
-                )
-            if dep.depends_on not in seen_flag_names:
-                raise ValueError(
-                    f'command "{name}": Requires references unknown flag '
-                    f'"{dep.depends_on}"'
-                )
-            if dep.flag == dep.depends_on:
-                raise ValueError(
-                    f'command "{name}": Requires flag and depends_on cannot be '
-                    f'the same ("{dep.flag}")'
-                )
-        elif isinstance(dep, Implies):
-            if dep.flag not in seen_flag_names:
-                raise ValueError(
-                    f'command "{name}": Implies references unknown flag '
-                    f'"{dep.flag}"'
-                )
-            if dep.implies not in seen_flag_names:
-                raise ValueError(
-                    f'command "{name}": Implies references unknown flag '
-                    f'"{dep.implies}"'
-                )
-            if dep.flag == dep.implies:
-                raise ValueError(
-                    f'command "{name}": Implies flag and implies cannot be '
-                    f'the same ("{dep.flag}")'
-                )
-            # Look up the actual Flag objects to validate types
-            all_flags_by_name = {f.name: f for f in all_flags}
-            trigger_flag = all_flags_by_name[dep.flag]
-            target_flag = all_flags_by_name[dep.implies]
-            if trigger_flag.type is not bool:
-                raise ValueError(
-                    f'command "{name}": Implies trigger flag "{dep.flag}" '
-                    f"must be a bool flag"
-                )
-            if target_flag.type is not bool:
-                raise ValueError(
-                    f'command "{name}": Implies target flag "{dep.implies}" '
-                    f"must be a bool flag"
-                )
-            if not isinstance(dep.value, bool):
-                raise ValueError(
-                    f'command "{name}": Implies value must be a bool, '
-                    f"got {type(dep.value).__name__!r}"
-                )
+    _validate_constraint_set(
+        name, resolved_constraints, all_flags, all_args, _scoped_paths,
+    )
 
     # Validate flag-default RelativeToRoot markers against declared roots.
     _root_names = infra_root_names or frozenset()
@@ -13605,7 +14452,7 @@ def _build_and_validate_command(
         members=tuple(all_members),
         sites=sites,
         shorts=scoped_shorts,
-        dependencies=tuple(resolved_dependencies),
+        constraints=tuple(resolved_constraints),
         tags=effective_tags,
         hidden=hidden,
         interactive=interactive,
@@ -14069,6 +14916,52 @@ def _format_dry_run_section(cmd: Command) -> list[str]:
     ]
 
 
+def _constraint_help_sentence(
+    c: object, kinds: dict, by_name: dict,
+) -> str:
+    """The per-family sentence a `Constraints:` line carries (§26.10)."""
+    if isinstance(c, AtLeastOne):
+        return f"at least one of {_render_member_list(c, kinds, by_name, True)}"
+    if isinstance(c, AllOrNone):
+        return f"all or none of {_render_member_list(c, kinds, by_name, True)}"
+    if isinstance(c, Requires):
+        return f"--{c.flag} requires --{c.depends_on}"
+    # `Implies` renders `--no-<implies>` when the declared value is false,
+    # which is the negation spelling its own violation sentence already uses.
+    # No `=true` spelling is invented.
+    target = c.implies if c.value else f"no-{c.implies}"
+    return f"--{c.flag} implies --{target}"
+
+
+def _format_constraints_section(cmd: Command) -> list[str]:
+    """The `Constraints:` block (§26.10) -- the first rendering this system has
+    ever had in any implementation.
+
+    A declared rule that changes whether an invocation is accepted, and that
+    the operator cannot see in `--help`, is the same erasure the presence round
+    ended for requiredness. The DECLARED NAME renders in the position a flag
+    name occupies, so the identifier a violation prints is discoverable in the
+    help the operator already read, and the block computes ONE alignment column
+    across itself alone -- it never shares the flag block's column. A nested
+    constraint gets its own line AND appears inside its parent's line, because
+    it is both a rule of its own and an operand. No presence part is repeated:
+    every flag line already carries exactly one, and a constraint states a rule
+    over members rather than a property of one.
+    """
+    if not cmd.constraints:
+        return []
+    kinds, by_name = _constraint_index(cmd)
+    rows = [
+        (c.name, _constraint_help_sentence(c, kinds, by_name))
+        for c in cmd.constraints
+    ]
+    column = max(2 + len(n) for n, _ in rows) + 4
+    lines = ["", "Constraints:"]
+    for n, sentence in rows:
+        lines.append(f"  {n}{' ' * (column - 2 - len(n))}{sentence}".rstrip())
+    return lines
+
+
 def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
     """Format command-level help shown when the user runs 'myapp cmd --help'."""
     lines: list[str] = [f"{app.name} {prefix}{cmd.name} -- {cmd.help}"]
@@ -14134,6 +15027,8 @@ def _format_command_help(app: App, cmd: Command, prefix: str = "") -> str:
             lines.append(
                 f"{' ' * indent}{spec}{' ' * padding}{help_text}{meta}".rstrip()
             )
+
+    lines.extend(_format_constraints_section(cmd))
 
     # Global flags
     if app._global_flags:
@@ -15013,26 +15908,49 @@ def _serialize_command(cmd: Command) -> dict:
     tags = sorted(cmd.tags)
     if tags:
         d["tags"] = tags
+    # The constraint catalogue (§25.7's co-occurrence-round amendment). Four
+    # types, a mandatory `name` on each, and a `members` array of
+    # {kind, name, when} records in declaration order. The encoding is COMPLETE
+    # rather than indicative: the resolved `kind` is published so a consumer
+    # never has to search the flag and arg lists, `when` is always emitted on a
+    # flag or arg member and never on a constraint member (which is why it
+    # takes no `defaults` block entry), and nesting is encoded as
+    # constraint-kind members rather than flattened into leaves.
     constraints: list[dict] = []
-    for dep in cmd.dependencies:
-        if isinstance(dep, CoRequired):
-            constraints.append({
-                "type": "co_required",
-                "flags": dep.flags,
-            })
-        elif isinstance(dep, Requires):
-            constraints.append({
-                "type": "requires",
-                "flag": dep.flag,
-                "depends_on": dep.depends_on,
-            })
-        elif isinstance(dep, Implies):
-            constraints.append({
-                "type": "implies",
-                "flag": dep.flag,
-                "implies": dep.implies,
-                "value": dep.value,
-            })
+    if cmd.constraints:
+        kinds, _by_name = _constraint_index(cmd)
+        for dep in cmd.constraints:
+            if isinstance(dep, _CO_OCCURRENCE_FAMILIES):
+                members: list[dict] = []
+                for m in dep.members:
+                    kind = kinds[m.name]
+                    entry: dict = {"kind": kind, "name": m.name}
+                    if kind != _MEMBER_KIND_CONSTRAINT:
+                        entry["when"] = m.resolved_when
+                    members.append(entry)
+                constraints.append({
+                    "type": (
+                        "at_least_one" if isinstance(dep, AtLeastOne)
+                        else "all_or_none"
+                    ),
+                    "name": dep.name,
+                    "members": members,
+                })
+            elif isinstance(dep, Requires):
+                constraints.append({
+                    "type": "requires",
+                    "name": dep.name,
+                    "flag": dep.flag,
+                    "depends_on": dep.depends_on,
+                })
+            elif isinstance(dep, Implies):
+                constraints.append({
+                    "type": "implies",
+                    "name": dep.name,
+                    "flag": dep.flag,
+                    "implies": dep.implies,
+                    "value": dep.value,
+                })
     if constraints:
         d["constraints"] = constraints
     if cmd.hidden:

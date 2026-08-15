@@ -528,7 +528,8 @@ class TestComposition:
 
         @app.command(
             "cmd", effect="read_only", help="a command",
-            dependencies=[strictcli.Implies(
+            constraints=[strictcli.Implies(
+                "release-implies-signed",
                 flag="release", implies="signed", value=True,
             )],
         )
@@ -546,7 +547,8 @@ class TestComposition:
 
         @app.command(
             "cmd", effect="read_only", help="a command",
-            dependencies=[strictcli.Implies(
+            constraints=[strictcli.Implies(
+                "release-implies-signed",
                 flag="release", implies="signed", value=True,
             )],
         )
@@ -564,8 +566,8 @@ class TestComposition:
 
         @app.command(
             "cmd", effect="read_only", help="a command",
-            dependencies=[strictcli.Requires(
-                flag="sign", depends_on="key",
+            constraints=[strictcli.Requires(
+                "sign-needs-key", flag="sign", depends_on="key",
             )],
         )
         @strictcli.flag("sign", type=bool, help="sign", default=False)
@@ -575,45 +577,36 @@ class TestComposition:
 
         r = app.test(["cmd", "--sign"])
         assert r.exit_code == 1
-        assert "flag '--sign' requires '--key'" in r.stderr
+        assert (
+            'constraint "sign-needs-key": flag \'--sign\' requires \'--key\''
+            in r.stderr
+        )
 
-    def test_co_required_with_a_required_member(self):
-        # §23.5's CoRequired row: a required member is always provided, so the
-        # group then forces every other member to be provided in every
-        # invocation. The shape is legal; the errors are the two it can reach.
-        def app():
-            a = _app()
+    def test_an_all_or_none_member_may_not_declare_required(self):
+        # §23.5's `CoRequired`/`required` cell is AMENDED by §26.5: the shape
+        # it called "surprising" is the whole objection, and it is now a
+        # registration error. A member the invocation must always supply turns
+        # all-or-none into "every other member is required too", which already
+        # has a spelling -- declare them required.
+        a = _app()
+
+        with pytest.raises(ValueError) as exc:
 
             @a.command(
                 "cmd", effect="read_only", help="a command",
-                dependencies=[strictcli.CoRequired(flags=["cert", "key"])],
+                constraints=[strictcli.AllOrNone("tls", [
+                    strictcli.Member("cert"), strictcli.Member("key"),
+                ])],
             )
             @strictcli.flag("cert", type=str, help="the certificate", presence="required")
             @strictcli.flag("key", type=str, help="the private key", presence="optional")
             def cmd(ctx, cert, key=None):
-                print(f"cert={cert} key={key}")
+                pass
 
-            return a
-
-        both = app().test(["cmd", "--cert", "c.pem", "--key", "k.pem"])
-        assert both.exit_code == 0, both.stderr
-        assert both.stdout == "cert=c.pem key=k.pem\n"
-
-        # Only the required member: the group is violated, because a required
-        # member cannot be absent to make the group vacuously satisfied.
-        only_required = app().test(["cmd", "--cert", "c.pem"])
-        assert only_required.exit_code == 1
-        assert only_required.stderr == (
-            "error: flags --cert, --key must be used together\n"
-            "try 'test cmd --help'\n"
-        )
-
-        # Neither: the dependency check sees an empty group (vacuously fine)
-        # and the required check is what fires.
-        neither = app().test(["cmd"])
-        assert neither.exit_code == 1
-        assert neither.stderr == (
-            "error: flag '--cert' is required\ntry 'test cmd --help'\n"
+        assert str(exc.value) == (
+            'command "cmd": constraint "tls" member \'--cert\' declares '
+            'presence="required": a member the invocation must always supply '
+            "leaves the constraint nothing to decide"
         )
 
     def test_choices_compose_with_optional_in_both_directions(self):
@@ -703,7 +696,8 @@ class TestProvided:
 
         @app.command(
             "cmd", effect="read_only", help="a command",
-            dependencies=[strictcli.Implies(
+            constraints=[strictcli.Implies(
+                "release-implies-signed",
                 flag="release", implies="signed", value=True,
             )],
         )

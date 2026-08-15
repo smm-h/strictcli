@@ -542,15 +542,17 @@ class TestInvokeSelectors:
 
 
 class TestInvokeDependencies:
-    """_invoke enforces CoRequired and Requires dependencies."""
+    """_invoke enforces the co-occurrence families and Requires (§26)."""
 
     def test_co_required_violation(self):
         app = _build_app()
 
         @app.command(
             "deploy", effect="read_only", help="deploy",
-            dependencies=[
-                strictcli.CoRequired(flags=["host", "port"]),
+            constraints=[
+                strictcli.AllOrNone("host-port", [
+                    strictcli.Member("host"), strictcli.Member("port"),
+                ]),
             ],
         )
         @strictcli.flag("host", type=str, help="host", presence="optional")
@@ -566,8 +568,8 @@ class TestInvokeDependencies:
 
         @app.command(
             "deploy", effect="read_only", help="deploy",
-            dependencies=[
-                strictcli.Requires(flag="port", depends_on="host"),
+            constraints=[
+                strictcli.Requires("port-needs-host", flag="port", depends_on="host"),
             ],
         )
         @strictcli.flag("host", type=str, help="host", presence="optional")
@@ -615,8 +617,8 @@ class TestInvokeImplies:
 
         @app.command(
             "deploy", effect="read_only", help="deploy",
-            dependencies=[
-                strictcli.Implies(flag="ci", implies="agree", value=True),
+            constraints=[
+                strictcli.Implies("ci-implies-agree", flag="ci", implies="agree", value=True),
             ],
         )
         @strictcli.flag("ci", type=bool, default=False, help="CI mode")

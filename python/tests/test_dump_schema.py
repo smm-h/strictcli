@@ -895,31 +895,79 @@ class TestSchemaConstraints:
         # wrong fragment would be worse than publishing none (§25.6).
         assert "value_schema" not in cmd["flags"][0]
 
-    def test_co_required(self, tmp_path, monkeypatch):
+    def test_all_or_none(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
         @app.command("deploy", effect="read_only", help="Deploy",
-                     dependencies=[strictcli.CoRequired(flags=["host", "port"])])
-        @strictcli.flag("host", type=str, help="Hostname", presence="required")
-        @strictcli.flag("port", type=int, help="Port number", presence="required")
+                     constraints=[strictcli.AllOrNone("host-port", [
+                         strictcli.Member("host"), strictcli.Member("port"),
+                     ])])
+        @strictcli.flag("host", type=str, help="Hostname", presence="optional")
+        @strictcli.flag("port", type=int, help="Port number", presence="optional")
         def deploy(ctx, host, port):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         cmd = data["commands"]["deploy"]
-        assert len(cmd["constraints"]) == 1
-        c = cmd["constraints"][0]
-        assert c["type"] == "co_required"
-        assert c["flags"] == ["host", "port"]
+        assert cmd["constraints"] == [{
+            "type": "all_or_none",
+            "name": "host-port",
+            "members": [
+                {"kind": "flag", "name": "host", "when": "present"},
+                {"kind": "flag", "name": "port", "when": "present"},
+            ],
+        }]
+
+    def test_at_least_one_with_every_member_kind(self, tmp_path, monkeypatch):
+        """The resolved `kind` is published, so a consumer never has to search
+        the flag and arg lists; `when` is ALWAYS emitted on a flag or arg
+        member and NEVER on a constraint member."""
+        monkeypatch.chdir(tmp_path)
+        app = _make_app()
+
+        @app.command(
+            "purge", effect="read_only", help="Purge",
+            args=[strictcli.Arg("targets", help="ids", variadic=True,
+                                presence="optional")],
+            constraints=[
+                strictcli.AllOrNone("host-port", [
+                    strictcli.Member("host"), strictcli.Member("port"),
+                ]),
+                strictcli.AtLeastOne("selection", [
+                    strictcli.Member("targets", when="non_empty"),
+                    strictcli.Member("all", when="true"),
+                    strictcli.Member("host-port"),
+                ]),
+            ],
+        )
+        @strictcli.flag("host", type=str, help="Hostname", presence="optional")
+        @strictcli.flag("port", type=int, help="Port number", presence="optional")
+        @strictcli.flag("all", type=bool, default=False, help="Everything")
+        def purge(ctx, targets, host, port, all):
+            pass
+
+        app.test(["--dump-schema"])
+        data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+        cmd = data["commands"]["purge"]
+        assert cmd["constraints"][1] == {
+            "type": "at_least_one",
+            "name": "selection",
+            "members": [
+                {"kind": "arg", "name": "targets", "when": "non_empty"},
+                {"kind": "flag", "name": "all", "when": "true"},
+                {"kind": "constraint", "name": "host-port"},
+            ],
+        }
 
     def test_requires(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
         @app.command("deploy", effect="read_only", help="Deploy",
-                     dependencies=[strictcli.Requires(flag="port", depends_on="host")])
+                     constraints=[strictcli.Requires(
+                         "port-needs-host", flag="port", depends_on="host")])
         @strictcli.flag("host", type=str, help="Hostname", presence="required")
         @strictcli.flag("port", type=int, help="Port number", presence="required")
         def deploy(ctx, host, port):
@@ -928,18 +976,20 @@ class TestSchemaConstraints:
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         cmd = data["commands"]["deploy"]
-        assert len(cmd["constraints"]) == 1
-        c = cmd["constraints"][0]
-        assert c["type"] == "requires"
-        assert c["flag"] == "port"
-        assert c["depends_on"] == "host"
+        assert cmd["constraints"] == [{
+            "type": "requires",
+            "name": "port-needs-host",
+            "flag": "port",
+            "depends_on": "host",
+        }]
 
     def test_implies(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
         @app.command("deploy", effect="read_only", help="Deploy",
-                     dependencies=[strictcli.Implies(
+                     constraints=[strictcli.Implies(
+                         "force-implies-agree",
                          flag="force-deploy", implies="agree", value=True)])
         @strictcli.flag("force-deploy", type=bool, default=False, help="Force deploy")
         @strictcli.flag("agree", type=bool, default=False, help="Skip confirmation")
@@ -949,43 +999,48 @@ class TestSchemaConstraints:
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         cmd = data["commands"]["deploy"]
-        assert len(cmd["constraints"]) == 1
-        c = cmd["constraints"][0]
-        assert c["type"] == "implies"
-        assert c["flag"] == "force-deploy"
-        assert c["implies"] == "agree"
-        assert c["value"] is True
+        assert cmd["constraints"] == [{
+            "type": "implies",
+            "name": "force-implies-agree",
+            "flag": "force-deploy",
+            "implies": "agree",
+            "value": True,
+        }]
 
     def test_multiple_constraints(self, tmp_path, monkeypatch):
-        """Multiple constraint types on the same command."""
+        """Multiple constraint types on the same command, declaration order."""
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
         @app.command("deploy", effect="read_only", help="Deploy",
-                     dependencies=[
-                         strictcli.CoRequired(flags=["host", "port"]),
-                         strictcli.Requires(flag="port", depends_on="host"),
+                     constraints=[
+                         strictcli.AllOrNone("host-port", [
+                             strictcli.Member("host"), strictcli.Member("port"),
+                         ]),
+                         strictcli.Requires(
+                             "port-needs-host", flag="port", depends_on="host"),
                      ])
-        @strictcli.flag("host", type=str, help="Hostname", presence="required")
-        @strictcli.flag("port", type=int, help="Port number", presence="required")
+        @strictcli.flag("host", type=str, help="Hostname", presence="optional")
+        @strictcli.flag("port", type=int, help="Port number", presence="optional")
         def deploy(ctx, host, port):
             pass
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
         cmd = data["commands"]["deploy"]
-        assert len(cmd["constraints"]) == 2
         types = [c["type"] for c in cmd["constraints"]]
-        assert types == ["co_required", "requires"]
+        assert types == ["all_or_none", "requires"]
 
-    def test_constraint_flag_names_use_dashes(self, tmp_path, monkeypatch):
-        """Constraint flag names should use dashes (flag names), not underscores."""
+    def test_constraint_member_names_use_dashes(self, tmp_path, monkeypatch):
+        """Member names are flag names (dashes), never param names."""
         monkeypatch.chdir(tmp_path)
         app = _make_app()
 
         @app.command("deploy", effect="read_only", help="Deploy",
-                     dependencies=[strictcli.CoRequired(
-                         flags=["sim-run", "skip-confirm"])])
+                     constraints=[strictcli.AllOrNone("pair", [
+                         strictcli.Member("sim-run", when="true"),
+                         strictcli.Member("skip-confirm", when="true"),
+                     ])])
         @strictcli.flag("sim-run", type=bool, default=False, help="Dry run")
         @strictcli.flag("skip-confirm", type=bool, default=False, help="Skip confirmation")
         def deploy(ctx, sim_run, skip_confirm):
@@ -993,9 +1048,8 @@ class TestSchemaConstraints:
 
         app.test(["--dump-schema"])
         data = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
-        cmd = data["commands"]["deploy"]
-        c = cmd["constraints"][0]
-        assert c["flags"] == ["sim-run", "skip-confirm"]
+        c = data["commands"]["deploy"]["constraints"][0]
+        assert [m["name"] for m in c["members"]] == ["sim-run", "skip-confirm"]
 
 
 class TestSchemaTagContracts:
