@@ -1,24 +1,24 @@
 {
   "_hash_version": 3,
   "en/architecture.md": {
-    "content": "036badc963070373d9338b4c25e059e97d3a71723274738485e36cfae0130c71",
-    "description": "8fd0ce42eacd07543fe287f3dffd393efafa0ecfb931a0e8c8243fdb2db7acad"
+    "content": "6b30783a4bd8da8131e9dae2daa1d588a46f236370125161e509cf3a899affba",
+    "description": "e9134d06417d5f00be5f374da30fe78e690c89aa16ab579df2044266ebc7a218"
   },
   "en/conformance.md": {
     "content": "55b7da5c77f4f1eb41c58b9236cb6094c5338f742b23cd0d85dce0b912d09be8",
     "description": "ecf387ce65cac3d1dff0229fe0906c1552e0cc47c57287e02d86941743535556"
   },
   "en/flag-system.md": {
-    "content": "9b0b5dbbc495c9bfc85017af3380b40ac3950d474d11cde640ae706affeaf6e9",
-    "description": "7f0daba0627af3e683356ccef01577450fdc7d2a9cfd69ff2cc950ca914bede2"
+    "content": "cceb83eec4aeb1718048aa7ec808283ad3c229c260cbff4a21668688de210ba5",
+    "description": "1c7bc398e8f9b0883c99c2c4f5e53a326f1642bfe9721f790dd3931264a46e47"
   },
   "en/gen-index.md": {
     "content": "eb1108470fa2bd2b5f40652463149db42e91c58cb8697433c562cc51b4925616",
     "description": "de421ec712350fd2336eb5ecdb2b218864da7af30526828f1b7c7f55293aa31b"
   },
   "en/go-quickstart.md": {
-    "content": "4f5b05bee4223298cb93c9e72ceecd2ed1d3b943a7df95ce1c323b2d6b788348",
-    "description": "ed8ed714948d4d90daab1a2eca606040c2749975815a61cd53596df016192bd8"
+    "content": "9d8d2a3dc77e7d18e02d63eafbf3711cd6c69a6711e464dc79bd4450fee7ced5",
+    "description": "f713e3717351b1f1ebaccf0f1f4d6ee3390c3966067aa5912b05ffeb70341455"
   },
   "en/go-strictcli-testdata-noncomparable.md": {
     "content": "3e51fdc0997f38707db188e2cce1590da01f17bdcd6361a5dc8e805303ac7af0",
@@ -36,8 +36,8 @@
     "description": "00dc1fe8b762ad0a4bbe41cc77fcd68c44632820aae9893e1ece91d479e6d6ea"
   },
   "en/language-idioms.md": {
-    "content": "8bf6ae54aabe806ca0037eeafe85df887a4b4e8d1e8ae0f869cba23a0896017e",
-    "description": "3ccfa63d9b64788e68d837ff946bb26f14c45dfb9c28c9dc715f1d927fd7bd2b"
+    "content": "f011bd9f69abe0850488f5c030263ff19147d6bcc551148b12a0bd4810b005a0",
+    "description": "574e4396634348d372b54bc35698f92c1c21f108b539d6ddb79edcf60ad7525e"
   },
   "en/mcp-confirmation.md": {
     "content": "a9a1065413384efade9e20688bc5a5536113971047899b49c7675388c5a6ab1e",
@@ -48,8 +48,8 @@
     "description": "70bfdba9b524dd0d01ed386281d43243f71b63b87c54551fe0ee9f7109ce3e73"
   },
   "en/python-quickstart.md": {
-    "content": "218dd69c4cd76778c8eead5e51edddd170f4a5d61dd7d60c1b45483fd08ee65c",
-    "description": "06e16afe175f83b5eb902fa669a72e004aa5c798851215fccf3a56fc0c96e294"
+    "content": "5a95382c820382d13e81328d32ece75c744365c51a2b8185d940f2012dc91ab4",
+    "description": "9654b9bbf9c7be190310afb1e3d29e33d0257665ff40b879844d7ab7cd4ba95b"
   },
   "en/python-strictcli.md": {
     "content": "6f1b6e55f543e1bfc7464a15348000471faada959c6686d2ed797541d3d806f7",
@@ -57,8 +57,8 @@
     "source_docstring": "869d760f17632ede6f9b09aa15d41ddd3e3626fd1471d84ece919e2402507969"
   },
   "en/typescript-quickstart.md": {
-    "content": "bd5959aa4b1b411e6d90dfe4f09f53debabaa8b59a25bc0b212f67b7b5487d94",
-    "description": "662808499e25b2600ca7b583885c0e9abc09c34bca9d858907ef398978342d98"
+    "content": "40c0b19f96414e7906457bdc80915f5075b06f9ed72c21cfc257afb84eb38829",
+    "description": "a67204e88bc93cf7e6a7761ac9793e88eb2d3aaa5b0a7028da3752f3232de522"
   },
   "en/typescript-src-app.md": {
     "content": "b3a7b96dc80757525ecf75be7b79145d23b295e3225f88200eaf98dec991d7a5",
