@@ -1,7 +1,7 @@
 {
   "_hash_version": 3,
   "en/architecture.md": {
-    "content": "966095c0ebbd13a4f821aab2618c1fcf5bfeba0264535d0176633bc5c3fa5736",
+    "content": "036badc963070373d9338b4c25e059e97d3a71723274738485e36cfae0130c71",
     "description": "5931d7de50e860d69f443077281028ae0bba260a848b7e2ba84c614a211329a4"
   },
   "en/conformance.md": {
@@ -9,11 +9,11 @@
     "description": "0b736bfb4c8a30023e37c4fcab94561d13c0e94121990d4a62a05dda01f2a3e1"
   },
   "en/flag-system.md": {
-    "content": "0152b58b1c7343bc088336426745938db943708cd519c9aeb82282c42d5aaa1b",
+    "content": "b6e197a23db6363536ab64fb9c57133777ec331b4f0d3ec2f56dc5d1463da90c",
     "description": "93bf83e58e5ab472e2636023fed7f6df7e0d892ddd89463f9b9b88f22039a018"
   },
   "en/gen-index.md": {
-    "content": "b152ec9cc4a5a38eb7528488ada3bc83f58f20fc61e676dae94f8cf484c78e7d",
+    "content": "eb1108470fa2bd2b5f40652463149db42e91c58cb8697433c562cc51b4925616",
     "description": "de421ec712350fd2336eb5ecdb2b218864da7af30526828f1b7c7f55293aa31b"
   },
   "en/go-quickstart.md": {
@@ -174,7 +174,7 @@
   "en/typescript-src-infer.md": {
     "content": "8ea044f0ee2380e53080b852dafc7dded995115c7fe90c9f57df08a0af3130b7",
     "description": "875b9ee8cf3ca7eda19194544da63a8babacd1cf62902fdc5a4b8eb389314d2e",
-    "source_docstring": "27dd914f774f268384006036966dc93f8306df0a5b28bc9a0a17ec7b7ff46b40"
+    "source_docstring": "a0c4ace91ae25287eb8699f36f382ee7e3d85b26aef3504788a9f3bd3d29b504"
   },
   "en/typescript-src-infra.md": {
     "content": "8e19ad2a2ed3bf94dc2ca92379c49fdc6827d2250f6d0b3b12b21433791a2713",
@@ -214,7 +214,7 @@
   "en/typescript-src-schema.md": {
     "content": "ac95201126cfd8a8f21ee4ce580c0c423d5405d032c0cc63ea2f1b5a667fc065",
     "description": "3966818be73b01510019efdd8f9c4c490acc2c4f84f18523a8141629245c872e",
-    "source_docstring": "7a32288cf2492130ba1613904dc6ea94e9aedd4c96525a66d77105f64359df06"
+    "source_docstring": "d0426e9de9f0ebc9361f7373deca65accfa16418189c06f66a20d477e87e1e0c"
   },
   "en/typescript-src-scopeparse.md": {
     "content": "5abb34e54f1b65bc3a08fd480dfeded04bd0be23a032262e4e4e2e076da19d70",
