@@ -583,8 +583,27 @@ func TestRecordDoorElectionOutranksAPresenceProblemInAnEarlierRecord(t *testing.
 	wantRefusal(t, recordDoorStaged(t, Fields{}), recordForeignChoice)
 }
 
-func TestRecordDoorElectionOutranksAScopeProblemInAnEarlierRecord(t *testing.T) {
-	wantRefusal(t, recordDoorStaged(t, Fields{"retries": 1, "phone_number": "x"}), recordForeignChoice)
+// A scope problem BESIDE the record -- a scoped parameter supplied at the flat
+// door's top level while another scope is elected -- loses to the second
+// selector's election refusal too. Inside the record the same parameter is no
+// longer a scope fact at all: the record's namespace is the elected scope's
+// own, so a key it does not declare is SHAPE (§24.11 item 246), and shape
+// outranks the election refusal rather than losing to it.
+func TestRecordDoorElectionOutranksAScopeProblemBesideARecord(t *testing.T) {
+	var captured map[string]interface{}
+	app := flatTwoSelectorApp(&captured)
+	email := findChoice(&app.commands["run"].flags[1], "email")
+	ir := app.invoke("run", map[string]interface{}{
+		"via":          Elect(email, Fields{"retries": 1}),
+		"phone_number": "x",
+		"target":       Elect(foreignChoice(t), Fields{"value": "work"}),
+	})
+	wantRefusal(t, ir.err, recordForeignChoice)
+}
+
+func TestRecordDoorShapeOutranksASecondSelectorsElectionRefusal(t *testing.T) {
+	wantRefusal(t, recordDoorStaged(t, Fields{"retries": 1, "bogus": 2}),
+		`unknown parameter "bogus" for command "run" under '--via email'`)
 }
 
 // ---------------------------------------------------------------------------
@@ -729,4 +748,152 @@ func TestPreTypedRecordDoorChecksAPositional(t *testing.T) {
 		}
 	})
 	wantRefusal(t, got, "argument 'target': expected string, got int")
+}
+
+// ---------------------------------------------------------------------------
+// A key inside an elected record (§24.11 item 246, §24.3)
+//
+// The record door's key namespace is the ELECTED CHOICE'S OWN SCOPE: the
+// payload key where the choice carries a payload, and the parameters that scope
+// declares at that level. A key outside that set names nothing, which is a fact
+// about the object's SHAPE -- refused ahead of every election, scope, value and
+// presence problem the same call contains, exactly as the flat door's own
+// unknown key is. The sentence is the flat door's with §12.13's scope suffix on
+// it, because it is the same fact one level down and the suffix says where.
+//
+// The out-of-scope template is refused for this state: it names a flag the
+// command DECLARES and this scope does not own, and a key naming nothing has no
+// other side to name.
+// ---------------------------------------------------------------------------
+
+func TestRecordDoorUnknownKeyIsRefusedAtTheShapeStage(t *testing.T) {
+	got := recordRefusal(t, func(app *App) map[string]interface{} {
+		return map[string]interface{}{
+			"target": "t",
+			"mode":   Elect(choiceDeclOf(app, "mode", "all-profiles"), Fields{}),
+			"via":    Elect(choiceDeclOf(app, "via", "email"), Fields{"retries": 1, "bogus": 2}),
+		}
+	})
+	wantRefusal(t, got, `unknown parameter "bogus" for command "run" under '--via email'`)
+}
+
+// A key naming a flag a SIBLING choice declares names nothing this scope
+// declares either: the namespace is the elected scope's own.
+func TestRecordDoorSiblingScopeKeyIsUnknown(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDepthApp(&captured)
+	ir := app.invoke("run", map[string]interface{}{
+		"via": Elect(recordChoice(app, "via", "email"), Fields{"retries": 1, "phone_number": "x"}),
+	})
+	wantRefusal(t, ir.err, `unknown parameter "phone_number" for command "run" under '--via email'`)
+}
+
+// The same fact one level further down carries the whole path.
+func TestRecordDoorUnknownKeyInsideANestedRecord(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDepthApp(&captured)
+	ir := app.invoke("run", map[string]interface{}{
+		"via": Elect(recordChoice(app, "via", "email"), Fields{
+			"retries": 1,
+			"format": Elect(nestedChoice(recordChoice(app, "via", "email"), "format", "rich"),
+				Fields{"width": 5, "bogus": 2}),
+		}),
+	})
+	wantRefusal(t, ir.err, `unknown parameter "bogus" for command "run" under '--via email --format rich'`)
+}
+
+// A member-spelled scope renders its own token in the suffix, and its payload
+// key is declared.
+func TestRecordDoorUnknownKeyBesideAMemberPayload(t *testing.T) {
+	got := recordRefusal(t, func(app *App) map[string]interface{} {
+		return map[string]interface{}{
+			"target": "t",
+			"mode":   Elect(choiceDeclOf(app, "mode", "profile"), Fields{"value": "work", "bogus": 1}),
+		}
+	})
+	wantRefusal(t, got, `unknown parameter "bogus" for command "run" under '--profile'`)
+}
+
+// Shape precedes every phase: the unknown key outranks a second selector's
+// election refusal, and a value, presence and scope problem beside it.
+func TestRecordDoorUnknownKeyOutranksEveryPhase(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDepthApp(&captured)
+	email := recordChoice(app, "via", "email")
+	want := `unknown parameter "bogus" for command "run" under '--via email'`
+	// Beside a second selector electing nothing (presence).
+	ir := app.invoke("run", map[string]interface{}{
+		"via": Elect(email, Fields{"retries": 1, "bogus": 2}),
+	})
+	wantRefusal(t, ir.err, want)
+	// Beside a value refusal in the same record.
+	ir = app.invoke("run", map[string]interface{}{
+		"count": "nope",
+		"via":   Elect(email, Fields{"retries": "nope", "bogus": 2}),
+	})
+	wantRefusal(t, ir.err, want)
+	// Beside a missing required flag in the same scope (presence).
+	ir = app.invoke("run", map[string]interface{}{
+		"via": Elect(email, Fields{"bogus": 2}),
+	})
+	wantRefusal(t, ir.err, want)
+}
+
+// A record's unknown key is not the flat door's scope violation: the same
+// parameter supplied at the flat door's top level is a flag the command
+// declares, in a scope that does not own it, and keeps §12.13's sentence.
+func TestFlatDoorKeepsTheOutOfScopeSentence(t *testing.T) {
+	var captured map[string]interface{}
+	ir := recordDepthApp(&captured).invoke("run", map[string]interface{}{
+		"via": "email", "retries": 1, "phone_number": "x",
+	})
+	wantRefusal(t, ir.err,
+		"flag '--phone-number' is only valid under '--via sms', but '--via email' was elected")
+}
+
+// recordDepthApp declares a nested selector inside a scope, so a record's keys
+// have a path at more than one depth.
+func recordDepthApp(captured *map[string]interface{}) *App {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("run", "run it", captureHandler(captured),
+		WithFlags(
+			IntFlag("count", "how many", Optional()),
+			ChoiceFlag("via", "delivery channel", Required(),
+				Choice("email", "an email message",
+					IntFlag("retries", "how many", Required()),
+					ChoiceFlag("format", "the body format", Default("plain"),
+						Choice("plain", "plain text"),
+						Choice("rich", "rich text", IntFlag("width", "columns", Required())),
+					),
+				),
+				Choice("sms", "a text message", StringFlag("phone-number", "destination", Required())),
+			),
+		), WithEffect(EffectReadOnly))
+	return app
+}
+
+// recordChoice finds one choice of one selector on recordDepthApp's command.
+func recordChoice(app *App, selName, chName string) *ChoiceDecl {
+	cmd := app.commands["run"]
+	for i := range cmd.flags {
+		if cmd.flags[i].Name == selName {
+			return findChoice(&cmd.flags[i], chName)
+		}
+	}
+	panic("no selector " + selName)
+}
+
+// The two spellings can be mixed -- a flat election at one level, a record at
+// the next -- and the shape sweep descends through the flat one to reach the
+// record's keys.
+func TestRecordDoorUnknownKeyUnderAFlatElection(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDepthApp(&captured)
+	ir := app.invoke("run", map[string]interface{}{
+		"via":     "email",
+		"retries": 1,
+		"format": Elect(nestedChoice(recordChoice(app, "via", "email"), "format", "rich"),
+			Fields{"width": 5, "bogus": 2}),
+	})
+	wantRefusal(t, ir.err, `unknown parameter "bogus" for command "run" under '--via email --format rich'`)
 }

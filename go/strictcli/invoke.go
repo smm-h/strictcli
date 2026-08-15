@@ -185,6 +185,14 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 		}
 	}
 
+	// The same fact one level down. An elected record's key namespace is the
+	// ELECTED CHOICE'S OWN SCOPE, so a key outside it names nothing, at any
+	// depth, and is refused with this same sentence plus the clause that says
+	// where (§24.11 item 246).
+	if errStr := checkRecordShape(cmd, kwargs, commandPath); errStr != "" {
+		return invokeResult{exitCode: 1, err: errStr}
+	}
+
 	// Populate sourcedStore from kwargs, mapping param names back to flag names.
 	// Provided kwargs are marked SourceCLI; absent flags will get SourceDefault
 	// when validateAndBuildKwargs applies defaults.
@@ -453,6 +461,120 @@ func buildFlatProps(a *App, cmd *Command) *flatProps {
 		p.args[arg.Name] = true
 	}
 	return p
+}
+
+// checkRecordShape refuses a key inside an elected record that the elected
+// scope does not declare (contract §24.11 item 246, §24.3).
+//
+// The record door's key namespace is the elected choice's OWN scope: the
+// payload key where the choice carries one, and the parameters that scope
+// declares at that level. A key outside that set names nothing -- a fact about
+// the object's SHAPE, decided ahead of every election, scope, value and
+// presence problem the same call contains, which is why this runs before the
+// declaration walk that settles the elections.
+//
+// The sentence is the flat door's own with §12.13's scope suffix on it: the
+// fact is the same fact one level down, and the suffix is the clause that says
+// where. §12.13's out-of-scope template is deliberately NOT used -- it names a
+// flag the command declares against the scope that owns it, and a key naming
+// nothing anywhere has no other side to name.
+//
+// A record naming a choice this selector does not declare is skipped: without a
+// scope there is no namespace to read the keys against, and the election phase
+// refuses that record on its own.
+func checkRecordShape(cmd *Command, kwargs map[string]interface{}, commandPath string) string {
+	var walk func(flags []Flag, args map[string]interface{}, path []pathSeg) string
+	walk = func(flags []Flag, args map[string]interface{}, path []pathSeg) string {
+		for i := range flags {
+			f := &flags[i]
+			if f.Type != TypeChoice {
+				continue
+			}
+			rec, isRecord := args[flagParamName(f.Name)].(*Elected)
+			if !isRecord {
+				// A flat election is descended THROUGH rather than checked: its
+				// keys are the command's own top-level ones, which the shape
+				// sweep above has already read, but a nested selector under it
+				// may still carry a record.
+				if ch := flatElectedChoice(f, args); ch != nil {
+					if errStr := walk(ch.Flags, args, append(append([]pathSeg{}, path...), pathSeg{sel: f, ch: ch})); errStr != "" {
+						return errStr
+					}
+				}
+				continue
+			}
+			ch := findChoice(f, rec.decl.Name)
+			if ch != rec.decl {
+				continue
+			}
+			scope := append(append([]pathSeg{}, path...), pathSeg{sel: f, ch: ch})
+			if errStr := unknownRecordKey(ch, rec.Fields, scope, commandPath); errStr != "" {
+				return errStr
+			}
+			if errStr := walk(ch.Flags, rec.Fields, scope); errStr != "" {
+				return errStr
+			}
+		}
+		return ""
+	}
+	return walk(cmd.flags, kwargs, nil)
+}
+
+// flatElectedChoice reports the choice the flat spelling elects for one
+// selector, or nil when nothing settles. The shape sweep reads an election only
+// to reach the records nested under it; refusing one is the election phase's
+// own duty, and an unsettled election simply ends this walk.
+func flatElectedChoice(sel *Flag, args map[string]interface{}) *ChoiceDecl {
+	if v, isName := args[flagParamName(sel.Name)].(string); isName {
+		return findChoice(sel, v)
+	}
+	if !sel.memberSpelled {
+		return nil
+	}
+	var only *ChoiceDecl
+	for _, ch := range sel.choiceDecls {
+		value, supplied := args[flagParamName(ch.Name)]
+		if !supplied {
+			continue
+		}
+		// A payload-less member DECLINES on the false its `--no-<name>` token
+		// would have carried (§21.2).
+		if !choiceCarriesPayload(ch) {
+			if b, isBool := value.(bool); isBool && !b {
+				continue
+			}
+		}
+		if only != nil {
+			return nil
+		}
+		only = ch
+	}
+	return only
+}
+
+// unknownRecordKey reports the refusal for one record's first undeclared key.
+// A map has no order, so the keys are sorted: the refusal names one key, and
+// which one it names is the declaration's business rather than the runtime's.
+func unknownRecordKey(ch *ChoiceDecl, fields Fields, scope []pathSeg, commandPath string) string {
+	declared := make(map[string]bool, len(ch.Flags)+1)
+	if choiceCarriesPayload(ch) {
+		declared[scopeReservedValueName] = true
+	}
+	for i := range ch.Flags {
+		declared[flagParamName(ch.Flags[i].Name)] = true
+	}
+	var unknown []string
+	for key := range fields {
+		if !declared[key] {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) == 0 {
+		return ""
+	}
+	sort.Strings(unknown)
+	return errUnknownParameterForCommand(unknown[0], commandPath) +
+		errScopeSuffix(renderScopePath(scope))
 }
 
 // checkPreTypedValue checks one PRE-TYPED value against the declaration it was
