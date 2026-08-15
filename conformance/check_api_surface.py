@@ -606,6 +606,10 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "app.commands": "_commands",
                 "app.groups": "_groups",
                 "app.tag_contracts": "_tag_contracts",
+                # One declaration, two input spellings: `config_path` holds the
+                # RESOLVED path once a marker is read, and the declaration
+                # itself is kept beside it.
+                "app.config_path_relative_to_root": "_config_path_declared",
             },
             schema_to_go={
                 **_SHARED_SCHEMA_TO_GO,
@@ -614,6 +618,10 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "app.groups": "groups",
                 "app.config": "configEnabled",
                 "app.config_path": "configPathOverride",
+                # One declaration, two input spellings: a config path is a
+                # string or a marker relative to a declared root, and Go keeps
+                # the marker in its own field beside the resolved override.
+                "app.config_path_relative_to_root": "configPathRef",
                 # Go resolves the declared schema location eagerly into one
                 # absolute field, as it does the config path override.
                 "app.schema_path": "schemaOutPath",
@@ -632,6 +640,7 @@ def _build_descriptors() -> list[EntityDescriptor]:
             },
             schema_python_runtime={
                 "app.tag_contracts": "_tag_contracts (set in __post_init__, not a dataclass field)",
+                "app.config_path_relative_to_root": "_config_path_declared (set in __post_init__; config_path itself holds the RESOLVED path once the marker is read)",
             },
             ts_struct="App",
             ts_to_schema={
@@ -641,6 +650,9 @@ def _build_descriptors() -> list[EntityDescriptor]:
             schema_to_ts={
                 **_SHARED_SCHEMA_TO_TS,
                 "app.global_flags": "flags",
+                # One declaration, two input spellings: AppSpec.configPath is
+                # `string | InfraRootPath`, so the marker form is the same key.
+                "app.config_path_relative_to_root": "configPath",
             },
             ts_entity_exclusions={
                 **_SHARED_TS_EXCLUSIONS,
