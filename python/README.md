@@ -233,29 +233,66 @@ declared top-level key is still always present. Inside the record,
 `strictcli.provided(via, "subject")` answers whether the invocation caused a
 field's value.
 
-### Flag dependencies
+### Constraints
 
-Three relationship types, all passed via `dependencies=[...]`:
+Four relationship types, all passed via `constraints=[...]`, and every one of
+them declares a **mandatory name** -- the name is what a violation prints and
+what `--help` shows, and it is what lets one constraint be a member of another.
 
-- `CoRequired(flags=["output", "format"])` -- all must appear together, or none
-- `Requires(flag="trace", depends_on="output")` -- one-way dependency
-- `Implies(flag="trace", implies="log-output", value=True)` -- auto-set a bool flag when another is provided; explicit contradictions are parse errors
+- `AtLeastOne(name, members)` -- at least one member is engaged. Members may
+  co-occur; it has no upper bound and is never exclusivity
+- `AllOrNone(name, members)` -- either every member is engaged or none is.
+  Nothing engaged is vacuously satisfied
+- `Requires(name, flag=..., depends_on=...)` -- one-way dependency
+- `Implies(name, flag=..., implies=..., value=...)` -- auto-set a bool flag when
+  another is provided; explicit contradictions are parse errors
+
+A **member** is a `Member(name, when=...)` record naming a command flag, a
+positional arg, or another named at-least-one or all-or-none (nesting is a
+cycle-checked DAG). A bare string is refused. `when` is the closed election
+vocabulary -- `"present"` (the default; the value was provided by the
+invocation, never by a declared default), `"true"` (bool only), `"non_empty"`
+(strings and collections) -- and a **bool member must declare it explicitly**,
+so `--no-all` can never engage a constraint while selecting nothing.
 
 ```python
-@app.command("export", help="Export data", effect="mutating", dependencies=[
-    strictcli.CoRequired(flags=["output", "format"]),
-    strictcli.Requires(flag="trace", depends_on="output"),
-    strictcli.Implies(flag="trace", implies="log-output", value=True),
-])
-@strictcli.flag("output", type=str, presence="optional", help="Output path")
-@strictcli.flag("format", type=str, presence="optional", help="Output format")
-@strictcli.flag("trace", type=bool, default=False, help="Emit a trace")
-@strictcli.flag("log-output", type=bool, default=False, help="Log the output path")
-def export(ctx, output, format, trace, log_output): ...
+@app.command("rewrite", help="Rewrite author identity", effect="mutating",
+             constraints=[
+                 strictcli.AllOrNone("author-name", [
+                     strictcli.Member("old-name"), strictcli.Member("new-name"),
+                 ]),
+                 strictcli.AllOrNone("author-email", [
+                     strictcli.Member("old-email"), strictcli.Member("new-email"),
+                 ]),
+                 strictcli.AtLeastOne("author-change", [
+                     strictcli.Member("author-name"),
+                     strictcli.Member("author-email"),
+                 ]),
+             ])
+@strictcli.flag("old-name", type=str, presence="optional", help="Current name")
+@strictcli.flag("new-name", type=str, presence="optional", help="New name")
+@strictcli.flag("old-email", type=str, presence="optional", help="Current email")
+@strictcli.flag("new-email", type=str, presence="optional", help="New email")
+def rewrite(ctx, old_name, new_name, old_email, new_email): ...
 ```
 
-Dependencies can only reference flags you declared, so the reserved quartet
-(`dry-run`, `approve-consequential`, `quiet`, `verbose`) can never appear in one.
+```
+Constraints:
+  author-name      all or none of --old-name, --new-name
+  author-email     all or none of --old-email, --new-email
+  author-change    at least one of (--old-name with --new-name), (--old-email with --new-email)
+```
+
+Children are evaluated before parents, so an operator who typed one half of a
+pair is told the pair is incomplete rather than that the whole selection is
+missing. No member of a co-occurrence constraint may declare
+`presence="required"` -- a member the invocation must always supply leaves the
+constraint nothing to decide.
+
+Constraints can only reference flags and args you declared, and they operate at
+root scope only, so the reserved quartet (`dry-run`, `approve-consequential`,
+`quiet`, `verbose`) can never appear in one and a scoped flag is a registration
+error.
 
 ### Global flags
 
@@ -501,9 +538,11 @@ paths have no TTY contract, so a consequential command is dispatched directly.
 | `Arg` | Positional argument |
 | `FlagSet` | Reusable flag bundle |
 | `Choice` | One entry of a `choices=` value flag: a value with optional help |
-| `CoRequired` | Flags that must appear together |
+| `AtLeastOne` | At least one member must be engaged |
+| `AllOrNone` | Every member is engaged, or none is |
 | `Requires` | One flag depends on another |
 | `Implies` | Auto-set a bool flag from another |
+| `Member` | One operand of a co-occurrence constraint |
 | `Result` | Return type of `app.test()` |
 | `Tool` | LLM tool descriptor |
 | `CheckRunResult` | Check execution result with wall-clock timing |
