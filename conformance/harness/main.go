@@ -929,6 +929,11 @@ func buildFlag(fd map[string]interface{}) strictcli.Flag {
 	if v, ok := fd["negatable"]; ok && !v.(bool) {
 		opts = append(opts, strictcli.NegatableOpt(false))
 	}
+	// The clear vocabulary's declaration (contract §27.6): legal only on a
+	// property of an update, and what mints `--unset-<prop>`.
+	if v, ok := fd["nullable"]; ok && v.(bool) {
+		opts = append(opts, strictcli.Nullable())
+	}
 	// The corpus's one expressible validator shape (case-schema `validate`):
 	// a callable refusing named values with a fixed message. Comparison goes
 	// through each language's own default formatting of the value, so one
@@ -1149,6 +1154,39 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 		opts = append(opts, func(c *strictcli.Command) {
 			c.DryRunUnsupportedReason = reason
 		})
+	}
+	// The update-command construct (contract §27). The case schema follows the
+	// DECLARATION side -- ONE record carrying its write mode (§13's amendment)
+	// -- and Go's spelling takes the mode as a positional parameter, so an
+	// absent or unknown write_mode reaches the constructor as a WriteMode whose
+	// value is outside the vocabulary. That is the covering input for
+	// errUpdateWriteModeInvalid, which is why the case schema does not require
+	// the key.
+	if v, ok := cmdDef["update_of"]; ok {
+		ud := v.(map[string]interface{})
+		resource, _ := ud["resource"].(string)
+		mode, _ := ud["write_mode"].(string)
+		var updOpts []strictcli.UpdateOption
+		if names, ok := ud["identity"]; ok {
+			var list []string
+			for _, n := range names.([]interface{}) {
+				list = append(list, n.(string))
+			}
+			updOpts = append(updOpts, strictcli.Identity(list...))
+		}
+		if names, ok := ud["properties"]; ok {
+			var list []string
+			for _, n := range names.([]interface{}) {
+				list = append(list, n.(string))
+			}
+			// An empty list declares no properties at all: Properties() has a
+			// compile-time floor of one, and the registration guard is what
+			// refuses the caller that omits the option entirely.
+			if len(list) > 0 {
+				updOpts = append(updOpts, strictcli.Properties(list[0], list[1:]...))
+			}
+		}
+		opts = append(opts, strictcli.WithUpdateOf(resource, strictcli.WriteMode(mode), updOpts...))
 	}
 	// The machine payload's declared schema (§19.5). A handler_returns of kind
 	// "data"/"exit_data" supplies a payload, and ctx.Payload refuses to run on
