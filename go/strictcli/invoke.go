@@ -276,6 +276,22 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 				if b.sel != f {
 					continue
 				}
+				if b.record {
+					// The record door's own field check, and the record door's
+					// own label on what it delivers (§18.26 items 252, 253).
+					checked, absent, errStr := checkRecordFieldValue(b.flag, b.raw)
+					if errStr != "" {
+						return invokeResult{exitCode: 1, err: errStr}
+					}
+					if absent {
+						// The nil a record writes on an optional field IS the
+						// absent key, so it is delivered by the declaration's
+						// own optional path -- the one an omitted key takes.
+						continue
+					}
+					cliByFlag[b.flag] = checked
+					continue
+				}
 				checked, errStr := checkPreTypedValue(b.flag, b.raw)
 				if errStr != "" {
 					return invokeResult{exitCode: 1, err: errStr}
@@ -614,6 +630,27 @@ func checkPreTypedValue(f *Flag, value interface{}) (interface{}, string) {
 	return coerced, ""
 }
 
+// checkRecordFieldValue checks one field of a supplied RECORD against the
+// declaration it was supplied against (contract §24.11, §18.26 items 252, 254).
+//
+// It is checkPreTypedValue with ONE carve-out, and the carve-out is this door's
+// alone: a scope class cannot omit a field the way a flat object omits a key,
+// so an explicit nil on an OPTIONAL field IS that omission. Such a field is
+// reported ABSENT rather than checked, and the caller delivers it the way an
+// omitted key is delivered -- through the declaration's own optional path. The
+// carve-out stops at optionality: a required field's presence rule would
+// otherwise be answered by a value its declared type forbids, and a defaulted
+// field's declaration says a value, not absence. At the flat door, where
+// absence has its own spelling, a nil stays legal for nothing.
+//
+func checkRecordFieldValue(f *Flag, value interface{}) (interface{}, bool, string) {
+	if value == nil && f.presence == presenceOptional {
+		return nil, true, ""
+	}
+	checked, errStr := checkPreTypedValue(f, value)
+	return checked, false, errStr
+}
+
 // checkPreTypedArgValue checks one PRE-TYPED positional value against its
 // declaration, and delivers the value itself (contract §24.11 item 244).
 //
@@ -784,6 +821,13 @@ type pendingBind struct {
 	flag *Flag
 	raw  interface{}
 	sel  *Flag
+	// record reports that the value came out of a RECORD's fields rather than
+	// out of the flat object. The two doors answer three questions differently
+	// -- an explicit nil on an optional field, the source a supplied field
+	// earns, and which halves of the declaration are consulted -- so which door
+	// supplied a value has to survive the collection pass (§18.26 items 252,
+	// 253, 254).
+	record bool
 }
 
 // collectInvokeElections converts a programmatic call's selector arguments into
@@ -814,8 +858,11 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 		}
 	}
 
-	var walk func(flags []Flag, args map[string]interface{}) string
-	walk = func(flags []Flag, args map[string]interface{}) string {
+	// fromRecord says whether the object THIS level reads is a record's fields:
+	// the door a value came through decides how its declaration is read
+	// (§18.26 item 252).
+	var walk func(flags []Flag, args map[string]interface{}, fromRecord bool) string
+	walk = func(flags []Flag, args map[string]interface{}, fromRecord bool) string {
 		for i := range flags {
 			f := &flags[i]
 			if f.Type != TypeChoice {
@@ -831,13 +878,13 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 				}
 				sup.suppliedNames[f.Name] = true
 				sup.preElected[f] = ch
-				if errStr := walk(ch.Flags, rec.Fields); errStr != "" {
+				if errStr := walk(ch.Flags, rec.Fields, true); errStr != "" {
 					return errStr
 				}
 				continue
 			}
 			if f.memberSpelled {
-				if errStr := collectFlatMemberElections(f, args, named, raw, sup, walk); errStr != "" {
+				if errStr := collectFlatMemberElections(f, args, named, raw, sup, walk, fromRecord); errStr != "" {
 					return errStr
 				}
 				continue
@@ -856,14 +903,15 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 			sup.suppliedNames[f.Name] = true
 			sup.preElected[f] = ch
 			// The flat form's scoped parameters sit beside the selector, so
-			// the same top-level object supplies the next level too.
-			if errStr := walk(ch.Flags, args); errStr != "" {
+			// the same object supplies the next level too -- a record's fields
+			// where this level is a record's, the top-level object otherwise.
+			if errStr := walk(ch.Flags, args, fromRecord); errStr != "" {
 				return errStr
 			}
 		}
 		return ""
 	}
-	if errStr := walk(cmd.flags, kwargs); errStr != "" {
+	if errStr := walk(cmd.flags, kwargs, false); errStr != "" {
 		return nil, errStr
 	}
 
@@ -884,14 +932,14 @@ func bindSelectorValues(sel *Flag, args map[string]interface{}, sup *suppliedEle
 	if rec, isRecord := args[flagParamName(sel.Name)].(*Elected); isRecord {
 		// The record door: the scope's values are the record's own fields.
 		if findChoice(sel, rec.decl.Name) == rec.decl {
-			bindScopeValues(rec.decl, rec.Fields, sup, binds, root)
+			bindScopeValues(rec.decl, rec.Fields, sup, binds, root, true)
 		}
 		return
 	}
 	// The flat door: every scoped parameter sits beside the selector in the one
 	// object that carries the selector itself.
 	if ch := electedScope(sel, sup); ch != nil {
-		bindScopeValues(ch, Fields(args), sup, binds, root)
+		bindScopeValues(ch, Fields(args), sup, binds, root, false)
 	}
 }
 
@@ -925,8 +973,10 @@ func electedScope(sel *Flag, sup *suppliedElections) *ChoiceDecl {
 // argv written in declaration order would type them. fields is the object that
 // carries this scope's values -- a record's own fields at the record door, and
 // the one top-level object at the flat door, where every depth reads the same
-// one. The two spellings may be mixed, so each level answers for itself.
-func bindScopeValues(ch *ChoiceDecl, fields Fields, sup *suppliedElections, binds *[]pendingBind, root *Flag) {
+// one. The two spellings may be mixed, so each level answers for itself, and
+// fromRecord says which object THIS level is reading: the door a value came
+// through decides three of its answers (§18.26 items 252, 253, 254).
+func bindScopeValues(ch *ChoiceDecl, fields Fields, sup *suppliedElections, binds *[]pendingBind, root *Flag, fromRecord bool) {
 	for i := range ch.Flags {
 		sub := &ch.Flags[i]
 		key := flagParamName(sub.Name)
@@ -939,7 +989,7 @@ func bindScopeValues(ch *ChoiceDecl, fields Fields, sup *suppliedElections, bind
 			// "value" in a record, and under the member's OWN flag name in the
 			// flat machine form -- which is the property name §24.11 publishes.
 			if v, ok := fields["value"]; ok {
-				*binds = append(*binds, pendingBind{flag: sub, raw: v, sel: root})
+				*binds = append(*binds, pendingBind{flag: sub, raw: v, sel: root, record: fromRecord})
 				sup.suppliedNames[sub.Name] = true
 				continue
 			}
@@ -947,19 +997,20 @@ func bindScopeValues(ch *ChoiceDecl, fields Fields, sup *suppliedElections, bind
 		if sub.Type == TypeChoice {
 			if rec, isRecord := fields[key].(*Elected); isRecord {
 				if findChoice(sub, rec.decl.Name) == rec.decl {
-					bindScopeValues(rec.decl, rec.Fields, sup, binds, root)
+					bindScopeValues(rec.decl, rec.Fields, sup, binds, root, true)
 				}
 				continue
 			}
 			// The flat spelling at this level: the nested scope's values sit in
-			// the same object the nested selector's own election was read from.
+			// the same object the nested selector's own election was read from,
+			// which is a record's fields when this level is a record's.
 			if nested := electedScope(sub, sup); nested != nil {
-				bindScopeValues(nested, fields, sup, binds, root)
+				bindScopeValues(nested, fields, sup, binds, root, fromRecord)
 			}
 			continue
 		}
 		if v, ok := fields[key]; ok {
-			*binds = append(*binds, pendingBind{flag: sub, raw: v, sel: root})
+			*binds = append(*binds, pendingBind{flag: sub, raw: v, sel: root, record: fromRecord})
 			sup.suppliedNames[sub.Name] = true
 		}
 	}
@@ -981,7 +1032,8 @@ func collectFlatMemberElections(
 	named bool,
 	raw interface{},
 	sup *suppliedElections,
-	walk func([]Flag, map[string]interface{}) string,
+	walk func([]Flag, map[string]interface{}, bool) string,
+	fromRecord bool,
 ) string {
 	elected := map[string]bool{}
 	if named {
@@ -1027,5 +1079,5 @@ func collectFlatMemberElections(
 			only = ch
 		}
 	}
-	return walk(only.Flags, args)
+	return walk(only.Flags, args, fromRecord)
 }
