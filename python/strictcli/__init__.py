@@ -11070,6 +11070,11 @@ class _Occ:
     # Candidate names, when a short is reused by sibling scopes: which one it
     # binds to is decided once the elections are known (§24.7).
     alts: tuple[str, ...] = ()
+    # The argv index this occurrence was tokenized from, which is what lets the
+    # value phase sweep root and scoped occurrences in ONE command-line order
+    # (§24.3). Occurrences the flat door manufactures carry no argv position and
+    # never reach that sweep.
+    seq: int = -1
 
 
 @dataclass
@@ -11394,6 +11399,51 @@ def _scope_why(
     raise AssertionError("site is in scope")  # pragma: no cover
 
 
+def _live_site(
+    cmd: Command, state: _ElectionState, name: str,
+) -> "_Site | None":
+    """The one declaration a supplied scoped name has THIS run (§24.7).
+
+    Sibling scopes may reuse a name, and they are mutually exclusive, so at
+    most one of a name's sites is ever live. Scope validation has already run
+    when this is consulted, so a name with no live site is one the parse
+    already refused.
+    """
+    for site in cmd.sites.get(name, ()):
+        if _path_is_live(site.path, state):
+            return site
+    return None
+
+
+def _coerce_scoped_occurrence(
+    site: "_Site", occ: _Occ, store: dict, stdin_consumed_by: list,
+) -> None:
+    """Coerce ONE scoped occurrence into ``store``, keyed by the flag's name.
+
+    The per-occurrence shape is what makes the value phase one command-line
+    ordered sweep across root and scoped tokens alike (§24.3): every
+    occurrence is interpreted where it was typed, so `--retries nope
+    --retries 1` reports the token that will not parse instead of quietly
+    keeping the last one. Root-scope and scoped names are disjoint by
+    registration (§24.7), so one store serves every live scope.
+    """
+    f = site.value_flag
+    if f.compound == "dict":
+        _store_dict_flag(f, str(occ.raw), store)
+        return
+    if f.repeatable:
+        coerced = _coerce_scoped_value(f, occ.raw, stdin_consumed_by)
+        collected = store.setdefault(f.name, [])
+        if f.unique and coerced in collected:
+            raise _ParseError(
+                f"--{f.name}: duplicate value "
+                f"'{_format_value_for_error(coerced)}'"
+            )
+        collected.append(coerced)
+        return
+    store[f.name] = _coerce_scoped_value(f, occ.raw, stdin_consumed_by)
+
+
 def _find_selector(selectors: tuple, name: str) -> "_Selector | None":
     for s in selectors:
         if not isinstance(s, _Selector):
@@ -11634,6 +11684,7 @@ def _resolve_scoped_value(
     pre_typed: bool,
     stdin_consumed_by: list,
     conflict_mode: str = "cli-wins",
+    cli_values: dict[str, object] | None = None,
 ) -> tuple[object, str] | None:
     """The VALUE phase for one scoped flag, or None when nothing supplied it.
 
@@ -11641,8 +11692,25 @@ def _resolve_scoped_value(
     phases: every value inside the live scopes is interpreted before any
     missing required flag is reported, so `--via email --retries abc` names
     the integer that will not parse rather than the subject it never reached.
+
+    ``cli_values`` is the argv path's own coercion sweep, already run in
+    command-line order across root and scoped occurrences alike (§24.3,
+    §18.27 item 257): where it is supplied, a supplied token's value was
+    coerced there and this function only decides what the AMBIENT sources say
+    about the flags no token named. The programmatic doors pass nothing and
+    coerce here, in the command's declaration order (§18.25 item 249).
     """
-    hits = [o for o in occs if o.name == f.name]
+    if cli_values is not None:
+        if f.name in cli_values:
+            value = cli_values[f.name]
+            _check_scoped_config_conflict(
+                f, value, config_data=config_data, hermetic=hermetic,
+                pre_typed=pre_typed, conflict_mode=conflict_mode,
+            )
+            return value, "cli"
+        hits = []
+    else:
+        hits = [o for o in occs if o.name == f.name]
     if hits:
         if pre_typed:
             # A scoped value is only ever pre-typed at the FLAT machine
@@ -11672,14 +11740,14 @@ def _resolve_scoped_value(
             f, value, config_data=config_data, hermetic=hermetic,
             pre_typed=pre_typed, conflict_mode=conflict_mode,
         )
-        return _check_scoped_value(f, value, "cli")
+        return value, "cli"
     # An ambient binding is consulted exactly when its scope is elected, which
     # is the only path that reaches this function (§24.6).
     if not pre_typed and not hermetic and f.env is not None:
         env_val = os.environ.get(f.env)
         if env_val is not None:
-            return _check_scoped_value(
-                f, _resolve_flag_env_value(f, env_val, stdin_consumed_by),
+            return (
+                _resolve_flag_env_value(f, env_val, stdin_consumed_by),
                 "env",
             )
     if not pre_typed and not hermetic and config_data:
@@ -11689,7 +11757,7 @@ def _resolve_scoped_value(
                 coerced = _coerce_config_value(config_data[key], f)
             except ValueError as e:
                 raise _ParseError(f"--{f.name}: config value error: {e}")
-            return _check_scoped_value(f, coerced, "config")
+            return coerced, "config"
     return None
 
 
@@ -11762,6 +11830,7 @@ def _coerce_member_payload(
     pre_typed: bool,
     stdin_consumed_by: list,
     conflict_mode: str,
+    cli_values: dict[str, object] | None = None,
 ) -> object:
     """The value phase for one elected member's payload (§24.4, §24.7).
 
@@ -11772,18 +11841,27 @@ def _coerce_member_payload(
     payload property is absent, and that is the flat reading of `--profile`
     with nothing after it -- refused with the command line's own sentence
     rather than delivered as a silent None (§24.11).
+
+    ``cli_values`` carries the argv path's own coercion sweep, exactly as it
+    does for an ordinary scoped flag: a payload is one more occurrence, and it
+    takes its position in command-line order with the rest (§24.3).
     """
-    hits = [o for o in occs if o.name == spec.name]
-    raw = hits[-1].raw if hits else _MISSING
-    if raw is _MISSING:
-        raise _ParseError(f"flag '--{spec.name}' requires a value")
-    value = (
-        # Pre-typed here is the flat machine boundary, as it is for every other
-        # scoped value (§24.11 item 247).
-        _check_pre_typed_value(spec.payload, raw, machine_boundary=True)
-        if pre_typed
-        else _coerce_scoped_value(spec.payload, raw, stdin_consumed_by)
-    )
+    if cli_values is not None:
+        if spec.name not in cli_values:
+            raise _ParseError(f"flag '--{spec.name}' requires a value")
+        value = cli_values[spec.name]
+    else:
+        hits = [o for o in occs if o.name == spec.name]
+        raw = hits[-1].raw if hits else _MISSING
+        if raw is _MISSING:
+            raise _ParseError(f"flag '--{spec.name}' requires a value")
+        value = (
+            # Pre-typed here is the flat machine boundary, as it is for every
+            # other scoped value (§24.11 item 247).
+            _check_pre_typed_value(spec.payload, raw, machine_boundary=True)
+            if pre_typed
+            else _coerce_scoped_value(spec.payload, raw, stdin_consumed_by)
+        )
     # §21.3's `config_conflict_mode="error"` carve-out survives untouched
     # on member flags (§21's box, item 119): it is a value-hygiene check
     # about the operator's own configuration, and it runs even where the
@@ -11808,6 +11886,8 @@ def _run_scope_value_phase(
     pre_typed: bool,
     stdin_consumed_by: list,
     conflict_mode: str,
+    cli_values: dict[str, object] | None = None,
+    deferred_checks: list | None = None,
 ) -> None:
     """Interpret every value inside the live scopes, at every depth (§24.3).
 
@@ -11816,16 +11896,29 @@ def _run_scope_value_phase(
     ahead of any required flag that was never supplied. Results land in
     ``values`` keyed by (scope path, flag name) and the presence pass reads
     them from there: coercing twice would consume stdin twice on an @-prefix.
+
+    ``deferred_checks``, when supplied, collects (flag, key) for the closed-set
+    and ``validate`` checks instead of running them here. That is the argv
+    path's shape and only its: §18.20 item 226 pins that every coercion failure
+    outranks every ``validate`` refusal, and a check run beside its own
+    coercion would let a scoped callback fire ahead of a later token's coercion.
+    The programmatic doors pass nothing and keep item 249's declaration-ordered
+    sweep, where each declaration is read to completion in turn.
     """
     for m in members:
         if isinstance(m, Flag):
             resolved = _resolve_scoped_value(
                 m, occs, config_data=config_data, hermetic=hermetic,
                 pre_typed=pre_typed, stdin_consumed_by=stdin_consumed_by,
-                conflict_mode=conflict_mode,
+                conflict_mode=conflict_mode, cli_values=cli_values,
             )
             if resolved is not None:
-                values[(path, m.name)] = resolved
+                key = (path, m.name)
+                if deferred_checks is None:
+                    values[key] = _check_scoped_value(m, *resolved)
+                else:
+                    values[key] = resolved
+                    deferred_checks.append((m, key))
             continue
         key = _sel_key(path, m.name)
         elected = state.elected.get(key)
@@ -11839,7 +11932,7 @@ def _run_scope_value_phase(
                 _coerce_member_payload(
                     elected, occs, config_data=config_data, hermetic=hermetic,
                     pre_typed=pre_typed, stdin_consumed_by=stdin_consumed_by,
-                    conflict_mode=conflict_mode,
+                    conflict_mode=conflict_mode, cli_values=cli_values,
                 ),
                 "cli",
             )
@@ -11847,6 +11940,7 @@ def _run_scope_value_phase(
             elected.members, child, occs, state, values,
             config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
             stdin_consumed_by=stdin_consumed_by, conflict_mode=conflict_mode,
+            cli_values=cli_values, deferred_checks=deferred_checks,
         )
 
 
@@ -12108,11 +12202,15 @@ def _resolve_selectors(
     conflict_mode: str = "cli-wins",
     state: _ElectionState | None = None,
     infra_roots: dict[str, str] | None = None,
+    cli_values: dict[str, object] | None = None,
 ) -> _SelectorResult:
-    """Run all four phases over a command's selectors.
+    """Run all four phases over a command's selectors, on the ARGV path.
 
     ``state`` carries the result of phases 1-3 when a caller has already run
     them (:func:`_elect_and_validate_scopes`); passing it never re-runs them.
+    ``cli_values`` carries what the command line's own coercion sweep produced
+    for the scoped tokens, already interleaved with the root ones in
+    command-line order (§24.3).
     """
     if stdin_consumed_by is None:
         stdin_consumed_by = [None]
@@ -12125,11 +12223,18 @@ def _resolve_selectors(
     # §24.3's phase order, spelled as two passes: every value inside the live
     # scopes is interpreted first, and only then does presence decide.
     values: dict = {}
+    deferred_checks: list = []
     _run_scope_value_phase(
         cmd.selectors, (), occs, state, values,
         config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
         stdin_consumed_by=stdin_consumed_by, conflict_mode=conflict_mode,
+        cli_values=cli_values, deferred_checks=deferred_checks,
     )
+    # The closed set and `validate`, once nothing is left to coerce: a
+    # coercion failure anywhere on the command line outranks every callback
+    # refusal (§18.20 item 226), scoped callbacks included.
+    for f, key in deferred_checks:
+        values[key] = _check_scoped_value(f, *values[key])
     result = _build_scope_values(
         cmd.selectors, (), occs, state, values,
         config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
@@ -12584,8 +12689,10 @@ def _parse_command(
     # consumes the next argv element -- and every coercion happens afterwards,
     # so a structural problem is always reported before a value problem
     # whatever their order on the command line. `raw` is a str for a value
-    # token and True/False for a bool-style one.
-    root_occs: list[tuple[Flag, object]] = []
+    # token and True/False for a bool-style one, and the leading int is the
+    # argv index that recorded it -- the value phase sweeps root and scoped
+    # occurrences in ONE command-line order, so both lists carry their position.
+    root_occs: list[tuple[int, Flag, object]] = []
     # Phase 1: every scoped occurrence, collected WITHOUT interpreting any of
     # it. Whether a token consumes the next argv element is decided here, before
     # any choice is elected -- which is why sibling scopes may reuse a name only
@@ -12621,7 +12728,7 @@ def _parse_command(
                         f"flag '--{name}' is a boolean negation and does not "
                         f"take a value"
                     )
-                scoped_occs.append(_Occ(target, False, tok))
+                scoped_occs.append(_Occ(target, False, tok, seq=idx))
                 return idx + 1
         site = _scoped_site(name)
         if site is None:
@@ -12631,14 +12738,14 @@ def _parse_command(
                 raise _ParseError(
                     f"flag '--{name}' is a boolean flag and does not take a value"
                 )
-            scoped_occs.append(_Occ(name, True, tok, alts))
+            scoped_occs.append(_Occ(name, True, tok, alts, seq=idx))
             return idx + 1
         if inline is not None:
-            scoped_occs.append(_Occ(name, inline, tok, alts))
+            scoped_occs.append(_Occ(name, inline, tok, alts, seq=idx))
             return idx + 1
         if idx + 1 >= len(tokens):
             raise _ParseError(f"flag '--{name}' requires a value")
-        scoped_occs.append(_Occ(name, tokens[idx + 1], tok, alts))
+        scoped_occs.append(_Occ(name, tokens[idx + 1], tok, alts, seq=idx))
         return idx + 2
 
     def _store_value(f: Flag, value: object) -> None:
@@ -12701,7 +12808,7 @@ def _parse_command(
                     raise _ParseError(
                         f"flag '{flag_part}' is a boolean flag and does not take a value"
                     )
-                root_occs.append((f, value_part))
+                root_occs.append((i, f, value_part))
             elif flag_part in negation_lookup:
                 raise _ParseError(
                     f"flag '{flag_part}' is a boolean negation and does not take a value"
@@ -12714,7 +12821,7 @@ def _parse_command(
         # --no-flag negation
         if tok in negation_lookup:
             f = negation_lookup[tok]
-            root_occs.append((f, False))
+            root_occs.append((i, f, False))
             i += 1
             continue
 
@@ -12723,12 +12830,12 @@ def _parse_command(
             if tok in long_lookup:
                 f = long_lookup[tok]
                 if f.type is bool and f.compound != "dict":
-                    root_occs.append((f, True))
+                    root_occs.append((i, f, True))
                     i += 1
                 else:
                     # str/int/float/dict flag: consume next token as value
                     if i + 1 < len(tokens):
-                        root_occs.append((f, tokens[i + 1]))
+                        root_occs.append((i, f, tokens[i + 1]))
                         i += 2
                     else:
                         raise _ParseError(f"flag '{tok}' requires a value")
@@ -12740,12 +12847,12 @@ def _parse_command(
         if tok.startswith("-") and len(tok) == 2 and tok in short_lookup:
             f = short_lookup[tok]
             if f.type is bool and f.compound != "dict":
-                root_occs.append((f, True))
+                root_occs.append((i, f, True))
                 i += 1
             else:
                 # str/int/float/dict flag: consume next token as value
                 if i + 1 < len(tokens):
-                    root_occs.append((f, tokens[i + 1]))
+                    root_occs.append((i, f, tokens[i + 1]))
                     i += 2
                 else:
                     raise _ParseError(f"flag '{tok}' requires a value")
@@ -12765,8 +12872,30 @@ def _parse_command(
             cmd, scoped_occs, config_data=config_data, hermetic=hermetic,
         )
 
-    # The value pass over the root-scope occurrences, in argv order.
-    for f, raw in root_occs:
+    # Phase 4: the value pass over EVERY occurrence, root and scoped alike, in
+    # COMMAND-LINE order (§24.3). One sweep, not two: partitioning root values
+    # ahead of scoped ones would make which of two true refusals is printed
+    # depend on a declaration the operator cannot see, which is the outcome the
+    # phase order exists to prevent (§18.27 item 257; Go is the reference).
+    # Only coercion happens here -- the closed set and `validate` run in a
+    # later pass, so every coercion failure outranks every callback refusal
+    # (§18.20 item 226).
+    scoped_cli: dict[str, object] = {}
+    merged = [(seq, True, (f, raw)) for seq, f, raw in root_occs]
+    merged.extend((o.seq, False, o) for o in scoped_occs)
+    merged.sort(key=lambda entry: entry[0])
+    for _, is_root, item in merged:
+        if not is_root:
+            site = _live_site(cmd, election_state, item.name)
+            if site is None or site.kind == "selector":
+                # The election IS a selector token's value, and a scope
+                # violation was already refused above.
+                continue
+            if site.kind == "member" and site.choice.payload is None:
+                continue  # a payload-less member token elects; it carries no value
+            _coerce_scoped_occurrence(site, item, scoped_cli, stdin_consumed_by)
+            continue
+        f, raw = item
         if raw is True or raw is False:
             cli_set[f.name] = raw
         elif f.compound == "dict":
@@ -12902,6 +13031,7 @@ def _parse_command(
             cmd, scoped_occs, config_data=config_data, hermetic=hermetic,
             stdin_consumed_by=stdin_consumed_by, conflict_mode=conflict_mode,
             state=election_state, infra_roots=infra_roots,
+            cli_values=scoped_cli,
         )
         if out_diagnostics is not None:
             out_diagnostics.extend(selector_result.diagnostics)

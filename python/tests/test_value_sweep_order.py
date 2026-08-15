@@ -256,15 +256,30 @@ def test_a_scoped_presence_refusal_outranks_a_missing_required_root_flag():
 
 
 # ---------------------------------------------------------------------------
-# The command line answers with the order it was TYPED in, unchanged
+# The command line answers with the order it was TYPED in
 # ---------------------------------------------------------------------------
 
 
 def test_the_command_line_reads_its_own_tokens_in_its_own_order():
-    """Nothing about the argv path changed here: a root token's value is read
-    where the parser reads root tokens, ahead of the scopes."""
+    """The argv path is NOT a party to the sweep above (§18.27 item 257).
+
+    §24.3 pins command-line order within a phase, and the value phase is one
+    phase whether a token names a root flag or a scoped one: the first token
+    that will not coerce is the one reported, whatever the declaration says.
+    """
     r = _app().test([
         "run", "--via", "email", "--retries", "nope", "--after", "nope",
+        "--all-profiles",
+    ])
+    assert r.exit_code == 1
+    assert "error: --retries: expected integer, got 'nope'\n" in r.stderr
+
+
+def test_the_command_line_reports_the_root_token_when_the_root_token_is_first():
+    """The same two mistakes the other way round: the same rule, the other
+    answer. Nothing about a declaration decides which of the two is printed."""
+    r = _app().test([
+        "run", "--via", "email", "--after", "nope", "--retries", "nope",
         "--all-profiles",
     ])
     assert r.exit_code == 1
