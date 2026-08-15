@@ -82,6 +82,26 @@ export function isInfraRootPath(v: unknown): v is InfraRootPath {
 	return typeof v === "object" && v !== null && MINTED.has(v);
 }
 
+/**
+ * A marker as MACHINE output: only the declared env var and path parts, never
+ * a resolved machine-specific path (§13's machine-stable marker shape).
+ *
+ * One shape serves every machine surface that publishes a declaration -- the
+ * dumped schema (§25.10) and `config show`'s payload -- because both publish
+ * the same fact: what the declaration says, where a delivery would say what the
+ * run produced.
+ */
+export function serializeInfraMarker(
+	m: InfraRootPath,
+): Record<string, unknown> {
+	return {
+		relative_to_root: {
+			env_var: m.envVar,
+			parts: [...m.parts],
+		},
+	};
+}
+
 /** Expands a leading ~ (as ~ or ~/...) to the user's home directory. */
 export function expandTilde(p: string): string {
 	if (p === "~") {

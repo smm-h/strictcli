@@ -36,6 +36,7 @@ import {
 	defineReadOnlyCommand,
 	flag,
 	memberChoiceFlag,
+	relativeToRoot,
 	t,
 } from "../src/index.js";
 import { envelopePayloadText } from "./envelope_helpers.js";
@@ -1688,4 +1689,82 @@ test("config set/init still mutate in live mode", async () => {
 		log.map((r) => [r.verb, r.recorded]),
 		[["write", false]],
 	);
+});
+
+// =========================================================================
+// A marker-defaulted flag on `config show` (§13, §25.10, §18.27 item 261)
+//
+// `config show` displays what the configuration SAYS, not what a run would
+// produce: a RelativeToRoot default renders as the declaration, and the
+// machine form carries §13's machine-stable marker shape -- the same split
+// §25.10 already pins for the dumped schema. The resolved path belongs to the
+// run, where the flag is delivered labelled `infra` (§18.23 item 237).
+// =========================================================================
+
+function markerConfigApp(): App {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "test app",
+		config: true,
+		infraRoot: { MYAPP_HOME: "/var/lib/myapp" },
+	});
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run command",
+			flags: {
+				db: flag("db", t.str, {
+					help: "Database path",
+					presence: "default",
+					default: relativeToRoot("MYAPP_HOME", "db.sqlite"),
+				}),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("config show renders a marker default as the declaration", async () => {
+	freshXdg();
+	await withEnv({ MYAPP_HOME: undefined }, async () => {
+		const r = await markerConfigApp().test(["config", "show", "--plain"]);
+		assert.equal(r.exitCode, 0);
+		assert.equal(
+			r.stdout,
+			"db = RelativeToRoot('MYAPP_HOME', 'db.sqlite')  (source: default)\n" +
+				"\n" +
+				"Infrastructure:\n" +
+				"  MYAPP_HOME (root) = /var/lib/myapp  (source: default)\n",
+		);
+	});
+});
+
+test("config show --json carries the marker in §13's machine-stable shape", async () => {
+	freshXdg();
+	await withEnv({ MYAPP_HOME: undefined }, async () => {
+		const r = await markerConfigApp().test(["config", "show", "--json"]);
+		assert.equal(r.exitCode, 0);
+		assert.equal(
+			envelopePayloadText(r.stdout),
+			'{"__infrastructure__":{"MYAPP_HOME":{"kind":"root",' +
+				'"resolved":"/var/lib/myapp","source":"default"}},' +
+				'"db":{"source":"default","value":{"relative_to_root":' +
+				'{"env_var":"MYAPP_HOME","parts":["db.sqlite"]}}}}\n',
+		);
+	});
+});
+
+test("config show still displays a marker-declared flag's real config value", async () => {
+	// The declaration renders only where the declaration is what answers: a
+	// config file naming the key wins, and its value is displayed as itself.
+	const { dir } = freshXdg();
+	writeFileSync(join(dir, "config.json"), '{"db": "/srv/other.sqlite"}\n');
+	await withEnv({ MYAPP_HOME: undefined }, async () => {
+		const r = await markerConfigApp().test(["config", "show", "--plain"]);
+		assert.match(
+			r.stdout,
+			/^db = \/srv\/other\.sqlite {2}\(source: config\)\n/,
+		);
+	});
 });

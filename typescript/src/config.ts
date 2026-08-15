@@ -69,7 +69,7 @@ import {
 	schemaKind,
 } from "./factories.js";
 import { formatFloatCanonical } from "./float.js";
-import { expandTilde, isInfraRootPath } from "./infra.js";
+import { expandTilde, isInfraRootPath, serializeInfraMarker } from "./infra.js";
 // Type-only, deliberately: parse.ts reads this module's pre-typed value check,
 // so a runtime import back the other way would close a cycle.
 import type { ConfigLoadResult, ConfigProvider } from "./parse.js";
@@ -1062,6 +1062,14 @@ export function formatConfigValue(v: unknown): string {
 	if (v === null || v === undefined) {
 		return "<nil>";
 	}
+	// A marker renders as the DECLARATION -- `RelativeToRoot('E', 'x')`, the
+	// form the siblings print byte-for-byte -- because `config show` displays
+	// what the configuration says, where the resolved path is what a run
+	// produces (§18.27 item 261, §25.10). Serializing the marker object would
+	// print its own internals, which no declaration was written in.
+	if (isInfraRootPath(v)) {
+		return String(v);
+	}
 	if (v instanceof Map || Array.isArray(v) || isRecord(v)) {
 		return jsonDumpsPy(v);
 	}
@@ -1589,7 +1597,16 @@ function configShowHandler(app: AppImpl, ctx: Context): number {
 	for (const f of allFlags) {
 		const param = flagParamName(f.name);
 		const [value, source] = resolveFlagShowSource(f, configData);
-		result[param] = { value: value ?? null, source };
+		// The machine form publishes the declaration too, in §13's
+		// machine-stable marker shape -- the one the dumped schema already uses
+		// (§25.10) -- rather than whatever the runtime's own object happens to
+		// serialize as.
+		result[param] = {
+			value: isInfraRootPath(value)
+				? serializeInfraMarker(value)
+				: (value ?? null),
+			source,
+		};
 	}
 	for (const [cfName, cf] of app.configFields) {
 		if (colliding.has(cfName)) {

@@ -54,7 +54,7 @@ import {
 	valueSchemaFragment,
 } from "./factories.js";
 import { formatFloatCanonical } from "./float.js";
-import { type InfraRootPath, isInfraRootPath } from "./infra.js";
+import { isInfraRootPath, serializeInfraMarker } from "./infra.js";
 
 // --- JSON writer (2-space indent, bigint/float machine-channel tokens) ---
 
@@ -138,21 +138,6 @@ function sortedRecord(
 }
 
 /**
- * Serializes a RelativeToRoot marker machine-stably: only the declared env
- * var and path parts, never a resolved machine-specific path. Identical
- * shape across all implementations (Go serializeDefault / Python
- * _serialize_marker).
- */
-function serializeMarker(m: InfraRootPath): Record<string, unknown> {
-	return {
-		relative_to_root: {
-			env_var: m.envVar,
-			parts: [...m.parts],
-		},
-	};
-}
-
-/**
  * A value flag's (or arg's) `choices=` entries, as the records item 164 made
  * them (§25.5). The machine-readable half of a choices declaration lives in
  * the fragment's `enum`; this is the human-readable half, which JSON Schema
@@ -174,7 +159,7 @@ function serializeChoiceRecords(
 
 /** A declared default, as the schema publishes it (marker shape preserved). */
 function serializeDefaultValue(value: unknown): unknown {
-	return isInfraRootPath(value) ? serializeMarker(value) : value;
+	return isInfraRootPath(value) ? serializeInfraMarker(value) : value;
 }
 
 /**
@@ -208,7 +193,7 @@ function serializeFlag(f: AnyFlag): Record<string, unknown> {
 	if (o.presence === "default") {
 		const dflt = o.default;
 		d.default = isInfraRootPath(dflt)
-			? serializeMarker(dflt)
+			? serializeInfraMarker(dflt)
 			: kind === "list"
 				? [...(dflt as unknown[])]
 				: dflt;
