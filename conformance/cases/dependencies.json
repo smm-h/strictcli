@@ -772,7 +772,8 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "implies"
+      "stdout_equals": "",
+      "stderr_equals": "error: flag '--fast' implies '--no-embeddings', but '--embeddings' was explicitly provided\ntry 'myapp cmd --help'\n"
     }
   },
   {

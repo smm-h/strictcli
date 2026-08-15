@@ -1257,5 +1257,96 @@
         "is required"
       ]
     }
+  },
+  {
+    "name": "record door: a passthrough command takes only its raw argument list (python)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "pre_call": [
+        {
+          "command": "shell",
+          "kwargs": {
+            "bogus": 1
+          }
+        }
+      ],
+      "commands": [
+        {
+          "name": "shell",
+          "help": "hand every argument to the child",
+          "effect": "mutating",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        },
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
+      ]
+    },
+    "argv": [
+      "noop"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_equals": "call error: unknown parameter 'bogus' for passthrough command 'shell'\n"
+    },
+    "targets": [
+      "python"
+    ]
+  },
+  {
+    "name": "record door: a passthrough command takes only its raw argument list (go and typescript)",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "pre_call": [
+        {
+          "command": "shell",
+          "kwargs": {
+            "bogus": 1
+          }
+        }
+      ],
+      "commands": [
+        {
+          "name": "shell",
+          "help": "hand every argument to the child",
+          "effect": "mutating",
+          "passthrough": true,
+          "passthrough_handler_prints": "{name}:{args}"
+        },
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
+      ]
+    },
+    "argv": [
+      "noop"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_equals": "call error: unknown parameter \"bogus\" for passthrough command \"shell\"\n"
+    },
+    "targets": [
+      "go",
+      "typescript"
+    ]
   }
 ]

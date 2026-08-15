@@ -66,10 +66,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # rejected. Go's WithDryRunUnsupported(reason) is the only way to set
     # either field and always sets both, which makes the orphan shape
     # unrepresentable rather than merely unchecked.
-    'command *: dry_run_unsupported_reason requires dry_run_supported=false '
-    '(there is nothing to explain while dry run is supported)': {
-        "go": "excluded:WithDryRunUnsupported(reason) sets both fields at once, so a reason without the declaration is unrepresentable in Go",
-    },
 
     # -- Handler signature validation (Python only) --
     'command *: handler missing parameter * for flag *': {
@@ -85,21 +81,11 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "typescript": "excluded:TS handlers take a single kwargs object like Go; no handler signature validation",
     },
 
-    # -- Python default type validation --
-    'Flag *: choice * is not of type *': {
-        "go": "excluded:Go validates choices with type-specific messages (str/int/float)",
-    },
 
     # -- Python internal float errors --
     'invalid literal for float(): *': {
         "go": "excluded:Python internal ValueError from _strict_float, surfaces as 'expected float'",
         "typescript": "excluded:Python internal ValueError from _strict_float; TS float parsing surfaces 'expected float' directly",
-    },
-    'NaN is not allowed': {
-        "go": "excluded:Python internal ValueError from _strict_float, wrapped with flag prefix at call site",
-    },
-    'Inf is not allowed': {
-        "go": "excluded:Python internal ValueError from _strict_float, wrapped with flag prefix at call site",
     },
 
     # -- Python generic _require_non_empty_str --
@@ -165,10 +151,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "typescript": "excluded:TS unique is a typed boolean option; no runtime type check needed",
     },
 
-    # -- Python repeatable default element validation --
-    'Flag *: default element * is not of type *': {
-        "go": "excluded:Go validates default elements with type-specific messages (str/int/float)",
-    },
 
     # -- Compound type structural differences --
     '*: dict key type must be str, got *': {
@@ -261,9 +243,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     },
 
     # -- Arg compound type messages (Python wording) --
-    'Arg *: choice * is not of type *': {
-        "go": "excluded:Go validates Arg choices with type-specific messages (str/int/float)",
-    },
     'Arg *: default * is not in choices *': {
         "go": "excluded:Python f-string normalizes without brackets; Go counterpart uses [%s]",
         "typescript": "excluded:TS mirrors Go's bracketed rendering 'Arg *: default * is not in choices [*]'",
@@ -295,9 +274,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "go": "excluded:Python uses 'dict'; Go uses 'map[string]interface{}'",
         "typescript": "excluded:TS uses 'dict flag default must be a Map' (language-idiomatic, like Go's map[string]interface{})",
     },
-    'Flag *: dict type cannot be combined with choices': {
-        "go": "excluded:Go uses 'choices is incompatible with compound types (list/dict)'",
-    },
     'Flag *: dict type cannot be combined with repeatable=True': {
         "go": "excluded:Go forbids compound+repeatable differently; no direct counterpart",
     },
@@ -323,15 +299,12 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # -- Required-bool prefix structural difference --
     "flag '--*' is required": {
         "go": "excluded:Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
-        "typescript": "excluded:TS uses parameterized prefix in parse.ts like Go applyFlagDefault; template shape is '*flag --*...'",
     },
     "flag '--*' must be passed as --*": {
         "go": "excluded:Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
-        "typescript": "excluded:TS uses parameterized prefix in parse.ts like Go applyFlagDefault; template shape is '*flag --*...'",
     },
     "flag '--*' must be passed as --* or --no-*": {
         "go": "excluded:Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
-        "typescript": "excluded:TS uses parameterized prefix in parse.ts like Go applyFlagDefault; template shape is '*flag --*...'",
     },
     "global flag '--*' is required": {
         "go": "excluded:Go uses parameterized prefix in applyFlagDefault; signature is '*flag --*...'",
@@ -347,9 +320,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     },
 
     # -- InfraEnv structural / extraction asymmetries --
-    'RelativeToRoot references undeclared infra root *; declare it as an infra root': {
-        "go": "excluded:Go counterpart is an aligned fmt.Errorf in resolveInfraRootPath, not in the extracted registration set",
-    },
     'command *: flag *: RelativeToRoot references undeclared infra root *; declare it as an infra root': {
         "go": "excluded:Go has no command-context flag-marker validation; it validates per-flag at registration",
     },
@@ -357,28 +327,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     # =======================================================================
     # Go-present, Python-excluded
     # =======================================================================
-
-    # -- Go type-specific choice validation --
-    'Flag *: choice * is not of type str': {
-        "python": "excluded:Go type-specific choice validation (Python uses generic pattern)",
-    },
-    'Flag *: choice * is not of type int': {
-        "python": "excluded:Go type-specific choice validation (Python uses generic pattern)",
-    },
-    'Flag *: choice * is not of type float': {
-        "python": "excluded:Go type-specific choice validation (Python uses generic pattern)",
-    },
-
-    # -- Go type-specific default element validation --
-    'Flag *: default element * is not of type str': {
-        "python": "excluded:Go type-specific default element validation (Python uses generic pattern)",
-    },
-    'Flag *: default element * is not of type int': {
-        "python": "excluded:Go type-specific default element validation (Python uses generic pattern)",
-    },
-    'Flag *: default element * is not of type float': {
-        "python": "excluded:Go type-specific default element validation (Python uses generic pattern)",
-    },
 
     # -- Go entity-specific help validation --
     'App.help must be a non-empty string': {
@@ -434,24 +382,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     },
 
     # -- Go compound type messages --
-    'Arg *: choice * is not of type float': {
-        "python": "excluded:Go type-specific Arg choice validation (Python uses generic pattern)",
-    },
-    'Arg *: choice * is not of type int': {
-        "python": "excluded:Go type-specific Arg choice validation (Python uses generic pattern)",
-    },
-    'Arg *: choice * is not of type str': {
-        "python": "excluded:Go type-specific Arg choice validation (Python uses generic pattern)",
-    },
-    'Arg *: choices is incompatible with list type': {
-        # §25.4 unified the two variadic-arg spellings onto one published shape,
-        # so a ban that fires on one of them and not the other is two rules for
-        # one fact. Go deleted its template; TypeScript's survives with no
-        # caller.
-        "typescript": "dead_code:§25.4 unified the two variadic-arg spellings, so the ban has no caller left; Go deleted its twin outright",
-        "python": "excluded:Python's list-typed arg already required variadic=True and never carried this ban",
-        "go": "excluded:§25.4 deletes errArgChoicesIncompatibleListType outright: one declaration, one published shape, one rule",
-    },
     'Arg *: default * is not in choices [*]': {
         "python": "excluded:Go fmt.Sprintf with brackets; Python counterpart normalizes without brackets",
     },
@@ -467,9 +397,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     'DictOf: value type must be str, int, or float, got *': {
         "python": "excluded:Go typed constructor validation; Python uses generic {context}: pattern",
     },
-    'Flag *: choices is incompatible with compound types (list/dict)': {
-        "python": "excluded:Go Flag-specific compound type restriction; Python validates differently",
-    },
     'Flag *: default element *: *': {
         "python": "excluded:Go type-specific default element validation (Python uses generic pattern)",
     },
@@ -478,9 +405,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     },
     'Flag *: dict flag default must be a map[string]interface{}': {
         "python": "excluded:Go typed assertion for dict default; Python uses isinstance check",
-    },
-    'Flag *: explicit empty default is redundant for list flags, omit the default': {
-        "python": "excluded:Go-specific list flag default validation; Python handles differently",
     },
     'Flag *: list flag default must be a []interface{}': {
         "python": "excluded:Go typed assertion for list default; Python uses isinstance check",
@@ -628,11 +552,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "go": "coverage_deferred:Needs config file fixture support in conformance framework",
         "typescript": "coverage_deferred:Needs config file fixture support in conformance framework",
     },
-    "flag '--*' implies '--**', but '--**' was explicitly provided": {
-        "python": "coverage_deferred:Needs Implies dependency test case in conformance framework",
-        "go": "coverage_deferred:Needs Implies dependency test case in conformance framework",
-        "typescript": "coverage_deferred:Needs Implies dependency test case in conformance framework",
-    },
     '--*: cannot read stdin': {
         "python": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
         "go": "coverage_deferred:Requires stdin piping to subprocess, not supported in conformance runner",
@@ -653,19 +572,8 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "go": "coverage_deferred:Requires a file with restricted permissions, platform-dependent",
         "typescript": "coverage_deferred:Requires a file with restricted permissions, platform-dependent",
     },
-    'unknown parameter * for command *': {
-        "python": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
-        "go": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
-        "typescript": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
-    },
-    'unknown parameter * for passthrough command *': {
-        "python": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
-        "go": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
-        "typescript": "coverage_deferred:Invoke API error; needs programmatic call conformance test infrastructure",
-    },
     'test-coverage: cannot create .strictcli/coverage/: *': {
         "python": "excluded:Python uses os.makedirs which raises OSError, not a formatted message",
-        "go": "excluded:Go-specific formatted error for coverage shard directory creation failure",
     },
 
     # =======================================================================
@@ -765,18 +673,11 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
 
     # -- Effects regime: templates whose trigger the conformance runner cannot
     #    reach (effects contract §14.5) --
-    'about to run consequential command *. Proceed? [y/N] ': {
-        "python": "coverage_deferred:Requires an INTERACTIVE stdin; the conformance runner pins stdin to the null device so cases never depend on the operator's terminal",
-        "go": "coverage_deferred:Requires an INTERACTIVE stdin; the conformance runner pins stdin to the null device so cases never depend on the operator's terminal",
-        "typescript": "coverage_deferred:Requires an INTERACTIVE stdin; the conformance runner pins stdin to the null device so cases never depend on the operator's terminal",
-    },
-    # The non-interactive branch IS covered now: the runner pins stdin to the
-    # null device, which makes §8.3's outcome deterministic in every target.
-    'aborted': {
-        "python": "coverage_deferred:Requires an INTERACTIVE stdin; a decline needs an answer typed at a terminal",
-        "go": "coverage_deferred:Requires an INTERACTIVE stdin; a decline needs an answer typed at a terminal",
-        "typescript": "coverage_deferred:Requires an INTERACTIVE stdin; a decline needs an answer typed at a terminal",
-    },
+    # The confirm protocol's own two templates are NOT among them any more: the
+    # framework's test-only confirm seam (case-schema `confirm_stdin_interactive`)
+    # says the answer channel is interactive and leaves the answer coming from
+    # the case's piped stdin, so cases/effects_consequential.json asserts the
+    # prompt and the decline byte-for-byte on every target.
     'command *: effects.http failed: * * returned *': {
         "python": "coverage_deferred:Requires issuing a real network request, which conformance cases must not do",
         "go": "coverage_deferred:Requires issuing a real network request, which conformance cases must not do",
@@ -870,20 +771,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
     },
     'Arg *: default: null does not declare optionality: use presence: "optional" (it delivers undefined when the arg is absent)': {
-        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
-        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
-    },
-
-    # -- A mutex member declaring requiredness, three spellings --
-    'Flag *: a mutex member cannot declare presence="required": the group\'s own requirement is what makes the choice mandatory': {
-        "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
-        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
-    },
-    'Flag *: a mutex member cannot declare Required(): the group\'s own requirement is what makes the choice mandatory': {
-        "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
-        "typescript": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
-    },
-    'Flag *: a mutex member cannot declare *: the group\'s own requirement is what makes the choice mandatory': {
         "python": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
         "go": 'excluded:the presence family pins ONE sentence in three spellings (contract §12.12), and each implementation carries only its own; presence_registration.json asserts all three, per target',
     },
@@ -1147,8 +1034,8 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220): Call() takes an Elect(choice, Fields) value in Go; TypeScript's call takes the union member object, which the type system checks",
     },
     '--*: elected value names choice *, which is not declared by this choice flag': {
-        'python': "excluded:Go-only (contract §12.13, §18.19 item 220): the name-carrying Call() form is Go's; Python's call() takes an instance of a declared choice class",
-        'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220): the name-carrying Call() form is Go's; TypeScript's call takes the union member object",
+        'python': "excluded:Go-only (contract §12.13, §18.19 item 220, ratified as a permanent split by §18.25 item 251): a Go record holds a declared choice of SOME selector, so it can say the choice is real and belongs elsewhere; Python's call() takes an instance of a declared choice class and TypeScript's a string tag, and neither is holding a declaration. cases/record_door_divergences.json asserts the refusal on every target and acknowledges the sentence.",
+        'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220, ratified as a permanent split by §18.25 item 251): a Go record holds a declared choice of SOME selector, so it can say the choice is real and belongs elsewhere; Python's call() takes an instance of a declared choice class and TypeScript's a string tag, and neither is holding a declaration. cases/record_door_divergences.json asserts the refusal on every target and acknowledges the sentence.",
     },
     'schema value of unserializable type: *': {
         'python': "excluded:Go-only (contract §12.13, §18.19 item 220): v2's ordered writer is hand-written in Go and must reject a value its type switch does not know; Python's json.dumps and TypeScript's writer have their own paths",
@@ -1165,10 +1052,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     'Flag *: choices entry * is *, not a choice class: declare it with @choice(...)': {
         'go': "excluded:Python-only (contract §12.13, §18.19 item 220): Python's choices= takes decorated classes; Go's variadic takes *ChoiceDecl and TypeScript's map takes ChoiceDef, both compile-checked",
         'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): Python's choices= takes decorated classes; Go's variadic takes *ChoiceDecl and TypeScript's map takes ChoiceDef, both compile-checked",
-    },
-    'Flag *: choice name * must match [a-z][a-z0-9-]*': {
-        'go': "excluded:Python-only (contract §12.13, §18.19 item 220): a Python choice name is the @choice decorator's own string argument; Go validates it through the flag-name bans and TypeScript through its keyed map",
-        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): a Python choice name is the @choice decorator's own string argument; Go validates it through the flag-name bans and TypeScript through its keyed map",
     },
     'Choice * of *: field * declares no flag: declare it with sub_flag(...), sub_choice_flag(...) or member_value(...)': {
         'go': "excluded:Python-only (contract §12.13, §18.19 item 220): a scope is a dataclass body in Python, so a field can exist without a declaration; Go's and TypeScript's scopes are flag lists",
@@ -1203,9 +1086,8 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         'typescript': 'excluded:Python-only (contract §12.13, §18.19 item 220): only Python has a per-parameter annotation to check, which is what makes assert_never sound',
     },
     "parameter * for command * must be an instance of a declared choice of '--*' (*), got *": {
-        'go': "excluded:Python-only (contract §12.13, §18.19 item 220): call()'s refusal of a non-record value names Python's choice classes; Go's twin names Elect(...) and TypeScript's is a compile error",
-        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): call()'s refusal of a non-record value names Python's choice classes; Go's twin names Elect(...) and TypeScript's is a compile error",
-        'python': 'coverage_deferred:call() is the programmatic front door; the conformance runner drives argv only',
+        'go': "excluded:Python-only (contract §12.13, §18.19 item 220, ratified as a permanent split by §18.25 item 251): a Python record is an INSTANCE of a class, so its refusal names the type it got against the union it declared; a Go record holds a *ChoiceDecl and a TypeScript record a string tag, and each names what its runtime is holding. cases/record_door_divergences.json asserts the refusal on every target and acknowledges the sentence.",
+        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220, ratified as a permanent split by §18.25 item 251): a Python record is an INSTANCE of a class, so its refusal names the type it got against the union it declared; a Go record holds a *ChoiceDecl and a TypeScript record a string tag, and each names what its runtime is holding. cases/record_door_divergences.json asserts the refusal on every target and acknowledges the sentence.",
     },
     '--*: config value error: expected str, got *': {
         'go': 'excluded:Python-only (contract §12.13, §18.19 item 220): Python coerces a config-sourced election through its own typed reader; Go and TypeScript reuse the ordinary config-value error',
@@ -1228,8 +1110,8 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
     },
     "flag '--*' requires a value": {
-        'go': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
-        'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+        'go': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets, as does cases/selector_flat_boundary.json for the flat door's missing-payload refusal (contract §18.22 item 233)",
+        'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets, as does cases/selector_flat_boundary.json for the flat door's missing-payload refusal (contract §18.22 item 233)",
     },
     "flag '--*' is a boolean flag and does not take a value": {
         'go': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
@@ -1238,16 +1120,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     "flag '--*' is a boolean negation and does not take a value": {
         'go': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
         'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
-    },
-    'command *: mutex group must have at least 2 flags, got *': {
-        'go': 'dead_code:MutexGroup is deleted (contract §24.14); the template survives in errors.go with no caller left',
-        'python': 'excluded:MutexGroup is deleted (contract §24.14); Python retained no template',
-        'typescript': 'excluded:MutexGroup is deleted (contract §24.14); TypeScript retained no template',
-    },
-    'command *: flag * appears in multiple mutex groups': {
-        'go': 'dead_code:MutexGroup is deleted (contract §24.14); the template survives in errors.go with no caller left',
-        'python': 'excluded:MutexGroup is deleted (contract §24.14); Python retained no template',
-        'typescript': 'excluded:MutexGroup is deleted (contract §24.14); TypeScript retained no template',
     },
 
 }
