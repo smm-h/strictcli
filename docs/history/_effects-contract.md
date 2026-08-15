@@ -3154,6 +3154,19 @@ command "<name>": <Family> references '<x>', which is declared under '<scope pat
 family's own spelling (`CoRequired`, `Requires`, `Implies`), which is how the existing
 `... references unknown flag ...` trio already names itself.
 
+> **Amendment (2026-08-15, co-occurrence round, §18.30 item 270): the sentence names the
+> CONSTRAINT, not the family.** `CoRequired` is deleted (§26.1) and every constraint now declares a
+> mandatory name, so `<Family>` has both a value that no longer exists and a better replacement.
+> The template becomes
+>
+> ```
+> command "<name>": constraint "<c>" references '<x>', which is declared under '<scope path>': constraints operate at root scope only
+> ```
+>
+> `errConstraintReferencesScopedFlag(name, c, x, path)`, all three. The trailing clause drops the
+> word `dependency` because after §26 the noun for all four kinds is `constraint`; the rule it
+> states -- §24.8's -- is unchanged in every respect.
+
 **Python-only: the handler-annotation family** (S11, §24.12). Three templates that name a state only
 Python's spelling can reach, and they are `excluded:` entries in `check_error_parity.py` with that
 rationale -- §12.12's precedent, applied for the same reason and not as a parity defect. Go's
@@ -3298,6 +3311,131 @@ is lost and stays silent on the case where none is.
 **Category.** Registration-time, so the coverage rule that binds `parse` templates does not reach
 it; it is asserted **per target** in a conformance case, the way `conformance/cases/
 presence_registration.json` asserts §12.12's guards.
+
+### 12.15 The constraint system
+
+Added 2026-08-15 (co-occurrence round, §18.30). The family splits across both parity categories
+exactly as §12.13's does, and for the same reason: the **violation** templates are **parse-time**
+(stderr, exit 1, one covering conformance case each); the **declaration guards** are
+**registration-time**, in §12.10's and §12.12's class.
+
+Templates that name a *spelling* carry a per-language noun phrase and are asserted per target --
+§12.12's mechanism unchanged. §12.12's `<required-spelling>` row is reused verbatim; this section
+adds four rows:
+
+| | Python | Go | TypeScript |
+|---|---|---|---|
+| `<when-present-spelling>` | `when="present"` | `WhenPresent()` | `when: "present"` |
+| `<when-true-spelling>` | `when="true"` | `WhenTrue()` | `when: "true"` |
+| `<when-non-empty-spelling>` | `when="non_empty"` | `WhenNonEmpty()` | `when: "non_empty"` |
+| `<constraint-member-spelling>` | `Member("<x>")` | `Member("<x>")` | `{ name: "<x>" }` |
+
+**How a member renders inside a sentence** -- pinned once here, and used by every template below,
+by §26.10's help block and by §26.12's description block:
+
+- a **flag** member renders `--<name>`; an **arg** member renders its bare `<name>`; a **nested
+  constraint** member renders `(<its own members, by this same rule, joined by its family's
+  connector>)`, where the connector is ` with ` for all-or-none and ` or ` for at-least-one;
+- a **list** of members is unquoted and joined by `, ` in declaration order, which is §12.13's
+  member-list rule; a **single** member named on its own is quoted -- `member '--old-name'`,
+  `member 'targets'` -- which is §12.13's single-flag rule. The two rules are §12.13's, applied to a
+  new list rather than restated for it;
+- the rendering is **structural, never nominal**: a nested member renders its own operands and never
+  its name. The constraint's name identifies the rule that failed and appears once, in the prefix; a
+  member list names tokens the reader can type.
+
+**The prefix** is `constraint "<c>": `, in double quotes, on every template in this section
+including the parse-time ones. The catalog quotes by **kind of thing** rather than by category of
+message -- a declared identifier takes double quotes (`command "<name>"`, `Flag "<name>"`,
+`Choice "<c>" of "<sel>"`, `no source info for flag "<name>"`) and a token the operator typed takes
+single quotes (`flag '--x' is required`) -- and a constraint name is a declared identifier that no
+invocation ever contains.
+
+**Violation templates (parse-time).**
+
+```
+constraint "<c>": at least one of <members> is required
+```
+
+`errAtLeastOneRequired(c, members, clause)`. All three. `<members>` is the whole member list by the
+rendering rule above, in declaration order. `<clause>` is **§21.4's decline clause verbatim**
+(`errMutexDeclineClause`), appended when at least one bool member declaring `<when-true-spelling>`
+was provided as false, naming the **first** such member in declaration order:
+
+```
+constraint "purge-selection": at least one of targets, --older-than, --larger-than, --all is required (--no-all declines an option; it does not choose one)
+```
+
+Reusing that clause is not a claim that this family is exclusivity: the clause is about a **negated
+bool**, which is the same fact under both constructs, and A3 ruled that a decline beside an empty
+selection must teach rather than mislead. There is deliberately **no** analogous clause for a member
+declaring `<when-non-empty-spelling>` that was provided empty, because A2 places empty-value
+legality on the flag's own value validation and never on the layer above it.
+
+```
+constraint "<c>": <members> must be used together
+```
+
+`errAllOrNoneTogether(c, members)`. All three. Every member is listed, engaged or not, which is the
+shipped message's behaviour carried over.
+
+**Registration guards.** All registration-time, all three implementations unless a row says
+otherwise, all in the `command "<name>": ` prefix family. `<i>` is 0-based, as §12.13 pins for every
+entry index in the catalog.
+
+| Template | Text |
+|---|---|
+| `errConstraintNameCharset(name, c)` | `command "<name>": constraint name "<c>" must match [a-z][a-z0-9-]*` |
+| `errConstraintNameDuplicate(name, c)` | `command "<name>": duplicate constraint name "<c>"` |
+| `errConstraintNameCollides(name, c)` | `command "<name>": constraint name "<c>" is already a flag or arg name: a member reference resolves by name and would be ambiguous` |
+| `errConstraintMinMembers(name, c, n)` | `command "<name>": constraint "<c>" must declare at least two members, got <n>`. **Go-excluded** -- Go's constructors take two named members before the variadic tail, so a one-member constraint does not compile |
+| `errConstraintMemberNotRecord(name, c, i)` | `command "<name>": constraint "<c>" member <i> is a bare name: declare it as <constraint-member-spelling>`. **Python and TypeScript**; Go-excluded, its members being a typed value. This is `errChoicesEntryNotRecord`'s exact discipline one construct over |
+| `errConstraintMemberUnknown(name, c, x)` | `command "<name>": constraint "<c>" references unknown member "<x>"` |
+| `errConstraintMemberAmbiguous(name, c, x)` | `command "<name>": constraint "<c>" references "<x>", which names both a flag and a positional arg` |
+| `errConstraintMemberDuplicate(name, c, x)` | `command "<name>": constraint "<c>" declares member "<x>" twice` |
+| `errConstraintMemberRequired(name, c, x)` | `command "<name>": constraint "<c>" member '--<x>' declares <required-spelling>: a member the invocation must always supply leaves the constraint nothing to decide` |
+| `errConstraintMemberBoolWhen(name, c, x)` | `command "<name>": constraint "<c>" member '--<x>' is a bool and must declare its election: <when-true-spelling> counts only a true value, <when-present-spelling> counts any` |
+| `errConstraintWhenTrueNotBool(name, c, x, t)` | `command "<name>": constraint "<c>" member '--<x>' declares <when-true-spelling>, which needs a bool; '--<x>' is a <t>` |
+| `errConstraintWhenNonEmptyNotSized(name, c, x, t)` | `command "<name>": constraint "<c>" member '--<x>' declares <when-non-empty-spelling>, which needs a string or a collection; '--<x>' is a <t>` |
+| `errConstraintNestedWhen(name, c, x)` | `command "<name>": constraint "<c>" member "<x>" is a constraint and cannot declare an election: a nested constraint is engaged when its own members are` |
+| `errConstraintNestedFamily(name, c, x)` | `command "<name>": constraint "<c>" references constraint "<x>", which declares a one-way dependency rather than a co-occurrence rule: only at-least-one and all-or-none can be members of another constraint` |
+| `errConstraintCycle(name, path)` | `command "<name>": constraints form a cycle: <path>` |
+| `errConstraintUnknownFlag(name, c, x)` | `command "<name>": constraint "<c>" references unknown flag "<x>"` -- the `Requires` / `Implies` operand vocabulary is flags only (§26.13), so their unknown-name refusal keeps the flag noun |
+
+`<t>` in the two `when`-type guards is the framework's own type word (`str`, `bool`, `int`, `float`,
+and the compound spellings the existing type errors already use), never a language type name.
+
+`<path>` in `errConstraintCycle` renders the participating names joined by ` -> `, starting **and
+ending** at the same name, beginning at the first participant in declaration order:
+`author-change -> author-name -> author-change`. A constraint naming itself is the degenerate case
+and renders `author-change -> author-change`; it is the same condition and takes the same template,
+never a second one.
+
+`errConstraintMemberRequired` renders an **arg** member as `member 'targets'` by the single-member
+quoting rule above. It is one template with one substitution, not a `Flag`/`Arg` twin pair:
+§12.12's twinning rule applies to messages whose *prefix* names a surface, and this one's prefix
+names the constraint.
+
+**Amended in place: the shipped sentences these replace.** Every row below is a **visible
+amendment** rather than a silent rewrite, because the bytes a user reads change:
+
+| Shipped | After this round | Why it moves |
+|---|---|---|
+| ~~`flags --a, --b must be used together`~~ (`errFlagsMustBeUsedTogether`) | `constraint "<c>": --a, --b must be used together` | the name is now mandatory and identifies which rule fired; the noun `flags` is dropped because a member may be a positional arg or a nested constraint, and a noun that is right for one operand kind and wrong for the others is worse than none -- the `--` and bare-name spellings already say which kind each member is |
+| ~~`flag '--x' requires '--y'`~~ (`errFlagRequiresFlag`) | `constraint "<c>": flag '--x' requires '--y'` | prefix only; the sentence is untouched (§26.13) |
+| ~~`flag '--a' implies '--no-b', but '--b' was explicitly provided`~~ (`errImpliesConflict`) | `constraint "<c>": flag '--a' implies '--no-b', but '--b' was explicitly provided` | prefix only |
+| ~~`command "<name>": CoRequired must have at least 2 flags, got <n>`~~ | `errConstraintMinMembers` above | `CoRequired` is deleted (§26.1) and the operand vocabulary widened |
+| ~~`command "<name>": CoRequired references unknown flag "<x>"`~~ | `errConstraintMemberUnknown` above | as above |
+| ~~`command "<name>": CoRequired has duplicate flag "<x>"`~~ | `errConstraintMemberDuplicate` above | as above |
+| ~~`command "<name>": Requires references unknown flag "<x>"`~~ / ~~`... Implies references unknown flag "<x>"`~~ | `errConstraintUnknownFlag` above | two templates for one condition collapse onto the constraint's own name, which is what tells the reader which declaration to fix |
+| ~~`command "<name>": <Family> references '<x>', which is declared under '<scope path>': dependency constraints operate at root scope only`~~ (§12.13, `errConstraintReferencesScopedFlag`) | `command "<name>": constraint "<c>" references '<x>', which is declared under '<scope path>': constraints operate at root scope only` | `<Family>` was the declared family's own spelling and one of its three values (`CoRequired`) no longer exists; the name is a better identifier than the family word ever was, and the trailing clause loses `dependency` because the noun for all four kinds is now `constraint` |
+
+**Category and coverage.** The two violation templates are **parse-time** and take the covering
+conformance case every parse template takes. The guards are registration-time and are asserted **per
+target**, as `conformance/cases/presence_registration.json` asserts §12.12's. The three
+implementation-specific exclusions above (`errConstraintMinMembers` in Go,
+`errConstraintMemberNotRecord` in Go) are `excluded:` entries in `check_error_parity.py` with the
+rationale in their rows -- §12.12's precedent, applied for §12.12's reason.
 
 ---
 
@@ -7820,6 +7958,224 @@ saying the rule is the record door's alone and what the flat door answers instea
      that they are the record door's, which is the door they were ruled for and the only door whose
      input makes the question undecidable.
 
+### 18.30 The constraint system, authored (2026-08-15)
+
+Fourteen items authoring **§26** and **§12.15**: the campaign's phase L2 as restructured by ruling
+S16, written **before** implementation, which is the discipline §19's item-111 ledger established and
+the campaign's own verification section requires. Numbering continues §18.29's, for the reason §18.14
+gave: the same campaign's ledger.
+
+**What this round is.** §24 took exactly-one out of the constraint system and §24.14 recorded what
+the system would keep. This round authors that remainder: two families (at-least-one, all-or-none),
+members generalized from flags to flags, positional args and other named constraints, a declared
+election vocabulary replacing type-dispatched parser rules, and the first rendering, encoding and
+tool-schema projection any of these families has ever had. `CoRequired` is deleted by rename;
+`Requires` and `Implies` keep their semantics and join the shared surface.
+
+**What was read before pinning.** The three implementations' current dependency families
+(`CoRequired` / `Requires` / `Implies` -- declaration shapes, registration guards, parse-time
+sentences, the `is_present_for_deps` predicate, the schema serializers, the MCP builders and all
+three help formatters), and the two real fleet sites the campaign names, on disk, read-only: safegit's
+`author rewrite` (four `Default(nil)` flags, two `CoRequired` pairs, one hand guard) and saferm's
+`purge` (a variadic arg, two `Default("")` sentinels, one bool, one hand guard). Both are recorded
+with their migrated declarations in §26.7.
+
+**Origin tags**, per §18.14's preamble. The families, the operand generalization, the election
+vocabulary and the rendering/encoding scope come from campaign phase L2, which is `[%%]` (ruling B5);
+the two rejections in item 282 are `(D)` (B2) and the campaign's own recorded rung-10 rejection; the
+per-language surfaces are `(D)` B9 applied. Every **pin** authored here -- the spellings, the
+sentences, the orders, the fidelity table -- is **untagged**: none is a directive and none is an
+adopted recommendation, they are this round's derivations from the rulings and the code, and the
+several places where the derivation is genuinely underdetermined say so in the text.
+
+**Sites amended in place**: §12.13 (the scoped-operand refusal names the constraint, not the family);
+§23.5 (the `CoRequired` row's `required` cell becomes an error; the row is renamed with its family and
+gains an at-least-one twin); §24.8 (the rule holds over the wider operand vocabulary; the extension's
+shape narrows); §24.14 (the round it anticipated is authored); §25.7 (the constraint catalogue is
+rewritten and every entry gains a mandatory `name`).
+
+269. **Two families, named for their predicates; `CoRequired` deleted by rename; the container
+     renamed to `constraints` (§26.1).** at-least-one and all-or-none are implemented as two
+     predicates, **not** as two points on a cardinality axis: L2.1's `Group(min,max)` interior is
+     **superseded** by S16, because with exactly-one gone a numeric interior's only remaining
+     function would be to make a later `Group(0,1)` a one-line change -- and B2 bans that at any
+     cardinality, forever. all-or-none absorbs `CoRequired` as a **rename with no alias and no
+     deprecation period**: the declaration changes shape anyway (mandatory name, member records,
+     widened operands), so keeping the noun would leave one word describing two declarations, and
+     `AllOrNone` beside `AtLeastOne` pairs two predicate words where `CoRequired` beside `AtLeastOne`
+     paired a relation word with a cardinality word. `dependencies=` becomes `constraints=` in all
+     three: the schema key has been `constraints` since v1 and §25.7 already calls the catalogue by
+     that noun, so the declaration surface was the last place using the other one. **at-least-one is
+     never exclusivity** and no surface may describe it with §21.4's vocabulary.
+
+270. **Every constraint declares a mandatory name, and every violation sentence carries it
+     (§12.15, §26.9).** Names are what make nesting expressible at all, and they are mandatory rather
+     than optional-with-a-fallback because a family plus a member list identifies a rule only until
+     one command declares two rules over overlapping members -- which safegit already does. The
+     prefix is `constraint "<c>": ` with **double** quotes, because the catalog quotes by kind of
+     thing rather than by category of message: a declared identifier takes double quotes
+     (`command "<name>"`, `Flag "<name>"`, `no source info for flag "<name>"`) and a typed token takes
+     single ones. **Three shipped parse sentences change bytes** and are amended visibly in §12.15's
+     table: `flags --a, --b must be used together` (which additionally **loses the noun `flags`**,
+     since a member may now be an arg or a nested constraint and a noun right for one operand kind and
+     wrong for the others is worse than none), `flag '--x' requires '--y'` and the `Implies` conflict,
+     both prefix-only. Four registration templates are deleted with `CoRequired` and two more collapse
+     onto the name.
+
+271. **Members generalize to flags, positional args and other named constraints, resolved in one
+     namespace, nested as a cycle-checked DAG (§26.2, L2.2).** By-name reference throughout: a
+     constraint never owns a `Flag`. The one namespace makes a bare member name total, and two
+     refusals keep it so -- a constraint name colliding with a flag or arg name, and a member name
+     resolving to **both** a flag and an arg. The second is reachable because the implementations
+     check duplicate flag names and duplicate arg names **separately** today, so a command may declare
+     both; this round refuses to guess inside that state rather than fixing it, and **flags the
+     question** of whether flag/arg name collision should be refused outright as a real decision with
+     fleet blast radius that is deliberately not taken here. Only the two co-occurrence families may
+     be nested members: `Requires` and `Implies` are rules rather than co-occurrence predicates, and
+     "engaged" has no meaning for them.
+
+272. **The `when` vocabulary, its default, and the bool refusal (§26.3, L2.3).** `present` | `true` |
+     `non_empty`, closed, replacing the parser's type-dispatched rules. **Default `present`** -- the
+     task's own derivation -- with one refusal on top: **omitting `when` on a bool member is a
+     registration error**. Both halves are needed and each fixes what the other would break. A
+     uniform default keeps the vocabulary from becoming type dispatch wearing a keyword, which is the
+     thing L2.3 deletes; and without the bool refusal that same default means `--no-all` engages a
+     constraint while selecting nothing -- the mutex survey's shipped-dangerous class (A1) arriving in
+     a new family **by omission**. So A1 becomes a spelling the declaration states, exactly as L2.3
+     asked, rather than parser lore or a second type-dispatched default. `true` on a non-bool and
+     `non_empty` on a bool/int/float are registration errors. **There is no source filter in the
+     vocabulary**, which is this round's answer to L2.2's reconcile-the-two-presence-definitions note:
+     A5's CLI-only rule belongs to **member spelling** and lives in §24.6 with the reason that
+     justifies it; a constraint is not an election, so it takes §23.6's single predicate, and adding a
+     `cli` value here would restore the second definition under a new name.
+
+273. **Engaged, vacuous and satisfied, defined explicitly, with children evaluated before parents
+     (§26.4, L2.2).** A flag or arg member is engaged when its selector fires; a nested constraint is
+     engaged when at least one of its own members is -- **engagement propagates upward, satisfaction
+     does not**. all-or-none with nothing engaged is **vacuously true**, which is the "none" half of
+     its name; at-least-one with nothing engaged is violated, which is the whole of what it says. A
+     nested member therefore counts toward its parent **only when engaged**, which is precisely
+     safegit's hand guard expressed. Evaluation order is **children before parents, siblings in
+     declaration order**, and it is not a tie-break convention: an operator who typed one half of a
+     pair must be told the pair is incomplete, not that the whole selection is missing. Pipeline
+     position is the dependency families' existing one -- after `Implies` injection, before defaults.
+
+274. **The exempt-from-required rule inverts into a refusal (§26.5, amending §23.5).** L2.1 said the
+     rule becomes "any flag named by a constraint that can satisfy its requiredness, computed from the
+     constraint set". **That sentence has no referent after L1**: §23 deleted requiredness-derivation,
+     deleted the mutex-member exemption and deleted the idea that requiredness is computed at all. A
+     constraint never subtracts from a declaration; it adds a rule on top of one. What survives of
+     L2.1 is therefore a registration refusal computed from the same set: **no member of a
+     co-occurrence constraint may declare `required`** -- in at-least-one because the constraint would
+     be satisfied in every invocation and could never fire, in all-or-none because it silently means
+     "every other member is required too", which already has a spelling. The second half **amends
+     shipped contract text**: §23.5's `CoRequired`/`required` cell called that shape "legal, and
+     stated because it is a surprising shape to write by accident", and the surprise was the whole
+     objection. The full cell-by-cell table (both families × required/default/optional, plus the
+     variadic-arg and member-flag corners) is §26.5's, and its headline consequence is stated there:
+     membership neither makes a flag required nor exempts it from being required.
+
+275. **The three declaration surfaces, per B9 (§26.6).** Python: CapWords frozen dataclasses whose
+     first field is `name`, `Member(name, when="present")` as a **record** with a bare string refused
+     (§24.2's `choices=` rule applied for its reason), `when=` as a closed keyword vocabulary beside
+     `effect=` / `presence=` / `elect_by=`. Go: the `CoRequired`/`Requires`/`Implies` **structs are
+     deleted** and replaced by constructors over an unexported type -- §23.2's `presenceBits`
+     guarantee once more, so a struct literal cannot declare a half-formed constraint -- with **two
+     named members before the variadic tail**, which makes a one-member constraint a compile error.
+     TypeScript: one option object per factory (the shape `requires({...})` already has), members as
+     plain `{name, when?}` literals matching the value-flag record, `when` as a literal union, and
+     `members` typed `readonly [M, M, ...M[]]`, which makes the two-member floor a compile error there
+     too. The two compile-time floors are B9's one-language payoffs, and they make
+     `errConstraintMinMembers` **Go-excluded** and TypeScript-reachable only through a widened caller
+     -- the treatment §12.13 item 213 already established.
+
+276. **Help renders constraints, for the first time in any implementation (§26.10, L2.5).** Verified
+     across all three help formatters: the dependency list is not read at all, so `CoRequired`,
+     `Requires` and `Implies` render **nowhere** today. A declared rule that decides whether an
+     invocation is accepted and that `--help` cannot show is the same erasure the presence round ended
+     for requiredness. The `Constraints:` section renders **the declared name** in the position a flag
+     name occupies -- so the identifier a violation prints is discoverable in the help the operator
+     already read -- with its own alignment column (§24.10's rule for `Arguments:`, applied to a third
+     section), declaration order, one line per constraint including nested ones, members in CLI tokens
+     by §12.15's rendering rule, and **no presence part**, because every flag line already carries
+     exactly one (§23.8) and a constraint states a rule over members rather than a property of one.
+
+277. **The schema catalogue is rewritten under the v2 canon (§26.11, amending §25.7).** Four `type`
+     values (`at_least_one`, `all_or_none`, `requires`, `implies`), `co_required` deleted the way
+     `mutex` was, a mandatory `name` on every entry, and a `members` array of `{kind, name, when}`
+     records in declaration order. Two pins carry the round's reasoning: the **resolved `kind`** is
+     published so a consumer never has to search the flag and arg lists to learn what a name refers to
+     -- §25.2's reason for publishing a fragment rather than a type word -- and `when` is **always
+     emitted** on flag and arg members and **never** on constraint members, which is the presence
+     key's rule for the presence key's reason (a defaulted key that could be omitted is an erasure)
+     and is why it takes **no `defaults` block entry**. Nesting is encoded as constraint-kind members
+     rather than flattened into leaves: a partially encoded constraint is not a legal intermediate
+     state, which is §24.11's sentence for the selector encoding, unchanged.
+
+278. **The MCP projection and the declared lossiness policy (§26.12, L2.5).** Exactly two fidelity
+     verdicts, in a closed table: **exact** (a keyword expresses the rule completely) and **partial**
+     (what can be emitted is emitted, the remainder is stated in the description, and the rule is
+     enforced at call time with the parser's own sentence). There is no third verdict in which a rule
+     reaches the boundary unstated. at-least-one projects `anyOf` of `required` branches -- exactly,
+     including when a member is an all-or-none, which becomes one branch listing its leaves, so
+     **safegit's site projects with no loss at all**; all-or-none and `requires` project
+     `dependentRequired`; `implies` projects nothing and takes a description line, because it injects
+     a value rather than constraining input. **`anyOf` here does not contradict §24.11's refusal of
+     `oneOf`**: that would have restructured the tool schema into variants and was deferred behind a
+     measurement of client handling, while these keywords sit beside `properties` and `required` on
+     one flat object, add no structure, and degrade safely into the call-time refusal §24.11 already
+     pins. **Refusing MCP exposure**, the policy's other branch, is written as the standing rule for a
+     future kind that cannot be stated: since every non-hidden leaf command is a tool, refusal means
+     refusing the **declaration** at registration, never omitting a command from `tools/list` -- a
+     silent omission being the same defect one level up. No kind needs it today, so no guard is built
+     for one; the rule exists so a later round chooses between `partial` and refusal rather than
+     inventing a third answer.
+
+279. **`Requires` and `Implies` keep their semantics and join the shared surface (§26.13).** They take
+     the mandatory name, the container rename, the `constraint "<c>": ` prefix, a rendered help line,
+     a `name` schema key and a projection they never had. They keep the predicate, the flags-only
+     operand vocabulary (no args, no nesting, no `when`), their sentences byte-for-byte after the
+     prefix, and their injection order. The campaign's loose end says semantic changes to them are out
+     of scope; nothing here is one.
+
+280. **Recorded residual with evidence: the present-but-false hole reaches `Requires` and `Implies`
+     (§26.13).** Both use *provided* as their predicate, so `--no-x` satisfies a `Requires` naming `x`
+     and fires an `Implies` triggering on it. That is the class A1 closed for elections -- the mutex
+     survey found it in 14 of 18 groups and two shipped-dangerous sites -- reaching two families this
+     campaign declared out of scope. It is **recorded rather than fixed**, because the remedy is a
+     `when`-style declaration on their operands, which is exactly the semantic change the loose end
+     defers. **Flagged as a question for the user rather than a session's own call**: whether those two
+     families take election selectors is the natural next design round, and doing it silently inside a
+     rendering round is the drift the out-of-scope note exists to prevent.
+
+281. **The two real sites, with their declarations pinned and one behaviour change named (§26.7).**
+     safegit's `author rewrite` becomes two `AllOrNone` pairs plus one `AtLeastOne` over those two
+     **by name** -- the shape that forced operand generalization -- and its four `Default(nil)` flags
+     become `Optional()`, which §23.1 requires independently. saferm's `purge` becomes one
+     `AtLeastOne` over a variadic **arg** and three flags, with `targets` declaring `non_empty` (the
+     test its own handler performs; equal to `present` on a variadic by §26.3), `all` declaring `true`
+     (A1 as a declaration), and its two `Default("")` sentinels becoming `Optional()` per L1.4's
+     triage. Two things are flagged rather than assumed: `older-than` / `larger-than` declare
+     `present` and **not** `non_empty`, because A2 puts empty-string legality on the flag's own
+     `validate` rather than on the layer above it -- so the site either gains that callback or keeps
+     failing later, and that is its migration's decision; and **the exit code changes at both sites**,
+     from each tool's usage code (safegit 2, saferm's `ExitUsage`) to the framework's parse-error 1,
+     which is a user-visible change belonging in each tool's changelog rather than being discovered by
+     something that reads exit codes.
+
+282. **L2.6's rejections re-recorded, and one made structural (§26.14).** **No at-most-one, ever, at
+     any cardinality** (B2, `(D)`): every real site is an exactly-one with an unnamed member, the
+     remedy is to name it, and `absence_means=` is rejected with it for legitimizing absence instead
+     of containing it. Item 269's refusal of a numeric interior is what makes this structural rather
+     than a convention -- there is no constructor, parameter or representation through which an upper
+     bound of one could be expressed. **No constraint algebra or satisfiability analysis** (rung 10):
+     three byte-identical solvers buy nothing the registration guards and two predicates do not
+     already give, **revisit at roughly 50 declared constraints**, which is the campaign's own trigger
+     and is recorded so a later round has a threshold rather than an argument. **Exactly-one does not
+     return** (S16). The section also states what the round does not touch -- in-scope constraints,
+     those two families' semantics, L3's update construct, multi-elect -- and that the implementation
+     joins the campaign's single breaking release rather than creating one of its own.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -8977,6 +9333,24 @@ the third is added below)*:
 > exactly what they mean at root scope, and `env` / `config` mean what §24.6 pins for a conditional
 > binding.
 
+> **Amendment (2026-08-15, co-occurrence round, §18.30 item 274): the `CoRequired` row's `required`
+> cell becomes a REGISTRATION ERROR, and the row is renamed with its family.** `CoRequired` is
+> deleted and all-or-none takes its place (§26.1), and the round's own reconciliation of membership
+> with the presence declaration (§26.5) refuses a member that declares requiredness in **both**
+> co-occurrence families:
+>
+> | Struck cell | What replaces it |
+> |---|---|
+> | ~~`CoRequired` / `required` -> legal, and stated because it is a surprising shape to write by accident~~ | **registration error** (`errConstraintMemberRequired`, §12.15). The shape it called surprising is the whole objection: a member the invocation must always supply turns all-or-none into "every other member is required too", which is a declaration the framework already has a spelling for -- declare them required. Two spellings for one fact is what §12.12's redirects exist to prevent |
+> | `CoRequired` / `default` -- unchanged in substance | a defaulted member is **not** provided by its default, so it never engages the constraint on its own (§26.4) |
+> | `CoRequired` / `optional` -- unchanged | the ordinary case: engaged iff provided, filtered by the member's declared `when` (§26.3) |
+>
+> The **new `at-least-one` row** takes the same three cells for the same reasons, and its `required`
+> cell has an additional consequence worth naming: a required member makes an at-least-one satisfied
+> in every invocation, so the constraint could never fire at all. The `Requires` row is untouched in
+> substance -- §26.13 leaves that family's semantics alone -- and gains only the mandatory name its
+> declaration now carries.
+
 ### 23.6 `ctx.provided`
 
 A dedicated boolean accessor, in all three languages, for the question the fleet was asking with
@@ -9556,6 +9930,16 @@ choice's own fields is meaningful and is well-defined (the scope is elected or t
 vacuous). It is deliberately not built here, because no fleet site needs it yet; when one appears,
 it is added as a nested declaration inside the choice, never as a root-scope constraint that reaches
 into a scope by name.
+
+> **Amendment (2026-08-15, co-occurrence round, §18.30 items 270-271): the rule holds verbatim over
+> a wider operand vocabulary, and the refusal names the constraint.** §26.2 generalizes a member to
+> a flag, a **positional arg** or another **named constraint**, and every one of them is refused a
+> scoped operand by this same rule: an arg cannot be scoped at all (§24.7), and a nested constraint
+> reaches scopes only through its own members, each of which is checked here. The message is
+> §12.13's, amended in place to name the constraint rather than the family. **The extension's shape
+> is narrowed by what §26 built**: an in-scope constraint, when a site appears, is a nested
+> declaration inside the choice whose members resolve **within that scope**, and it is still never a
+> root-scope constraint reaching in by name.
 
 ### 24.9 Provided-ness inside a record
 
@@ -10187,6 +10571,12 @@ thing to reconcile, since inventing a second spelling for repetition would be a 
 > present-but-false hole, the hand-written "nothing was chosen" guards, the placeholder bools that
 > existed only because a group could not reference a declared flag, and a type surface that said
 > "four independent booleans" where the intent said "one of four".
+>
+> **The round this box anticipated is authored: it is §26** *(added 2026-08-15, co-occurrence round,
+> §18.30)*. Everything the box promised it would keep is there and nothing it said had left has come
+> back: two families, by-name members generalized to args and to other named constraints, the
+> declared election vocabulary, first-class rendering and encoding on every surface, no at-most-one
+> at any cardinality, and no constructor or parameter through which exactly-one could return.
 
 ### 24.15 What this round does not touch
 
@@ -10518,6 +10908,32 @@ rather than there, because the `defaults` block is defined as the map of what an
 and a subtype catalogue is not an omission baseline. `conformance/schema.json`'s `$defs` carries the
 same three and drops `$defs/mutex_group`.
 
+> **Amendment (2026-08-15, co-occurrence round, §18.30 item 277): the catalogue is rewritten, still
+> closed, and every entry gains a mandatory `name`.** `co_required` goes the way `mutex` went -- the
+> construct is deleted (§26.1) -- and the two co-occurrence families take its place with a member
+> array rather than a flat flag list:
+>
+> | `type` | Keys, in order |
+> |---|---|
+> | `at_least_one` | `type`, `name`, `members` |
+> | `all_or_none` | `type`, `name`, `members` |
+> | `requires` | `type`, `name`, `flag`, `depends_on` |
+> | `implies` | `type`, `name`, `flag`, `implies`, `value` |
+>
+> **The member object**, whose keys are emitted in this order: `kind`, `name`, `when`. `kind` is one
+> of `flag`, `arg`, `constraint` -- the **resolved** kind, so a consumer never has to search the
+> flag and arg lists to learn what a name refers to, which is the same reason §25.2 publishes a
+> fragment rather than a type word. `when` is one of `present`, `true`, `non_empty` and is
+> **always emitted** on a `flag` or `arg` member and **never** on a `constraint` member (a nested
+> member has no election of its own, §26.3). Always-emitted is the presence key's rule for the
+> presence key's reason: a defaulted `when` that could be omitted is an erasure, and this format
+> exists to end erasures. Because it is never omitted it takes **no `defaults` block entry**; the
+> block is the map of what an omitted key means, and this key is never omitted.
+>
+> `members` is an **array in declaration order**, which is §25.9's array rule unchanged.
+> `conformance/schema.json`'s `$defs` gains `$defs/at_least_one`, `$defs/all_or_none` and
+> `$defs/constraint_member`, and drops `$defs/co_required`.
+
 ### 25.8 The byte canon
 
 The committed `.strictcli/schema.json` must be **dumper-independent**: a repository whose file is
@@ -10824,3 +11240,576 @@ Stated so the boundary is a decision rather than an omission:
   republishes them unchanged.
 - **No config-field or check declaration changes.** Config fields keep `required` and their scalar-
   only surface; check entries keep their six mandatory fields. Only their serialization moves.
+
+---
+
+## 26. The constraint system
+
+Added 2026-08-15 (co-occurrence round, §18.30). This is the fourth phase of the declaration-regime
+campaign and the **normative record of what a constraint is** after the scoped-selector construct
+took exactly-one out of it: what the two surviving families mean, what may be a member of one, how a
+member is elected, what each surface publishes, and what a violation says. §24.14 promised this
+round its contents; this section is that promise discharged.
+
+The round implements campaign phase **L2** as restructured by ruling **S16**: L2.1's one reference
+model, L2.2's operand generalization, L2.3's declared election selectors, L2.5's rendering and
+encoding, and L2.6's rejections. L2.4 is not implemented and never will be -- §24.2 and §24.14
+superseded it.
+
+### 26.1 The two families, and what left
+
+**Exactly-one is not here and cannot return.** Every exactly-one shape is a selector (§24), and this
+system contains no `ExactlyOne` constructor, no cardinality parameter, no `min`/`max` pair and no
+internal `Group(min, max)` representation through which one could be reintroduced. The campaign's
+L2.1 named `Group(min,max)` as the internal representation with named constructors on top; **that
+part of L2.1 is superseded** by S16, because with exactly-one gone the two survivors are not two
+points on a cardinality axis -- they are two different predicates -- and a numeric interior is
+exactly the door a later `Group(0,1)` would walk through. The families are implemented as themselves.
+
+| Family | Meaning |
+|---|---|
+| **at-least-one** | at least one member is **engaged**. Members **may co-occur** -- engaging two, or all, satisfies it exactly as engaging one does |
+| **all-or-none** | either **every** member is engaged or **none** is |
+
+**at-least-one is not exclusivity, and must never be documented as one.** It has no upper bound, it
+never refuses a second member, and no sentence, help line, schema key or description block in any
+implementation may describe it with the word "exclusive" or with §21.4's `mutually exclusive`
+vocabulary. The one thing it shares with member-spelled election is §12.15's decline clause, which is
+a fact about a negated bool rather than about either construct.
+
+**all-or-none absorbs `CoRequired` by rename, and `CoRequired` is deleted.** There is no alias, no
+shim and no deprecation period (0.x policy, §16). The rename is not cosmetic bookkeeping: the
+declaration changes shape in the same pass -- a mandatory name, a member record, a widened operand
+vocabulary -- so keeping the old noun would leave one word describing two different declarations, and
+the fleet's call sites must be touched either way because the name is now mandatory. `CoRequired`
+beside `AtLeastOne` would also pair a relation word with a cardinality word for one system;
+`AllOrNone` beside `AtLeastOne` says what each predicate is.
+
+**`Requires` and `Implies` stay, semantically untouched** (§26.13). What they join is the naming, the
+container rename, the error prefix, the help block and the schema encoding.
+
+**One container, named for what it holds.** `dependencies=` / `WithDependencies(...)` /
+`dependencies:` become `constraints=` / `WithConstraints(...)` / `constraints:`. The schema key has
+been `constraints` since v1 and §25.7 calls its catalogue the constraint catalogue, so the
+declaration surface was the only place still using the other noun.
+
+### 26.2 Members: the operand model
+
+**Every constraint references its members by name.** A group never owns a `Flag` object; flags and
+args are declared once, in the normal places, and a constraint names them. Registration resolves
+every name and refuses an unknown one -- the `CoRequired` precedent, widened.
+
+**A member is one of three things** (L2.2):
+
+| Member kind | What it names |
+|---|---|
+| `flag` | a command flag, at **root scope** (§24.8: a scoped flag is a registration error) |
+| `arg` | a positional arg of the same command |
+| `constraint` | another **named** at-least-one or all-or-none of the same command |
+
+**Names resolve in one namespace.** A member's name is looked up among the command's flags, its args
+and its constraints. Two refusals keep that lookup total: a constraint name that collides with a flag
+or arg name is a registration error (`errConstraintNameCollides`), and a member name that resolves to
+**both** a flag and an arg is a registration error (`errConstraintMemberAmbiguous`). The second is
+reachable because the implementations check duplicate flag names and duplicate arg names separately
+today, so a command may declare a flag and an arg of one name; that state is a latent kwargs
+collision independent of this round, and this round refuses to *guess* inside it rather than fixing
+it. **Flagged for the implementor**: whether a flag and an arg of the same name should be refused
+outright is a real question with fleet blast radius, and it is deliberately not decided here.
+
+**Nesting is a DAG, cycle-checked at registration** (`errConstraintCycle`). Depth is unlimited, as
+§24.7's nesting is. Only the two co-occurrence families may be nested members: naming a `Requires`
+or an `Implies` is a registration error (`errConstraintNestedFamily`), because those two are rules
+rather than co-occurrence predicates and "engaged" has no meaning for them.
+
+**A member declares no presence and no help of its own.** It is a reference; the declaration it
+refers to carries every fact about the value.
+
+**A selector may be a member.** A token-spelled choice flag (§24.4) is an ordinary root-scope flag
+here, elected or not, and `present` is the only election selector legal on it (its value is a record,
+so `true` and `non_empty` have nothing to test). It engages when the **invocation** elected it and
+not when a default election did, which is §18.28 item 264's answer read through §26.4's predicate.
+A **member flag** of a member-spelled selector is refused a different way and needs no new rule: a
+member flag must declare requiredness (§12.13's `errMemberFlagPresence`), and §26.5 refuses a
+required member -- so the state is already closed by two existing rules meeting.
+
+### 26.3 Election selectors: `when`
+
+**Each flag or arg member carries `when`, from a closed three-value vocabulary.** This replaces the
+type-dispatched rules the parser used to apply on its own (L2.3): what counts as "chosen" is a
+declaration, never parser lore.
+
+| `when` | Engaged when | Legal on |
+|---|---|---|
+| `present` | the value is **provided** (§23.6: `cli`, `env`, `config`, `implied`; never `default` or `infra`) | every type |
+| `true` | provided **and** the resolved value is `true` | `bool` only |
+| `non_empty` | provided **and** the resolved value is a non-empty string, list or map | `str`, repeatable/list and dict flags, and variadic args |
+
+**The default is `present`**, and omitting `when` on a **bool** member is a registration error
+(`errConstraintMemberBoolWhen`). Both halves are deliberate. A uniform default keeps the vocabulary
+from becoming type dispatch wearing a keyword -- which is the thing L2.3 deletes -- and the bool
+refusal closes the hole that default would otherwise re-open: `present` on a bool means `--no-all`
+engages a constraint while selecting nothing, which is the mutex survey's shipped-dangerous class
+(A1) arriving in a new family by omission. The framework refuses to guess exactly where guessing was
+already proven wrong, and A1 becomes a spelling the declaration states rather than a rule the parser
+knows.
+
+**`true` on a non-bool and `non_empty` on a bool, int or float are registration errors**
+(`errConstraintWhenTrueNotBool`, `errConstraintWhenNonEmptyNotSized`). A selector that cannot be
+evaluated against the declared type is a mis-declaration, not a no-op.
+
+**There is no source filter in the vocabulary**, and this is the round's answer to L2.2's
+reconcile-the-two-presence-definitions note. The two definitions were `is_present_for_mutex`
+(command-line only) and `is_present_for_deps` (provided, from any source). The first belongs to a
+construct that no longer exists: A5's CLI-only rule survives as **member spelling's** rule and lives
+in §24.6, where the reason for it -- an election is a token the operator types -- is a property of
+that construct. A constraint is not an election, so it takes the ordinary predicate, and there is
+exactly one definition of "was this supplied" in the framework (§23.6). Adding a `cli` value to this
+vocabulary would restore the second definition under a new name, so it is refused rather than
+deferred.
+
+**An arg's provided-ness**, which the flag-side store does not answer: an arg is provided when the
+invocation supplied a positional token for it, or a key for it at a machine door, and never when the
+declaration's default or an optional absence filled it. For a **variadic** arg, provided means at
+least one element -- which is why `present` and `non_empty` return the same answer on a variadic arg,
+either spelling being legal, and why an explicitly supplied empty array is not a provision (the
+implementations already read an empty array as "no tokens at all" when checking a required variadic).
+**Flagged for the implementor**: the flag-side sourced store holds flags only today, so the arg-side
+predicate is new plumbing rather than a lookup, and it must give the same answer at the argv door and
+at both machine doors (§18.29 items 267-268).
+
+### 26.4 Engaged, vacuous, satisfied
+
+Three words, defined once, because L2.2 asked for exactly this and every surface below depends on it.
+
+- a **flag or arg member is engaged** iff its `when` selector fires (§26.3);
+- a **nested constraint member is engaged** iff at least one of *its* members is engaged. Engagement
+  propagates upward; satisfaction does not;
+- **at-least-one is satisfied** iff at least one member is engaged;
+- **all-or-none is satisfied** iff every member is engaged or none is. With nothing engaged it is
+  **vacuously true** -- that is the "none" half of its own name, not a loophole;
+- a constraint is **vacuous** in an invocation when no member of it is engaged. A vacuous
+  all-or-none is satisfied; a vacuous at-least-one is violated, which is the whole of what it says.
+
+**A nested member counts toward its parent only when engaged.** A vacuous all-or-none nested inside
+an at-least-one contributes nothing, so two vacuous pairs leave the parent unsatisfied -- which is
+precisely safegit's shipped hand guard, expressed (§26.7).
+
+**Evaluation order: children before parents, siblings in declaration order.** A violated nested
+constraint reports its own sentence and its parent is never evaluated. This is not a tie-break
+convention; it is the only order that reports the fixable fact: an operator who typed one half of a
+pair is told the pair is incomplete, not that the whole selection is missing.
+
+**Where it runs in the parse pipeline**: exactly where the dependency families run today -- after
+`Implies` injection (so an implied value can engage a member) and **before** defaults are applied (so
+a declared default cannot). §23.5's `Implies` rows are unchanged and now cover engagement too.
+
+### 26.5 Presence: what a member may declare
+
+The campaign's L2.1 said the exempt-from-required rule becomes "any flag named by a constraint that
+can satisfy its requiredness", computed from the constraint set. **That rule has no referent after
+L1, and it inverts.** Under the old regime the framework *derived* requiredness and *exempted* mutex
+members from the derivation; §23 deleted the derivation, the exemption and the whole idea that
+requiredness is computed. A constraint therefore never subtracts from a declaration -- it adds a rule
+on top of one -- and what remains of L2.1's sentence is a registration refusal computed from the
+constraint set: **no member of a co-occurrence constraint may declare `required`**
+(`errConstraintMemberRequired`).
+
+Cell by cell, for a flag or arg member, against §23's three declarations:
+
+| Member of | `required` | a value `default` | `optional` |
+|---|---|---|---|
+| **at-least-one** | **registration error**. The invocation always supplies it, so the constraint is satisfied in every invocation and can never fire | **legal**, and the fleet's ordinary bool shape: a default is not provided (§23.6), so it never engages the constraint by itself -- `default=false` with `when="true"` engages exactly when someone types `--all` | **legal**, the ordinary case: engaged iff provided, filtered by `when` |
+| **all-or-none** | **registration error**, amending §23.5's shipped "legal, and stated because it is a surprising shape" cell. It turns the constraint into "every other member is required too", which already has a spelling -- declare them required | **legal**; a defaulted member never engages on its own, so a group whose members are all defaulted stays vacuous until something supplies one | **legal**, the ordinary case |
+
+Consequences that follow rather than being declared separately:
+
+- **membership never makes a flag required, and never exempts it from being required.** An
+  at-least-one over three optional flags leaves all three optional; what is required is that one of
+  them engages, which is the constraint's own sentence and never a per-flag presence part (§26.10
+  renders it as such);
+- **a variadic arg member** declares `optional` or `required` and never a default (§23.3), so the
+  `default` column has no arg-side cell to fill for it;
+- **a member flag of a member-spelled selector** cannot be a constraint member at all: it must
+  declare requiredness (§12.13) and this section refuses a required member. Two rules meeting, no
+  third rule needed;
+- **a nested constraint member has no presence**, so no cell applies to it.
+
+### 26.6 The authored spellings, per language
+
+Per B9, parity binds semantics and the pinned sentences of §12.15, never declaration surfaces. Each
+surface below is the shape its language's existing strictcli idiom already points at.
+
+**Python -- dataclasses, keyword vocabularies, records over bare values.**
+
+```python
+@app.command("rewrite", help="rewrite author identity across history", effect="mutating",
+             constraints=[
+                 AllOrNone("author-name", [Member("old-name"), Member("new-name")]),
+                 AllOrNone("author-email", [Member("old-email"), Member("new-email")]),
+                 AtLeastOne("author-change", [Member("author-name"), Member("author-email")]),
+             ])
+```
+
+- `AllOrNone`, `AtLeastOne`, `Requires` and `Implies` are frozen dataclasses whose **first field is
+  `name`**, joining the CapWords family `Requires` and `Implies` already established;
+- `Member(name, when="present")` is a record, and a **bare string is refused**
+  (`errConstraintMemberNotRecord`) -- §24.2's rule for `choices=` entries, applied for its reason: a
+  spelling that lets one member carry an election and another not carry the *word* for it is two
+  spellings for one fact;
+- `when=` is a keyword taking a closed string vocabulary, which is how Python spells `effect=`,
+  `presence=` and `elect_by=`.
+
+**Go -- constructors returning an interface, and a compile-time two-member floor.**
+
+```go
+sc.WithConstraints(
+    sc.AllOrNone("author-name", sc.Member("old-name"), sc.Member("new-name")),
+    sc.AtLeastOne("purge-selection",
+        sc.Member("targets", sc.WhenNonEmpty()),
+        sc.Member("older-than"),
+        sc.Member("all", sc.WhenTrue()),
+    ),
+)
+```
+
+```go
+type Constraint interface{ isConstraint() }
+
+func AllOrNone(name string, a, b ConstraintMember, rest ...ConstraintMember) Constraint
+func AtLeastOne(name string, a, b ConstraintMember, rest ...ConstraintMember) Constraint
+func Requires(name, flag, dependsOn string) Constraint
+func Implies(name, flag, implies string, value bool) Constraint
+func Member(name string, opts ...MemberOption) ConstraintMember
+func WhenPresent() MemberOption
+func WhenTrue() MemberOption
+func WhenNonEmpty() MemberOption
+func WithConstraints(cs ...Constraint) CmdOption
+```
+
+- the `CoRequired` / `Requires` / `Implies` **structs are deleted** and replaced by constructors over
+  an unexported type, which is `Choice`'s and `ChoiceFlag`'s idiom and §23.2's `presenceBits`
+  guarantee applied once more: a struct literal cannot declare a constraint, so it cannot declare a
+  half-formed one;
+- **two named members before the variadic tail** makes a one-member constraint a **compile** error.
+  A payoff reaching one language is a pro (B9), and this one costs nothing: a caller with a slice
+  writes `AllOrNone(n, ms[0], ms[1], ms[2:]...)`, which fails at the caller rather than inside the
+  framework;
+- `Member(name, opts...)` takes functional options because Go has no keyword arguments, matching
+  every other option surface in the package.
+
+**TypeScript -- option objects, literal unions, and a typed member tuple.**
+
+```ts
+constraints: [
+    allOrNone({ name: "author-name", members: [{ name: "old-name" }, { name: "new-name" }] }),
+    atLeastOne({ name: "purge-selection", members: [
+        { name: "targets", when: "non_empty" },
+        { name: "older-than" },
+        { name: "all", when: "true" },
+    ]}),
+]
+```
+
+- all four factories take **one option object**, which is the shape `requires({...})` and
+  `implies({...})` already have; the positional-array `coRequired([...])` spelling goes with the
+  construct it belonged to;
+- a member is a **plain object literal** `{ name, when? }`, matching the value-flag choice record
+  `{ value, help }` (§24.12);
+- `when` is the literal union `"present" | "true" | "non_empty"`, so a typo is a compile error;
+- `members` is typed `readonly [ConstraintMember, ConstraintMember, ...ConstraintMember[]]`, so the
+  two-member floor is a **compile** error here too, and `errConstraintMinMembers` is reachable only
+  through a widened or JSON-shaped caller -- which is exactly the covering input its conformance case
+  asserts, the treatment §12.13 item 213 already established.
+
+### 26.7 The two real sites
+
+The campaign named two hand-rolled constraints as the proof that operands must generalize. Both are
+Go sites, both read on disk today, and both are expressible with nothing but §26.2's vocabulary.
+
+**safegit `author rewrite` -- at-least-one over two all-or-none pairs.** Today: four string flags
+declared `Default(nil)` (which §23.1 now refuses outright), two `CoRequired` pairs, and a hand guard
+in the handler printing `error: at least one of --old-name or --old-email is required` and returning
+exit code 2. The declaration:
+
+```go
+sc.WithFlags(
+    sc.StringFlag("old-name", "current author or committer display name ...", sc.Optional()),
+    sc.StringFlag("new-name", "new display name ...", sc.Optional()),
+    sc.StringFlag("old-email", "current author or committer email address ...", sc.Optional()),
+    sc.StringFlag("new-email", "new email address ...", sc.Optional()),
+),
+sc.WithConstraints(
+    sc.AllOrNone("author-name", sc.Member("old-name"), sc.Member("new-name")),
+    sc.AllOrNone("author-email", sc.Member("old-email"), sc.Member("new-email")),
+    sc.AtLeastOne("author-change", sc.Member("author-name"), sc.Member("author-email")),
+),
+```
+
+What the operator reads, with the hand guard deleted:
+
+```
+constraint "author-change": at least one of (--old-name with --new-name), (--old-email with --new-email) is required
+constraint "author-name": --old-name, --new-name must be used together
+```
+
+The second fires instead of the first whenever one half of a pair was typed, by §26.4's
+children-before-parents order.
+
+**saferm `purge` -- one at-least-one over a variadic arg and three flags.** Today: a variadic
+`ArgRequired(false)` arg, two `Default("")` sentinel strings, one `Default(false)` bool, and a hand
+guard printing `error: specify record UUIDs or numeric IDs, --older-than, --larger-than, or --all`
+and returning its usage exit code. After L1.4's sentinel triage (the handler tests `!= ""`, so both
+were sentinels):
+
+```go
+sc.WithFlags(
+    sc.StringFlag("older-than", "Purge items older than duration ...", sc.Optional()),
+    sc.StringFlag("larger-than", "Only purge items larger than this size ...", sc.Optional()),
+    sc.BoolFlag("all", "Select all archived items for permanent destruction", sc.Default(false)),
+),
+sc.WithArgs(
+    sc.NewArg("targets", "Record UUIDs or numeric database IDs ...", sc.Variadic(), sc.ArgOptional()),
+),
+sc.WithConstraints(
+    sc.AtLeastOne("purge-selection",
+        sc.Member("targets", sc.WhenNonEmpty()),
+        sc.Member("older-than"),
+        sc.Member("larger-than"),
+        sc.Member("all", sc.WhenTrue()),
+    ),
+),
+```
+
+```
+constraint "purge-selection": at least one of targets, --older-than, --larger-than, --all is required
+```
+
+Four pins the site forces, each of them a decision rather than a transcription:
+
+- **`targets` declares `when: non_empty`** because that is the test the site's own handler performs
+  (`len(targetsRaw) > 0`). On a variadic arg it is equal to `present` by §26.3's rule, so the pin
+  costs nothing and says what the site means;
+- **`older-than` and `larger-than` declare `present`, not `non_empty`.** A2 places empty-string
+  legality on the flag's own value validation, so `--older-than ""` engages the constraint and is
+  refused, if it should be refused, by a `validate` callback on that flag. **Flagged**: the site
+  gains that callback in its migration, or it accepts `""` and fails in `parseDuration` as it does
+  today;
+- **`all` declares `when: true`**, which is A1 as a declaration. `--no-all` engages nothing and the
+  operator is told so by §12.15's decline clause;
+- **the exit code changes at both sites.** A hand guard returns the tool's own usage code (safegit 2,
+  saferm's `ExitUsage`); a framework parse error exits **1**. That is a user-visible behaviour change
+  in the migration pass and belongs in each tool's changelog entry rather than being discovered by a
+  script that reads exit codes.
+
+### 26.8 Registration and the resolution order
+
+Registration resolves and validates a command's constraint set in this order, which is pinned because
+three implementations must report the same first error for a declaration with two faults:
+
+1. **name legality** -- charset, duplicates, collision with a flag or arg name;
+2. **member arity** -- at least two members;
+3. **member resolution** -- each name resolves to exactly one flag, arg or constraint; unknown and
+   ambiguous names refuse here;
+4. **scope** -- a resolved flag declared inside a choice scope refuses (§24.8, §12.13);
+5. **nesting legality** -- a nested member is an at-least-one or an all-or-none, carries no `when`,
+   and the reference graph is acyclic;
+6. **election legality** -- `when` against the member's declared type, including the bool refusal;
+7. **presence legality** -- §26.5's required-member refusal.
+
+The order runs from the constraint's own identity outward to the declarations it names, so a message
+never blames a member for a fault in the constraint that names it.
+
+### 26.9 Violations at parse time
+
+The two violation sentences, their clause and their rendering are §12.15's. Two properties are pinned
+here because they are about the system rather than about a message:
+
+- **a violation names the constraint and nothing else about the declaration.** The name is the only
+  identifier the reader can carry back to the source, and it is why names are mandatory rather than
+  optional-with-a-fallback: a family plus a member list identifies a rule only until a command has
+  two rules over overlapping members, which safegit already does;
+- **constraint violations are evaluated in declaration order after election and value resolution**,
+  and they precede nothing and follow nothing new: the pipeline position is the dependency families'
+  existing one (§26.4).
+
+### 26.10 Help rendering
+
+`CoRequired`, `Requires` and `Implies` render **nowhere** in help today -- verified in all three
+implementations' help formatters, none of which reads the dependency list at all. A declared rule
+that changes whether an invocation is accepted, and that the operator cannot see in `--help`, is the
+same erasure the presence round ended for requiredness. This round gives the whole system its first
+rendering.
+
+**A `Constraints:` section**, in §24.10's style, after the last of the `Arguments:` / `Flags:` blocks:
+
+```
+Flags:
+  --old-name <str>            current author or committer display name [optional]
+  --new-name <str>            new display name [optional]
+  --old-email <str>           current author or committer email address [optional]
+  --new-email <str>           new email address [optional]
+
+Constraints:
+  author-name                 all or none of --old-name, --new-name
+  author-email                all or none of --old-email, --new-email
+  author-change               at least one of (--old-name with --new-name), (--old-email with --new-email)
+```
+
+- **the declared name renders**, in the position a flag name occupies, so the identifier a violation
+  prints is discoverable in the help the operator already read;
+- **one alignment column, computed across the constraint block alone.** It never shares the flag
+  block's column, which is §24.10's rule for the `Arguments:` section applied to a third section;
+- **declaration order**, two-space indent, one line per constraint including nested ones -- a nested
+  constraint has its own line *and* appears inside its parent's line, because it is both a rule of
+  its own and an operand;
+- **members render by §12.15's rule**, in CLI tokens (`--old-name`, bare `targets`), because help is
+  the command-line surface;
+- the per-family sentences: `at least one of <members>`, `all or none of <members>`,
+  `--<flag> requires --<depends_on>`, and `--<flag> implies --<implies>` -- the last rendering
+  `--no-<implies>` when the declared value is false, which is the negation spelling its own violation
+  sentence already uses. No `=true` spelling is invented;
+- **a member's presence part is not repeated here.** Every flag line already carries exactly one
+  presence part (§23.8), and a constraint states a rule over members rather than a property of one.
+
+### 26.11 The schema encoding
+
+§25.7's catalogue is rewritten by this round's amendment there: four `type` values, a mandatory
+`name` on each, a `members` array of `{kind, name, when}` records, `when` always emitted on flag and
+arg members and never on constraint members, and no `defaults` block entry because nothing is ever
+omitted. The command entry's key order is untouched -- `constraints` keeps the position §25.9 gave it
+-- and array order is declaration order, as it is everywhere else in v2.
+
+**The encoding is complete rather than indicative.** A consumer must be able to reconstruct the rule
+without re-reading the declaration: the resolved `kind` is published so no name lookup is needed, the
+nesting is published as constraint-kind members rather than flattened into leaves, and a partially
+encoded constraint is not a legal intermediate state -- the same sentence §24.11 pins for the selector
+encoding, for the same reason.
+
+### 26.12 The MCP projection, and the declared lossiness policy
+
+**The policy first, since it is what L2.5 asked for**: a constraint is never silently dropped from a
+tool schema. Every constraint kind has a row in the table below declaring its **fidelity**, and there
+are exactly two verdicts:
+
+- **exact** -- a JSON Schema keyword expresses the rule completely; it is emitted, and the description
+  block still names the rule in words;
+- **partial** -- the keyword expresses less than the rule, or there is no keyword at all; what can be
+  emitted is emitted, the **remainder is stated in the tool description** in the pinned form below,
+  and the rule is enforced at call time with the CLI parser's own sentence.
+
+There is no third verdict in which a rule reaches the boundary unstated. **Refusing MCP exposure is
+the standing rule for a future kind that cannot even be stated**: because strictcli publishes every
+non-hidden leaf command as a tool, refusing exposure means refusing the *declaration* at registration,
+never omitting the command from `tools/list` -- a silent omission is the same defect one level up.
+No kind needs that today, so no guard is built for it; the rule is written so a later round decides
+between `partial` and refusal rather than inventing a third answer.
+
+| Kind and shape | Emitted | Fidelity |
+|---|---|---|
+| at-least-one, every member a flag or arg with `when: present` | `anyOf: [{required: [<member>]}, ...]`, one branch per member | **exact** |
+| at-least-one with an all-or-none member | that member becomes **one branch** listing all of its leaves in `required` | **exact** |
+| at-least-one with a nested at-least-one member | the nested branches are **inlined** into the parent's `anyOf` | **exact** |
+| at-least-one, any member declaring `when: "true"` or `"non_empty"` | the same `anyOf` | **partial** -- `required` says a key is present, not that it is true or non-empty |
+| all-or-none, every member a flag or arg with `when: present` | `dependentRequired`, mapping each member to all the others | **exact** |
+| all-or-none with a nested constraint member, or any non-`present` selector | nothing | **partial** -- the keyword cannot carry a group as an operand |
+| requires | `dependentRequired: {<flag>: [<depends_on>]}` | **exact** |
+| implies | nothing | **partial** -- it injects a value rather than constraining the input, so there is nothing for a schema to say |
+
+**Why `anyOf` here when §24.11 refused `oneOf` for selectors.** The two are not the same bet.
+§24.11's `oneOf` would have **restructured** the tool schema into variants, changing the shape every
+client must understand, and it was deferred behind a measurement of client handling. These keywords
+sit **beside** `properties` and `required` on one flat object schema, add no structure, and degrade
+safely: a client that ignores an unknown keyword sends a call that the framework refuses at call time
+with the parser's own sentence -- which is exactly the enforcement §24.11 already pins for scopes.
+The runtime refusal is the authority; the schema is advisory. `oneOf` for selectors remains deferred
+and this round does not touch it.
+
+**The description block**, in the shape §24.11's scope block already established, appended after it
+when both exist and separated from it by a blank line:
+
+```
+Constraints (enforced at call time):
+  at least one of: targets, older_than, larger_than, all -- not expressed in the schema: the "true" and "non_empty" selectors
+  all or none of: old_name, new_name
+```
+
+- one line per constraint, **declaration order**, two-space indent;
+- members render by §12.15's rule but in **property names** (underscored), never CLI tokens -- the
+  scope block already made that choice for the same reason: the caller writes keys, not argv;
+- a **partial** projection appends ` -- not expressed in the schema: <reason>`, where `<reason>` is
+  from a closed set: `the "true" and "non_empty" selectors`, `the nested grouping`, `the injection`;
+- an **exact** projection appends no clause at all. The block names every constraint either way, so
+  the presence of a clause tells a reader exactly where the schema is weaker than the rule.
+
+**Enforcement at call time is unchanged and total.** Every constraint is evaluated at the machine
+doors exactly as at the argv door, and a violation returns the §12.15 sentence through the framework's
+existing tool-result error channel (`isError` content, never `-32602`) -- §24.11's correction, whose
+reasoning covers this case without amendment: the request was well-formed at the protocol level and
+what failed was the command's own declaration rule.
+
+### 26.13 `Requires` and `Implies`: what changes, and what does not
+
+The campaign records semantic changes to these two as **out of scope** (L2's loose end), and this
+round changes none. What they take is the system's shared surface:
+
+| Changes | Does not change |
+|---|---|
+| a mandatory `name`, first field / first parameter | the predicate on both sides: §23.6's provided, unchanged |
+| the `constraints=` container and Go's constructor spelling | the operand vocabulary: **flags only**, by name, at root scope. Neither takes an arg, a nested constraint or a `when` selector |
+| the `constraint "<c>": ` prefix on both violation sentences | the sentences themselves, byte for byte after the prefix |
+| a rendered line in the `Constraints:` help block | the injection order (`Implies` resolves before the co-occurrence families, so an implied value can engage a member) |
+| a `name` key in the schema entry | every other key in the entry |
+| a `dependentRequired` projection for `requires`; a description line for `implies` | that neither has ever been projected before |
+
+**One residual is recorded with evidence rather than fixed.** Both families use *provided* as their
+predicate, so a bool flag supplied as `--no-x` satisfies a `Requires` that names it and fires an
+`Implies` that triggers on it. That is the same present-but-false class A1 closed for elections -- the
+mutex survey found 14 groups with the hole and two shipped-dangerous sites -- reaching two families
+whose semantics this campaign declared out of scope. The evidence is that the class is real and has
+already produced dangerous behaviour once; the reason it is not fixed here is that the remedy is a
+`when`-style declaration on those families' operands, which is a semantic change to them, and the
+campaign's rule for that is to record it. **Flagged, and it should be a question to the user rather
+than a session's own call**: whether `Requires` and `Implies` take election selectors is the natural
+next design round, and doing it silently inside a rendering round would be exactly the drift the
+out-of-scope note exists to prevent.
+
+### 26.14 What this round rejects and does not touch
+
+**Rejected, re-recorded** (L2.6, and they are rejections rather than deferrals):
+
+- **No at-most-one, ever, at any cardinality** (B2). Every real at-most-one site is an exactly-one
+  with an unnamed member, and the remedy is to name the member -- which is now a selector choice
+  (§24). `absence_means=` was considered and rejected with it: it legitimizes absence instead of
+  containing it. Nothing in this system -- no constructor, no parameter, no internal representation --
+  can express an upper bound of one, and §26.1's refusal of a numeric interior is what keeps that
+  true structurally rather than by convention.
+- **No constraint algebra and no satisfiability analysis** (L2.6's rung 10). Three byte-identical
+  solvers for a corpus this size buys nothing that the registration guards and the two predicates do
+  not already give. **Revisit when the corpus passes roughly 50 declared constraints**, which is the
+  campaign's own stated trigger and is recorded here so a later round has a threshold rather than an
+  argument.
+- **Exactly-one does not return** (S16, §24.14). Not as a constructor, not as a cardinality, not as a
+  "convenience" over an at-least-one with an upper bound.
+
+**Not touched**, so the boundary is a decision rather than an omission:
+
+- **In-scope constraints** (§24.8's sanctioned extension): still unbuilt, still waiting for a real
+  site, and now with a narrower shape -- a nested declaration inside the choice whose members resolve
+  within that scope.
+- **`Requires` / `Implies` semantics**, including the present-but-false residual recorded above.
+- **The update-command construct** (L3): the mutating-default ban, `update_of=`, `write_mode=` and
+  the `--unset-<prop>` vocabulary. L3.2's at-least-one-property rule is the framework enforcing a
+  rule of its own about a declared property set, not an `AtLeastOne` a command writes; whether it is
+  implemented over this system's predicate is L3's decision to make with its own evidence.
+- **Multi-elect** (§24.13), which is the selector's extension and shares nothing with this system.
+- **The release boundary.** This amendment's implementation joins the single breaking strictcli
+  release the campaign already scoped (L1 + L2 + L3, F.4); it does not create a release of its own,
+  and §25.14's ordering for consumers is unchanged.
+
+**Surfaces outside this document that the implementation round must carry**, recorded because this
+file is the only thing this round writes: strictcli's own `CLAUDE.md` (its `CoRequired(flags=[...])`
+line and the `dependencies=[...]` sentence), `docs/flag-system.md`, the conformance corpus's
+constraint cases and `conformance/schema.json`'s `$defs`, and the fleet's own declarations -- every
+`CoRequired` in the fleet must be rewritten because the name is mandatory, which is the migration
+F.1 already schedules.
