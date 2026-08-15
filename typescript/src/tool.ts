@@ -648,9 +648,25 @@ export function flatToCallKwargs(
 
 	// --- Pass 3: the records ---
 
-	const buildRecord = (sel: AnyChoiceFlag, tag: string): unknown => {
+	const buildRecord = (
+		sel: AnyChoiceFlag,
+		tag: string,
+	): Record<string, unknown> => {
 		const chosen = sel.choices[tag];
 		const record: Record<string, unknown> = { choice: tag };
+		// A selection the caller elected nothing of is the DECLARATION's, and
+		// materializing it here must not turn it into the call's. The record is
+		// built anyway, because a key of the elected scope supplied beside it has
+		// to ride in it, so it carries the mark that keeps `ctx.source` and
+		// `ctx.provided` answering `default`/false for the election and keeps
+		// §12.13's origin clause on whatever this scope's declarations refuse --
+		// exactly as the command line and the record door answer for the same
+		// declaration (§23.6, §24.5, §18.28 items 263 and 264). A field the caller
+		// DID supply is delivered and follows the record door's own rule, which
+		// labels every field it delivers the declaration's (§18.26 item 253).
+		if (elections.get(sel)?.origin === errElectionOriginDefault) {
+			markDeclarationElected(record);
+		}
 		if (chosen === undefined) {
 			return record;
 		}
@@ -719,23 +735,9 @@ export function flatToCallKwargs(
 	for (const d of decls) {
 		const param = flagParamName(d.name);
 		if (d.kind === "choice-flag") {
-			const election = elections.get(d);
-			const tag = election?.elected;
+			const tag = elections.get(d)?.elected;
 			if (tag !== undefined) {
-				const record = buildRecord(d, tag) as Record<string, unknown>;
-				// A selection the caller elected nothing of is the DECLARATION's, and
-				// materializing it here must not turn it into the call's: the record
-				// is built because a sibling key may have to ride in it, so it carries
-				// the mark that keeps `ctx.source` and `ctx.provided` answering
-				// `default`/false for the election, exactly as the command line and
-				// the record door answer for the same declaration (§23.6, §24.5). A
-				// field the caller DID supply is delivered and follows the record
-				// door's own rule, which labels every field it delivers the
-				// declaration's (§18.26 item 253).
-				if (election?.origin === errElectionOriginDefault) {
-					markDeclarationElected(record);
-				}
-				out[param] = record;
+				out[param] = buildRecord(d, tag);
 			}
 			continue;
 		}

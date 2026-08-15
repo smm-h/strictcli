@@ -1064,17 +1064,15 @@ test("infra: a defaulted selection's undeclared root names the origin too", asyn
 		await refusalOf(undeclaredRootScopeApp(true).call("send", {})),
 		want,
 	);
-	// The flat machine form ELECTS before call() sees anything: its conversion
-	// materializes the record the declaration's default names, so by the time
-	// the record door reads it, the election is the object's. It therefore
-	// carries the scope suffix and no origin clause -- the same conversion that
-	// already answers ctx.source("via") with "cli" here where the command line
-	// and the record door both answer "default".
+	// The flat machine form materializes the record the declaration's default
+	// names before call() sees anything -- but the election is still the
+	// DECLARATION's, so the clause composes here exactly as it does at the other
+	// two doors (§18.28 items 263 and 264). A conversion is not a caller.
 	assert.equal(
 		await refusalOf(
 			toolNamed(undeclaredRootScopeApp(true), "send").execute({}),
 		),
-		`${undeclaredRoot} under '--via email'`,
+		want,
 	);
 });
 
@@ -1112,6 +1110,25 @@ test("infra: the suffix names the WHOLE path at depth", async () => {
 		await refusalOf(
 			undeclaredRootScopeApp(false).call("send", {
 				via: { choice: "sms", format: { choice: "plain" } },
+			}),
+		),
+		typed,
+	);
+	// The flat door, with the outer election the caller's and the INNER one the
+	// declaration's: the clause names the inner election, which is the outermost
+	// one no caller made (§18.19 item 216, §18.28 item 264).
+	assert.equal(
+		await refusalOf(
+			toolNamed(undeclaredRootScopeApp(false), "send").execute({ via: "sms" }),
+		),
+		want,
+	);
+	// Both elections the caller's at that door too: no clause.
+	assert.equal(
+		await refusalOf(
+			toolNamed(undeclaredRootScopeApp(false), "send").execute({
+				via: "sms",
+				format: "plain",
 			}),
 		),
 		typed,

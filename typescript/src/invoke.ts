@@ -461,6 +461,7 @@ export async function invokeApp(
 							app.infraRoots,
 							problems,
 							[],
+							"",
 						)
 					: electDefaultRecord(d, tag, app.infraRoots, []),
 				supplied && !isDeclarationElected(value) ? "cli" : "default",
@@ -762,7 +763,10 @@ function electFromRecord(
  *
  * `path` is the elections ABOVE this selector, so a scoped presence refusal
  * three levels down names the whole path §12.13 renders, exactly as the argv
- * path names it.
+ * path names it. `origin` is the pinned clause of the OUTERMOST election above
+ * that no caller made -- empty while every election on the path was the
+ * caller's, and the declaration's clause once one of them was the flat door's
+ * materialized default (§12.13, §18.19 item 216, §18.28 items 263 and 264).
  */
 function buildElectedRecord(
 	sel: AnyChoiceFlag,
@@ -771,10 +775,20 @@ function buildElectedRecord(
 	infraRoots: ReadonlyMap<string, string>,
 	problems: ParseProblem[],
 	path: readonly ScopeStep[],
+	origin: string,
 ): unknown {
 	const tag = elections.get(sel) as string;
 	const chosen = sel.choices[tag] as NonNullable<(typeof sel.choices)[string]>;
 	const out: Record<string, unknown> = { [CHOICE_TAG_KEY]: tag };
+	// A record the flat door materialized from a selector's own default is the
+	// DECLARATION's election however far in it sits, and the outermost such
+	// election is the one the clause names.
+	const electionOrigin =
+		origin !== ""
+			? origin
+			: isDeclarationElected(raw)
+				? errElectionOriginDefault
+				: "";
 	const take = (f: AnyFlag, key: string, value: unknown): void => {
 		if (
 			(value === undefined || value === null) &&
@@ -818,6 +832,12 @@ function buildElectedRecord(
 		...path,
 		{ selector: sel, choiceName: tag },
 	];
+	// The scope suffix and the origin suffix, in that order and never the other
+	// way round (§12.13): where the declaration sits, then the ambient cause a
+	// reader cannot see in their own call. The clause is empty for a caller's own
+	// election, which is what a caller-supplied record always is.
+	const suffix =
+		errScopeSuffix(scopePath(scope)) + errElectionOriginSuffix(electionOrigin);
 	for (const [key, sub] of Object.entries(chosen.flags)) {
 		if (sub.kind === "choice-flag") {
 			const subTag = elections.get(sub);
@@ -832,6 +852,7 @@ function buildElectedRecord(
 					infraRoots,
 					problems,
 					scope,
+					electionOrigin,
 				);
 			} else {
 				out[key] = electDefaultRecord(sub, subTag, infraRoots, scope);
@@ -843,25 +864,19 @@ function buildElectedRecord(
 			continue;
 		}
 		if (sub.opts.presence === "required") {
-			// The ROOT sentence plus the scope suffix (§12.13): a required bool
-			// inside a scope names the tokens that satisfy it exactly as it does at
-			// root, and the suffix says where the requirement lives.
+			// The ROOT sentence plus the suffix (§12.13): a required bool inside a
+			// scope names the tokens that satisfy it exactly as it does at root, and
+			// the suffix says where the requirement lives and what elected it.
 			problems.push({
 				stage: STAGE.presence,
-				message: `${errFlagRequired(sub.name, requiredFlagForm(sub))}${errScopeSuffix(scopePath(scope))}`,
+				message: `${errFlagRequired(sub.name, requiredFlagForm(sub))}${suffix}`,
 			});
 			continue;
 		}
 		// The declaration decides, exactly as it does on the argv path: a compound
 		// default is copied and a RelativeToRoot marker resolves through the app's
-		// declared infrastructure roots (§23, §24.6). Every election on this path
-		// was the CALLER's, so the scope suffix carries no origin clause -- there
-		// is no ambient cause to name.
-		out[key] = applyScopedDefaultForInvoke(
-			sub,
-			infraRoots,
-			errScopeSuffix(scopePath(scope)),
-		);
+		// declared infrastructure roots (§23, §24.6).
+		out[key] = applyScopedDefaultForInvoke(sub, infraRoots, suffix);
 	}
 	// Every field this door delivers reports the DECLARATION, so `provided()`
 	// answers false for all of them (§18.26 item 253). The supplied-versus-
