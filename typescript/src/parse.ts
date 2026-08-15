@@ -808,16 +808,21 @@ export function parseCommand(
 
 /**
  * The positional values reaching the pipeline, and how they were produced
- * (contract §24.11). `tokens` are argv strings the parser must READ; a
- * `pre-typed` value comes from a programmatic front door already of the
- * declared type and is CHECKED against the declaration instead. The caller
- * says which it has -- the pipeline never guesses from the value's runtime
- * type, because "already a string" is exactly what a str declaration expects
- * and what an int declaration must refuse.
+ * (contract §24.11). `tokens` are argv strings the parser must READ, in the
+ * ORDER they were typed; a `pre-typed` value comes from a programmatic front
+ * door already of the declared type, is CHECKED against the declaration
+ * instead, and is carried BY NAME -- a kwargs object has no order of its own
+ * (§21.4), so the key is the binding and an absent key is the absence presence
+ * answers (§24.11 item 248). The caller says which it has: the pipeline never
+ * guesses from the value's runtime type, because "already a string" is exactly
+ * what a str declaration expects and what an int declaration must refuse.
  */
 export type Positionals =
 	| { readonly kind: "tokens"; readonly values: readonly string[] }
-	| { readonly kind: "pre-typed"; readonly values: readonly unknown[] };
+	| {
+			readonly kind: "pre-typed";
+			readonly byName: ReadonlyMap<string, unknown>;
+	  };
 
 /**
  * One positional value becomes the type its arg declares. A token is parsed;
@@ -842,6 +847,101 @@ function coercePositional(
 		return coerceConfigScalarLong(widenJsonIntegers(raw), schema);
 	} catch (e) {
 		throw new ParseError(errArgumentWrapped(a.name, (e as Error).message));
+	}
+}
+
+/**
+ * Argv's positionals: the tokens bind to the args IN ORDER, because order is
+ * the only thing a command line has to say which arg a token is for.
+ */
+function resolveArgTokens(
+	args: readonly AnyArg[],
+	tokens: readonly string[],
+	argValues: Map<string, unknown>,
+): void {
+	const lastArg =
+		args.length > 0 ? (args[args.length - 1] as AnyArg) : undefined;
+	const hasVariadic = lastArg?.opts.variadic === true;
+	const fixedArgs = hasVariadic ? args.slice(0, -1) : args;
+	fixedArgs.forEach((a, idx) => {
+		if (idx < tokens.length) {
+			argValues.set(a.name, coercePositional(a, tokens[idx], "tokens"));
+		} else if (a.opts.presence === "required") {
+			throw new ParseError(errMissingRequiredArgument(a.name));
+		} else if (a.opts.presence === "default") {
+			argValues.set(a.name, a.opts.default);
+		} else {
+			// An optional arg delivers absence as a PRESENT key holding undefined
+			// (contract §23.3): key-absence delivery was rejected for the round.
+			argValues.set(a.name, undefined);
+		}
+	});
+	if (hasVariadic && lastArg !== undefined) {
+		const remaining = tokens.slice(fixedArgs.length);
+		if (lastArg.opts.presence === "required" && remaining.length === 0) {
+			throw new ParseError(errMissingRequiredArgument(lastArg.name));
+		}
+		argValues.set(
+			lastArg.name,
+			remaining.map((p) => coercePositional(lastArg, p, "tokens")),
+		);
+	} else if (tokens.length > args.length) {
+		throw new ParseError(errUnexpectedArgument(String(tokens[args.length])));
+	}
+}
+
+/**
+ * A programmatic door's positionals: each value binds to the arg its KEY NAMES
+ * (§24.11 item 248). A kwargs object has no order of its own (§21.4), so
+ * position is not a binding a caller can express here -- reading the supplied
+ * subset densely would hand a value the caller wrote under one name to whatever
+ * arg the omissions left in that slot, and then refuse it in the name of an arg
+ * nobody supplied.
+ *
+ * Presence is answered by the key's ABSENCE, exactly as the argv path answers
+ * it with a token that was never typed: an omitted optional arg is delivered as
+ * a present key holding absence, an omitted defaulted one takes its declared
+ * default, and an omitted required one keeps the argv path's own sentence.
+ *
+ * A variadic arg is a SEQUENCE of positionals rather than one value of a
+ * collection type, so an array is one element per entry -- each checked on its
+ * own -- and anything else is the single element it looks like.
+ */
+function resolvePreTypedArgs(
+	args: readonly AnyArg[],
+	byName: ReadonlyMap<string, unknown>,
+	argValues: Map<string, unknown>,
+): void {
+	for (const a of args) {
+		if (byName.has(a.name)) {
+			const raw = byName.get(a.name);
+			if (a.opts.variadic === true) {
+				const items = Array.isArray(raw) ? raw : [raw];
+				if (items.length === 0 && a.opts.presence === "required") {
+					// An empty array is the flat spelling of no tokens at all.
+					throw new ParseError(errMissingRequiredArgument(a.name));
+				}
+				argValues.set(
+					a.name,
+					items.map((item) => coercePositional(a, item, "pre-typed")),
+				);
+				continue;
+			}
+			argValues.set(a.name, coercePositional(a, raw, "pre-typed"));
+			continue;
+		}
+		if (a.opts.presence === "required") {
+			throw new ParseError(errMissingRequiredArgument(a.name));
+		}
+		if (a.opts.variadic === true) {
+			argValues.set(a.name, []);
+			continue;
+		}
+		if (a.opts.presence === "default") {
+			argValues.set(a.name, a.opts.default);
+			continue;
+		}
+		argValues.set(a.name, undefined);
 	}
 }
 
@@ -968,38 +1068,10 @@ export function validateAndBuildKwargs(
 
 	// Positional args
 	const argValues = new Map<string, unknown>();
-	const supplied = positionals.values;
-	const lastArg =
-		args.length > 0 ? (args[args.length - 1] as AnyArg) : undefined;
-	const hasVariadic = lastArg?.opts.variadic === true;
-	const fixedArgs = hasVariadic ? args.slice(0, -1) : args;
-	fixedArgs.forEach((a, idx) => {
-		if (idx < supplied.length) {
-			argValues.set(
-				a.name,
-				coercePositional(a, supplied[idx], positionals.kind),
-			);
-		} else if (a.opts.presence === "required") {
-			throw new ParseError(errMissingRequiredArgument(a.name));
-		} else if (a.opts.presence === "default") {
-			argValues.set(a.name, a.opts.default);
-		} else {
-			// An optional arg delivers absence as a PRESENT key holding undefined
-			// (contract §23.3): key-absence delivery was rejected for the round.
-			argValues.set(a.name, undefined);
-		}
-	});
-	if (hasVariadic && lastArg !== undefined) {
-		const remaining = supplied.slice(fixedArgs.length);
-		if (lastArg.opts.presence === "required" && remaining.length === 0) {
-			throw new ParseError(errMissingRequiredArgument(lastArg.name));
-		}
-		argValues.set(
-			lastArg.name,
-			remaining.map((p) => coercePositional(lastArg, p, positionals.kind)),
-		);
-	} else if (supplied.length > args.length) {
-		throw new ParseError(errUnexpectedArgument(String(supplied[args.length])));
+	if (positionals.kind === "pre-typed") {
+		resolvePreTypedArgs(args, positionals.byName, argValues);
+	} else {
+		resolveArgTokens(args, positionals.values, argValues);
 	}
 
 	// Arg choices (after type coercion)

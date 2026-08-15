@@ -48,7 +48,9 @@ import {
 	memberList,
 	type PassthroughDef,
 	requiredFlagForm,
+	type ScopeStep,
 	schemaKind,
+	scopePath,
 } from "./factories.js";
 import { buildInfraAccess } from "./infra.js";
 import { interpretHandlerReturn } from "./outcome.js";
@@ -350,7 +352,8 @@ export async function invokeApp(
 			sel,
 			suppliedByFlagName.has(name),
 			suppliedByFlagName.get(name),
-			"",
+			[],
+			commandPath,
 			elections,
 			problems,
 		);
@@ -385,6 +388,7 @@ export async function invokeApp(
 							elections,
 							app.infraRoots,
 							problems,
+							[],
 						)
 					: electDefaultRecord(d, tag, app.infraRoots),
 				supplied ? "cli" : "default",
@@ -407,23 +411,17 @@ export async function invokeApp(
 		throw new InvokeError(first.message);
 	}
 
-	// Positionals from kwargs in arg declaration order. They are handed to the
-	// pipeline AS SUPPLIED: a positional arg is a declaration exactly as a flag
-	// is, so the value supplied for one is checked against the type it declares
-	// rather than stringified into a token the caller never wrote (§24.11).
-	const positionals: unknown[] = [];
+	// Positionals from kwargs, BY NAME. They are handed to the pipeline AS
+	// SUPPLIED: a positional arg is a declaration exactly as a flag is, so the
+	// value supplied for one is checked against the type it declares rather than
+	// stringified into a token the caller never wrote (§24.11) -- and it binds to
+	// the arg its KEY names, never to the position the supplied subset happens to
+	// leave it in, because a kwargs object has no order of its own (§24.11 item
+	// 248, §21.4). An omitted key is the absence presence answers.
+	const positionals = new Map<string, unknown>();
 	for (const a of def.args) {
-		if (!Object.hasOwn(kwargs, a.name)) {
-			continue;
-		}
-		const val = kwargs[a.name];
-		// A variadic arg is a SEQUENCE of positionals, so an array spreads into
-		// one entry per element and each element is checked on its own; anything
-		// else is the single element it looks like.
-		if (a.opts.variadic === true && Array.isArray(val)) {
-			positionals.push(...val);
-		} else {
-			positionals.push(val);
+		if (Object.hasOwn(kwargs, a.name)) {
+			positionals.set(a.name, kwargs[a.name]);
 		}
 	}
 
@@ -434,7 +432,7 @@ export async function invokeApp(
 			cmd,
 			def.args,
 			store,
-			{ kind: "pre-typed", values: positionals },
+			{ kind: "pre-typed", byName: positionals },
 			app.globalFlagNames,
 			app.infraRoots,
 			[...selectorByName.keys()],
@@ -559,11 +557,6 @@ async function invokePassthrough(
 
 // --- Elected records on the programmatic front door (contract §24.11) ---
 
-/** The scope path one elected choice opens, as its refusals spell it. */
-function electedScopePath(sel: AnyChoiceFlag, tag: string): string {
-	return sel.electBy === "member-flags" ? `--${tag}` : `--${sel.name} ${tag}`;
-}
-
 /**
  * Pass 1 over one selector: which choice the record elects, plus the facts
  * about the record that outrank an election -- its own shape, the payload key
@@ -572,17 +565,20 @@ function electedScopePath(sel: AnyChoiceFlag, tag: string): string {
  * caller reports the lowest one over the WHOLE command (§24.3, §24.11).
  *
  * The walk descends into the elected choice's own selectors, outermost first,
- * so every election in the tree is settled before any value is read.
+ * so every election in the tree is settled before any value is read. `path` is
+ * the ELECTIONS ABOVE this selector, so every sentence below renders §12.13's
+ * whole path at whatever depth it is written from.
  */
 function electFromRecord(
 	sel: AnyChoiceFlag,
 	supplied: boolean,
 	value: unknown,
-	path: string,
+	path: readonly ScopeStep[],
+	commandPath: string,
 	elections: Map<AnyChoiceFlag, string>,
 	problems: ParseProblem[],
 ): void {
-	const suffix = errScopeSuffix(path);
+	const suffix = errScopeSuffix(scopePath(path));
 	if (!supplied) {
 		const o = sel.opts;
 		if (o.presence === "default" && o.default !== undefined) {
@@ -622,7 +618,37 @@ function electFromRecord(
 	}
 	elections.set(sel, tag);
 	const chosen = sel.choices[tag] as NonNullable<(typeof sel.choices)[string]>;
-	const scope = electedScopePath(sel, tag);
+	const scope: readonly ScopeStep[] = [
+		...path,
+		{ selector: sel, choiceName: tag },
+	];
+	// The record's key namespace is the ELECTED CHOICE'S OWN SCOPE: the tag key,
+	// the payload key where the choice carries one, and the parameters that
+	// scope declares at that level (§24.11 item 246). A key outside that set
+	// names nothing the command declares, which is the same fact about the
+	// object's SHAPE the flat door refuses one level up -- so it takes that
+	// door's sentence with §12.13's scope suffix saying where, and is recorded
+	// ahead of every other fact this record carries.
+	//
+	// The out-of-scope template is refused here: it names a flag the command
+	// DECLARES against the scopes that own it, and a key naming nothing anywhere
+	// has no other side to name -- rendering it `--bogus` would claim a
+	// declaration that does not exist.
+	const declared = new Set<string>([
+		CHOICE_TAG_KEY,
+		CHOICE_VALUE_KEY,
+		...Object.keys(chosen.flags),
+	]);
+	for (const key of Object.keys(raw)) {
+		if (!declared.has(key)) {
+			problems.push({
+				stage: STAGE.shape,
+				message:
+					errUnknownParameterForCommand(key, commandPath) +
+					errScopeSuffix(scopePath(scope)),
+			});
+		}
+	}
 	if (chosen.value !== undefined && !Object.hasOwn(raw, CHOICE_VALUE_KEY)) {
 		// A member flag is elected by its own token and that token CARRIES the
 		// payload, so a record electing one with no `value` is the command line's
@@ -636,21 +662,6 @@ function electFromRecord(
 			message: errFlagRequiresValue(`--${tag}`),
 		});
 	}
-	const declared = new Set<string>([
-		CHOICE_TAG_KEY,
-		CHOICE_VALUE_KEY,
-		...Object.keys(chosen.flags),
-	]);
-	for (const key of Object.keys(raw)) {
-		if (!declared.has(key)) {
-			// A key the elected scope never declared is the scope question one
-			// level down, and takes the stage a scope violation takes.
-			problems.push({
-				stage: STAGE.scope,
-				message: `flag '--${key}' is only valid under '${scope}', but that scope does not declare it`,
-			});
-		}
-	}
 	for (const [key, sub] of Object.entries(chosen.flags)) {
 		if (sub.kind === "choice-flag") {
 			electFromRecord(
@@ -658,6 +669,7 @@ function electFromRecord(
 				Object.hasOwn(raw, key),
 				raw[key],
 				scope,
+				commandPath,
 				elections,
 				problems,
 			);
@@ -675,6 +687,10 @@ function electFromRecord(
  * Nothing throws: a value refusal and a scoped presence refusal each carry
  * their stage into the same list pass 1 wrote to, so the phases -- and not the
  * order this walk happens to reach them in -- decide which is reported.
+ *
+ * `path` is the elections ABOVE this selector, so a scoped presence refusal
+ * three levels down names the whole path §12.13 renders, exactly as the argv
+ * path names it.
  */
 function buildElectedRecord(
 	sel: AnyChoiceFlag,
@@ -682,6 +698,7 @@ function buildElectedRecord(
 	elections: ReadonlyMap<AnyChoiceFlag, string>,
 	infraRoots: ReadonlyMap<string, string>,
 	problems: ParseProblem[],
+	path: readonly ScopeStep[],
 ): unknown {
 	const tag = elections.get(sel) as string;
 	const chosen = sel.choices[tag] as NonNullable<(typeof sel.choices)[string]>;
@@ -712,7 +729,10 @@ function buildElectedRecord(
 			raw[CHOICE_VALUE_KEY],
 		);
 	}
-	const path = electedScopePath(sel, tag);
+	const scope: readonly ScopeStep[] = [
+		...path,
+		{ selector: sel, choiceName: tag },
+	];
 	for (const [key, sub] of Object.entries(chosen.flags)) {
 		if (sub.kind === "choice-flag") {
 			const subTag = elections.get(sub);
@@ -726,6 +746,7 @@ function buildElectedRecord(
 					elections,
 					infraRoots,
 					problems,
+					scope,
 				);
 				provided.add(key);
 			} else {
@@ -743,7 +764,7 @@ function buildElectedRecord(
 			// root, and the suffix says where the requirement lives.
 			problems.push({
 				stage: STAGE.presence,
-				message: `${errFlagRequired(sub.name, requiredFlagForm(sub))}${errScopeSuffix(path)}`,
+				message: `${errFlagRequired(sub.name, requiredFlagForm(sub))}${errScopeSuffix(scopePath(scope))}`,
 			});
 			continue;
 		}
