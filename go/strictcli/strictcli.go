@@ -3994,7 +3994,7 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	// BEFORE the constraint passes because its first step is the
 	// mutating-default ban, which is a fact about the command's own
 	// classification and is independent of every rule declared on top of it.
-	validateUpdate(name, cmd)
+	validateUpdate(name, cmd, globalFlags)
 
 	// Validate the constraint set, in §26.8's pinned pass order -- including the
 	// trailing phase carrying the two dependency families' own guards.

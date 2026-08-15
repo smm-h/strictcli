@@ -137,7 +137,7 @@ func unsetFlagName(prop string) string { return "unset-" + prop }
 // record's identity, outward to the declarations it names -- §26.8's direction
 // -- and each step crosses the whole declaration before the next begins, so a
 // message never blames a name for a fault in the record that names it.
-func validateUpdate(cmdName string, cmd *Command) {
+func validateUpdate(cmdName string, cmd *Command, globalFlags []Flag) {
 	// Step 1: the mutating-default ban. It runs first because it is a fact
 	// about the command's CLASSIFICATION and is independent of whether an
 	// update is declared at all.
@@ -271,8 +271,16 @@ func validateUpdate(cmdName string, cmd *Command) {
 			continue
 		}
 		minted := unsetFlagName(name)
+		// The whole flag namespace this command's tokenizer reads, which
+		// includes the app's globals: they are recognized after the command
+		// name too, so a global of the minted name would be unreachable.
 		if cmd.rootFlagIndex(minted) >= 0 || cmd.index.scopedFlagPath(minted) != nil {
 			panic(errUnsetNameReserved(cmdName, name))
+		}
+		for i := range globalFlags {
+			if globalFlags[i].Name == minted {
+				panic(errUnsetNameReserved(cmdName, name))
+			}
 		}
 	}
 }

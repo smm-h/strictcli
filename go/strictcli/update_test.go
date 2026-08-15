@@ -1016,3 +1016,15 @@ func TestClearingABoolProperty(t *testing.T) {
 		t.Fatalf("proxied = %v (unset %v)", value, unset)
 	}
 }
+
+func TestTheUnsetNameReservationReachesTheAppsGlobals(t *testing.T) {
+	// A global is recognized after the command name too, so a global of the
+	// minted name would be unreachable behind the clear spelling.
+	app := NewApp("t", "1.0.0", "t")
+	app.GlobalFlag(StringFlag("unset-content", "a global of that name", Optional()))
+	expectPanic(t, `command "u": flag name "unset-content" is reserved: property '--content' declares Nullable(), which mints '--unset-content'`, func() {
+		app.Command("u", "update", noop, WithEffect(EffectMutating),
+			WithUpdateOf("thing", WriteSparse, Properties("content")),
+			WithFlags(StringFlag("content", "content", Optional(), Nullable())))
+	})
+}
