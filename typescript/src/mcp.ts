@@ -533,7 +533,9 @@ async function handleToolsCall(
 		// error takes.
 		const entry = collectToolCommands(app).find(([path]) => path === toolName);
 		const callable =
-			entry === undefined ? callArgs : flatToCallKwargs(entry[1], callArgs);
+			entry === undefined
+				? callArgs
+				: flatToCallKwargs(app, toolName, entry[1], callArgs);
 		result = await app.call(toolName, callable, {
 			approveConsequential: consented,
 		});

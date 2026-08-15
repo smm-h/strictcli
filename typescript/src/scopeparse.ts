@@ -322,7 +322,13 @@ function resolveScope(
 	out: { values: Record<string, unknown>; provided: Set<string> } | null,
 	run: Run,
 ): void {
-	const suffix = errScopeSuffix(scopePath(path));
+	// The scope suffix and the origin suffix, in that order and never the other
+	// way round (§12.13): where the requirement lives, then the ambient cause a
+	// reader cannot see in their own command line. Every presence refusal this
+	// scope produces carries the pair, and a decline clause goes after both.
+	const suffix =
+		errScopeSuffix(scopePath(path)) +
+		errElectionOriginSuffix(electionOriginOf(path, run));
 	for (const decl of decls) {
 		for (const s of surfaceNames(decl)) {
 			run.liveNames.add(s.name);
@@ -332,7 +338,7 @@ function resolveScope(
 			continue;
 		}
 		if (out !== null) {
-			resolveScopedFlag(decl, path, out, run, suffix);
+			resolveScopedFlag(decl, out, run, suffix);
 		}
 	}
 }
@@ -547,7 +553,11 @@ function electByMembers(
 	}
 	run.problems.push({
 		stage: STAGE.presence,
-		message: `${errOneOfRequired(memberList(sel), clause)}${suffix}`,
+		// Scope suffix, origin suffix, THEN the decline clause, in that order and
+		// no other (§12.13): the scope names where the requirement lives and
+		// closes the sentence, and the two parentheticals follow it -- the decline
+		// clause last, because it is a note about a token that WAS typed.
+		message: errOneOfRequired(memberList(sel), `${suffix}${clause}`),
 	});
 	return { elected: undefined, origin: "" };
 }
@@ -559,7 +569,6 @@ function electByMembers(
  */
 function resolveScopedFlag(
 	f: AnyFlag,
-	path: readonly ScopeStep[],
 	out: { values: Record<string, unknown>; provided: Set<string> },
 	run: Run,
 	suffix: string,
@@ -623,22 +632,23 @@ function resolveScopedFlag(
 	}
 
 	if (source === undefined) {
-		// The declaration decides. A required sub-flag names the scope it is
-		// required under, and the origin of a non-command-line election, so a
-		// refusal never blames a command line that does not contain the cause.
+		// The declaration decides. A required sub-flag carries the scope it is
+		// required under and the origin of a non-command-line election (both in
+		// `suffix`), so a refusal never blames a command line without the cause.
 		if (o.presence === "required") {
-			const origin = electionOriginOf(path, run);
 			run.problems.push({
 				stage: STAGE.presence,
-				message: `flag '--${f.name}' is required${suffix}${errElectionOriginSuffix(origin)}`,
+				message: `flag '--${f.name}' is required${suffix}`,
 			});
 			return;
 		}
-		if (o.presence === "default") {
-			out.values[key] = cloneDefault(o.default);
-			return;
-		}
-		out.values[key] = undefined;
+		// §23 applies one level down UNCHANGED, and that includes what a declared
+		// default IS: a compound is copied so a handler cannot mutate the
+		// declaration, and a RelativeToRoot marker is RESOLVED through the app's
+		// declared infrastructure roots. Delivering the marker itself would hand
+		// a handler an opaque object no command line can produce, where the same
+		// declaration at root delivers the resolved path.
+		out.values[key] = scopedDefaultApplier(f, run.input.infraRoots).value;
 		return;
 	}
 
@@ -700,17 +710,6 @@ function electionOriginOf(path: readonly ScopeStep[], run: Run): Origin {
 	return "";
 }
 
-/** Copies a declared compound default so a handler cannot mutate the declaration. */
-function cloneDefault(dflt: unknown): unknown {
-	if (dflt instanceof Map) {
-		return new Map(dflt);
-	}
-	if (Array.isArray(dflt)) {
-		return [...dflt];
-	}
-	return dflt;
-}
-
 /**
  * Value coercion for a scoped flag. Deferred until phase 4 on purpose: a
  * coercion failure is a VALUE-stage problem, and a flag whose scope was never
@@ -751,6 +750,30 @@ export function installScopedValueParser(
 	) => void,
 ): void {
 	scopedValueParser = fn;
+}
+
+/**
+ * Installed by parse.ts at module load: the ONE declared-default path, so a
+ * scoped flag's default is applied exactly as a root flag's is -- compounds
+ * copied, and a RelativeToRoot marker resolved through the declared roots the
+ * snapshot carries. Reached only for a presence the declaration ANSWERS
+ * (optional or default), so it never throws here.
+ */
+let scopedDefaultApplier: (
+	f: AnyFlag,
+	infraRoots: ReadonlyMap<string, string>,
+) => { value: unknown } = () => {
+	throw new Error("internal: scoped default applier not installed");
+};
+
+/** Package-internal wiring (parse.ts owns the default implementation). */
+export function installScopedDefaultApplier(
+	fn: (
+		f: AnyFlag,
+		infraRoots: ReadonlyMap<string, string>,
+	) => { value: unknown },
+): void {
+	scopedDefaultApplier = fn;
 }
 
 // --- The conditional-binding diagnostics (§24.6) ---

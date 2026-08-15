@@ -2421,6 +2421,438 @@ test("mcp: a nested selector's own refusal names the scope it sits in", async ()
 	assert.equal(await send.execute({ via: "email", quick: true }), 0);
 });
 
+/**
+ * A command with a selector, a positional arg and an app-level global flag, so
+ * the shape pass below is exercised against every key class the flat object may
+ * legally carry -- not just the scoped ones.
+ */
+function shapeBoundaryApp(): App {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "test app",
+		flags: {
+			trace_id: flag("trace-id", t.str, { help: "id", presence: "optional" }),
+		},
+	});
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run",
+			args: [
+				arg("target", t.str, { help: "what to run", presence: "required" }),
+			],
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "email",
+							flags: {
+								subject: flag("subject", t.str, {
+									help: "the subject",
+									presence: "required",
+								}),
+							},
+						}),
+						sms: choice({ help: "sms" }),
+					},
+					{ help: "delivery channel", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("mcp: a property no declaration mentions is refused before every election", async () => {
+	// An undeclared property is a fact about the OBJECT, settled before any
+	// election is read -- the flat counterpart of the token scan refusing
+	// `--nope` before it interprets `--via` (§24.3's shape stage, §24.11). The
+	// sentence is the one call() already gives; only its PLACE was wrong.
+	const run = twoSelectorApp()
+		.asTools()
+		.find((t2) => t2.name === "run");
+	assert.ok(run);
+	const unknown = { message: 'unknown parameter "nope" for command "run"' };
+	// Ahead of a presence refusal: nothing elected either selector.
+	await assert.rejects(run.execute({ nope: 1 }), unknown);
+	// Ahead of an election refusal, which outranks presence in its own right.
+	await assert.rejects(
+		run.execute({ gamma: "g", second: "delta", nope: 1 }),
+		unknown,
+	);
+	// Ahead of an invalid-choice refusal on a selector's own property, which is
+	// a shape fact of its own and therefore beats every PHASE fact beside it --
+	// but not an unknown key recorded before it.
+	await assert.rejects(run.execute({ first: "bogus", nope: 1 }), unknown);
+	await assert.rejects(
+		run.execute({ first: "bogus", gamma: "g", second: "delta" }),
+		{
+			message: "--first: invalid value 'bogus', must be one of: alpha, beta",
+		},
+	);
+	// The CLI refuses the same shape first too, in its own vocabulary: a name
+	// the declaration never mentions is an unknown FLAG there.
+	assert.equal(
+		(await twoSelectorApp().test(["run", "--nope", "1"])).stderr,
+		errOut("unknown flag '--nope'", "myapp run"),
+	);
+});
+
+test("mcp: the shape pass outranks a scope refusal, and knows every legal key", async () => {
+	const launch = memberBoundaryApp()
+		.asTools()
+		.find((t2) => t2.name === "launch");
+	assert.ok(launch);
+	// `create_missing` belongs to a scope that was not elected -- a declared
+	// name, so it takes the scope refusal on its own.
+	await assert.rejects(
+		launch.execute({ target: "all-profiles", create_missing: true }),
+		{
+			message:
+				"flag '--create-missing' is only valid under '--profile', but '--all-profiles' was elected",
+		},
+	);
+	// Beside an undeclared key, the object's shape is what is reported.
+	await assert.rejects(
+		launch.execute({ target: "all-profiles", create_missing: true, nope: 1 }),
+		{ message: 'unknown parameter "nope" for command "launch"' },
+	);
+	// A positional arg and an app-level global flag are legal keys here and are
+	// passed through untouched, so neither is mistaken for an undeclared one.
+	const run = shapeBoundaryApp()
+		.asTools()
+		.find((t2) => t2.name === "run");
+	assert.ok(run);
+	assert.equal(
+		await run.execute({
+			via: "email",
+			subject: "hi",
+			target: "the-target",
+			trace_id: "t-1",
+		}),
+		0,
+	);
+	await assert.rejects(
+		run.execute({ via: "email", subject: "hi", target: "the-target", nope: 1 }),
+		{ message: 'unknown parameter "nope" for command "run"' },
+	);
+});
+
+test("mcp: a nested selector's own property is out of scope, not undeclared", async () => {
+	// A selector one level down publishes its own property at this boundary, so
+	// supplying it while a sibling scope is elected is the out-of-scope refusal
+	// -- the same sentence the CLI gives for a scoped flag in that position.
+	const build = (): App => {
+		const app = makeApp();
+		app.command(
+			defineReadOnlyCommand("send", {
+				help: "send",
+				flags: {
+					via: choiceFlag(
+						"via",
+						{
+							email: choice({
+								help: "email",
+								flags: {
+									mode: memberChoiceFlag(
+										"mode",
+										{
+											quick: choice({ help: "quick" }),
+											slow: choice({ help: "slow" }),
+										},
+										{ help: "how fast", presence: "required" },
+									),
+								},
+							}),
+							sms: choice({ help: "sms" }),
+						},
+						{ help: "delivery channel", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		);
+		return app;
+	};
+	const send = build()
+		.asTools()
+		.find((t2) => t2.name === "send");
+	assert.ok(send);
+	await assert.rejects(send.execute({ via: "sms", mode: "quick" }), {
+		message:
+			"flag '--mode' is only valid under '--via email', but '--via sms' was elected",
+	});
+});
+
+test("mcp: a decline inside a scope composes members, scope, THEN the clause", async () => {
+	// §12.13's order: the scope suffix closes the "is required" sentence, and
+	// the decline clause is a parenthetical about a token that WAS supplied. The
+	// two front doors compose it identically because they share the renderer.
+	const build = (): App => {
+		const app = makeApp();
+		app.command(
+			defineReadOnlyCommand("send", {
+				help: "send",
+				flags: {
+					via: choiceFlag(
+						"via",
+						{
+							email: choice({
+								help: "email",
+								flags: {
+									mode: memberChoiceFlag(
+										"mode",
+										{
+											quick: choice({ help: "quick" }),
+											slow: choice({ help: "slow" }),
+										},
+										{ help: "how fast", presence: "required" },
+									),
+								},
+							}),
+							sms: choice({ help: "sms" }),
+						},
+						{ help: "delivery channel", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		);
+		return app;
+	};
+	const composed =
+		"one of --quick, --slow is required under '--via email' (--no-quick declines an option; it does not choose one)";
+	assert.equal(
+		(await build().test(["send", "--via", "email", "--no-quick"])).stderr,
+		errOut(composed, "myapp send"),
+	);
+	const send = build()
+		.asTools()
+		.find((t2) => t2.name === "send");
+	assert.ok(send);
+	await assert.rejects(send.execute({ via: "email", quick: false }), {
+		message: composed,
+	});
+	// At root scope the suffix is empty and the clause still closes the sentence.
+	assert.equal(
+		(await memberBoundaryApp().test(["launch", "--no-all-profiles"])).stderr,
+		errOut(
+			"one of --profile, --all-profiles is required (--no-all-profiles declines an option; it does not choose one)",
+			"myapp launch",
+		),
+	);
+});
+
+test("templates: all three clauses on one sentence compose scope, origin, decline", async () => {
+	// The full composition §12.13 closes: where the requirement lives, the
+	// ambient cause a reader cannot see in their own command line, and the
+	// teaching note about the token they DID type -- in that order and no other.
+	const build = (): App => {
+		const app = makeApp();
+		app.command(
+			defineReadOnlyCommand("run", {
+				help: "run",
+				flags: {
+					via: choiceFlag(
+						"via",
+						{
+							email: choice({
+								help: "email",
+								flags: {
+									target: memberChoiceFlag(
+										"target",
+										{
+											profile: choice({
+												help: "one profile",
+												value: { carrier: t.str, help: "profile name" },
+											}),
+											"all-profiles": choice({ help: "every profile" }),
+										},
+										{ help: "what to launch", presence: "required" },
+									),
+								},
+							}),
+							sms: choice({ help: "sms" }),
+						},
+						{
+							help: "delivery channel",
+							presence: "required",
+							env: "NOTIFY_VIA",
+						},
+					),
+				},
+				handler: () => 0,
+			}),
+		);
+		return app;
+	};
+	await withEnv({ NOTIFY_VIA: "email" }, async () => {
+		assert.equal(
+			(await build().test(["run", "--no-all-profiles"])).stderr,
+			errOut(
+				"one of --profile, --all-profiles is required under '--via email' (elected from env var 'NOTIFY_VIA') (--no-all-profiles declines an option; it does not choose one)",
+				"myapp run",
+			),
+		);
+		// The origin suffix rides the sentence with no decline beside it too.
+		assert.equal(
+			(await build().test(["run"])).stderr,
+			errOut(
+				"one of --profile, --all-profiles is required under '--via email' (elected from env var 'NOTIFY_VIA')",
+				"myapp run",
+			),
+		);
+	});
+});
+
+test("mcp: a selector property naming a member outranks that member's decline", async () => {
+	// `{target: "all-profiles", all_profiles: false}` states an election and a
+	// decline of the same member. The selector's property IS the election, a
+	// JSON object has no order for a later key to win by, and the decline is
+	// therefore dropped rather than turned into a contradiction.
+	const launch = memberBoundaryApp()
+		.asTools()
+		.find((t2) => t2.name === "launch");
+	assert.ok(launch);
+	assert.equal(
+		await launch.execute({ target: "all-profiles", all_profiles: false }),
+		0,
+	);
+	// The elected record is the one the selector's property named.
+	let seen: unknown;
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("launch", {
+			help: "launch",
+			flags: {
+				target: memberChoiceFlag(
+					"target",
+					{
+						profile: choice({
+							help: "one profile",
+							value: { carrier: t.str, help: "profile name" },
+						}),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "what to launch", presence: "required" },
+				),
+			},
+			handler: (a) => {
+				seen = a.target.choice;
+				return 0;
+			},
+		}),
+	);
+	const l2 = app.asTools().find((t2) => t2.name === "launch");
+	assert.ok(l2);
+	await l2.execute({ target: "all-profiles", all_profiles: false });
+	assert.equal(seen, "all-profiles");
+	// A decline with NO selector property is still a decline, unchanged.
+	await assert.rejects(launch.execute({ all_profiles: false }), {
+		message:
+			"one of --profile, --all-profiles is required (--no-all-profiles declines an option; it does not choose one)",
+	});
+});
+
+test("mcp: a pre-typed value inside a scope is checked against its declaration", async () => {
+	// §24.11 hands this boundary values nobody parses, and the declaration still
+	// decides what they may be -- one level down exactly as at root. A member's
+	// payload is declared by its own flag, so the refusal names the member's own
+	// token (§24.4).
+	const build = (): App => {
+		const app = makeApp();
+		app.command(
+			defineReadOnlyCommand("send", {
+				help: "send",
+				flags: {
+					via: choiceFlag(
+						"via",
+						{
+							email: choice({
+								help: "email",
+								flags: {
+									retries: flag("retries", t.int, {
+										help: "how many",
+										presence: "optional",
+									}),
+								},
+							}),
+							sms: choice({ help: "sms" }),
+						},
+						{ help: "delivery channel", presence: "required" },
+					),
+					target: memberChoiceFlag(
+						"target",
+						{
+							profile: choice({
+								help: "one profile",
+								value: { carrier: t.str, help: "profile name" },
+							}),
+							"all-profiles": choice({ help: "every profile" }),
+						},
+						{ help: "what to launch", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		);
+		return app;
+	};
+	const send = build()
+		.asTools()
+		.find((t2) => t2.name === "send");
+	assert.ok(send);
+	const ok = { via: "email", profile: "work" };
+	assert.equal(await send.execute(ok), 0);
+	// A scoped flag's own value.
+	await assert.rejects(send.execute({ ...ok, retries: "many" }), {
+		message: "--retries: expected integer, got str",
+	});
+	await assert.rejects(send.execute({ ...ok, retries: null }), {
+		message: "--retries: expected integer, got null",
+	});
+	// A member's payload, named by the member's own token.
+	await assert.rejects(send.execute({ via: "email", profile: null }), {
+		message: "--profile: expected string, got null",
+	});
+	await assert.rejects(send.execute({ via: "email", profile: 7 }), {
+		message: "--profile: expected string, got int",
+	});
+	// The record front door reaches the same declaration and says the same.
+	await assert.rejects(
+		build().call("send", {
+			via: { choice: "email", retries: "many" },
+			target: { choice: "profile", value: "work" },
+		}),
+		{ message: "--retries: expected integer, got str" },
+	);
+	await assert.rejects(
+		build().call("send", {
+			via: { choice: "email" },
+			target: { choice: "profile", value: null },
+		}),
+		{ message: "--profile: expected string, got null" },
+	);
+	// The command line is untouched: it parses tokens, and its own value
+	// refusal for the same flag is the parser's, not this one.
+	assert.equal(
+		(
+			await build().test([
+				"send",
+				"--via",
+				"email",
+				"--retries",
+				"many",
+				"--profile",
+				"work",
+			])
+		).stderr,
+		errOut("--retries: expected integer, got 'many'", "myapp send"),
+	);
+});
+
 // =========================================================================
 // The catalogue's own bytes
 // =========================================================================

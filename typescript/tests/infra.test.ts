@@ -11,7 +11,16 @@
 import { strict as assert } from "node:assert";
 import { homedir } from "node:os";
 import { test } from "node:test";
-import { createApp, defineReadOnlyCommand, flag, t } from "../src/index.js";
+import type { App } from "../src/app.js";
+import {
+	choice,
+	choiceFlag,
+	createApp,
+	defineReadOnlyCommand,
+	flag,
+	provided,
+	t,
+} from "../src/index.js";
 import {
 	buildInfraAccess,
 	expandTilde,
@@ -588,4 +597,159 @@ test("infra: command help renders the marker default as the Python repr", async 
 			"Flags:\n" +
 			"  --db <str>    Database path [default: RelativeToRoot('MYAPP_HOME', 'db.sqlite')]\n",
 	);
+});
+
+// --- A marker default INSIDE an elected scope (contract §24.6, §23) ---
+
+/**
+ * A selector whose elected scope declares a `RelativeToRoot` default. The
+ * declaration means the same thing one level down as it does at root, so the
+ * scope must deliver the RESOLVED path -- never the opaque marker, which no
+ * command line can produce and no handler can read.
+ */
+function scopedInfraApp(): App {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "t",
+		infraRoot: { MYAPP_HOME: "/var/lib/myapp" },
+	});
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "email",
+							flags: {
+								subject: flag("subject", t.str, {
+									help: "the subject",
+									presence: "required",
+								}),
+								store: flag("store", t.str, {
+									help: "where the copy goes",
+									presence: "default",
+									default: relativeToRoot("MYAPP_HOME", "mail", "outbox"),
+								}),
+							},
+						}),
+						sms: choice({ help: "sms" }),
+					},
+					{ help: "delivery channel", presence: "required" },
+				),
+			},
+			handler: (args, ctx) => {
+				if (args.via.choice === "email") {
+					ctx.info(`${args.via.store}:${provided(args.via, "store")}`);
+				}
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+test("infra: a scoped marker default resolves through the declared root", async () => {
+	await withEnv({ MYAPP_HOME: "/opt/data" }, async () => {
+		const r = await scopedInfraApp().test([
+			"send",
+			"--via",
+			"email",
+			"--subject",
+			"hi",
+		]);
+		assert.equal(r.exitCode, 0);
+		// The resolved path, and NOT provided: the declaration decided it, which
+		// is what the "infra" source label means (§23.6).
+		assert.equal(r.stdout, "/opt/data/mail/outbox:false\n");
+	});
+});
+
+test("infra: the root is unset, so the scoped marker takes the declared path", async () => {
+	await withEnv({ MYAPP_HOME: undefined }, async () => {
+		const r = await scopedInfraApp().test([
+			"send",
+			"--via",
+			"email",
+			"--subject",
+			"hi",
+		]);
+		assert.equal(r.stdout, "/var/lib/myapp/mail/outbox:false\n");
+	});
+});
+
+test("infra: hermetic resolves a scoped marker too (no argv dependency)", async () => {
+	await withEnv({ MYAPP_HOME: "/opt/data" }, async () => {
+		const r = await scopedInfraApp().test([
+			"--hermetic",
+			"send",
+			"--via",
+			"email",
+			"--subject",
+			"hi",
+		]);
+		assert.equal(r.stdout, "/opt/data/mail/outbox:false\n");
+	});
+});
+
+test("infra: a scoped marker resolves at BOTH programmatic front doors", async () => {
+	await withEnv({ MYAPP_HOME: "/opt/data" }, async () => {
+		// The record door: call() takes the elected record pre-typed, and the
+		// fields it does not carry come from the declaration -- resolved.
+		let seen: unknown;
+		const build = (): App => {
+			const app = createApp({
+				name: "myapp",
+				version: "1.0.0",
+				help: "t",
+				infraRoot: { MYAPP_HOME: "/var/lib/myapp" },
+			});
+			app.command(
+				defineReadOnlyCommand("send", {
+					help: "send",
+					flags: {
+						via: choiceFlag(
+							"via",
+							{
+								email: choice({
+									help: "email",
+									flags: {
+										subject: flag("subject", t.str, {
+											help: "the subject",
+											presence: "required",
+										}),
+										store: flag("store", t.str, {
+											help: "where the copy goes",
+											presence: "default",
+											default: relativeToRoot("MYAPP_HOME", "mail", "outbox"),
+										}),
+									},
+								}),
+								sms: choice({ help: "sms" }),
+							},
+							{ help: "delivery channel", presence: "required" },
+						),
+					},
+					handler: (args) => {
+						seen = args.via.choice === "email" ? args.via.store : undefined;
+						return 0;
+					},
+				}),
+			);
+			return app;
+		};
+		await build().call("send", { via: { choice: "email", subject: "hi" } });
+		assert.equal(seen, "/opt/data/mail/outbox");
+		// The flat machine door reaches the same declaration through the same
+		// conversion, so it delivers the same resolved path.
+		seen = undefined;
+		const send = build()
+			.asTools()
+			.find((x) => x.name === "send");
+		assert.ok(send);
+		await send.execute({ via: "email", subject: "hi" });
+		assert.equal(seen, "/opt/data/mail/outbox");
+	});
 });

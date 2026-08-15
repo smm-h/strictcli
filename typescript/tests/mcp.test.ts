@@ -414,9 +414,11 @@ test("mcp: tools/call passes arguments through to the handler", async () => {
 		params: { name: "deploy", arguments: { target: "prod", count: 3 } },
 	});
 	assert.equal(captured.target, "prod");
-	// Pre-typed invoke values pass through as-is (Go parity): a JSON number
-	// stays a number, it is not converted to bigint.
-	assert.equal(captured.count, 3);
+	// A pre-typed value is checked against its declaration (§24.11, §18.23 item
+	// 240), and JSON has no bigint, so the integer token arrives as the declared
+	// int carrier's own representation rather than as the `number` JSON.parse
+	// produced -- what the handler receives is what its type says it receives.
+	assert.equal(captured.count, 3n);
 	assert.deepEqual(JSON.parse(contentOf(resp)[0]?.text as string), {
 		deployed: "prod",
 		count: 3,

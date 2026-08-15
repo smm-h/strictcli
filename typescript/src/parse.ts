@@ -53,6 +53,7 @@ import {
 import { isInfraRootPath, resolveInfraRootPath } from "./infra.js";
 import { resolveCommand } from "./routing.js";
 import {
+	installScopedDefaultApplier,
 	installScopedValueParser,
 	type Occurrence,
 	type Occurrences,
@@ -279,6 +280,13 @@ export function parseRawFlagValue(
 // @-prefixes exactly as a command-level flag does (contract §24.3's
 // "unaffected by the construct" list).
 installScopedValueParser(parseRawFlagValue);
+
+// ONE declared-default path too: a scoped flag's RelativeToRoot default
+// resolves through the app's infrastructure roots exactly as a root flag's
+// does, and delivers the resolved path rather than the marker (§23, §24.6).
+installScopedDefaultApplier((f, infraRoots) =>
+	applyFlagDefault(f, "", infraRoots),
+);
 
 // --- Env and config resolution passes ---
 

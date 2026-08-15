@@ -715,3 +715,145 @@ test("call: handler exceptions propagate (not wrapped in InvokeError)", async ()
 	);
 	await assert.rejects(app.call("fail"), RangeError);
 });
+
+// --- Pre-typed values are checked against the declaration (§24.11, §23.4) ---
+
+/**
+ * "Pre-typed" means ALREADY OF THE DECLARED TYPE, never exempt from the
+ * declaration. This door parses nothing, but the declaration still says what
+ * the value may be -- and it is the same question a config document poses, so
+ * it takes the same check and the same sentences.
+ */
+function typedApp(captured?: Record<string, unknown>) {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "test app",
+		flags: {
+			trace_id: flag("trace-id", t.str, { help: "id", presence: "optional" }),
+		},
+	});
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run",
+			flags: {
+				name: flag("name", t.str, { help: "a name", presence: "optional" }),
+				count: flag("count", t.int, { help: "a count", presence: "optional" }),
+				weight: flag("weight", t.float, {
+					help: "a weight",
+					presence: "optional",
+				}),
+				tags: flag("tags", t.list(t.str), {
+					help: "tags",
+					presence: "default",
+					default: [],
+				}),
+				labels: flag("labels", t.dict(t.str), {
+					help: "labels",
+					presence: "default",
+					default: new Map(),
+				}),
+			},
+			handler: (args) => {
+				if (captured !== undefined) {
+					Object.assign(captured, {
+						name: args.name,
+						count: args.count,
+						weight: args.weight,
+						tags: args.tags,
+						labels: args.labels,
+					});
+				}
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+async function refusal(kwargs: Record<string, unknown>): Promise<string> {
+	try {
+		await typedApp().call("run", kwargs);
+	} catch (e) {
+		return (e as Error).message;
+	}
+	throw new Error("expected a refusal");
+}
+
+test("call: a wrong-typed pre-typed value is refused, never delivered", async () => {
+	assert.equal(await refusal({ name: 7n }), "--name: expected string, got int");
+	assert.equal(
+		await refusal({ count: "7" }),
+		"--count: expected integer, got str",
+	);
+	assert.equal(
+		await refusal({ count: 1.5 }),
+		"--count: expected integer, got float",
+	);
+	assert.equal(
+		await refusal({ weight: "1.5" }),
+		"--weight: expected float, got str",
+	);
+	// A compound is checked entry by entry, exactly as a config document is.
+	assert.equal(
+		await refusal({ tags: ["a", 2n] }),
+		"--tags: element 1: expected str, got int",
+	);
+	assert.equal(
+		await refusal({ labels: { a: "1", b: 2n } }),
+		"--labels: key 'b': expected str, got int",
+	);
+	// The dict flag's own SHAPE refusal is unchanged.
+	assert.equal(
+		await refusal({ labels: ["not", "a", "map"] }),
+		'dict flag "labels": expected map type, got Array',
+	);
+	// An app-level global is a declaration like any other.
+	assert.equal(
+		await refusal({ trace_id: 7n }),
+		"--trace-id: expected string, got int",
+	);
+});
+
+test("call: null is a legal value for nothing, whatever the presence", async () => {
+	// Optionality has ONE spelling: an optional flag is delivered absent when
+	// its key is absent, so a null says nothing the declaration cannot say --
+	// and on a required flag it would answer the presence rule with a value the
+	// declaration forbids (§23.4).
+	assert.equal(
+		await refusal({ name: null }),
+		"--name: expected string, got null",
+	);
+	assert.equal(
+		await refusal({ count: null }),
+		"--count: expected integer, got null",
+	);
+	assert.equal(
+		await refusal({ name: undefined }),
+		"--name: expected string, got null",
+	);
+});
+
+test("call: an unknown parameter is refused before any value problem", async () => {
+	// Shape before phase, at the record front door too (§24.11): a key naming
+	// nothing the command declares outranks a wrong-typed value beside it,
+	// whichever key the caller wrote first.
+	assert.equal(
+		await refusal({ name: null, nope: 1 }),
+		'unknown parameter "nope" for command "run"',
+	);
+	assert.equal(
+		await refusal({ nope: 1, name: null }),
+		'unknown parameter "nope" for command "run"',
+	);
+});
+
+test("call: an integer supplied as a JSON number arrives as the declared int", async () => {
+	// JSON has no bigint. The value is converted INTO the declared type, which
+	// is what makes the handler's parameter type true of what it holds.
+	const captured: Record<string, unknown> = {};
+	await typedApp(captured).call("run", { count: 3, weight: 2, name: "x" });
+	assert.equal(captured.count, 3n);
+	assert.equal(captured.weight, 2);
+	assert.equal(captured.name, "x");
+});

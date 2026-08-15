@@ -14,6 +14,7 @@
 import type { AppImpl, RegisteredCommand } from "./app.js";
 import { recordCoverage } from "./checks/coverage.js";
 import { validateCheckRegistrations } from "./checks/framework.js";
+import { coerceConfigValueForFlag } from "./config.js";
 import {
 	Context,
 	contextPayload,
@@ -100,7 +101,7 @@ function isConsequential(cmd: RegisteredCommand): boolean {
 }
 
 /** Converts a parameter name like "dry_run" back to a flag name "dry-run". */
-function paramToFlagName(param: string): string {
+export function paramToFlagName(param: string): string {
 	return param.replaceAll("_", "-");
 }
 
@@ -121,16 +122,69 @@ function invokeTypeName(v: unknown): string {
 
 /**
  * Converts a caller-provided value to the internal representation expected by
- * the validation pipeline (Go coerceInvokeValue). Dict flags accept a Map
- * (passed through) or a plain object (converted to a Map); anything else is
- * an InvokeError. Lists and scalars pass through as-is -- values are
- * pre-typed by the caller.
+ * the validation pipeline (Go coerceInvokeValue), and CHECKS it against the
+ * declaration it was supplied against (contract §24.11, §23.4).
+ *
+ * "Pre-typed" has always meant ALREADY OF THE DECLARED TYPE, never exempt from
+ * the declaration: a front door that does no parsing still has a declaration
+ * saying what the value may be, and the closed-set half of it (`choices`) is
+ * consulted on this path already. So the type half is consulted too, by the
+ * check the config reader runs over an already-typed document -- a flat object
+ * and a config document pose the identical question.
+ *
+ * `null` and `undefined` are legal for nothing. Optionality has ONE spelling
+ * (§23.4): a flag that may be absent declares `optional` and is delivered
+ * absent when its key is simply not there, so a null says nothing the
+ * declaration cannot already say -- and on a required flag it would answer the
+ * presence rule with a value the declaration forbids.
+ *
+ * Dict flags keep their own shape refusal, which is the one both this door and
+ * Go's already print, and their entries are then checked like any others.
  */
 function coerceInvokeValue(f: AnyFlag, value: unknown): unknown {
+	let checked = value;
 	if (schemaKind(f.schema) === "dict") {
-		return coerceInvokeDict(f, value);
+		checked = Object.fromEntries(coerceInvokeDict(f, value));
 	}
-	return value;
+	try {
+		return coerceConfigValueForFlag(widenJsonIntegers(checked), f);
+	} catch (e) {
+		throw new InvokeError(`--${f.name}: ${(e as Error).message}`);
+	}
+}
+
+/**
+ * JSON has no bigint, so an integer arriving over the machine boundary is a
+ * `number` where every other layer of this implementation carries one as a
+ * `bigint` -- the config reader's own JSON parser turns an integer token into
+ * a bigint before any value is checked. This is that same normalization for
+ * the values a caller hands in directly, and it runs whatever the declaration
+ * says: it decides what the value IS, which is what the refusal below must
+ * name, and only then does the declaration decide whether that is acceptable.
+ * A fractional number, a string and a null are all left exactly as they are.
+ */
+function widenJsonIntegers(value: unknown): unknown {
+	const widen = (v: unknown): unknown =>
+		typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v;
+	if (Array.isArray(value)) {
+		return value.map(widen);
+	}
+	if (isPlainRecord(value)) {
+		return Object.fromEntries(
+			Object.entries(value).map(([k, v]) => [k, widen(v)]),
+		);
+	}
+	return widen(value);
+}
+
+/** A plain object (never a Map, an Array or null), for the widening walk. */
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+	return (
+		typeof v === "object" &&
+		v !== null &&
+		!Array.isArray(v) &&
+		!(v instanceof Map)
+	);
 }
 
 function coerceInvokeDict(f: AnyFlag, value: unknown): Map<string, unknown> {
@@ -263,6 +317,25 @@ export async function invokeApp(
 	// flag names. Provided kwargs are marked "cli"; absent flags get their
 	// defaults inside validateAndBuildKwargs.
 	const store = new SourcedStore();
+	// A key naming nothing this command declares is a fact about the object's
+	// SHAPE, and shape is decided before every phase (§24.11, §24.3): an unknown
+	// flag outranks every election, scope, value and presence problem on the
+	// command line wherever it sits in argv, so an unknown key does the same
+	// here. Checked in its own pass, ahead of the one that reads values.
+	for (const paramName of Object.keys(kwargs)) {
+		const flagName = paramToFlagName(paramName);
+		if (
+			flagByName.has(flagName) ||
+			selectorByName.has(flagName) ||
+			app.globalFlagNames.has(flagName) ||
+			argNames.has(paramName)
+		) {
+			continue;
+		}
+		throw new InvokeError(
+			errUnknownParameterForCommand(paramName, commandPath),
+		);
+	}
 	for (const [paramName, value] of Object.entries(kwargs)) {
 		const flagName = paramToFlagName(paramName);
 		const f = flagByName.get(flagName);
@@ -273,22 +346,24 @@ export async function invokeApp(
 		const sel = selectorByName.get(flagName);
 		if (sel !== undefined) {
 			try {
-				store.set(flagName, validateElectedRecord(sel, value), "cli");
+				store.set(
+					flagName,
+					validateElectedRecord(sel, value, app.infraRoots),
+					"cli",
+				);
 			} catch (e) {
 				throw new InvokeError((e as Error).message);
 			}
 			continue;
 		}
-		if (app.globalFlagNames.has(flagName)) {
-			store.set(flagName, value, "cli");
-			continue;
+		const gf = app.globalFlags.find((g) => g.name === flagName);
+		if (gf !== undefined) {
+			// An app-level global is a declaration like any other, so a value
+			// supplied for one is checked like any other (§24.11).
+			store.set(flagName, coerceInvokeValue(gf, value), "cli");
 		}
-		if (argNames.has(paramName)) {
-			continue; // handled below in arg declaration order
-		}
-		throw new InvokeError(
-			errUnknownParameterForCommand(paramName, commandPath),
-		);
+		// Anything left is a positional arg, handled below in declaration order;
+		// the shape pass above already refused everything else.
 	}
 	// A selector with no kwarg elects from its declaration, exactly as the
 	// argv path's election phase does: its default, or the required refusal.
@@ -297,7 +372,11 @@ export async function invokeApp(
 			continue;
 		}
 		if (sel.opts.presence === "default" && sel.opts.default !== undefined) {
-			store.set(name, electDefaultRecord(sel, sel.opts.default), "default");
+			store.set(
+				name,
+				electDefaultRecord(sel, sel.opts.default, app.infraRoots),
+				"default",
+			);
 			continue;
 		}
 		throw new InvokeError(
@@ -463,7 +542,11 @@ async function invokePassthrough(
  * filled from the declaration. Unknown fields are refused -- a key the scope
  * never declared is the same mistake an unknown parameter is one level up.
  */
-function validateElectedRecord(sel: AnyChoiceFlag, value: unknown): unknown {
+function validateElectedRecord(
+	sel: AnyChoiceFlag,
+	value: unknown,
+	infraRoots: ReadonlyMap<string, string>,
+): unknown {
 	if (typeof value !== "object" || value === null) {
 		throw new Error(
 			`flag '--${sel.name}': the elected value must be a record carrying its '${CHOICE_TAG_KEY}' tag`,
@@ -493,7 +576,19 @@ function validateElectedRecord(sel: AnyChoiceFlag, value: unknown): unknown {
 			// that message would render the member as its own owner.
 			throw new Error(errFlagRequiresValue(`--${tag}`));
 		}
-		out[CHOICE_VALUE_KEY] = raw[CHOICE_VALUE_KEY];
+		// The member's payload is declared by its own flag -- named by the
+		// member's own token and required once the member is elected (§24.4) --
+		// so the value supplied for it is checked against that declaration.
+		out[CHOICE_VALUE_KEY] = coerceInvokeValue(
+			{
+				kind: "flag",
+				name: tag,
+				schema: chosen.value.carrier.schema,
+				carrier: chosen.value.carrier,
+				opts: { help: chosen.value.help, presence: "required" },
+			},
+			raw[CHOICE_VALUE_KEY],
+		);
 		provided.add(CHOICE_VALUE_KEY);
 	}
 	const path =
@@ -503,13 +598,13 @@ function validateElectedRecord(sel: AnyChoiceFlag, value: unknown): unknown {
 		declared.add(key);
 		if (sub.kind === "choice-flag") {
 			if (Object.hasOwn(raw, key)) {
-				out[key] = validateElectedRecord(sub, raw[key]);
+				out[key] = validateElectedRecord(sub, raw[key], infraRoots);
 				provided.add(key);
 			} else if (
 				sub.opts.presence === "default" &&
 				sub.opts.default !== undefined
 			) {
-				out[key] = electDefaultRecord(sub, sub.opts.default);
+				out[key] = electDefaultRecord(sub, sub.opts.default, infraRoots);
 			} else {
 				throw new Error(
 					sub.electBy === "member-flags"
@@ -529,7 +624,10 @@ function validateElectedRecord(sel: AnyChoiceFlag, value: unknown): unknown {
 				`flag '--${sub.name}' is required${errScopeSuffix(path)}`,
 			);
 		}
-		out[key] = sub.opts.presence === "default" ? sub.opts.default : undefined;
+		// The declaration decides, exactly as it does on the argv path: a compound
+		// default is copied and a RelativeToRoot marker resolves through the app's
+		// declared infrastructure roots (§23, §24.6).
+		out[key] = applyFlagDefaultForInvoke(sub, "", infraRoots).value;
 	}
 	for (const key of Object.keys(raw)) {
 		if (!declared.has(key)) {
@@ -547,7 +645,11 @@ function validateElectedRecord(sel: AnyChoiceFlag, value: unknown): unknown {
  * COMPLETE by registration (§24.5), so every sub-flag resolves from its own
  * declaration and nothing can be missing.
  */
-function electDefaultRecord(sel: AnyChoiceFlag, choiceName: string): unknown {
+function electDefaultRecord(
+	sel: AnyChoiceFlag,
+	choiceName: string,
+	infraRoots: ReadonlyMap<string, string>,
+): unknown {
 	const chosen = sel.choices[choiceName];
 	const out: Record<string, unknown> = { [CHOICE_TAG_KEY]: choiceName };
 	for (const [key, sub] of Object.entries(chosen?.flags ?? {})) {
@@ -555,10 +657,10 @@ function electDefaultRecord(sel: AnyChoiceFlag, choiceName: string): unknown {
 			out[key] =
 				sub.opts.default === undefined
 					? undefined
-					: electDefaultRecord(sub, sub.opts.default);
+					: electDefaultRecord(sub, sub.opts.default, infraRoots);
 			continue;
 		}
-		out[key] = sub.opts.presence === "default" ? sub.opts.default : undefined;
+		out[key] = applyFlagDefaultForInvoke(sub, "", infraRoots).value;
 	}
 	attachProvidedFields(out, new Set());
 	return out;

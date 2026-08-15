@@ -15,6 +15,7 @@ import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import type { Effect } from "./effects.js";
 import {
 	errElectionOriginDefault,
+	errElectionOriginSuffix,
 	errFlagInvalidChoice,
 	errFlagRequiresValue,
 	errJsonSchemaIsGroup,
@@ -25,6 +26,7 @@ import {
 	errOneOfRequired,
 	errRouterCommandMustBeString,
 	errScopeSuffix,
+	errUnknownParameterForCommand,
 	InvokeError,
 } from "./errors.js";
 import {
@@ -39,7 +41,11 @@ import {
 	scopePath,
 	valueSchemaFragment,
 } from "./factories.js";
-import { type CallOptions, commandClassification } from "./invoke.js";
+import {
+	type CallOptions,
+	commandClassification,
+	paramToFlagName,
+} from "./invoke.js";
 import { flagParamName } from "./parse.js";
 import { resolveCommand } from "./routing.js";
 import {
@@ -335,6 +341,8 @@ function presenceClause(d: AnyDecl): string {
  * double election, which is an answer no command line can produce.
  */
 export function flatToCallKwargs(
+	app: AppImpl,
+	commandPath: string,
 	cmd: RegisteredCommand,
 	kwargs: Readonly<Record<string, unknown>>,
 ): Record<string, unknown> {
@@ -372,6 +380,14 @@ export function flatToCallKwargs(
 				ownedBy(d.name, path);
 				continue;
 			}
+			// A nested selector's own property belongs to the scope it sits in,
+			// exactly as an ordinary flag's does -- supplied while a sibling scope is
+			// elected, it takes the out-of-scope refusal rather than being read as a
+			// name the command never declared. A ROOT selector owns no scope and is
+			// consumed unconditionally, so it is not indexed here.
+			if (path.length > 0) {
+				ownedBy(d.name, path);
+			}
 			for (const [choiceName, c] of Object.entries(d.choices)) {
 				const next: ScopeStep[] = [...path, { selector: d, choiceName }];
 				// A member's own property flattens under the member's flag name, and
@@ -393,6 +409,37 @@ export function flatToCallKwargs(
 		decls.filter((d) => d.kind === "choice-flag"),
 		[],
 	);
+
+	// --- Pass 0: the object's own shape ---
+	//
+	// A property no declaration mentions anywhere is a fact about the OBJECT,
+	// settled before any election is read -- the flat counterpart of the token
+	// scan refusing `--nope` before it interprets `--via` (§24.3's shape stage).
+	// call() refuses the same key with the same sentence; recording it HERE is
+	// what puts it ahead of every election, scope, value and presence problem,
+	// exactly as the command line puts it there.
+	//
+	// The legal set is every DECLARED name, not every live one: a property whose
+	// scope was not elected is declared, and gets the scope refusal that says so.
+	const declaredParams = new Set<string>(scopedParams.keys());
+	for (const d of decls) {
+		declaredParams.add(flagParamName(d.name));
+	}
+	for (const a of (cmd.def as AnyCommand).args) {
+		declaredParams.add(a.name);
+	}
+	for (const key of Object.keys(kwargs)) {
+		if (
+			declaredParams.has(key) ||
+			app.globalFlagNames.has(paramToFlagName(key))
+		) {
+			continue;
+		}
+		problems.push({
+			stage: STAGE.shape,
+			message: errUnknownParameterForCommand(key, commandPath),
+		});
+	}
 
 	// --- Pass 1: elections, over EVERY selector, outermost first ---
 
@@ -464,7 +511,9 @@ export function flatToCallKwargs(
 		}
 		problems.push({
 			stage: STAGE.presence,
-			message: `${errOneOfRequired(memberList(sel), clause)}${suffix}`,
+			// Scope suffix, origin suffix, THEN the decline clause (§12.13) -- the
+			// CLI parser's own composition, reused rather than restated.
+			message: errOneOfRequired(memberList(sel), `${suffix}${clause}`),
 		});
 		return { elected: undefined, origin: "" };
 	};
@@ -489,6 +538,21 @@ export function flatToCallKwargs(
 		return { elected: undefined, origin: "" };
 	};
 
+	/**
+	 * The origin clause of the OUTERMOST non-command-line election on a path
+	 * (§18.19 item 216), read out of the elections this pass has already
+	 * settled. Empty when every election on the path was supplied by the caller.
+	 */
+	const electionOriginOn = (path: readonly ScopeStep[]): string => {
+		for (const step of path) {
+			const origin = elections.get(step.selector)?.origin ?? "";
+			if (origin !== "") {
+				return origin;
+			}
+		}
+		return "";
+	};
+
 	const electOne = (
 		sel: AnyChoiceFlag,
 		path: readonly ScopeStep[],
@@ -496,7 +560,11 @@ export function flatToCallKwargs(
 		const named = kwargs[flagParamName(sel.name)];
 		if (typeof named === "string" && !Object.hasOwn(sel.choices, named)) {
 			problems.push({
-				stage: STAGE.election,
+				// A selector property naming no declared choice is a fact about the
+				// OBJECT, not about an election: there is nothing to elect from. It
+				// therefore takes the shape stage, where it loses to an unknown key
+				// recorded before it and beats every phase fact after it (§24.11).
+				stage: STAGE.shape,
 				message: errFlagInvalidChoice(
 					sel.name,
 					formatValueForError(named),
@@ -505,7 +573,11 @@ export function flatToCallKwargs(
 			});
 			return { elected: undefined, origin: "" };
 		}
-		const suffix = errScopeSuffix(scopePath(path));
+		// The scope suffix and the origin suffix, in that order (§12.13), with a
+		// decline clause after both -- the CLI parser's own composition.
+		const suffix =
+			errScopeSuffix(scopePath(path)) +
+			errElectionOriginSuffix(electionOriginOn(path));
 		return sel.electBy === "member-flags"
 			? electMembers(sel, named, suffix)
 			: electToken(sel, named, suffix);
@@ -654,7 +726,11 @@ function makeTool(
 		// promise, exactly as an invocation error does: a tool's execute is a
 		// promise-returning contract, and a synchronous throw would escape it.
 		execute: async (kwargs = {}, opts = {}) =>
-			app.call(commandPath, flatToCallKwargs(cmd, kwargs), opts),
+			app.call(
+				commandPath,
+				flatToCallKwargs(app, commandPath, cmd, kwargs),
+				opts,
+			),
 	};
 }
 
