@@ -97,15 +97,17 @@ def get_python_fields() -> dict[str, set[str]]:
     sys.path.insert(0, str(PROJECT_ROOT / "python"))
     import strictcli
 
-    # Command is internal but part of the conformance surface
-    from strictcli import Command
+    # Command is internal but part of the conformance surface. _ChoiceDecl is
+    # the same shape one construct over: a consumer writes a @choice-decorated
+    # class, and this is what the decorator attaches to it (contract §24.12).
+    from strictcli import Command, _ChoiceDecl
 
     result: dict[str, set[str]] = {}
     for cls in [
         strictcli.Flag, strictcli.Arg, strictcli.FlagSet,
-        strictcli.MutexGroup, strictcli.CoRequired, strictcli.Requires,
+        strictcli.CoRequired, strictcli.Requires,
         strictcli.App, strictcli.Group,
-        Command,
+        Command, _ChoiceDecl,
     ]:
         fields = {f.name for f in dataclasses.fields(cls)}
         result[cls.__name__] = fields
@@ -286,6 +288,18 @@ _GLOBAL_IMPL_EXCLUSIONS: dict[str, str] = {
     "type": "Python Flag.type uses native types; schema uses 'type' string enum",
     "checks_embed": "runtime-only (bytes data, not serializable to JSON schema)",
     "checksEmbed": "runtime-only (Go field for WithChecksEmbed, not serializable to JSON schema)",
+    # The scoped-selector construct's derived indices. Each is computed from
+    # the declaration at registration and published nowhere: the dump carries
+    # the declaration itself (contract §25.6), not the tables a parser builds
+    # from it.
+    "choice_records": "the record list §24.2 pairs with `choices`; the case "
+    "schema spells both halves in one `choices_<T>` key and the dump splits "
+    "them into `value_schema`'s enum and the `choices` sibling (§25.5)",
+    "members": "derived index: the flags a command's scopes declare, flattened for lookup",
+    "selectors": "derived index: the command's selector declarations, which the flag list already carries",
+    "shorts": "derived index: the short-claim table §12.13's two short guards are built from",
+    "sites": "derived index: every declaration site of a scoped name, for the collision guards",
+    "allDecls": "derived index (TS): every declaration of a command in one list, for the scope walk",
 }
 
 # Schema fields that exist only for the test harness (not real API fields).
@@ -441,6 +455,13 @@ def _build_descriptors() -> list[EntityDescriptor]:
             impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
             python_entity_exclusions={"compound", "item_type", "value_type"},
             schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+            # `elect_by` is what makes a case's flag entry a SELECTOR (§13's
+            # item-207 box), and a selector is its own declaration entity in
+            # every implementation: Python's _Selector, Go's unexported
+            # memberSpelled on a TypeChoice flag, TypeScript's ChoiceFlagDef.
+            # One case-schema entry serves both constructs; three declaration
+            # surfaces do not, which is B9 rather than a gap.
+            schema_entity_exclusions={"elect_by"},
             ts_struct="FlagDef",
             ts_to_schema=_SHARED_TS_TO_SCHEMA,
             schema_to_ts=_SHARED_SCHEMA_TO_TS,
@@ -471,14 +492,52 @@ def _build_descriptors() -> list[EntityDescriptor]:
             ts_struct="FlagSet",
             ts_entity_exclusions=_SHARED_TS_EXCLUSIONS,
         ),
+        # The scoped-selector construct's choice object (contract §24.1,
+        # §13's item-207 box). It replaces $defs/mutex_group, which is deleted
+        # with MutexGroup itself (§24.14): the exactly-one family leaves the
+        # constraint system entirely, and its declaration is a selector.
+        #
+        # The three declaration surfaces diverge on purpose (B9), so only the
+        # SHAPE is compared here: Python's is a @choice-decorated frozen
+        # dataclass whose fields are the scope (no dataclass fields of its
+        # own), Go's is a *ChoiceDecl value with identity, and TypeScript's is
+        # a ChoiceDef record in a keyed map. The case schema's `presence` and
+        # `args` keys are input-only -- they exist so the two refused
+        # declarations have a covering input (§12.13) and no implementation
+        # carries a field for either.
         EntityDescriptor(
-            schema_def="mutex_group",
-            python_cls="MutexGroup",
-            go_struct="MutexGroup",
+            schema_def="choice",
+            python_cls="_ChoiceDecl",
+            go_struct="ChoiceDecl",
             impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
-            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
-            ts_struct="MutexGroup",
-            ts_entity_exclusions=_SHARED_TS_EXCLUSIONS,
+            # `presence` and `args` are input-only: they exist so the two
+            # refused declarations have a covering input (§12.13), and no
+            # implementation carries a field for either. `value` is the member
+            # payload, which Go carries as the electing Flag itself (Flags[0])
+            # and TypeScript as the choice record's `value` carrier -- neither
+            # is a named field of the choice entity.
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY | {
+                "presence", "args", "value",
+            },
+            # Python's choice IS a decorated class: `cls` is the class the
+            # scope's fields live on, and `localns` is the frame the
+            # annotations resolve against (§24.12). Neither is a published
+            # fact, and `flags` has no field at all because the scope is the
+            # class body.
+            python_entity_exclusions={"cls", "localns"},
+            schema_python_runtime={
+                "choice.flags": "Python's scope is the decorated class's own "
+                "dataclass fields, read off `cls` rather than held in a list",
+            },
+            ts_struct="ChoiceDef",
+            ts_entity_exclusions={
+                **_SHARED_TS_EXCLUSIONS,
+                "name": "a TypeScript choice is named by its KEY in the "
+                "selector's choice map, which is what makes the delivered tag "
+                "an exact literal type (§24.12)",
+                "kind": "the discriminant TypeScript brands every declaration "
+                "descriptor with; not a declared fact",
+            },
         ),
         EntityDescriptor(
             schema_def="co_required",
@@ -516,7 +575,6 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "command.flags": "flags",
                 "command.args": "args",
                 "command.flag_sets": "flagSets",
-                "command.mutex": "mutex",
                 "command.dependencies": "dependencies",
                 "command.tags": "tags",
                 "command.config_fields": "configFields",
@@ -917,8 +975,12 @@ def check_option_funcs_coverage(go_fields: dict[str, set[str]]) -> list[str]:
 KNOWN_TS_PUBLIC_NAMES: set[str] = {
     # Values: factories, functions, classes, constants
     "arg", "coRequired", "createApp", "deprecated",
-    "errorCheckSpec", "flag", "flagSet", "implies", "mutexGroup",
+    "errorCheckSpec", "flag", "flagSet", "implies",
     "outcome", "relativeToRoot", "requires", "warnCheckSpec",
+    # The scoped-selector construct (contract §24.12): the choice factory, the
+    # two selector twins, the record's provided-ness accessor and the
+    # exhaustiveness helper the derived union makes sound.
+    "choice", "choiceFlag", "memberChoiceFlag", "provided", "assertNever",
     "formatCheckResults", "formatCheckResultsJSON",
     "CheckRunResult", "CheckSpec", "Context", "ErrorReporter",
     "InvokeError", "WarnReporter",
@@ -929,7 +991,14 @@ KNOWN_TS_PUBLIC_NAMES: set[str] = {
     "readOnlyPassthrough", "mutatingPassthrough",
     "EffectFailed",
     # Type-only exports
-    "AnyArg", "AnyCommand", "AnyFlag", "AnyFlagSet", "AnyMutexGroup",
+    "AnyArg", "AnyCommand", "AnyFlag", "AnyFlagSet",
+    # Selector type-only exports. MutexGroup / AnyMutexGroup / mutexGroup are
+    # DELETED with the construct (contract §24.14): the exactly-one family
+    # leaves the constraint system entirely.
+    "AnyChoice", "AnyChoiceFlag", "AnyDecl", "ChoiceDef", "ChoiceFlagDef",
+    "ChoiceFlagOpts", "ChoiceMap", "ChoiceOf", "ChoiceRecord", "ElectBy",
+    "Elected", "ElectedOf", "ElectedRecord", "InferScopeArgs",
+    "ValueChoiceDef",
     "App", "AppSpec", "ArgDef", "ArgOpts", "CallOptions", "Carrier",
     "CheckContext", "CheckOutcome", "CheckProblem", "CheckSeverity",
     "ConnectionEnvReader",
@@ -939,7 +1008,7 @@ KNOWN_TS_PUBLIC_NAMES: set[str] = {
     "FlagDef", "FlagMap", "FlagOpts", "FlagSet", "Group", "GroupSpec",
     "Handler", "HandlerArgs", "HandlerResult", "HandlerReturn",
     "Implies", "InferHandler", "InferHandlerArgs", "InfraAccess",
-    "InfraRootPath", "ListSchema", "McpIO", "MutexGroup", "Outcome",
+    "InfraRootPath", "ListSchema", "McpIO", "Outcome",
     "PassthroughArgs", "PassthroughDef", "PassthroughHandler",
     "Requires", "Result", "RunChecksOptions", "RunChecksResult",
     "ScalarSchema", "Schema", "Tool", "WarnCheckSpecInit", "Writer",
