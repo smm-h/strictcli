@@ -46,6 +46,7 @@ import {
 	commandClassification,
 	markDeclarationElected,
 	paramToFlagName,
+	preTypedValueOutcome,
 	preTypedValueRefusal,
 } from "./invoke.js";
 import { flagParamName } from "./parse.js";
@@ -55,6 +56,7 @@ import {
 	firstProblem,
 	outOfScopeMessage,
 	type ParseProblem,
+	recordValidateRefusal,
 	STAGE,
 } from "./scopeparse.js";
 import { formatChoices, formatValueForError } from "./values.js";
@@ -354,6 +356,16 @@ export function flatToCallKwargs(
 		return { ...kwargs };
 	}
 	const problems: ParseProblem[] = [];
+	// The custom callbacks the supplied scoped values earned, held until every
+	// type check in the sweep has been recorded. A value is coerced where it is
+	// read and `validate` runs in a LATER pass, so a coercion failure outranks a
+	// validate refusal here exactly as it does on the command line (§18.20 item
+	// 226). This door sets no command-line position on anything it records, so
+	// within the value stage recording order alone decides: running the callback
+	// where the value is read would let it outrank a coercion failure on a flag
+	// declared after it, which is an answer no command line produces.
+	const pendingValidations: { readonly f: AnyFlag; readonly value: unknown }[] =
+		[];
 	const elections = new Map<AnyChoiceFlag, Election>();
 	// Every property name a LIVE scope claims -- the flat counterpart of the
 	// parser's liveNames. A live name is consumed by the build pass; anything
@@ -709,7 +721,10 @@ export function flatToCallKwargs(
 			const param = flagParamName(sub.name);
 			if (Object.hasOwn(kwargs, param)) {
 				record[subKey] = kwargs[param];
-				checkValue(sub, kwargs[param]);
+				// A key this door READ is a value the caller wrote, which is the
+				// distinction §23.5's callback turns on -- so a scoped value is checked
+				// against the WHOLE declaration here, not the type half alone.
+				checkSuppliedScopedValue(sub, kwargs[param]);
 			}
 		}
 		return record;
@@ -728,6 +743,35 @@ export function flatToCallKwargs(
 		const refusal = preTypedValueRefusal(f, value);
 		if (refusal !== undefined) {
 			problems.push({ stage: STAGE.value, message: refusal });
+		}
+	}
+
+	/**
+	 * A SCOPED value the caller supplied, against the whole declaration: the type
+	 * half now, and the custom callback held for the pass below.
+	 *
+	 * `validate` is a property of a supplied value (§23.5), and this door knows
+	 * which values were supplied -- it reads the caller's own keys -- so the
+	 * callback runs for a scoped value exactly as it does for a root-scope one
+	 * and for a typed token. The RECORD door defers it instead (§18.26 item 254),
+	 * because a constructed scope fills its declared defaults before anything can
+	 * look and running the callback there would run it on values the declaration
+	 * decided; that limitation is that door's and does not travel to this one.
+	 *
+	 * A member's payload declares no callback at all (§24.4), so it takes the
+	 * type check alone through `checkValue`.
+	 */
+	function checkSuppliedScopedValue(f: AnyFlag, value: unknown): void {
+		const outcome = preTypedValueOutcome(f, value);
+		if (!outcome.ok) {
+			problems.push({ stage: STAGE.value, message: outcome.message });
+			return;
+		}
+		if (flagOpts(f).validate !== undefined) {
+			// The callback runs on the value the HANDLER receives, which is the
+			// coerced one -- the command line runs it on the parsed value, never on
+			// the token text.
+			pendingValidations.push({ f, value: outcome.value });
 		}
 	}
 
@@ -761,6 +805,13 @@ export function flatToCallKwargs(
 			continue;
 		}
 		out[key] = value;
+	}
+	// The value stage's second pass: the custom callbacks, over the scoped values
+	// the sweep above accepted, in the declaration order it read them in. A
+	// root-scope value's callback belongs to the pipeline this conversion feeds,
+	// which never runs when anything above recorded a problem.
+	for (const { f, value } of pendingValidations) {
+		recordValidateRefusal(f, value, problems);
 	}
 	const first = firstProblem(problems);
 	if (first !== undefined) {

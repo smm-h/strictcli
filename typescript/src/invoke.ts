@@ -176,11 +176,29 @@ export function preTypedValueRefusal(
 	f: AnyFlag,
 	value: unknown,
 ): string | undefined {
+	const outcome = preTypedValueOutcome(f, value);
+	return outcome.ok ? undefined : outcome.message;
+}
+
+/**
+ * The same question with the ACCEPTED value kept: what the declaration turns a
+ * pre-typed value into, or the refusal it earns.
+ *
+ * A caller that has more of the declaration left to consult -- the flat door's
+ * custom callback, which runs on the value the handler will receive and not on
+ * the object the caller wrote -- needs the coerced value, and coercing twice to
+ * get it would run a declaration's own conversions twice.
+ */
+export function preTypedValueOutcome(
+	f: AnyFlag,
+	value: unknown,
+):
+	| { readonly ok: true; readonly value: unknown }
+	| { readonly ok: false; readonly message: string } {
 	try {
-		coerceInvokeValue(f, value);
-		return undefined;
+		return { ok: true, value: coerceInvokeValue(f, value) };
 	} catch (e) {
-		return (e as Error).message;
+		return { ok: false, message: (e as Error).message };
 	}
 }
 

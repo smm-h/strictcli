@@ -702,32 +702,58 @@ function resolveScopedFlag(
 		run.problems.push({ stage: STAGE.value, message: (e as Error).message });
 		return;
 	}
-	const validate = o.validate;
-	if (validate !== undefined) {
-		const check = (v: unknown): boolean => {
-			try {
-				validate(v as never);
-				return true;
-			} catch (e) {
-				run.problems.push({
-					stage: STAGE.value,
-					message: errFlagValueError(f.name, (e as Error).message),
-				});
-				return false;
-			}
-		};
-		if (Array.isArray(value)) {
-			for (const v of value) {
-				if (!check(v)) {
-					return;
-				}
-			}
-		} else if (value !== undefined && value !== null && !check(value)) {
-			return;
-		}
+	if (!recordValidateRefusal(f, value, run.problems)) {
+		return;
 	}
 	out.values[key] = value;
 	out.provided.add(key);
+}
+
+/**
+ * One flag's custom callback over a value the INVOCATION supplied, recorded as
+ * a value-stage problem rather than thrown. Returns whether the value survived.
+ *
+ * The callback is a property of a SUPPLIED value (§23.5): the caller is the one
+ * that decides whether it runs, never the door the value arrived through, so
+ * every door that can tell a supplied value from a declared one asks this --
+ * the command line's scoped values here, and the flat machine form's in
+ * tool.ts. A list runs the callback per element and stops at the first refusal,
+ * because the refusal names the value and a second one would name a value the
+ * caller has not been told about yet.
+ */
+export function recordValidateRefusal(
+	f: AnyFlag,
+	value: unknown,
+	problems: ParseProblem[],
+): boolean {
+	const validate = flagOpts(f).validate;
+	if (validate === undefined) {
+		return true;
+	}
+	const check = (v: unknown): boolean => {
+		try {
+			validate(v as never);
+			return true;
+		} catch (e) {
+			problems.push({
+				stage: STAGE.value,
+				message: errFlagValueError(f.name, (e as Error).message),
+			});
+			return false;
+		}
+	};
+	if (Array.isArray(value)) {
+		for (const v of value) {
+			if (!check(v)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	if (value === undefined || value === null) {
+		return true;
+	}
+	return check(value);
 }
 
 /**

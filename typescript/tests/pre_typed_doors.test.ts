@@ -1458,3 +1458,201 @@ test("flat: an election the caller DID make still reports the call", async () =>
 	assert.equal(flat.source, "cli");
 	assert.equal(flat.provided, true);
 });
+
+// =========================================================================
+// `validate` is a property of a SUPPLIED value, at every door that can tell
+// one (§23.5, §24.11, §18.26 item 254)
+// =========================================================================
+
+/**
+ * A scope carrying every shape the callback has to answer for: a defaulted
+ * field with a callback, a list field whose callback runs per element, a
+ * nested selector with a callback one level further down, and two root ints
+ * -- one declared before the selector and one after -- so a coercion failure
+ * can be posed against a validate refusal from either side.
+ */
+function scopedValidateApp(captured?: Record<string, unknown>): App {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send it",
+			flags: {
+				before: flag("before", t.int, {
+					help: "a root int declared before the selector",
+					presence: "optional",
+				}),
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "an email message",
+							flags: {
+								subject: flag("subject", t.str, {
+									help: "the subject",
+									presence: "default",
+									default: "hi",
+									validate: (v) => {
+										if (v === "no") {
+											throw new Error("no is refused");
+										}
+									},
+								}),
+								tags: flag("tags", t.list(t.str), {
+									help: "labels for the message",
+									presence: "default",
+									default: [],
+									validate: (v) => {
+										if (v.startsWith("x")) {
+											throw new Error(`bad tag '${v}'`);
+										}
+									},
+								}),
+								speed: choiceFlag(
+									"speed",
+									{
+										fast: choice({
+											help: "quickly",
+											flags: {
+												patience: flag("patience", t.int, {
+													help: "how long to wait",
+													presence: "default",
+													default: 1n,
+													validate: (v) => {
+														if (v > 9n) {
+															throw new Error("too patient");
+														}
+													},
+												}),
+											},
+										}),
+										slow: choice({ help: "safely" }),
+									},
+									{ help: "how fast", presence: "default", default: "fast" },
+								),
+							},
+						}),
+						sms: choice({ help: "a text message" }),
+					},
+					{ help: "delivery channel", presence: "default", default: "email" },
+				),
+				after: flag("after", t.int, {
+					help: "a root int declared after the selector",
+					presence: "optional",
+				}),
+			},
+			handler: (args) => {
+				if (captured !== undefined) {
+					Object.assign(captured, { via: args.via });
+				}
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+/** The refusal the flat machine door gives for one object, or "". */
+async function flatRefusal(kwargs: Record<string, unknown>): Promise<string> {
+	try {
+		await toolFor(scopedValidateApp(), "send").execute(kwargs);
+	} catch (e) {
+		return (e as Error).message;
+	}
+	return "";
+}
+
+test("flat: a scoped value the caller supplied runs its validate callback", async () => {
+	// The callback belongs to the value, not to the door: a key this door read
+	// is a value the caller wrote, so the whole declaration is consulted for it
+	// exactly as it is for a root-scope value and for a typed token (§23.5).
+	assert.equal(
+		await flatRefusal({ via: "email", subject: "no" }),
+		"--subject: no is refused",
+	);
+	// A defaulted election changes nothing: what the caller supplied is the
+	// field, and the field is what the callback answers for.
+	assert.equal(
+		await flatRefusal({ subject: "no" }),
+		"--subject: no is refused",
+	);
+	// One level further down, through a nested selection.
+	assert.equal(
+		await flatRefusal({ via: "email", patience: 10 }),
+		"--patience: too patient",
+	);
+	// A list runs the callback per element, as the command line does.
+	assert.equal(
+		await flatRefusal({ via: "email", tags: ["ok", "xbad"] }),
+		"--tags: bad tag 'xbad'",
+	);
+});
+
+test("flat: the callback never runs on a value the declaration decided", async () => {
+	// Every field above is defaulted to a value its own callback refuses to be
+	// asked about, so an accepted call is the proof: `validate` never runs on a
+	// declared default at this door either (§23.4).
+	const captured: Record<string, unknown> = {};
+	assert.equal(
+		await toolFor(scopedValidateApp(captured), "send").execute({}),
+		0,
+	);
+	assert.deepEqual(captured.via, {
+		choice: "email",
+		subject: "hi",
+		tags: [],
+		speed: { choice: "fast", patience: 1n },
+	});
+});
+
+test("call: the record door still runs the type check and nothing else", async () => {
+	// The record door cannot tell a field the caller wrote from one the scope
+	// class filled in, so the closed set and the callback are deferred there
+	// (§18.26 item 254). The same value the flat door refuses is delivered.
+	const captured: Record<string, unknown> = {};
+	assert.equal(
+		await scopedValidateApp(captured).call("send", {
+			via: { choice: "email", subject: "no" },
+		}),
+		0,
+	);
+	assert.equal(
+		(captured.via as Record<string, unknown>).subject,
+		"no",
+		"the record door delivers the value it was given",
+	);
+});
+
+test("flat: a coercion failure outranks a validate refusal, either position", async () => {
+	// A value is coerced where it is read and the callback runs in a later pass,
+	// so no declaration order produces the refusal ahead of the coercion failure
+	// (§18.20 item 226) -- the answer the command line gives for the same two
+	// problems.
+	for (const kwargs of [
+		{ via: "email", subject: "no", before: "nope" },
+		{ via: "email", before: "nope", subject: "no" },
+		{ via: "email", subject: "no", after: "nope" },
+		{ via: "email", after: "nope", subject: "no" },
+	]) {
+		assert.match(
+			await flatRefusal(kwargs),
+			/^--(before|after): expected integer/,
+		);
+	}
+});
+
+test("flat: the callback answers the command line's sentence", async () => {
+	// One channel, one wording, whichever door was used.
+	const r = await scopedValidateApp().test([
+		"send",
+		"--via",
+		"email",
+		"--subject",
+		"no",
+	]);
+	assert.equal(r.exitCode, 1);
+	assert.equal(
+		r.stderr,
+		errOut("--subject: no is refused", "myapp send"),
+		r.stderr,
+	);
+});
