@@ -232,6 +232,25 @@
           "default": null,
           "description": "Override the default config file path. If null, uses XDG_CONFIG_HOME/<app>/config.<format>."
         },
+        "config_path_relative_to_root": {
+          "type": "object",
+          "required": [
+            "env_var"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "env_var": {
+              "type": "string"
+            },
+            "parts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "The config path declared as a RelativeToRoot marker (WithConfigPathRelativeToRoot / config_path=RelativeToRoot(...)): the same declaration a flag spells with default_relative_to_root, resolved eagerly at construction through the named infra root. Referencing an undeclared root is a registration-time hard error, which is the state a case spells this key to reach."
+        },
         "schema_path": {
           "oneOf": [
             {
@@ -382,7 +401,7 @@
               },
               "kwargs": {
                 "type": "object",
-                "description": "Pre-typed handler kwargs, keyed by underscored parameter name."
+                "description": "Pre-typed handler kwargs, keyed by underscored parameter name. A SELECTOR's value is the elected record, spelled as the flat map §25.6 publishes -- the choice's name under the reserved key `choice`, then the fields that scope carries, nested to any depth -- and each harness materializes it in its own language's shape: a choice instance (Python), Elect(<choice>, Fields{...}) (Go), the tagged object itself (TypeScript). A map naming no declared choice is handed over untouched, which is how the record door's wrong-choice refusal gets a covering input."
               },
               "approve_consequential": {
                 "type": "boolean",
@@ -1176,9 +1195,13 @@
             "str",
             "int",
             "float",
-            "bool"
+            "bool",
+            "list[str]",
+            "list[int]",
+            "list[float]"
           ],
-          "default": "str"
+          "default": "str",
+          "description": "The arg's declared carrier. The list rows are the LIST-CARRIER spelling of a variadic arg (contract §25.4): both spellings register in every implementation, both deliver the same list, and both publish the same array-shaped fragment -- so the corpus must be able to declare each of them."
         },
         "choices_str": {
           "type": "array",

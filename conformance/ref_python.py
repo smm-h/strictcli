@@ -124,6 +124,21 @@ def _emit_default_value(value: object, ftype: str) -> str:
     return repr(value)
 
 
+def _arg_type_expr(atype: str) -> str:
+    """The Python type expression a declared arg carrier renders as.
+
+    A positional arg takes the four scalars and, since §25.4 unified the two
+    variadic spellings, a list carrier over the non-bool scalars -- the same
+    declaration TypeScript spells `t.list(t.str)` and Go spells
+    `ArgType(TypeListStr)`.
+    """
+    return {
+        "str": "str", "bool": "bool", "int": "int", "float": "float",
+        "list[str]": "list[str]", "list[int]": "list[int]",
+        "list[float]": "list[float]",
+    }[atype]
+
+
 def _validate_part(decl: dict) -> list[str]:
     """Emit the `validate=` keyword from a case's closed validator vocabulary."""
     if "validate" not in decl:
@@ -256,7 +271,17 @@ class _ChoiceClassEmitter:
             ftype = sub.get("type", "str")
             parts = [f"help={sub['help']!r}"]
             parts.extend(_presence_parts(sub))
-            if "default" in sub:
+            # A scoped `RelativeToRoot` default means inside a scope exactly
+            # what it means at root scope (§23.5, §18.23 item 237), so the
+            # scoped emitter carries the keyword the command-level emitter
+            # already spells (§18.27 item 259).
+            if "default_relative_to_root" in sub:
+                rtr = sub["default_relative_to_root"]
+                rtr_args = ", ".join(
+                    [repr(rtr["env_var"])] + [repr(p) for p in rtr.get("parts", [])]
+                )
+                parts.append(f"default=strictcli.RelativeToRoot({rtr_args})")
+            elif "default" in sub:
                 parts.append(f"default={_emit_default_value(sub['default'], ftype)}")
             if "short" in sub:
                 parts.append(f"short={sub['short']!r}")
@@ -299,6 +324,15 @@ class _ChoiceClassEmitter:
             self.lines.append(f"{indent}{line}")
         self.lines.append(f"{indent}_CHOICE_NAMES[{var}] = {choice['name']!r}")
         self.lines.append(f"{indent}_REC_FIELDS[{var}] = {field_order!r}")
+        self.lines.append(
+            f"{indent}_CHOICE_CLASS[({sel!r}, {choice['name']!r})] = {var}"
+        )
+        # A name-only fallback, so a case can hand ONE selector a choice class
+        # its sibling declared -- the input the record door's wrong-choice
+        # refusal is asserted against (§18.25 item 251).
+        self.lines.append(
+            f"{indent}_CHOICE_CLASS[('*', {choice['name']!r})] = {var}"
+        )
         self.lines.append("")
         return var
 
@@ -819,8 +853,7 @@ def _emit_command_registration(
                 aparts = [f"name={a['name']!r}", f"help={a['help']!r}"]
                 atype = a.get("type", "str")
                 if atype != "str":
-                    type_map = {"bool": "bool", "int": "int", "float": "float"}
-                    aparts.append(f"type={type_map[atype]}")
+                    aparts.append(f"type={_arg_type_expr(atype)}")
                 aparts.extend(_presence_parts(a))
                 if "default" in a:
                     aparts.append(f"default={_emit_default_value(a['default'], atype)}")
@@ -906,8 +939,7 @@ def _emit_command_registration(
             aparts = [f"name={a['name']!r}", f"help={a['help']!r}"]
             atype = a.get("type", "str")
             if atype != "str":
-                type_map = {"bool": "bool", "int": "int", "float": "float"}
-                aparts.append(f"type={type_map[atype]}")
+                aparts.append(f"type={_arg_type_expr(atype)}")
             aparts.extend(_presence_parts(a))
             if "default" in a:
                 aparts.append(f"default={_emit_default_value(a['default'], atype)}")
@@ -1211,6 +1243,43 @@ def generate(app_def: dict) -> str:
     # `<choice>(<field>=<value>, ...)` otherwise, fields in declaration order.
     lines.append("_CHOICE_NAMES = {}")
     lines.append("_REC_FIELDS = {}")
+    # The record front door's own vocabulary (contract §24.11's `call()` block):
+    # a (selector name, choice name) -> choice class map, so a case can spell an
+    # elected record as the flat map §25.6 publishes and each harness
+    # materializes it in its own language's shape -- a choice instance here, an
+    # Elect(<choice>, Fields{...}) in Go, the tagged object itself in
+    # TypeScript.
+    lines.append("_CHOICE_CLASS = {}")
+    lines.append("")
+    lines.append("def _sel_key(key, choice):")
+    lines.append("    for cand in (key, key.replace('_', '-'), '*'):")
+    lines.append("        if (cand, choice) in _CHOICE_CLASS:")
+    lines.append("            return cand")
+    lines.append("    return None")
+    lines.append("")
+    lines.append("def _mk_rec(sel, obj):")
+    lines.append("    cls = _CHOICE_CLASS[(sel, obj['choice'])]")
+    lines.append("    kwargs = {}")
+    lines.append("    for k, v in obj.items():")
+    lines.append("        if k == 'choice':")
+    lines.append("            continue")
+    lines.append("        key = k.replace('-', '_')")
+    lines.append("        if isinstance(v, dict) and 'choice' in v:")
+    lines.append("            nested = _sel_key(k, v['choice'])")
+    lines.append("            if nested is not None:")
+    lines.append("                v = _mk_rec(nested, v)")
+    lines.append("        kwargs[key] = v")
+    lines.append("    return cls(**kwargs)")
+    lines.append("")
+    lines.append("def _rec_kwargs(d):")
+    lines.append("    out = {}")
+    lines.append("    for k, v in d.items():")
+    lines.append("        if isinstance(v, dict) and 'choice' in v:")
+    lines.append("            sel = _sel_key(k, v['choice'])")
+    lines.append("            if sel is not None:")
+    lines.append("                v = _mk_rec(sel, v)")
+    lines.append("        out[k] = v")
+    lines.append("    return out")
     lines.append("")
     lines.append("def _sel_fmt(v):")
     lines.append("    if type(v) in _CHOICE_NAMES:")
@@ -1277,6 +1346,12 @@ def generate(app_def: dict) -> str:
         app_parts.append(f"env_prefix={app_def['env_prefix']!r}")
     if app_def.get("config", False):
         app_parts.append("config=True")
+    if "config_path_relative_to_root" in app_def:
+        _cprtr = app_def["config_path_relative_to_root"]
+        _cp_args = ", ".join(
+            [repr(_cprtr["env_var"])] + [repr(p) for p in _cprtr.get("parts", [])]
+        )
+        app_parts.append(f"config_path=strictcli.RelativeToRoot({_cp_args})")
     if "config_path" in app_def and app_def["config_path"] is not None:
         app_parts.append(f"config_path={app_def['config_path']!r}")
     if "schema_path" in app_def and app_def["schema_path"] is not None:
@@ -1471,7 +1546,7 @@ def generate(app_def: dict) -> str:
         lines.append("    try:")
         lines.append(
             f"        app.call({cmd!r}, approve_consequential={approve!r}, "
-            f"**{kwargs!r})"
+            f"**_rec_kwargs({kwargs!r}))"
         )
         lines.append(f"        print('call ok: {cmd}')")
         lines.append("    except strictcli.InvokeError as _ce:")

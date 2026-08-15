@@ -85,6 +85,20 @@ func main() {
 	if v, ok := appDef["config_path"]; ok && v != nil {
 		appOpts = append(appOpts, strictcli.WithConfigPath(v.(string)))
 	}
+	// The config path declared as a marker relative to an infra root: the same
+	// declaration the flag side spells with default_relative_to_root, resolved
+	// eagerly at construction.
+	if v, ok := appDef["config_path_relative_to_root"]; ok && v != nil {
+		m := v.(map[string]interface{})
+		var parts []string
+		if ps, ok := m["parts"]; ok {
+			for _, p := range ps.([]interface{}) {
+				parts = append(parts, p.(string))
+			}
+		}
+		appOpts = append(appOpts, strictcli.WithConfigPathRelativeToRoot(
+			m["env_var"].(string), parts...))
+	}
 	if v, ok := appDef["schema_path"]; ok && v != nil {
 		appOpts = append(appOpts, strictcli.WithSchemaPath(v.(string)))
 	}
@@ -323,6 +337,7 @@ func main() {
 			if raw, ok := spec["kwargs"]; ok {
 				kwargs = raw.(map[string]interface{})
 			}
+			kwargs = recordKwargs(kwargs)
 			var callOpts []strictcli.CallOption
 			if raw, ok := spec["approve_consequential"]; ok && raw == true {
 				callOpts = append(callOpts, strictcli.WithApproveConsequential())
@@ -378,6 +393,53 @@ func main() {
 type testCheckCtx struct{}
 
 func (c *testCheckCtx) ProjectRoot() string { return "." }
+
+// recordKwargs converts a pre_call kwargs object into the record front door's
+// own Go vocabulary: a value spelled as the flat map §25.6 publishes -- the
+// choice's name under the reserved key `choice` followed by the fields that
+// scope carries -- becomes strictcli.Elect(<choice>, Fields{...}), recursively,
+// so a nested selector inside a record is elected at its own level (§24.11).
+// A map naming no declared choice is handed through untouched: that IS the
+// state the record door's wrong-choice refusal is asserted against.
+func recordKwargs(kwargs map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(kwargs))
+	for k, v := range kwargs {
+		out[k] = recordValue(k, v)
+	}
+	return out
+}
+
+func recordValue(key string, v interface{}) interface{} {
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return v
+	}
+	name, ok := m["choice"].(string)
+	if !ok {
+		return v
+	}
+	decl, ok := choiceRegistry[key+"/"+name]
+	if !ok {
+		decl, ok = choiceRegistry[strings.ReplaceAll(key, "_", "-")+"/"+name]
+	}
+	if !ok {
+		// A name-only fallback, so a case can hand ONE selector a choice its
+		// sibling declared -- the input the record door's wrong-choice refusal
+		// is asserted against (§18.25 item 251).
+		decl, ok = choiceRegistry["*/"+name]
+	}
+	if !ok {
+		return v
+	}
+	fields := strictcli.Fields{}
+	for fk, fv := range m {
+		if fk == "choice" {
+			continue
+		}
+		fields[strings.ReplaceAll(fk, "-", "_")] = recordValue(fk, fv)
+	}
+	return strictcli.Elect(decl, fields)
+}
 
 // checkProblemSpec is a single problem the case asks the impl to mint.
 type checkProblemSpec struct {
@@ -630,6 +692,14 @@ func isSelector(fd map[string]interface{}) bool {
 // A choice carrying a `value` payload always becomes a MemberChoice, member
 // spelling or not -- which is exactly how a case reaches
 // errTokenChoiceCarriesPayload on the token-spelled side.
+// choiceRegistry holds every choice declaration the app definition built,
+// keyed by "<selector name>/<choice name>". The record front door takes the
+// declaration itself (strictcli.Elect(<choice>, Fields{...})), so a case that
+// spells an elected record as the flat map §25.6 publishes is materialized
+// through this registry -- the Go shape of what the Python reference builds as
+// a choice instance and TypeScript already receives as a tagged object.
+var choiceRegistry = map[string]*strictcli.ChoiceDecl{}
+
 func buildChoice(cd map[string]interface{}, memberSpelled bool) *strictcli.ChoiceDecl {
 	name := cd["name"].(string)
 	help := cd["help"].(string)
@@ -724,7 +794,13 @@ func buildSelectorFlag(fd map[string]interface{}) strictcli.Flag {
 	}
 	if chs, ok := fd["choices"]; ok {
 		for _, c := range chs.([]interface{}) {
-			opts = append(opts, buildChoice(c.(map[string]interface{}), memberSpelled))
+			cd := c.(map[string]interface{})
+			decl := buildChoice(cd, memberSpelled)
+			if cn, ok := cd["name"].(string); ok {
+				choiceRegistry[name+"/"+cn] = decl
+				choiceRegistry["*/"+cn] = decl
+			}
+			opts = append(opts, decl)
 		}
 	}
 	if memberSpelled {
@@ -887,6 +963,14 @@ func buildArg(ad map[string]interface{}) strictcli.Arg {
 		opts = append(opts, strictcli.ArgType(strictcli.TypeInt))
 	case "float":
 		opts = append(opts, strictcli.ArgType(strictcli.TypeFloat))
+	// The list-carrier spelling of a variadic arg (§25.4): one declaration with
+	// one published shape, whichever of the two spellings declared it.
+	case "list[str]":
+		opts = append(opts, strictcli.ArgType(strictcli.TypeListStr))
+	case "list[int]":
+		opts = append(opts, strictcli.ArgType(strictcli.TypeListInt))
+	case "list[float]":
+		opts = append(opts, strictcli.ArgType(strictcli.TypeListFloat))
 	}
 
 	// The presence declaration, arg side (contract §23.3). "default" is spelled

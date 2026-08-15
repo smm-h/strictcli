@@ -138,6 +138,24 @@ function scalarCarrier(typeName) {
 	}
 }
 
+/**
+ * The carrier a declared ARG type names. §25.4 unified the two variadic
+ * spellings, so a list carrier is a legal arg declaration in every
+ * implementation and the corpus must be able to spell it.
+ */
+function argCarrier(typeName) {
+	switch (typeName) {
+		case "list[str]":
+			return t.list(t.str);
+		case "list[int]":
+			return t.list(t.int);
+		case "list[float]":
+			return t.list(t.float);
+		default:
+			return scalarCarrier(typeName);
+	}
+}
+
 /** Scalar JSON value -> the TS runtime value for a strictcli type. */
 function convertScalar(typeName, v) {
 	if (v === null || v === undefined) {
@@ -546,7 +564,7 @@ function buildArg(ad) {
 	if (argChoices !== undefined) {
 		opts.choices = argChoices;
 	}
-	return arg(ad.name, scalarCarrier(atype), opts);
+	return arg(ad.name, argCarrier(atype), opts);
 }
 
 // ---------------------------------------------------------------------------
@@ -1209,6 +1227,13 @@ async function main() {
 	}
 	if ("config_path" in appDef && appDef.config_path !== null) {
 		spec.configPath = appDef.config_path;
+	}
+	// The config path declared as a marker relative to an infra root: the same
+	// declaration the flag side spells with default_relative_to_root, resolved
+	// eagerly at construction.
+	if ("config_path_relative_to_root" in appDef) {
+		const cprtr = appDef.config_path_relative_to_root;
+		spec.configPath = relativeToRoot(cprtr.env_var, ...(cprtr.parts ?? []));
 	}
 	if ("schema_path" in appDef && appDef.schema_path !== null) {
 		spec.schemaPath = appDef.schema_path;
