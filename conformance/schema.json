@@ -1294,6 +1294,13 @@
             "optional"
           ],
           "description": "The MEMBER flag's own presence. It is spellable only so that errMemberFlagPresence (§12.13) has a covering input: a member flag's presence is `required`, read as required once this member is elected, and no declaration surface has a slot for anything else -- TypeScript reads the choice record back as `{presence?: unknown}` and Go sets the option on the electing flag. Python is excluded from the template (§18.19 item 213), so a case spelling this key restricts its targets."
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/arg"
+          },
+          "description": "Positional args declared inside the scope. Spellable only so that errScopedPositional (§12.13) has a covering input: a positional's meaning would depend on an election that may be typed after it, so no declaration surface offers the slot -- Python reaches it through an Arg in the choice class's body and TypeScript through a widened flags map. Go's Choice(name, help, flags ...Flag) cannot take one at all, so a case spelling this key restricts its targets."
         }
       },
       "description": "One choice of a selector (contract §24.1, §13's item-207 box): a name, mandatory help, an optional member payload, and the scope it owns."

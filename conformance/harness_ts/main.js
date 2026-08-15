@@ -14,6 +14,7 @@ import { readFileSync, readSync, writeFileSync } from "node:fs";
 
 import { setConfirmIO } from "../../typescript/dist/confirm.js";
 import {
+	errChoiceDuplicateName,
 	errCommandDuplicateFlag,
 	errCommandPassthroughCannotHave,
 	errDuplicateGlobalFlag,
@@ -214,14 +215,29 @@ function buildChoice(cd) {
 	if ("value" in cd) {
 		spec.value = scalarCarrier(cd.value.type);
 	}
+	if ("args" in cd) {
+		// A positional inside a scope is inexpressible through the declared
+		// choice type; the widened flags map IS the covering input the
+		// scoped-positional refusal is asserted against (§12.13).
+		spec.flags = { ...(spec.flags ?? {}) };
+		for (const ad of cd.args) {
+			spec.flags[underscore(ad.name)] = buildArg(ad);
+		}
+	}
 	const built = choice(spec);
 	return "presence" in cd ? { ...built, presence: cd.presence } : built;
 }
 
 /** Builds a selector from a flag definition carrying `elect_by` (§24.12). */
 function buildSelectorFlag(fd) {
+	// A JS object collapses a same-name duplicate silently, so the framework's
+	// duplicate-choice check is replayed here first with its own catalog
+	// message -- the same convention flagMapOf already follows for flags.
 	const choices = {};
 	for (const cd of fd.choices ?? []) {
+		if (cd.name in choices) {
+			throw new Error(errChoiceDuplicateName(fd.name, cd.name));
+		}
 		choices[cd.name] = buildChoice(cd);
 	}
 	const opts = { help: fd.help };
