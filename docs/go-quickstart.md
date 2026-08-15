@@ -153,7 +153,8 @@ of them does not register, and neither does one that applies two.
 strictcli.StringFlag("output", "Output file path", strictcli.Required())
 strictcli.StringFlag("format", "Output format", strictcli.Default("json"))
 strictcli.StringFlag("tag", "Release tag", strictcli.Optional())
-strictcli.StringFlag("mode", "Run mode", strictcli.Required(), strictcli.Choices("json", "yaml", "csv"))
+strictcli.StringFlag("mode", "Run mode", strictcli.Required(),
+    strictcli.Choices(strictcli.Ch("json", ""), strictcli.Ch("yaml", ""), strictcli.Ch("csv", "")))
 ```
 
 `Required()` means some source -- a CLI token, a bound env var, a config entry,
@@ -206,7 +207,10 @@ strictcli.StringFlag("output", "Output file path",
     strictcli.Default("out.json"),              // Presence: a declared default value
     strictcli.Short("o"),                       // -o shorthand
     strictcli.Env("MYTOOL_OUTPUT"),             // Read from env var
-    strictcli.Choices("out.json", "out.yaml"),  // Restrict to choices
+    strictcli.Choices(                          // Restrict to choices
+        strictcli.Ch("out.json", "one JSON document"),
+        strictcli.Ch("out.yaml", ""),
+    ),
 )
 ```
 
@@ -219,7 +223,7 @@ Available options:
 | `Default(v)` | Presence: the framework supplies `v` when nothing else does. `Default(nil)` is a registration error -- use `Optional()`. |
 | `Short(s)` | Single-character short form (e.g., `Short("o")` for `-o`). |
 | `Env(name)` | Environment variable to read from. Precedence: CLI > env > config > default. |
-| `Choices(vals...)` | Restrict to specific values. Not available on bool flags. |
+| `Choices(vals...)` | Restrict to specific values, one `Ch(<value>, "<help>")` record each. Not available on bool flags. |
 | `Prefixed(b)` | Whether env var prefix validation is applied (default: true). |
 | `NegatableOpt(b)` | Override negation for bool flags (default: true for bool). |
 | `ValidateFn(fn)` | Custom validation function. Runs on supplied values only -- never on a declared `Default(v)`. |
@@ -351,7 +355,7 @@ Arg options:
 | `ArgOptional()` | Presence: absence is legal and delivers `nil`. |
 | `ArgDefault(v)` | Presence: the framework supplies `v` when the arg is absent. `ArgDefault(nil)` is a registration error -- use `ArgOptional()`. |
 | `ArgType(t)` | Type (default: `TypeStr`). Accepts `TypeStr`, `TypeBool`, `TypeInt`, `TypeFloat`. |
-| `ArgChoices(vals...)` | Restrict to specific values. |
+| `ArgChoices(vals...)` | Restrict to specific values, one `Ch(<value>, "<help>")` record each. |
 | `Variadic()` | Collect all remaining positional values (must be the last arg). |
 
 ### Variadic Arguments
@@ -391,7 +395,9 @@ framework names like `help`, `version`, `dump-schema`, `mcp`, `config`, or
 ```go
 app := strictcli.NewApp("mytool", "0.1.0", "A useful tool")
 app.GlobalFlag(strictcli.BoolFlag("color", "Colorize output", strictcli.Default(true)))
-app.GlobalFlag(strictcli.StringFlag("log-level", "Log level", strictcli.Default("info"), strictcli.Choices("debug", "info", "warn", "error")))
+app.GlobalFlag(strictcli.StringFlag("log-level", "Log level", strictcli.Default("info"),
+    strictcli.Choices(strictcli.Ch("debug", ""), strictcli.Ch("info", ""),
+        strictcli.Ch("warn", ""), strictcli.Ch("error", ""))))
 
 app.Command("deploy", "Deploy the app", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
     color := strictcli.Get[bool](kwargs, "color")
@@ -481,8 +487,8 @@ strictcli.BoolFlag("cache", "Enable caching", strictcli.Default(true))
 ### The reserved flag quartet
 
 Four flag names are owned by the framework and cannot be declared at any level --
-not as app global flags, not as command flags, not inside a flag set, not inside
-a mutex group:
+not as app global flags, not as command flags, not inside a flag set, and not
+inside a choice's scope at any depth:
 
 | Flag | Delivered as | Meaning |
 |------|-------------|---------|
@@ -636,30 +642,236 @@ or empty help is a registration-time panic with no opt-out. This ensures that
 every strictcli application is self-documenting from the first line of code, and
 users always have access to meaningful help for every flag and command.
 
-## Mutex Groups
+## Choice Flags
 
-Declare mutually exclusive flags using `WithMutex` and `MutexGroup`. At most
-one flag in the group may have a value from an explicit source (CLI, env, or
-config). If no flag in the group is elected, a "one of ... is required" error is
-produced.
+A **choice flag** elects exactly one of its declared choices per invocation, and
+each choice declares a **scope**: the flags that exist only while that choice is
+elected. It is the framework's one construct for "exactly one of these", and
+there is no at-most-one construct anywhere -- an absent selection is a choice
+nobody named, so the answer is to name it.
 
-Each member declares its own presence: `Optional()` is the ordinary declaration,
-`Default(v)` is legal (an unelected member delivers it), and `Required()` is a
-registration error -- the group's own requirement is what makes the choice
-mandatory:
+`Choice(name, help, flags...)` returns a value with **identity**, referenced by
+both the declaration and every handler that switches on it. That is the
+package-level-token idiom Go already uses, extended to something that carries a
+payload: a typo does not compile, and renaming a choice breaks every site that
+names it.
 
 ```go
-app.Command("output", "Produce output", handler,
-    strictcli.WithEffect(strictcli.EffectReadOnly),
-    strictcli.WithMutex(strictcli.MutexGroup{
-        Flags: []strictcli.Flag{
-            strictcli.StringFlag("file", "Write to file", strictcli.Optional()),
-            strictcli.BoolFlag("stdout", "Write to stdout", strictcli.Optional()),
-        },
-    }),
+var (
+    ViaEmail = strictcli.Choice("email", "deliver the notification as an email message",
+        strictcli.StringFlag("subject", "subject line of the message", strictcli.Required()),
+        strictcli.StringFlag("recipient", "destination email address", strictcli.Required()),
+    )
+    ViaSMS = strictcli.Choice("sms", "deliver the notification as a text message",
+        strictcli.StringFlag("phone-number", "destination number in E.164 form", strictcli.Required()),
+    )
+    ViaWebhook = strictcli.Choice("webhook", "post the notification to a URL",
+        strictcli.StringFlag("url", "endpoint to post to", strictcli.Required()),
+        strictcli.IntFlag("retries", "delivery attempts before giving up", strictcli.Default(3)),
+    )
+)
+
+app.Command("send", "Send one notification through exactly one channel",
+    func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+        via := strictcli.GetElected(kwargs, "via")
+        line := strictcli.Match(via,
+            strictcli.When(ViaEmail, func(f strictcli.Fields) string {
+                return "emailing " + strictcli.Get[string](f, "recipient") +
+                    ": " + strictcli.Get[string](f, "subject")
+            }),
+            strictcli.When(ViaSMS, func(f strictcli.Fields) string {
+                return "texting " + strictcli.Get[string](f, "phone_number")
+            }),
+            strictcli.When(ViaWebhook, func(f strictcli.Fields) string {
+                return fmt.Sprintf("posting to %s (%d retries)",
+                    strictcli.Get[string](f, "url"), strictcli.Get[int](f, "retries"))
+            }),
+        )
+        ctx.Info(line)
+        return strictcli.Exit(0)
+    },
+    strictcli.WithEffect(strictcli.EffectMutating),
+    strictcli.WithFlags(strictcli.ChoiceFlag("via", "Delivery channel",
+        strictcli.Required(), strictcli.Short("v"), ViaEmail, ViaSMS, ViaWebhook)),
 )
 ```
 
+The command's help renders the scope tree, and every line -- scoped or not --
+ends with exactly one presence part:
+
+```
+$ notify send --help
+notify send -- Send one notification through exactly one channel
+
+Flags:
+  --via, -v <choice>          Delivery channel [required]
+    email                     deliver the notification as an email message
+      --subject <str>         subject line of the message [required]
+      --recipient <str>       destination email address [required]
+    sms                       deliver the notification as a text message
+      --phone-number <str>    destination number in E.164 form [required]
+    webhook                   post the notification to a URL
+      --url <str>             endpoint to post to [required]
+      --retries <int>         delivery attempts before giving up [default: 3]
+```
+
+A flag supplied outside its elected scope is a distinct parse error naming both
+sides -- never "unknown flag":
+
+```
+$ notify send --via sms --subject hi
+error: flag '--subject' is only valid under '--via email', but '--via sms' was elected
+try 'notify send --help'
+
+$ notify send --subject hi
+error: flag '--subject' is only valid under '--via email', but '--via' was not provided
+try 'notify send --help'
+
+$ notify send --via email
+error: flag '--subject' is required under '--via email'
+try 'notify send --help'
+```
+
+Order is irrelevant -- nothing is interpreted until every token is collected --
+and errors are reported in a fixed order: **election, then scope, then value,
+then presence**. `--via sms --subject hi` reports the spelling mistake, never
+its consequence.
+
+### Delivery: `GetElected`, `Match` and `When`
+
+The handler receives an `*Elected` -- the elected `*ChoiceDecl` plus its
+`Fields` -- under the choice flag's own key. `Match` is **exhaustive against the
+declaration**: it compares the cases to the choice flag's own choice list and
+panics naming what is missing.
+
+```
+strictcli.Match: choice flag "via" has no case for webhook
+```
+
+Go has no sealed union, so the check runs at dispatch rather than at compile
+time. It cannot be defeated by a typo -- the cases are references, not strings --
+and it cannot go stale, because adding a choice breaks every `Match` that omits
+it on the first call. `e.Is(ViaEmail)` is the single-case form, and
+`e.Provided("subject")` answers whether the invocation caused a field's value.
+
+Scoped flags are **never** top-level `kwargs` entries, at any depth: the only key
+a choice flag adds is its own, so every declared top-level key is still always
+present. Inside the scope, field names are the underscored parameter names --
+`--phone-number` reads back as `Get[string](f, "phone_number")`.
+
+### Member spelling
+
+`MemberChoiceFlag(name, help, opts...)` with `MemberChoice(memberFlag, help, scope...)`
+is the member-spelled twin: each choice is its own flag, and the choice flag's
+own name is never typed -- it is the `kwargs` key and the noun help and errors
+use. They are twin **constructors** rather than an option, so the spelling is one
+declaration instead of two that must agree.
+
+```go
+var (
+    OneProfile = strictcli.MemberChoice(
+        strictcli.StringFlag("profile", "use the named profile", strictcli.Required()),
+        "use the named profile",
+        strictcli.BoolFlag("create-missing", "create the profile if it does not exist",
+            strictcli.Default(false)),
+    )
+    EveryProfile = strictcli.MemberChoice(
+        strictcli.BoolFlag("all-profiles", "apply to every profile", strictcli.Required()),
+        "apply to every profile",
+    )
+)
+
+app.Command("sync", "Synchronize profiles",
+    func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+        scope := strictcli.GetElected(kwargs, "scope")
+        ctx.Info(strictcli.Match(scope,
+            strictcli.When(OneProfile, func(f strictcli.Fields) string {
+                return fmt.Sprintf("syncing %s (create=%v)",
+                    strictcli.Get[string](f, "value"), strictcli.Get[bool](f, "create_missing"))
+            }),
+            strictcli.When(EveryProfile, func(f strictcli.Fields) string {
+                return "syncing every profile"
+            }),
+        ))
+        return strictcli.Exit(0)
+    },
+    strictcli.WithEffect(strictcli.EffectMutating),
+    strictcli.WithFlags(strictcli.MemberChoiceFlag("scope", "What to synchronize",
+        strictcli.Required(), OneProfile, EveryProfile)),
+)
+```
+
+```
+$ myapp sync --help
+myapp sync -- Synchronize profiles
+
+Flags:
+  scope                                        What to synchronize (exactly one of the following) [required]
+    --profile <str>                            use the named profile [required]
+      --create-missing, --no-create-missing    create the profile if it does not exist [default: false]
+    --all-profiles                             apply to every profile [required]
+
+$ myapp sync --profile work --create-missing
+syncing work (create=true)
+
+$ myapp sync --all-profiles --create-missing
+error: flag '--create-missing' is only valid under '--profile', but '--all-profiles' was elected
+
+$ myapp sync --profile work --all-profiles
+error: --profile and --all-profiles are mutually exclusive
+
+$ myapp sync
+error: one of --profile, --all-profiles is required
+```
+
+A member's payload is delivered under the reserved name `value`. A bool member
+is elected by `--<name>` and only when it resolves to **true**; `--no-<name>`
+*declines* -- it says "not this one" and elects nothing, and combining a decline
+with a real election is a parse error. Member election is **command-line only**:
+env and config are not consulted for a member at all. A member-spelled choice
+flag cannot carry a short, since it is never typed, and a short declared on a
+member is an ordinary flag short.
+
+Because the two constructors are twins over one `FlagOption` interface, mixing
+them is refused by name:
+
+```
+Choice "email" of "via": a member-spelled choice flag declares its choices with MemberChoice(...), which names the flag that elects the choice
+```
+
+### Presence, defaults, and recursion
+
+A choice flag declares `Required()` or `Default(<choice name>)`; `Optional()` is
+a registration error:
+
+```
+Flag "via": a choice flag cannot declare Optional(): an absent selection is a choice nobody named, so name it as a choice of its own
+```
+
+A member flag **must** declare `Required()`, read as *required once this member
+is elected* -- the inverse of the rule the retired mutex group carried:
+
+```
+Choice "profile" of "scope": a member flag must declare Required(), read as required once this member is elected
+```
+
+A default names a choice, and a registration check refuses one whose scope
+declares a required sub-flag, because a defaulted selection is a **complete**
+elected value:
+
+```
+Flag "via": Default("email") elects choice "email", whose scope declares the required flag '--subject': a defaulted selection must be complete with nothing typed
+```
+
+A defaulted choice flag renders its complete elected value:
+
+```
+  --via <choice>              Delivery channel [default: sms (phone-number=+15550100)]
+```
+
+Electing a choice on the command line never borrows the default's values. A
+choice flag is a flag, so a choice flag may be declared inside a choice's scope,
+to unlimited depth.
 ## Dependencies
 
 Declare relationships between flags using `WithDependencies`. Three dependency
@@ -830,7 +1042,7 @@ app.Deprecated("old-deploy", "Use 'deploy' instead. See https://example.com/migr
 Passthrough commands bypass all flag and argument parsing and forward raw args
 directly to the handler. They are useful for wrapping external tools where the
 argument format is not known in advance. Passthrough commands cannot have flags,
-args, flag sets, or mutex groups:
+args, or flag sets, and declare nothing a choice flag could scope:
 
 ```go
 app.Passthrough("exec", "Execute a command", func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{}) int {
@@ -878,7 +1090,11 @@ func main() {
         strictcli.StringFlag("environment", "Target environment",
             strictcli.Default("production"),
             strictcli.Short("e"),
-            strictcli.Choices("production", "staging", "dev"),
+            strictcli.Choices(
+                strictcli.Ch("production", ""),
+                strictcli.Ch("staging", ""),
+                strictcli.Ch("dev", ""),
+            ),
         ),
     ))
 
