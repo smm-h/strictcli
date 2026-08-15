@@ -135,12 +135,15 @@ export interface ScopeParseResult {
 /** How a selector's election came about, as the pinned origin clause (§12.13). */
 type Origin = "" | string;
 
-interface Election {
+export interface Election {
 	/** The choice name elected, or undefined when nothing was. */
 	readonly elected: string | undefined;
 	/** The pinned origin clause: empty for a command-line election. */
 	readonly origin: Origin;
 }
+
+/** What an election lookup answers, for either front door's own record of them. */
+export type ElectionLookup = (sel: AnyChoiceFlag) => Election | undefined;
 
 interface Run {
 	readonly input: ScopeParseInput;
@@ -198,23 +201,42 @@ function validateScopeMembership(run: Run): void {
 		if (entries === undefined || entries.length === 0) {
 			continue;
 		}
-		const owners = entries.map((e) => `'${ownerPath(e)}'`).join(" or ");
 		const first = entries[0] as ScopeIndexEntry;
 		run.problems.push({
 			stage: STAGE.scope,
-			message: errFlagOutOfScope(name, owners, whyOutOfScope(first, run)),
+			// A member-spelled election's own name belongs to its PARENT scope,
+			// and the index already records it there -- naming the member's own
+			// election as its owner would say the flag is only valid under itself.
+			message: outOfScopeMessage(
+				name,
+				entries.map((e) => e.path),
+				first.path,
+				(sel) => run.elections.get(sel),
+			),
 		});
 	}
 }
 
 /**
- * The scope path that OWNS a surface name. A member-spelled election's own
- * name belongs to its parent scope, and its owner is therefore that scope --
- * naming the member's own election here would say the flag is only valid
- * under itself.
+ * The out-of-scope refusal, composed once for BOTH front doors (§24.11): the
+ * machine boundary refuses a wrong combination with the CLI parser's own
+ * sentence, which means this renderer and not a second one -- scope paths in
+ * the CLI form §12.13 pins, choice names as declared.
+ *
+ * `owners` is every scope that declares the name, in declaration order;
+ * `blamed` is the path whose unsatisfied election the `<why>` clause names.
  */
-function ownerPath(entry: ScopeIndexEntry): string {
-	return scopePath(entry.path);
+export function outOfScopeMessage(
+	name: string,
+	owners: readonly (readonly ScopeStep[])[],
+	blamed: readonly ScopeStep[],
+	electionOf: ElectionLookup,
+): string {
+	return errFlagOutOfScope(
+		name,
+		owners.map((p) => `'${scopePath(p)}'`).join(" or "),
+		whyOutOfScope(blamed, electionOf),
+	);
 }
 
 /**
@@ -223,10 +245,13 @@ function ownerPath(entry: ScopeIndexEntry): string {
  * election is the one that failed blames the OUTER election, because that is
  * the token the user would have to change (§24.3, §12.13).
  */
-function whyOutOfScope(entry: ScopeIndexEntry, run: Run): string {
+function whyOutOfScope(
+	path: readonly ScopeStep[],
+	electionOf: ElectionLookup,
+): string {
 	const satisfied: ScopeStep[] = [];
-	for (const step of entry.path) {
-		const el = run.elections.get(step.selector);
+	for (const step of path) {
+		const el = electionOf(step.selector);
 		if (el !== undefined && el.elected === step.choiceName) {
 			satisfied.push(step);
 			continue;
@@ -246,7 +271,7 @@ function whyOutOfScope(entry: ScopeIndexEntry, run: Run): string {
 	}
 	// Every election on the path was satisfied, so the name is live after all.
 	return errScopeWhyNotProvided(
-		(entry.path[0] as ScopeStep | undefined)?.selector.name ?? "",
+		(path[0] as ScopeStep | undefined)?.selector.name ?? "",
 	);
 }
 

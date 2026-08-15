@@ -14,14 +14,12 @@
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import type { Effect } from "./effects.js";
 import {
+	errElectionOriginDefault,
 	errFlagInvalidChoice,
-	errFlagOutOfScope,
 	errJsonSchemaIsGroup,
 	errJsonSchemaRouteError,
 	errOneOfRequired,
 	errRouterCommandMustBeString,
-	errScopeWhyElected,
-	errScopeWhyNotProvided,
 	InvokeError,
 } from "./errors.js";
 import {
@@ -31,12 +29,14 @@ import {
 	type AnyFlag,
 	flagOpts,
 	memberList,
+	type ScopeStep,
 	scalarFragment,
 	valueSchemaFragment,
 } from "./factories.js";
 import { type CallOptions, commandClassification } from "./invoke.js";
 import { flagParamName } from "./parse.js";
 import { resolveCommand } from "./routing.js";
+import { type Election, outOfScopeMessage } from "./scopeparse.js";
 import { formatChoices, formatValueForError } from "./values.js";
 
 /**
@@ -325,44 +325,50 @@ export function flatToCallKwargs(
 	}
 	const out: Record<string, unknown> = {};
 	const consumed = new Set<string>();
-	const scopedParams = new Map<string, string[]>();
+	// Every property name a scope owns, against the DECLARED name behind it and
+	// the scope PATHS that own it -- the same ScopeStep paths the argv parser
+	// carries. The refusal below is the CLI's sentence, so it names the flag the
+	// way a user would type it, not the way the flat projection spells it.
+	const scopedParams = new Map<
+		string,
+		{ readonly name: string; readonly owners: ScopeStep[][] }
+	>();
+	const ownedBy = (name: string, path: readonly ScopeStep[]): void => {
+		const param = flagParamName(name);
+		const entry = scopedParams.get(param) ?? { name, owners: [] };
+		entry.owners.push([...path]);
+		scopedParams.set(param, entry);
+	};
 	const collectScoped = (
 		list: readonly AnyDecl[],
-		path: readonly string[],
+		path: readonly ScopeStep[],
 	): void => {
 		for (const d of list) {
 			if (d.kind === "flag") {
-				const owners = scopedParams.get(flagParamName(d.name)) ?? [];
-				owners.push(path.join(" "));
-				scopedParams.set(flagParamName(d.name), owners);
+				ownedBy(d.name, path);
 				continue;
 			}
 			for (const [choiceName, c] of Object.entries(d.choices)) {
-				const next = [...path, `${flagParamName(d.name)}=${choiceName}`];
+				const next: ScopeStep[] = [...path, { selector: d, choiceName }];
+				// A member's payload flattens under the member's own flag name, and
+				// the property is valid only while that member is the election --
+				// so the election it belongs to is ON its owner path, unlike on the
+				// command line where typing the member's token IS the election.
 				if (c.value !== undefined) {
-					const owners = scopedParams.get(flagParamName(choiceName)) ?? [];
-					owners.push(next.join(" "));
-					scopedParams.set(flagParamName(choiceName), owners);
+					ownedBy(choiceName, next);
 				}
 				collectScoped(Object.values(c.flags), next);
 			}
 		}
 	};
-	for (const d of decls) {
-		if (d.kind === "choice-flag") {
-			for (const [choiceName, c] of Object.entries(d.choices)) {
-				const base = [`${flagParamName(d.name)}=${flagParamName(choiceName)}`];
-				if (c.value !== undefined) {
-					const owners = scopedParams.get(flagParamName(choiceName)) ?? [];
-					owners.push(base.join(" "));
-					scopedParams.set(flagParamName(choiceName), owners);
-				}
-				collectScoped(Object.values(c.flags), base);
-			}
-		}
-	}
+	// Root-scope ordinary flags own no scope and are consumed unconditionally
+	// below, so only the selectors open scopes worth indexing.
+	collectScoped(
+		decls.filter((d) => d.kind === "choice-flag"),
+		[],
+	);
 
-	const elected = new Map<string, string>();
+	const elections = new Map<AnyChoiceFlag, Election>();
 	const buildRecord = (sel: AnyChoiceFlag): unknown => {
 		const key = flagParamName(sel.name);
 		const named = kwargs[key];
@@ -390,7 +396,12 @@ export function flatToCallKwargs(
 				),
 			);
 		}
-		elected.set(flagParamName(sel.name), tag);
+		// The origin clause the CLI would give for the same election: empty when
+		// the caller named the choice, `by default` when the declaration did.
+		elections.set(sel, {
+			elected: tag,
+			origin: typeof named === "string" ? "" : errElectionOriginDefault,
+		});
 		const record: Record<string, unknown> = { choice: tag };
 		if (chosen.value !== undefined) {
 			const payloadKey = flagParamName(tag);
@@ -428,50 +439,24 @@ export function flatToCallKwargs(
 		if (consumed.has(key)) {
 			continue;
 		}
-		const owners = scopedParams.get(key);
-		if (owners === undefined) {
+		const scoped = scopedParams.get(key);
+		if (scoped === undefined) {
 			out[key] = value;
 			continue;
 		}
-		// The same `<why>` clause the CLI parser gives, in the machine
-		// spelling: the first owner's outermost unsatisfied election.
+		// The refusal is the CLI parser's own sentence, rendered by the CLI's own
+		// renderer: one channel, one wording, whichever front door was used
+		// (§24.11, §18.19 item 222).
 		throw new InvokeError(
-			errFlagOutOfScope(
-				key,
-				owners.map((o) => `'${o}'`).join(" or "),
-				whyNotLive(owners[0] as string, elected),
+			outOfScopeMessage(
+				scoped.name,
+				scoped.owners,
+				scoped.owners[0] as ScopeStep[],
+				(sel) => elections.get(sel),
 			),
 		);
 	}
 	return out;
-}
-
-/**
- * The out-of-scope `<why>` clause at the machine boundary: the first segment
- * of the owner's path whose election did not happen, named the way §12.13's
- * three clauses name it.
- */
-function whyNotLive(
-	owner: string,
-	elected: ReadonlyMap<string, string>,
-): string {
-	const satisfied: string[] = [];
-	for (const segment of owner.split(" ")) {
-		const [selectorName, choiceName] = segment.split("=");
-		const actual = elected.get(selectorName as string);
-		if (actual === choiceName) {
-			satisfied.push(segment);
-			continue;
-		}
-		if (actual === undefined) {
-			return errScopeWhyNotProvided(selectorName as string);
-		}
-		return errScopeWhyElected(
-			[...satisfied, `${selectorName}=${actual}`].join(" "),
-			"",
-		);
-	}
-	return errScopeWhyNotProvided(owner);
 }
 
 function makeTool(

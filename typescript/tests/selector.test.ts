@@ -1658,9 +1658,87 @@ test("mcp: a wrong combination is refused at call time with the CLI's sentence",
 	const send = tools.find((t2) => t2.name === "send");
 	assert.ok(send);
 	assert.equal(await send.execute({ via: "email", subject: "hi" }), 0);
+	// The CLI's OWN sentence, which means the CLI's scope paths too: `--via
+	// email`, never the description block's machine spelling `via=email`
+	// (§24.11, §18.19 item 222).
 	await assert.rejects(send.execute({ via: "sms", subject: "hi" }), {
 		message:
-			"flag '--subject' is only valid under 'via=email', but 'via=sms' was elected",
+			"flag '--subject' is only valid under '--via email', but '--via sms' was elected",
+	});
+});
+
+test("mcp: the refusal names a member-spelled scope by its own member token", async () => {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("launch", {
+			help: "launch",
+			flags: {
+				target: memberChoiceFlag(
+					"target",
+					{
+						profile: choice({
+							help: "one profile",
+							value: { carrier: t.str, help: "profile name" },
+							flags: {
+								create_missing: flag("create-missing", t.bool, {
+									help: "create it when absent",
+									presence: "default",
+									default: false,
+								}),
+							},
+						}),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "what to launch", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	const launch = app.asTools().find((t2) => t2.name === "launch");
+	assert.ok(launch);
+	// The property is spelled `create_missing` at this boundary, and the
+	// sentence still names the flag the way a user would type it.
+	await assert.rejects(
+		launch.execute({ target: "all-profiles", create_missing: true }),
+		{
+			message:
+				"flag '--create-missing' is only valid under '--profile', but '--all-profiles' was elected",
+		},
+	);
+});
+
+test("mcp: a defaulted election is blamed with the CLI's origin clause", async () => {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "email",
+							flags: {
+								subject: flag("subject", t.str, {
+									help: "subject line",
+									presence: "required",
+								}),
+							},
+						}),
+						sms: choice({ help: "sms" }),
+					},
+					{ help: "delivery channel", presence: "default", default: "sms" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	const send = app.asTools().find((t2) => t2.name === "send");
+	assert.ok(send);
+	await assert.rejects(send.execute({ subject: "hi" }), {
+		message:
+			"flag '--subject' is only valid under '--via email', but '--via sms' was elected by default",
 	});
 });
 
