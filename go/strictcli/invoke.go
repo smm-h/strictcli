@@ -25,12 +25,6 @@ func (e *InvokeError) Error() string {
 	return e.Message
 }
 
-// paramToFlagName converts a parameter name like "dry_run" back to a flag name "dry-run".
-// This is the reverse of flagParamName.
-func paramToFlagName(param string) string {
-	return strings.ReplaceAll(param, "_", "-")
-}
-
 // callOptions carries the per-call state that is NOT a handler kwarg.
 type callOptions struct {
 	approveConsequential bool
@@ -170,31 +164,32 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 		return invokeResult{exitCode: code}
 	}
 
-	// Build reverse mapping: flag name (with dashes) -> flag definition
-	flagByName := make(map[string]*Flag)
-	for i := range cmd.flags {
-		flagByName[cmd.flags[i].Name] = &cmd.flags[i]
-	}
+	// The properties this command publishes at the flat boundary, each under
+	// the PARAMETER spelling a handler receives (§24.11).
+	props := buildFlatProps(a, cmd)
 
-	// Build global flag name set and global flag lookup
-	globalFlagNames := make(map[string]bool)
-	globalFlagByName := make(map[string]*Flag)
-	for i := range a.globalFlags {
-		globalFlagNames[a.globalFlags[i].Name] = true
-		globalFlagByName[a.globalFlags[i].Name] = &a.globalFlags[i]
-	}
-
-	// Build arg name set for separating positional args from flags
-	argNames := make(map[string]bool)
-	for _, arg := range cmd.args {
-		argNames[arg.Name] = true
+	// SHAPE precedes every phase. A key naming nothing the command declares is
+	// a fact about the object's shape, and it outranks every election, scope,
+	// value and presence problem the same object also contains -- exactly as an
+	// unknown flag outranks all four on the command line wherever it sits in
+	// argv (§24.11, §18.23 item 238). It therefore runs BEFORE the declaration
+	// walk below, whose own refusals (an unelectable selector value, a record
+	// naming a foreign choice) are phase facts.
+	for paramName := range kwargs {
+		if props.declares(paramName) {
+			continue
+		}
+		return invokeResult{
+			exitCode: 1,
+			err:      errUnknownParameterForCommand(paramName, commandPath),
+		}
 	}
 
 	// Populate sourcedStore from kwargs, mapping param names back to flag names.
 	// Provided kwargs are marked SourceCLI; absent flags will get SourceDefault
 	// when validateAndBuildKwargs applies defaults.
 	store := newSourcedStore()
-	var positionals []string
+	positionals := map[string]interface{}{}
 
 	// A selector's value on the programmatic front door is the same record a
 	// handler receives -- Elect(<choice>, Fields{...}) -- or, at the machine
@@ -204,10 +199,9 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	// doors agree by construction rather than by test (contract §24.11).
 	sup := newSuppliedElections()
 	cliByFlag := make(map[*Flag]interface{})
-	scopedNames := make(map[string]*Flag)
 	var scopedBinds []pendingBind
 	if cmd.index != nil && cmd.index.hasSelectors {
-		binds, errStr := collectInvokeElections(cmd, kwargs, sup, scopedNames)
+		binds, errStr := collectInvokeElections(cmd, kwargs, sup, props.scoped)
 		if errStr != "" {
 			return invokeResult{exitCode: 1, err: errStr}
 		}
@@ -215,44 +209,27 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	}
 
 	// Every value this call supplied, held until the election phase has run
-	// command-wide. Coercing where the value is read would let an earlier
+	// command-wide. Checking where the value is read would let an earlier
 	// scope's value problem outrank a later selector's election refusal, which
 	// inverts the pinned phase order (§24.3, §24.11).
 	rootValues := make(map[*Flag]interface{})
+	globalValues := make(map[*Flag]interface{})
 	for paramName, value := range kwargs {
-		flagName := paramToFlagName(paramName)
-
-		// Check if it's a command flag
-		if f, ok := flagByName[flagName]; ok {
+		if f, ok := props.flags[paramName]; ok {
 			if f.Type == TypeChoice {
 				continue // already folded into the election input
 			}
 			rootValues[f] = value
 			continue
 		}
-
-		// Check if it's a global flag
-		if globalFlagNames[flagName] {
-			store.set(flagName, value, SourceCLI)
+		if gf, ok := props.globals[paramName]; ok {
+			globalValues[gf] = value
 			continue
 		}
-
-		// Check if it's a positional arg -- will be handled after this loop
-		if argNames[paramName] {
-			continue
-		}
-
-		// A scoped parameter supplied at the top level: legal at this boundary,
-		// where the schema is flat (§24.11), and refused by the SAME scope
-		// machinery the CLI parser uses when the combination is wrong.
-		if _, ok := scopedNames[flagName]; ok {
-			continue
-		}
-
-		return invokeResult{
-			exitCode: 1,
-			err:      errUnknownParameterForCommand(paramName, commandPath),
-		}
+		// A positional arg, or a scoped parameter supplied at the top level --
+		// the latter legal at this boundary, where the schema is flat (§24.11),
+		// and refused by the SAME scope machinery the CLI parser uses when the
+		// combination is wrong. Both are read after the election phase.
 	}
 
 	amb := ambientSource{hermetic: true}
@@ -272,14 +249,15 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	// Phase 4 begins here: election and scope are settled command-wide, so a
 	// value may now be refused. A flat object has no order of its own, so the
 	// sweep is DECLARATION order -- scoped values as the walk collected them,
-	// then the command's own flags -- which is what §21.4 already uses wherever
-	// an order-free object has to be reported in some order.
+	// then the command's own flags, its positionals, and the app's globals --
+	// which is what §21.4 already uses wherever an order-free object has to be
+	// reported in some order.
 	for _, b := range scopedBinds {
-		coerced, errStr := coerceInvokeValue(b.flag, b.raw)
+		checked, errStr := checkPreTypedValue(b.flag, b.raw)
 		if errStr != "" {
 			return invokeResult{exitCode: 1, err: errStr}
 		}
-		cliByFlag[b.flag] = coerced
+		cliByFlag[b.flag] = checked
 	}
 	for i := range cmd.flags {
 		f := &cmd.flags[i]
@@ -287,49 +265,40 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 		if !ok {
 			continue
 		}
-		coerced, errStr := coerceInvokeValue(f, raw)
+		checked, errStr := checkPreTypedValue(f, raw)
 		if errStr != "" {
 			return invokeResult{exitCode: 1, err: errStr}
 		}
-		store.set(f.Name, coerced, SourceCLI)
+		store.set(f.Name, checked, SourceCLI)
 	}
 
-	// Build positionals list from kwargs in arg declaration order
-	for _, arg := range cmd.args {
-		val, ok := kwargs[arg.Name]
+	// Collect the positionals this call supplied, under the arg names it
+	// supplied them under. The values are handed on as supplied; the
+	// declaration checks them where every other positional is resolved, and
+	// binds each to the arg its key names (§24.11 item 244).
+	for i := range cmd.args {
+		arg := &cmd.args[i]
+		if val, ok := kwargs[arg.Name]; ok {
+			positionals[arg.Name] = val
+		}
+	}
+
+	for i := range a.globalFlags {
+		gf := &a.globalFlags[i]
+		raw, ok := globalValues[gf]
 		if !ok {
 			continue
 		}
-		if arg.IsVariadic {
-			// Variadic args: value should be []string or []interface{}
-			switch v := val.(type) {
-			case []string:
-				for _, s := range v {
-					positionals = append(positionals, s)
-				}
-			case []interface{}:
-				for _, item := range v {
-					if s, ok := item.(string); ok {
-						positionals = append(positionals, s)
-					} else {
-						positionals = append(positionals, fmt.Sprintf("%v", item))
-					}
-				}
-			default:
-				positionals = append(positionals, fmt.Sprintf("%v", val))
-			}
-		} else {
-			if s, ok := val.(string); ok {
-				positionals = append(positionals, s)
-			} else {
-				positionals = append(positionals, fmt.Sprintf("%v", val))
-			}
+		checked, errStr := checkPreTypedValue(gf, raw)
+		if errStr != "" {
+			return invokeResult{exitCode: 1, err: errStr}
 		}
+		store.set(gf.Name, checked, SourceCLI)
 	}
 
 	// Run validation and build final kwargs
 	var noStdin *string
-	validatedKwargs, postGlobalValues, sources, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames, a.infraRoots, est, cliByFlag, amb, &noStdin)
+	validatedKwargs, postGlobalValues, sources, errStr := validateAndBuildKwargs(cmd, store, preTypedPositionals(positionals), props.globalNames, a.infraRoots, est, cliByFlag, amb, &noStdin)
 	if errStr != "" {
 		return invokeResult{exitCode: 1, err: errStr}
 	}
@@ -404,47 +373,208 @@ func (a *App) invokeSealed(fn func() int) (code int, truncErr string) {
 	return fn(), ""
 }
 
-// coerceInvokeValue converts a Go-native value to the internal representation
-// expected by the parsing/validation pipeline. For compound types, this converts
-// typed Go slices ([]int, []string, etc.) to []interface{}, and typed Go maps
-// (map[string]int, etc.) to map[string]interface{}. For scalar types, the value
-// is passed through as-is.
-func coerceInvokeValue(f *Flag, value interface{}) (interface{}, string) {
-	if IsDictType(f.Type) {
-		return coerceInvokeDict(f, value)
-	}
-	if IsListType(f.Type) || f.Repeatable {
-		return coerceInvokeList(f, value)
-	}
-	return value, ""
+// flatProps is every property a command publishes at the flat boundary, keyed
+// by the PARAMETER spelling -- underscored, exactly as a handler receives it,
+// and exactly as the schema publishes it (§24.11). A flag's own dashed spelling
+// is therefore a key the command does not declare: the boundary reads the
+// command line the flat object spells, but it is not the command line, and one
+// property has one name.
+type flatProps struct {
+	// flags are the command's own root declarations, selectors included.
+	flags map[string]*Flag
+	// scoped is every declaration inside a scope, at every depth, including a
+	// member's payload key -- each a property of the flat schema, so supplying
+	// one is a scope question and never a shape one.
+	scoped map[string]*Flag
+	// globals are the app-level flags.
+	globals map[string]*Flag
+	// globalNames is the same set under the dashed spelling the parse pipeline
+	// keys its store by.
+	globalNames map[string]bool
+	// args are the positional args, under their declared names.
+	args map[string]bool
 }
 
-// coerceInvokeList converts various Go slice types to []interface{}.
-func coerceInvokeList(f *Flag, value interface{}) (interface{}, string) {
-	switch v := value.(type) {
-	case []interface{}:
-		return v, ""
-	case []string:
-		result := make([]interface{}, len(v))
-		for i, s := range v {
-			result[i] = s
-		}
-		return result, ""
-	case []int:
-		result := make([]interface{}, len(v))
-		for i, n := range v {
-			result[i] = n
-		}
-		return result, ""
-	case []float64:
-		result := make([]interface{}, len(v))
-		for i, n := range v {
-			result[i] = n
-		}
-		return result, ""
-	default:
-		return value, ""
+// declares reports whether one kwargs key names something this command has.
+func (p *flatProps) declares(paramName string) bool {
+	if _, ok := p.flags[paramName]; ok {
+		return true
 	}
+	if _, ok := p.scoped[paramName]; ok {
+		return true
+	}
+	if _, ok := p.globals[paramName]; ok {
+		return true
+	}
+	return p.args[paramName]
+}
+
+// buildFlatProps indexes one command's flat properties.
+func buildFlatProps(a *App, cmd *Command) *flatProps {
+	p := &flatProps{
+		flags:       make(map[string]*Flag, len(cmd.flags)),
+		scoped:      map[string]*Flag{},
+		globals:     make(map[string]*Flag, len(a.globalFlags)),
+		globalNames: make(map[string]bool, len(a.globalFlags)),
+		args:        make(map[string]bool, len(cmd.args)),
+	}
+	for i := range cmd.flags {
+		p.flags[flagParamName(cmd.flags[i].Name)] = &cmd.flags[i]
+	}
+	if cmd.index != nil {
+		for _, name := range cmd.index.order {
+			for _, site := range cmd.index.sites[name] {
+				if len(site.path) > 0 {
+					p.scoped[flagParamName(name)] = site.flag
+				}
+			}
+		}
+	}
+	for i := range a.globalFlags {
+		p.globals[flagParamName(a.globalFlags[i].Name)] = &a.globalFlags[i]
+		p.globalNames[a.globalFlags[i].Name] = true
+	}
+	for _, arg := range cmd.args {
+		p.args[arg.Name] = true
+	}
+	return p
+}
+
+// checkPreTypedValue checks one PRE-TYPED value against the declaration it was
+// supplied against, and returns it in the representation the parse pipeline
+// carries (contract §24.11, §23.4, §18.23 item 240).
+//
+// The two programmatic doors hand the framework values that are already typed,
+// so nothing parses them -- but the declaration still decides what they may be,
+// exactly as it does for a token that has to be parsed first. *Pre-typed* means
+// ALREADY OF THE DECLARED TYPE, never exempt from the declaration: the closed-set
+// half of the declaration (Choices) is consulted on this path already, so the
+// type half is consulted too. The check is the one the config reader runs over
+// an already-typed document, because a flat object and a config document pose
+// the identical question, and the sentences are therefore the ones that reader
+// already prints.
+//
+// nil is a legal value for nothing. Optionality has ONE spelling (§23.4): a flag
+// that may be absent declares Optional() and is delivered absent when its key is
+// simply not there, so a null says nothing the declaration cannot already say --
+// and on a required flag it would answer the presence rule with a value the
+// declaration forbids.
+func checkPreTypedValue(f *Flag, value interface{}) (interface{}, string) {
+	if IsDictType(f.Type) {
+		// A dict flag keeps its own SHAPE refusal, which names the Go type the
+		// caller actually handed over; its entries are then checked like any
+		// others.
+		m, errStr := coerceInvokeDict(f, value)
+		if errStr != "" {
+			return nil, errStr
+		}
+		value = m
+	}
+	coerced, errStr := coerceConfigValue(normalizePreTyped(value), f)
+	if errStr != "" {
+		return nil, errFlagValueError(f.Name, errStr)
+	}
+	return coerced, ""
+}
+
+// checkPreTypedArgValue checks one PRE-TYPED positional value against its
+// declaration, and delivers the value itself (contract §24.11 item 244).
+//
+// A positional is declared with the same presence spellings and the same four
+// types a flag is (§23.3), so nothing about being a positional makes a supplied
+// value exempt from its declaration: an int is not a string arg's value and a
+// null is nothing's. Stringifying instead would not merely skip the check, it
+// would MANUFACTURE an argv -- a token the caller never wrote, re-parsed into
+// the right answer by luck where the types happen to line up, and into the text
+// of a null where they do not. The wrapper is the arg side's own, never
+// `--<name>`, because that is the prefix every arg-side value refusal uses.
+//
+// A variadic arg is a SEQUENCE of positionals rather than one value of a
+// collection type, so an array spreads into one element per entry and each
+// element is checked on its own -- and anything else is the single element it
+// looks like, which is the one positional a command line would have typed.
+func checkPreTypedArgValue(a *Arg, value interface{}) (interface{}, string) {
+	if a.IsVariadic {
+		items, ok := normalizePreTyped(value).([]interface{})
+		if !ok {
+			items = []interface{}{value}
+		}
+		vals := make([]interface{}, len(items))
+		for i, item := range items {
+			checked, errStr := checkPreTypedArgElement(a, item)
+			if errStr != "" {
+				return nil, errStr
+			}
+			vals[i] = checked
+		}
+		return vals, ""
+	}
+	return checkPreTypedArgElement(a, value)
+}
+
+// checkPreTypedArgElement checks one pre-typed value against the type its arg
+// declares.
+func checkPreTypedArgElement(a *Arg, value interface{}) (interface{}, string) {
+	t := a.Type
+	if IsListType(t) {
+		t = ItemType(t)
+	}
+	coerced, errStr := coerceConfigScalar(normalizePreTyped(value), t, false)
+	if errStr != "" {
+		return nil, fmt.Sprintf("argument '%s': %s", a.Name, errStr)
+	}
+	return coerced, ""
+}
+
+// normalizePreTyped converts a Go-native value into the representation a decoded
+// document has, which is what the config reader's check reads: int64 and float64
+// for numbers, []interface{} and map[string]interface{} for the two compounds.
+// It decides what the value IS -- the fact the refusal below it must name -- and
+// never whether the declaration accepts it.
+func normalizePreTyped(value interface{}) interface{} {
+	switch v := value.(type) {
+	case int:
+		return int64(v)
+	case int8:
+		return int64(v)
+	case int16:
+		return int64(v)
+	case int32:
+		return int64(v)
+	case float32:
+		return float64(v)
+	case []interface{}:
+		out := make([]interface{}, len(v))
+		for i, item := range v {
+			out[i] = normalizePreTyped(item)
+		}
+		return out
+	case []string:
+		out := make([]interface{}, len(v))
+		for i, item := range v {
+			out[i] = item
+		}
+		return out
+	case []int:
+		out := make([]interface{}, len(v))
+		for i, item := range v {
+			out[i] = int64(item)
+		}
+		return out
+	case []float64:
+		out := make([]interface{}, len(v))
+		for i, item := range v {
+			out[i] = item
+		}
+		return out
+	case map[string]interface{}:
+		out := make(map[string]interface{}, len(v))
+		for k, item := range v {
+			out[k] = normalizePreTyped(item)
+		}
+		return out
+	}
+	return value
 }
 
 // coerceInvokeDict converts various Go map types to map[string]interface{}.
@@ -525,21 +655,13 @@ type pendingBind struct {
 // It returns the values the elected scopes were given, in declaration order,
 // for the caller to coerce once every election is settled. Nothing here refuses
 // a value: a walk over declarations is not a licence to refuse mid-walk.
-func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *suppliedElections, scopedNames map[string]*Flag) ([]pendingBind, string) {
-	// Every scoped name, so a top-level scoped parameter is recognized rather
-	// than refused as unknown -- and so a parameter belonging to a scope that
-	// was NOT elected reaches scope validation and is refused with the CLI's own
-	// sentence rather than silently ignored.
-	for _, name := range cmd.index.order {
-		for _, site := range cmd.index.sites[name] {
-			if len(site.path) > 0 {
-				scopedNames[name] = site.flag
-			}
-		}
-	}
+func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *suppliedElections, scoped map[string]*Flag) ([]pendingBind, string) {
+	// Every scoped parameter this call named is marked supplied, so a parameter
+	// belonging to a scope that was NOT elected reaches scope validation and is
+	// refused with the CLI's own sentence rather than silently ignored.
 	for key := range kwargs {
-		if _, ok := scopedNames[paramToFlagName(key)]; ok {
-			sup.suppliedNames[paramToFlagName(key)] = true
+		if f, ok := scoped[key]; ok {
+			sup.suppliedNames[f.Name] = true
 		}
 	}
 

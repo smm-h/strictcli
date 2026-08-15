@@ -586,7 +586,7 @@ func parseCommand(cmd *Command, tokens []string, globalFlags []Flag, configData 
 		}
 	}
 
-	kwargs, postGlobals, sources, errStr := validateAndBuildKwargs(cmd, store, positionals, globalFlagNames, infraRoots, est, cliByFlag, amb, stdinConsumedBy)
+	kwargs, postGlobals, sources, errStr := validateAndBuildKwargs(cmd, store, argvPositionals(positionals), globalFlagNames, infraRoots, est, cliByFlag, amb, stdinConsumedBy)
 	return kwargs, postGlobals, sources, errStr, est.skipped
 }
 
@@ -645,7 +645,7 @@ func applyFlagDefault(f *Flag, prefix string, roots map[string]string) (interfac
 // runs custom validation, resolves positional args, and builds the final
 // kwargs map.
 // Returns (kwargs, postGlobalValues, errorString).
-func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []string, globalFlagNames map[string]bool, infraRoots map[string]string, est *electionState, cliByFlag map[*Flag]interface{}, amb ambientSource, stdinConsumedBy **string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
+func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals positionalInput, globalFlagNames map[string]bool, infraRoots map[string]string, est *electionState, cliByFlag map[*Flag]interface{}, amb ambientSource, stdinConsumedBy **string) (map[string]interface{}, map[string]interface{}, map[string]string, string) {
 	// Election ran in phase 2 and scope validation in phase 3 (scope_parse.go).
 	// MutexGroup is deleted: "exactly one of these" is a member-spelled selector
 	// now, and §21.4's three errors survive verbatim inside the election phase
@@ -779,50 +779,12 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals []str
 
 	// Resolve positional args
 	argValues := make(map[string]interface{})
-	posIdx := 0
-	for i := range cmd.args {
-		a := &cmd.args[i]
-		if a.IsVariadic {
-			// Collect all remaining positionals
-			remaining := positionals[posIdx:]
-			if len(remaining) == 0 {
-				if a.presence == presenceRequired {
-					return nil, nil, nil, errMissingRequiredArgument(a.Name)
-				}
-				// A variadic arg always delivers a list, so its optional case
-				// is the empty one (contract §23.3).
-				argValues[a.Name] = []interface{}{}
-			} else {
-				vals := make([]interface{}, len(remaining))
-				for j, v := range remaining {
-					coerced, errStr := coerceArgValue(a, v)
-					if errStr != "" {
-						return nil, nil, nil, errStr
-					}
-					vals[j] = coerced
-				}
-				argValues[a.Name] = vals
-			}
-			posIdx = len(positionals)
-		} else if posIdx < len(positionals) {
-			coerced, errStr := coerceArgValue(a, positionals[posIdx])
-			if errStr != "" {
-				return nil, nil, nil, errStr
-			}
-			argValues[a.Name] = coerced
-			posIdx++
-		} else if a.presence == presenceRequired {
-			return nil, nil, nil, errMissingRequiredArgument(a.Name)
-		} else if a.presence == presenceDefault {
-			argValues[a.Name] = a.Default
-		} else {
-			// An optional arg delivers absence as a PRESENT key holding nil
-			// -- never key-absence (contract §23.3).
-			argValues[a.Name] = nil
+	if positionals.preTyped {
+		if errStr := resolvePreTypedArgs(cmd, positionals.byName, argValues); errStr != "" {
+			return nil, nil, nil, errStr
 		}
-	}
-	if posIdx < len(positionals) {
-		return nil, nil, nil, errUnexpectedArgument(positionals[posIdx])
+	} else if errStr := resolveArgTokens(cmd, positionals.tokens, argValues); errStr != "" {
+		return nil, nil, nil, errStr
 	}
 
 	// Validate arg choices (after type coercion)
@@ -989,6 +951,127 @@ func parseFloatStrict(flagName, raw string) (interface{}, string) {
 		return nil, fmt.Sprintf("--%s: expected float, got '%s'", flagName, raw)
 	}
 	return floatVal, ""
+}
+
+// positionalInput is the positional input one door supplied, in the form that
+// door speaks (contract §24.11 item 244).
+//
+// The argv door supplies TOKENS in the order they were typed, which are parsed
+// against the declaration and bound by position. A programmatic door supplies
+// VALUES KEYED BY ARG NAME: they are already of the declared type, so they are
+// checked against it rather than parsed, handed on as supplied rather than
+// stringified into a token the caller did not write, and bound to the arg the
+// key names rather than to whatever position the supplied subset happens to
+// leave them in. Which of the two a call carries is the DOOR's statement, made
+// once where the input is built; nothing below infers it from the values.
+type positionalInput struct {
+	tokens   []string
+	byName   map[string]interface{}
+	preTyped bool
+}
+
+// argvPositionals is the argv door's input: tokens to parse, bound by position.
+func argvPositionals(tokens []string) positionalInput {
+	return positionalInput{tokens: tokens}
+}
+
+// preTypedPositionals is a programmatic door's input: values to check, bound by
+// the arg name each was supplied under.
+func preTypedPositionals(byName map[string]interface{}) positionalInput {
+	return positionalInput{byName: byName, preTyped: true}
+}
+
+// resolveArgTokens binds the argv door's tokens to the declared args BY
+// POSITION, parsing each against the arg it lands on.
+func resolveArgTokens(cmd *Command, tokens []string, argValues map[string]interface{}) string {
+	posIdx := 0
+	for i := range cmd.args {
+		a := &cmd.args[i]
+		if a.IsVariadic {
+			remaining := tokens[posIdx:]
+			if len(remaining) == 0 {
+				if a.presence == presenceRequired {
+					return errMissingRequiredArgument(a.Name)
+				}
+				// A variadic arg always delivers a list, so its optional case
+				// is the empty one (contract §23.3).
+				argValues[a.Name] = []interface{}{}
+			} else {
+				vals := make([]interface{}, len(remaining))
+				for j, tok := range remaining {
+					coerced, errStr := coerceArgValue(a, tok)
+					if errStr != "" {
+						return errStr
+					}
+					vals[j] = coerced
+				}
+				argValues[a.Name] = vals
+			}
+			posIdx = len(tokens)
+		} else if posIdx < len(tokens) {
+			coerced, errStr := coerceArgValue(a, tokens[posIdx])
+			if errStr != "" {
+				return errStr
+			}
+			argValues[a.Name] = coerced
+			posIdx++
+		} else if a.presence == presenceRequired {
+			return errMissingRequiredArgument(a.Name)
+		} else if a.presence == presenceDefault {
+			argValues[a.Name] = a.Default
+		} else {
+			// An optional arg delivers absence as a PRESENT key holding nil
+			// -- never key-absence (contract §23.3).
+			argValues[a.Name] = nil
+		}
+	}
+	if posIdx < len(tokens) {
+		return errUnexpectedArgument(tokens[posIdx])
+	}
+	return ""
+}
+
+// resolvePreTypedArgs binds a programmatic door's values to the args their KEYS
+// name, checking each against the declaration it was supplied against
+// (contract §24.11 item 244).
+//
+// Presence is answered by the key's absence, exactly as the argv path answers it
+// with a token that was never typed -- so an omitted optional arg is delivered
+// as a present key holding absence, and an omitted required one keeps the argv
+// path's own sentence.
+func resolvePreTypedArgs(cmd *Command, byName map[string]interface{}, argValues map[string]interface{}) string {
+	for i := range cmd.args {
+		a := &cmd.args[i]
+		raw, supplied := byName[a.Name]
+		if supplied {
+			checked, errStr := checkPreTypedArgValue(a, raw)
+			if errStr != "" {
+				return errStr
+			}
+			if a.IsVariadic && a.presence == presenceRequired {
+				if vals, ok := checked.([]interface{}); ok && len(vals) == 0 {
+					// An empty array is the flat spelling of no tokens at all.
+					return errMissingRequiredArgument(a.Name)
+				}
+			}
+			argValues[a.Name] = checked
+			continue
+		}
+		switch {
+		case a.IsVariadic:
+			if a.presence == presenceRequired {
+				return errMissingRequiredArgument(a.Name)
+			}
+			argValues[a.Name] = []interface{}{}
+		case a.presence == presenceRequired:
+			return errMissingRequiredArgument(a.Name)
+		case a.presence == presenceDefault:
+			argValues[a.Name] = a.Default
+		default:
+			argValues[a.Name] = nil
+		}
+	}
+	return ""
 }
 
 // coerceArgValue coerces a raw positional arg string to the declared type.
