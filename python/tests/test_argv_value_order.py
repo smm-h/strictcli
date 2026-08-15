@@ -165,11 +165,26 @@ def test_the_last_occurrence_still_supplies_the_value():
             "error: --before: expected integer, got 'nope'",
         ),
         (
+            ["--before", "nope", "--schecked", "x"],
+            "error: --before: expected integer, got 'nope'",
+        ),
+        (
             ["--schecked", "x", "--retries", "nope"],
             "error: --retries: expected integer, got 'nope'",
         ),
         (
             ["--retries", "nope", "--schecked", "x"],
+            "error: --retries: expected integer, got 'nope'",
+        ),
+        # And a ROOT callback refusal does not outrank a scoped coercion
+        # failure either: the exception is about the two kinds of refusal, not
+        # about which scope either one sits in.
+        (
+            ["--rchecked", "x", "--retries", "nope"],
+            "error: --retries: expected integer, got 'nope'",
+        ),
+        (
+            ["--retries", "nope", "--rchecked", "x"],
             "error: --retries: expected integer, got 'nope'",
         ),
     ],
