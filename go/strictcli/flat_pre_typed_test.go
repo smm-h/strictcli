@@ -282,6 +282,11 @@ func TestPreTypedPositionalRefusesABoolForAnIntArg(t *testing.T) {
 		"argument 'amount': expected integer, got bool")
 }
 
+func TestPreTypedPositionalRefusesAFloatForAnIntArg(t *testing.T) {
+	wantRefusal(t, flatRefusal(t, base(map[string]interface{}{"amount": 1.5})),
+		"argument 'amount': expected integer, got float")
+}
+
 func TestPreTypedPositionalTakesTheDeclaredType(t *testing.T) {
 	captured := flatAccepted(t, base(map[string]interface{}{"amount": 3}))
 	if captured["amount"] != 3 {
