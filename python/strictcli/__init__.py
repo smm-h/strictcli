@@ -6189,22 +6189,6 @@ _CHECK_PAYLOAD_SCHEMA = {"type": "array", "items": {"type": "object"}}
 _CONFIG_SHOW_PAYLOAD_SCHEMA = {"type": "object"}
 
 
-def _config_show_value(value: object) -> object:
-    """One config-show value, as the MACHINE form publishes it.
-
-    A `RelativeToRoot` default is not a JSON value and has no resolution to
-    publish here: `config show` displays what the configuration says rather
-    than what a run would produce, exactly as `--dump-schema` does (§25.10).
-    So it is published in §13's machine-stable marker shape -- the declared env
-    var and path parts, never the resolved machine-specific path -- which is
-    the one shape this document has ever pinned for a marker. The human form
-    renders the marker as written and is untouched.
-    """
-    if isinstance(value, RelativeToRoot):
-        return _serialize_marker(value)
-    return value
-
-
 def _raise_handler_var_keyword_undeclared(name: str):
     raise ValueError(
         f'command "{name}": handler accepts **kwargs but the command does not '
@@ -8614,8 +8598,13 @@ class App:
             for f in all_flags:
                 param = _flag_param_name(f.name)
                 value, source = _resolve_flag_show_source(f, config_data)
+                # The SAME serializer the dumped schema uses (§13, §25.10): a
+                # `RelativeToRoot` default is not a JSON value, and this
+                # surface prints what the configuration says rather than what
+                # a run would produce, so it publishes the declared env var
+                # and path parts and never the resolved path.
                 result[param] = {
-                    "value": _config_show_value(value), "source": source,
+                    "value": _serialize_default_value(value), "source": source,
                 }
             # Include config fields (skip those colliding with a flag: they
             # are validation-only and render once, on the flag entry).
@@ -14783,10 +14772,13 @@ def _serialize_choice_records(records: tuple) -> list[dict]:
 
 
 def _serialize_default_value(value: object) -> object:
-    """A declared default, as the schema publishes it.
+    """A declared default, as the schema and `config show --json` publish it.
 
     A RelativeToRoot marker is emitted in its machine-stable shape: only the
     declared env var and path parts, never the resolved machine-specific path.
+    One helper serves both surfaces because they publish the same fact -- the
+    declaration -- and §13 pins exactly one shape for it (§25.10, §18.28
+    item 265).
     """
     if isinstance(value, RelativeToRoot):
         return _serialize_marker(value)
