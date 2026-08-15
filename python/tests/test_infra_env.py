@@ -8,7 +8,9 @@ from conftest import payload
 
 import strictcli
 from strictcli import App, Context, RelativeToRoot
-from strictcli import choice, choice_flag, member_value, sub_flag
+from strictcli import (
+    choice, choice_flag, member_value, sub_choice_flag, sub_flag,
+)
 
 
 # --- Eager root resolution ---
@@ -567,7 +569,9 @@ def test_a_defaulted_selection_still_delivers_its_plain_defaults(monkeypatch):
 
 def test_defaulted_selection_marker_naming_an_undeclared_root_is_refused(monkeypatch):
     """Registration does not see inside a scope, so the refusal arrives at
-    delivery -- carrying the scope the declaration lives in."""
+    delivery -- carrying the scope the declaration lives in, and what elected
+    it. Nothing the operator typed names this scope, so §12.13's origin clause
+    follows the scope suffix in item 239's order."""
     monkeypatch.delenv("MYAPP_HOME", raising=False)
 
     @choice("elsewhere", help="write elsewhere")
@@ -593,14 +597,146 @@ def test_defaulted_selection_marker_naming_an_undeclared_root_is_refused(monkeyp
     assert r.exit_code == 1
     assert (
         'error: RelativeToRoot references undeclared infra root "NOPE"; '
-        "declare it as an infra root under '--via elsewhere'\n"
+        "declare it as an infra root under '--via elsewhere' "
+        "(elected by default)\n"
     ) in r.stderr
     with pytest.raises(strictcli.InvokeError) as exc:
         app.call("run")
     assert str(exc.value) == (
         'RelativeToRoot references undeclared infra root "NOPE"; '
+        "declare it as an infra root under '--via elsewhere' "
+        "(elected by default)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# The origin clause on a defaulted selection's refusal (§12.13, item 239)
+# ---------------------------------------------------------------------------
+
+
+def _nested_marker_app(*, sel_env=None):
+    """A nested selector whose DEFAULT selection carries a bad marker.
+
+    Nothing an operator types names the inner scope, so every refusal it
+    raises has to say what elected it.
+    """
+
+    @choice("plain", help="plain text")
+    class Plain:
+        cfg: str = sub_flag(
+            help="the config file", default=RelativeToRoot("NOPE", "x"),
+        )
+
+    @choice("rich", help="rich text")
+    class Rich:
+        width: int = sub_flag(help="how wide", default=80)
+
+    @choice("email", help="as an email")
+    class Email:
+        body: "Plain | Rich" = sub_choice_flag(
+            help="the body format", default=Plain(),
+            elect_by="selector-token", choices=[Plain, Rich],
+        )
+
+    @choice("sms", help="as a text")
+    class Sms:
+        phone_number: str = sub_flag(help="destination", default="+1")
+
+    app = App(name="myapp", version="1.0.0", help="t",
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+
+    @app.command("send", effect="read_only", help="send it")
+    @choice_flag("via", help="delivery channel", presence="required",
+                 elect_by="selector-token", choices=[Email, Sms], env=sel_env)
+    def send(ctx, via: "Email | Sms"):
+        return 0
+
+    return app, Email
+
+
+_NESTED_REFUSAL = (
+    'RelativeToRoot references undeclared infra root "NOPE"; '
+    "declare it as an infra root under '--via email --body plain'"
+)
+
+
+def test_a_defaulted_selection_names_what_elected_it(monkeypatch):
+    """The outer election was typed and the inner one was not, so the clause
+    names the one the reader cannot see in their own command line."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, _ = _nested_marker_app()
+    r = app.test(["send", "--via", "email"])
+    assert r.exit_code == 1
+    assert f"error: {_NESTED_REFUSAL} (elected by default)\n" in r.stderr
+
+
+def test_the_origin_clause_reaches_the_flat_door(monkeypatch):
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, _ = _nested_marker_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        app._call_with_kwargs(
+            "send", {"via": "email"}, approve_consequential=False, flat=True,
+        )
+    assert str(exc.value) == f"{_NESTED_REFUSAL} (elected by default)"
+
+
+def test_the_origin_clause_reaches_the_record_door(monkeypatch):
+    """The caller supplied the OUTER record; the inner selection is still the
+    declaration's, and says so."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, Email = _nested_marker_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        app.call("send", via=Email())
+    assert str(exc.value) == f"{_NESTED_REFUSAL} (elected by default)"
+
+
+def test_an_ambient_election_further_out_outranks_the_default(monkeypatch):
+    """§24.6's rule, unchanged: the OUTERMOST non-command-line election is the
+    cause worth naming, so an env-elected outer scope wins the clause."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    monkeypatch.setenv("NOTIFY_VIA", "email")
+    app, _ = _nested_marker_app(sel_env="NOTIFY_VIA")
+    r = app.test(["send"])
+    assert r.exit_code == 1
+    assert (
+        f"error: {_NESTED_REFUSAL} (elected from env var 'NOTIFY_VIA')\n"
+    ) in r.stderr
+
+
+def test_a_supplied_election_earns_no_origin_clause(monkeypatch):
+    """The wrapper exists exactly when the clause it wraps does: an election
+    the operator typed is one they can already see."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+
+    @choice("elsewhere", help="write elsewhere")
+    class Elsewhere:
+        path: str = sub_flag(
+            help="where to write", default=RelativeToRoot("NOPE", "out"),
+        )
+
+    @choice("silent", help="no delivery")
+    class Silent:
+        pass
+
+    app = App(name="myapp", version="1.0.0", help="t",
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag("via", help="delivery channel", presence="required",
+                 elect_by="selector-token", choices=[Elsewhere, Silent])
+    def run(ctx, via: "Elsewhere | Silent"):
+        return 0
+
+    want = (
+        'RelativeToRoot references undeclared infra root "NOPE"; '
         "declare it as an infra root under '--via elsewhere'"
     )
+    r = app.test(["run", "--via", "elsewhere"])
+    assert r.exit_code == 1
+    assert f"error: {want}\n" in r.stderr
+    with pytest.raises(strictcli.InvokeError) as exc:
+        app.call("run", via=Elsewhere())
+    assert str(exc.value) == want
 
 
 def test_a_defaulted_selection_copies_its_compound_defaults(monkeypatch):
@@ -706,5 +842,6 @@ def test_a_member_spelled_marker_names_the_member_in_its_refusal(monkeypatch):
     assert r.exit_code == 1
     assert (
         'error: RelativeToRoot references undeclared infra root "NOPE"; '
-        "declare it as an infra root under '--all-profiles'\n"
+        "declare it as an infra root under '--all-profiles' "
+        "(elected by default)\n"
     ) in r.stderr

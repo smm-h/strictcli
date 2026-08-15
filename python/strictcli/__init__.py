@@ -11986,18 +11986,21 @@ def _resolve_declared_marker(
     *,
     member_spelled: dict[str, bool],
     infra_roots: dict[str, str] | None,
+    origin_suffix: str = "",
 ) -> str:
     """One `RelativeToRoot` default declared inside a scope, resolved (§24.6).
 
-    The marker's own sentence plus §12.13's scope suffix: registration never
-    sees inside a scope, so an undeclared root is reported where the default is
-    applied, naming the scope the declaration lives in.
+    The marker's own sentence plus §12.13's two suffixes, in the order item 239
+    closed them: registration never sees inside a scope, so an undeclared root
+    is reported where the default is applied, naming the scope the declaration
+    lives in and -- when the operator's own tokens do not name the election
+    that reached it -- what elected that scope.
     """
     try:
         return _resolve_infra_root_path(ref, infra_roots or {})
     except ValueError as e:
         suffix = _msg_scope_suffix(_render_scope_path(path, member_spelled))
-        raise _ParseError(str(e) + suffix) from None
+        raise _ParseError(str(e) + suffix + origin_suffix) from None
 
 
 def _declared_default_record(
@@ -12007,6 +12010,7 @@ def _declared_default_record(
     *,
     member_spelled: dict[str, bool],
     infra_roots: dict[str, str] | None,
+    state: "_ElectionState | None" = None,
 ) -> object:
     """A defaulted selection is complete and delivered as declared (§24.5).
 
@@ -12031,11 +12035,24 @@ def _declared_default_record(
     field has to be resolved or copied (at any depth), the delivered record is
     a new one built from the same class; when none does, the declaration's own
     object is delivered, as it always was.
+
+    A refusal raised down here says WHAT elected the scope it names, because
+    nothing the operator typed did: `(elected by default)` follows the scope
+    suffix in §12.13's order (item 239), and an ambient election further out
+    outranks it -- an env or config binding that reached this selection is the
+    cause a reader cannot see in their own command line (§24.6). ``state`` is
+    the election phase's record of that, and the doors that have no election
+    phase have no ambient source either, so the selection is the declaration's
+    there by construction.
     """
     spec = sel.choice_by_class(type(instance))
     if spec is None:  # pragma: no cover - registration proves the default's class
         return instance
     path = parent_path + ((sel.name, spec.name),)
+    origin_suffix = _msg_election_origin_suffix(
+        _path_origin(path, state) if state is not None
+        else _MSG_ELECTION_ORIGIN_DEFAULT
+    )
     values: dict[str, object] = {}
     sources: dict[str, str] = {}
     rebuilt = False
@@ -12050,7 +12067,7 @@ def _declared_default_record(
             if isinstance(raw, RelativeToRoot):
                 values[key] = _resolve_declared_marker(
                     raw, path, member_spelled=member_spelled,
-                    infra_roots=infra_roots,
+                    infra_roots=infra_roots, origin_suffix=origin_suffix,
                 )
                 sources[key] = "infra"
                 rebuilt = True
@@ -12067,7 +12084,7 @@ def _declared_default_record(
             continue
         nested = _declared_default_record(
             m, raw, path, member_spelled=member_spelled,
-            infra_roots=infra_roots,
+            infra_roots=infra_roots, state=state,
         )
         values[key] = nested
         sources[key] = "default"
@@ -12145,7 +12162,7 @@ def _build_scope_values(
         if key in state.from_default:
             result.values[param] = _declared_default_record(
                 m, m.default, path, member_spelled=member_spelled,
-                infra_roots=infra_roots,
+                infra_roots=infra_roots, state=state,
             )
             result.sources[param] = "default"
             continue
