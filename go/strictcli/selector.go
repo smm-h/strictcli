@@ -385,6 +385,12 @@ func validateSelectorDecl(sel *Flag) {
 		if strings.TrimSpace(ch.Help) == "" {
 			panic(errChoiceHelpEmpty(sel.Name, ch.Name))
 		}
+		// One charset for both spellings: under member spelling the name IS the
+		// flag that elects the choice, and under token spelling it is the value
+		// that names it (§24.7).
+		if !identifierRe.MatchString(ch.Name) {
+			panic(errChoiceNameCharset(sel.Name, ch.Name))
+		}
 		if ch.ownerSel != "" && ch.ownerSel != sel.Name {
 			panic(errChoiceAliased(ch.Name, ch.ownerSel, sel.Name))
 		}
@@ -527,6 +533,25 @@ func (s *flagSite) elects() bool {
 	return ch != nil && ch.member && memberFlag(ch) == s.flag
 }
 
+// electsMember reports whether this site IS the electing flag of a
+// member-spelled choice: the declaration whose name is the choice's name, and
+// therefore a flag name command-wide (§24.7).
+func electsMember(s *flagSite) bool {
+	ch := s.choice()
+	return ch != nil && ch.member && memberFlag(ch) == s.flag
+}
+
+// ownerScopePath is the scope a site's declaration BELONGS TO. For every
+// ordinary flag that is the site's own path, but a member flag is declared BY
+// the last election on its path rather than under it, so the scope that owns it
+// is the path without that segment (§12.13, §18.19 item 224).
+func ownerScopePath(s *flagSite) []pathSeg {
+	if electsMember(s) && len(s.path) > 0 {
+		return s.path[:len(s.path)-1]
+	}
+	return s.path
+}
+
 // selector returns the selector owning this site's scope, or nil at root.
 func (s *flagSite) selector() *Flag {
 	if len(s.path) == 0 {
@@ -630,6 +655,14 @@ func validateCommandScopes(cmdName string, idx *flagIndex) {
 					// pass.
 					if onPath(scoped.path, root.flag) {
 						panic(errScopedNameCollidesSelector(scoped.choice().Name, scoped.selector().Name, name))
+					}
+					// Under member spelling a choice name IS a flag name
+					// (§24.7), so a member flag and a command-level flag of that
+					// name are two declarations of ONE flag name rather than a
+					// scoped flag nothing could reach. The plain duplicate-flag
+					// error is the sentence that says so (§18.19 item 223).
+					if electsMember(scoped) {
+						panic(errCommandDuplicateFlag(cmdName, name))
 					}
 					panic(errScopedNameCollidesRoot(scoped.choice().Name, scoped.selector().Name, name))
 				}

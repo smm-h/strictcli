@@ -1204,3 +1204,162 @@ func TestChoiceValueBelongsToExactlyOneSelector(t *testing.T) {
 		ChoiceFlag("second", "the second selector", Required(), shared, Choice("c", "choice c"))
 	})
 }
+
+// --- Item 223: a member choice name IS a flag name (§24.7) ---
+
+// A member choice's name is the flag that elects it, so a command-level flag of
+// the same name is TWO DECLARATIONS OF ONE FLAG NAME rather than an unreachable
+// scoped flag. The plain duplicate-flag error is the one that says so.
+func TestMemberChoiceNameCollidingWithARootFlagIsADuplicateFlagName(t *testing.T) {
+	expectPanic(t, `command "cmd": duplicate flag name "profile"`, func() {
+		simpleApp("cmd", "a command", "ok", WithFlags(
+			StringFlag("profile", "a command-level flag", Optional()),
+			MemberChoiceFlag("mode", "which profiles", Required(),
+				MemberChoice(StringFlag("profile", "a profile", Required()), "one named profile"),
+				MemberChoice(BoolFlag("all-profiles", "every profile", Required()), "every profile"),
+			),
+		))
+	})
+}
+
+// The same collision one level down: depth changes nothing about what the name
+// IS, so the sentence is the same one.
+func TestNestedMemberChoiceNameCollidingWithARootFlagIsADuplicateFlagName(t *testing.T) {
+	expectPanic(t, `command "cmd": duplicate flag name "profile"`, func() {
+		simpleApp("cmd", "a command", "ok", WithFlags(
+			StringFlag("profile", "a command-level flag", Optional()),
+			ChoiceFlag("mode", "the mode", Required(),
+				Choice("advanced", "the advanced mode",
+					MemberChoiceFlag("profile-set", "which profiles", Required(),
+						MemberChoice(StringFlag("profile", "a profile", Required()), "one named profile"),
+						MemberChoice(BoolFlag("all-profiles", "every profile", Required()), "every profile"),
+					)),
+				Choice("simple", "the simple mode")),
+		))
+	})
+}
+
+// A member's SCOPE is not the member: an ordinary scoped flag colliding with a
+// command-level flag keeps the unreachable-scoped-flag sentence.
+func TestScopedFlagUnderAMemberCollidingWithARootFlagKeepsItsOwnError(t *testing.T) {
+	expectPanic(t, `Choice "profile" of "mode": flag '--create-missing' collides with a command-level flag of the same name: the scoped one could never be reached`, func() {
+		simpleApp("cmd", "a command", "ok", WithFlags(
+			BoolFlag("create-missing", "a command-level flag", Default(false)),
+			MemberChoiceFlag("mode", "which profiles", Required(),
+				MemberChoice(StringFlag("profile", "a profile", Required()), "one named profile",
+					BoolFlag("create-missing", "create it if absent", Default(false)),
+				),
+				MemberChoice(BoolFlag("all-profiles", "every profile", Required()), "every profile"),
+			),
+		))
+	})
+}
+
+// --- §24.7's choice-name charset ---
+
+func TestChoiceNameCharsetIsEnforcedOnTokenSpelling(t *testing.T) {
+	expectPanic(t, `Flag "via": choice name "Email" must match [a-z][a-z0-9-]*`, func() {
+		ChoiceFlag("via", "delivery channel", Required(),
+			Choice("Email", "an email message"),
+			Choice("sms", "a text message"))
+	})
+}
+
+func TestChoiceNameCharsetIsEnforcedOnMemberSpelling(t *testing.T) {
+	expectPanic(t, `Flag "mode": choice name "all_profiles" must match [a-z][a-z0-9-]*`, func() {
+		MemberChoiceFlag("mode", "which profiles", Required(),
+			MemberChoice(StringFlag("profile", "a profile", Required()), "one named profile"),
+			MemberChoice(BoolFlag("all_profiles", "every profile", Required()), "every profile"))
+	})
+}
+
+func TestChoiceNameCharsetRejectsALeadingDigitAndALeadingDash(t *testing.T) {
+	expectPanic(t, `Flag "via": choice name "2fa" must match [a-z][a-z0-9-]*`, func() {
+		ChoiceFlag("via", "delivery channel", Required(),
+			Choice("2fa", "second factor"),
+			Choice("sms", "a text message"))
+	})
+	expectPanic(t, `Flag "via": choice name "-email" must match [a-z][a-z0-9-]*`, func() {
+		ChoiceFlag("via", "delivery channel", Required(),
+			Choice("-email", "an email message"),
+			Choice("sms", "a text message"))
+	})
+}
+
+// The charset is exactly [a-z][a-z0-9-]*: digits and dashes after the first
+// character are legal, a trailing dash included.
+func TestChoiceNameCharsetAcceptsDigitsAndDashes(t *testing.T) {
+	ChoiceFlag("via", "delivery channel", Required(),
+		Choice("email-2", "an email message"),
+		Choice("sms-", "a text message"))
+}
+
+// --- Item 224: the owners clause of a MEMBER flag stops at its owning scope ---
+
+// scopedMemberApp declares a member-spelled selector one level inside a
+// token-spelled one, which is the only shape where a member flag can be
+// supplied out of scope at all: its own selector is unreachable.
+func scopedMemberApp() *App {
+	return simpleApp("run", "run it", "mode={mode}",
+		WithFlags(ChoiceFlag("mode", "the mode", Required(),
+			Choice("advanced", "the advanced mode",
+				MemberChoiceFlag("profile-set", "which profiles", Required(),
+					MemberChoice(StringFlag("profile", "a profile", Required()), "one named profile",
+						BoolFlag("create-missing", "create it if absent", Default(false)),
+					),
+					MemberChoice(BoolFlag("all-profiles", "every profile", Required()), "every profile"),
+				)),
+			Choice("simple", "the simple mode"),
+		)))
+}
+
+// A member flag is declared BY its own election, not under it: the scope path
+// that owns it is the path without that last segment.
+func TestOutOfScopeMemberFlagNamesTheOwningScopeOnly(t *testing.T) {
+	r := scopedMemberApp().Test([]string{"run", "--mode", "simple", "--profile", "work"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: flag '--profile' is only valid under '--mode advanced', but '--mode simple' was elected\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// The other why-clause, over the same owners clause.
+func TestOutOfScopeMemberFlagNamesTheOwningScopeOnlyWhenNothingWasElected(t *testing.T) {
+	r := scopedMemberApp().Test([]string{"run", "--profile", "work"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: flag '--profile' is only valid under '--mode advanced', but '--mode' was not provided\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// A flag in the member's SCOPE keeps every segment, the member's election
+// included: it really is declared under that election.
+func TestOutOfScopeFlagUnderAMemberKeepsTheWholePath(t *testing.T) {
+	r := scopedMemberApp().Test([]string{"run", "--mode", "simple", "--create-missing"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: flag '--create-missing' is only valid under '--mode advanced --profile', but '--mode simple' was elected\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// A live member's sibling scope is still refused with the whole path -- the
+// member's own election is live here, so nothing is trimmed by accident.
+func TestScopedFlagOfANonElectedSiblingMemberKeepsTheWholePath(t *testing.T) {
+	r := scopedMemberApp().Test([]string{"run", "--mode", "advanced", "--all-profiles", "--create-missing"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: flag '--create-missing' is only valid under '--mode advanced --profile', but '--mode advanced --all-profiles' was elected\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}

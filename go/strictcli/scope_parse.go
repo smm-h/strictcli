@@ -352,7 +352,7 @@ func (st *electionState) checkScope(suppliedOrder []string) string {
 		}
 		owners := make([]string, 0, len(sites))
 		for _, s := range sites {
-			owners = append(owners, quotedScopePath(s.path))
+			owners = append(owners, quotedScopePath(ownerScopePath(s)))
 		}
 		return errFlagOutOfScope(name, strings.Join(owners, " or "), st.why(sites[0].path))
 	}
@@ -365,8 +365,7 @@ func (st *electionState) checkScope(suppliedOrder []string) string {
 // declining it (`--no-x`) is a legal statement about the selector rather than a
 // flag supplied outside its scope. §21.4's decline errors then report it.
 func (st *electionState) isLiveElectionToken(s *flagSite) bool {
-	ch := s.choice()
-	if ch == nil || !ch.member || memberFlag(ch) != s.flag {
+	if !electsMember(s) {
 		return false
 	}
 	sel := s.selector()

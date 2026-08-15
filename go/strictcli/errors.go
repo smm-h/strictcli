@@ -1551,6 +1551,13 @@ func errChoiceHelpEmpty(sel, c string) string {
 	return fmt.Sprintf("Choice %q of %q: help text is required", c, sel)
 }
 
+// errChoiceNameCharset: under member spelling a choice name IS a flag name, and
+// a name that could not be a flag name would make the two spellings declare
+// different things (§24.7). One charset, both spellings.
+func errChoiceNameCharset(sel, c string) string {
+	return fmt.Sprintf("Flag %q: choice name %q must match [a-z][a-z0-9-]*", sel, c)
+}
+
 func errSelectorDefaultUnknownChoice(sel string, v interface{}, names string) string {
 	return fmt.Sprintf("Flag %q: Default(%s) names no declared choice: must be one of: %s", sel, formatValueForError(v), names)
 }
