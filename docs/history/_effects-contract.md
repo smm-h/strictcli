@@ -7090,9 +7090,12 @@ item 244's for the step the positional check runs in).
      its position in that walk, and the values of its elected record read at that position, at every
      depth -- root flags and selectors **interleaved**, never partitioned into scoped-first and
      root-second. The reason is the one item 243 gave for the stage table itself: the order is a
-     property of the parser, and the parser's order is the order the command was declared in, which
-     is the only order both doors and the command line share. **TypeScript complies**: `invokeApp`'s
-     second pass walks `def.allDecls` and builds each elected record where its selector stands.
+     property of the parser, and the parser's order is the order the command was declared in, ~~which
+     is the only order both doors and the command line share~~ *(struck 2026-08-15, argv-order round,
+     §18.27 item 257: probed false -- no implementation's argv path orders a root value against a
+     scoped one by the command's declaration order, and the pin binds the two programmatic doors)*.
+     **TypeScript complies**: `invokeApp`'s second pass walks `def.allDecls` and builds each elected
+     record where its selector stands.
      **Go sweeps the scoped binds first** -- `collectInvokeElections` returns them in walk order and
      `invoke` runs `checkPreTypedValue` over all of them before it touches `cmd.flags` -- so a scoped
      value refusal outranks the refusal of a root flag **declared before the selector**, which is not
@@ -7316,6 +7319,151 @@ answer item 238 assigned. The declaration walk still refuses an unelectable sele
 unknown key sits beside it, which is the phase fact it is. The note is struck at its site with a
 dated pointer here rather than rewritten, because it was true when it was written and the record of
 a re-probe is worth as much as the re-probe.
+
+### 18.27 The argv path's own order, and four records (2026-08-15)
+
+§18.25 and §18.26 pinned the record door by reading the three implementations at the paths each
+claim was about. Re-probing those two sections **by running the three**, rather than by reading them
+again, produced one correction to a pinned reason, one clarification of a deferral that reads looser
+than it is, one omission belonging to a single implementation, and two states that earn a record
+rather than a rule. Five items. Numbering continues §18.26's, for the reason §18.14 gave: the same
+campaign's ledger.
+
+**What each item is.** Item 257 is a **correction** to the reason item 249 gave for its own pin --
+the pin stands, its justification does not, and the correction reaches §24.11's normative block as
+well as the ledger. Item 258 is a **clarification** of item 254: which half of the record door's
+deferral binds now. Item 259 is a **one-implementation omission**, recorded and closed in the same
+round. Item 260 is an **acknowledged divergence** in item 241's class, destined for the corpus's
+`acknowledged_divergence` block. Item 261 is a **record with no rule attached**, deliberately left
+unpinned.
+
+**Every claim below was probed by running all three**, through the conformance runner's own
+generated apps (`conformance/run.py`'s `_run_case`, which builds the Python reference script, the Go
+harness binary and the TypeScript harness from one app definition), and through Python's own API
+where the reference generator cannot yet declare the case. Where a probe contradicts the round's
+filing, the probe wins and the filing is recorded as false.
+
+**Origin tags**, per §18.14's preamble. Every item here is **untagged**: none is a `(D)` directive
+and none is a `[%%]` adopted recommendation.
+
+**Sites amended in place**: §24.11's item-249 block -- the false clause struck and replaced with the
+scope the pin actually has; §18.25 item 249's own text -- the same clause struck with a pointer here.
+
+257. **The interleaved declaration order is the two PROGRAMMATIC doors' order, and the argv path
+     never shared it (§24.11's item-249 block, §18.25 item 249, §24.3).** Item 249 pinned one
+     declaration-ordered sweep across root flags and scopes and justified it with a claim about the
+     command line: that the command's declaration order "is the only order both doors and the command
+     line share". **Probed, the claim is false**, and it is false in every implementation. On the
+     argv path Python and TypeScript answer `--before: expected integer, got 'nope'` for
+     `run --via email --retries nope --before nope` and for the same tokens the other way round --
+     a **root** flag's value refusal outranks a scoped one whether the root flag is declared before
+     the selector or after it, whether its token comes first or last, and even when it is an app
+     **global** (`--jobs`), which no command declaration positions at all. Go answers
+     `--retries: expected integer, got 'nope'` for the first of those two command lines and
+     `--before: ...` for the second: its value phase is one sweep over the tokenized occurrences in
+     **command-line order**, root and scoped alike (`parse.go` phase 4a over `occs`, through
+     `liveFlagFor`, error-first). So the argv path uses the command's declaration order in none of
+     the three -- item 249's reason names an agreement that does not exist. **The pin itself is
+     untouched**: the flat door and the record door sweep the command's declarations once, a scope
+     holding its position in that walk, and `test_value_sweep_order.py`'s cases stand exactly as
+     written. Only the reason narrows -- it is the order the two doors share **with each other**,
+     which is the whole of what the pin needs, and the argv path was never one of its parties.
+     **The argv path's own order is not one order either, and this item does not pin it.** Python
+     and TypeScript partition: Python resolves every root flag's value before `_resolve_selectors`
+     runs at all, and TypeScript runs its root value pass over `rootOccs` before `parseScopes`, with
+     a comment reading §24.3 as requiring exactly that ("so root values are reported ahead of scoped
+     ones"). Go does not partition, and **§24.3's own words back Go**: that section says
+     command-line order within a phase, amended only to lift `validate` out of it (§18.20 item 226).
+     Two implementations follow a rule §24.3 does not state and one follows the rule it does state,
+     which is a divergence with the document on the wrong side of the majority -- and it is
+     **recorded here rather than decided here**, because deciding it is choosing between two
+     defensible argv orders and that choice belongs to the round that takes it with the corpus rows
+     in hand. Nothing changes in any implementation on account of this item.
+
+258. **The record door's type-only rule BINDS NOW; only the closed set and the custom callback are
+     deferred (§18.26 item 254, §24.11's record-door block, §23.4).** Item 254 recorded a deferral
+     and, in the same breath, recorded that **Go's record door ran two checks beyond the type** --
+     `validateChoices` over every field and `f.Validate` over every field it labelled provided --
+     because the values Go collects from a record re-enter the shared pipeline as **CLI-sourced**,
+     where `resolveElected` runs both unconditionally. Read quickly, "deferred" covers that state
+     too. It does not. **The rule binds this round**: the door runs the type check against each
+     field's declaration, at every depth, and runs **nothing else**, in all three. A record field
+     holding a value outside its `choices` list was refused in Go and delivered in Python and
+     TypeScript, which is one implementation refusing a call the other two accept -- item 231's
+     class, and not a thing a deferral may hold open. Go aligns: `checkRecordFieldValue` is the
+     record door's own field check, a `recordSupplied` marker carries the fact into
+     `resolveScopedValue` (which labels such a field `default`, per item 253), and the closed-set
+     check is skipped for exactly those fields while the argv and flat doors keep it unchanged. The
+     custom callback needs no separate suppression: a record field is labelled `default`, and §23.4
+     already forbids `validate` on a value the declaration decided. **What stays deferred is
+     unchanged and is the whole of the deferral**: giving `choices` and `validate` their proper
+     treatment at this door for all three, which needs the supplied-versus-declared distinction item
+     253 records the door cannot make. The deferred round starts from three doors that agree, not
+     from two that agree and one that refuses more than they do.
+
+259. **TypeScript drops §12.13's scope suffix from the undeclared-infra-root refusal, at every door
+     (§12.13, §24.6, §18.23 item 237, §18.20 item 228's class).** A `RelativeToRoot` default naming a
+     root the app never declared is a registration-time error at root scope, but **registration never
+     sees inside a scope** (§24.6), so inside an elected choice the refusal is raised where the
+     default is applied -- and it must say **where**, because the same marker at root would have been
+     refused before the process ran. Python and Go say it. Both print
+     `RelativeToRoot references undeclared infra root "NOPE_HOME"; declare it as an infra root under
+     '--via email'` -- Python from `_apply_scoped_presence` and `_resolve_declared_marker`, each
+     appending the scope suffix (and Python's presence path the origin suffix after it, in §18.23
+     item 239's order); Go from `resolveScopedValue`, appending the suffix `resolveElected` computed.
+     **TypeScript prints the sentence bare**, with no `under '--via email'`, because its one scoped
+     default path is `installScopedDefaultApplier(applyFlagDefault(f, "", infraRoots))` -- the root
+     path with an empty prefix and no suffix seam at all -- and its programmatic doors reach the same
+     helper through `applyFlagDefaultForInvoke(sub, "", infraRoots)`. So the omission is at **every**
+     door including argv, not a door-specific slip, and it is a **spelling omission rather than a
+     divergence of rules**: §12.13's suffix composes onto this sentence exactly as it composes onto
+     the required-flag sentence beside it, which TypeScript already carries. TypeScript changes; the
+     rule is the one already written. **One corpus row is unwritable today**, in §18.20 item 228's
+     class: `ref_python.py`'s scoped-flag emitter handles `default` but not
+     `default_relative_to_root`, so the Python target cannot declare a scoped marker default at all
+     and the case above had to be probed against Python's API directly. The generator gains the
+     keyword with the same spelling the command-level emitter already uses, or the fix ships with no
+     case that can prove it in all three.
+
+260. **The flat door's type NAME is each runtime's own vocabulary, and the split is acknowledged
+     (§18.25 item 247, §24.11, §18.23 item 241's class).** Item 247 pinned that an **integral** JSON
+     number satisfies an `int` declaration at this boundary, because two of the three decoders cannot
+     see integer-ness. The same fact reaches the sentence a **failed** check prints, and there the
+     three do not agree: `{"name": 7.0}` against a `str` declaration answers
+     `--name: expected string, got float` in Python and `--name: expected string, got int` in Go and
+     TypeScript. Neither answer is wrong about its own runtime. Python holds a `float` and says so.
+     Go's `typeName` calls an integral `float64` an `int` **on purpose** -- that is item 247's
+     accommodation read out loud, and calling it `float` would name a type the declaration would have
+     accepted. TypeScript's `widenJsonIntegers` turns an integral `number` into a `bigint` before any
+     check, so `configTypename` says `int` for the same reason. **Forcing one spelling would make two
+     of the three name a type their runtime is not holding** -- item 251's reason, one value in -- and
+     the alternative, naming the JSON type instead, would print `number` for a vocabulary that has no
+     such word anywhere else in the document. So this joins the corpus's `acknowledged_divergence`
+     block with a mandatory reason, per language: every implementation refuses the same call with the
+     same sentence up to the type name, the guarantee keeps being asserted everywhere, and a stale
+     acknowledgment is still reported by the suite.
+
+261. **`config show` renders a marker-defaulted flag as the DECLARATION, and nothing here is pinned
+     (§13, §25.10, §23.5, §18.23 item 237).** A flag whose default is a `RelativeToRoot` marker
+     **delivers** the resolved path labelled `infra` at every door (item 237, item 256). `config show`
+     does not deliver it: it prints
+     `db = RelativeToRoot('MYAPP_HOME', 'db.sqlite')  (source: default)` -- the marker as written and
+     the source `default` -- byte-identical in Python and Go. That is defensible as it stands, and is
+     the same split §25.10 already pins for the schema: a **dump is a property of the declaration**
+     where a delivery is a property of the run, and `config show` displays what the configuration
+     says rather than what a run would produce. **It is recorded and left unruled**, because ruling
+     it means deciding whether a display surface is a dump or a run, and that decision reaches every
+     row `config show` prints rather than this one. **The probe found the surface is not in
+     agreement, and that is the part a future round inherits**: TypeScript's human form prints the
+     marker object serialized, `toString` **method source included**, in place of the two-word
+     rendering its siblings print; and the machine form gives three different answers where the
+     document has pinned one marker shape (§13's `{"relative_to_root": {"env_var": ..., "parts":
+     [...]}}`) -- Python **hard-errors** at the envelope (`payload does not satisfy the declared
+     schema at payload["db"]["value"]: the value is not representable in JSON`, exit 1, on a
+     read-only command that succeeds in human form), Go emits `"value": {}`, and TypeScript emits
+     `"value": {"envVar": ..., "parts": [...]}` in its own casing. A crash and two disagreeing
+     payloads is a defect whatever the display question turns out to be, and the round that pins the
+     display should fix the machine form first.
 
 ---
 
@@ -9345,8 +9493,11 @@ that walk, and the values of its elected record read at that position, at every 
 and selectors are interleaved by that one order and never partitioned into a scoped sweep before a
 root one -- a scope is a POSITION in the sweep, not a group ahead of it. The reason is the one this
 block already gives for the stage table: the order belongs to the parser, and the parser's order is
-the order the command was declared in, which is the only order both doors and the command line
-share. The caller's key order decides nothing, in either door.**
+the order the command was declared in, ~~which is the only order both doors and the command line
+share~~ *(struck 2026-08-15, argv-order round, §18.27 item 257)* and it is the order the two
+PROGRAMMATIC doors share. The argv path has an order of its own, this sweep is not it, and this pin
+reaches the flat door and the record door only. The caller's key order decides nothing, in either
+door.**
 
 **A key inside an elected record names nothing the elected scope declares** *(added 2026-08-15,
 contract-pin round, §18.25 item 246)*. The record door's key namespace is the **elected choice's own
