@@ -22,7 +22,7 @@ Build in whichever of the three languages you prefer, writing it the way that la
 
 - [Language idioms](language-idioms.md) -- why the three declaration surfaces are deliberately different, and what parity actually binds
 - [Architecture and internals](architecture.md) -- the parse pipeline, registration-time validation, and the schema format
-- [Flag system](flag-system.md) -- flags, arguments, choice flags and their declaration scopes, dependencies, and the reserved quartet
+- [Flag system](flag-system.md) -- flags, arguments, choice flags and their declaration scopes, constraints, and the reserved quartet
 - [Conformance](conformance.md) -- how the three implementations are proven identical
 - [Consequential confirmation over MCP](mcp-confirmation.md) -- how a tool asks a human before it runs
 - [Process trace store](process-trace-store.md) -- how process ancestry is recorded and shared across tools

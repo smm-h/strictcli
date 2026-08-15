@@ -222,7 +222,7 @@ required positional argument renders `[required]` like a required flag.
 | `validate` | runs on a supplied value only -- **never** on a declared default, and never on absence |
 | `Implies` target | the injected value satisfies a `required` declaration (implication resolves before defaults) |
 | `Implies` trigger | fires when the flag is *provided*; a defaulted trigger never fires from its own default |
-| `CoRequired` / `Requires` | a member is present iff it is *provided*, so a default never satisfies a dependency |
+| a constraint member | engagement reads *provided*, so a declared default never engages a member on its own; a member may not declare `required` at all (see [Constraints](#constraints)) |
 | a choice flag | `required` or a `default` only; `optional` is a registration error, because an absent selection is a choice nobody named |
 | a member flag | **must** declare `required`, read as *required once this member is elected*; anything else is a registration error |
 | `RelativeToRoot` | the marker **is** a `default=` declaration; its value resolves at parse time with source label `infra` |
@@ -704,7 +704,7 @@ The 6 source labels:
 | `env` | From an environment variable |
 | `config` | From a config file |
 | `default` | From the flag's declared default value -- and the label an optional flag carries when nothing supplied it |
-| `implied` | Injected by an `Implies` dependency |
+| `implied` | Injected by an `Implies` constraint |
 | `infra` | Default resolved through a `RelativeToRoot` infrastructure root |
 
 For the yes/no question -- *did the invocation cause this value?* -- use
@@ -1002,9 +1002,9 @@ error: flag '--subject' is only valid under '--via email', but '--via sms' was e
 
 ### Constraints operate at root scope only
 
-`Requires`, `Implies` and the co-occurrence families reference flags **by
-name**, and a scoped name has no single namespace to resolve in. A constraint
-naming a scoped flag is a registration error, not a resolution -- because the
+Every [constraint](#constraints) references its members **by name**, and a
+scoped name has no single namespace to resolve in. A constraint naming a scoped
+flag is a registration error, not a resolution -- because the
 scope already **is** the constraint. A choice's scope says "these flags exist
 together, exactly when this choice is elected", which is a co-requirement plus
 an exclusivity plus a conditional requirement in one declaration.
@@ -1074,42 +1074,307 @@ boundary is drawn at what the choices *carry* rather than at how many there are.
 
 (`json` is not usable as a flag name anywhere: it is reserved for machine mode.)
 
-## Dependencies
+## Constraints
 
-Three dependency types control relationships between flags. `CoRequired` ensures
-flags appear together, `Requires` creates one-way dependencies, and `Implies`
-automatically sets a target flag's value when a trigger flag is provided.
-Exactly-one selection is not among them -- that is a
-[choice flag](#choice-flags-a-choice-is-a-declaration-scope) -- and a dependency
-naming a scoped flag is a registration error.
+A **constraint** is a declared rule over a command's own flags, args and other
+constraints. There are four kinds, in two pairs:
+
+| Kind | Meaning |
+|---|---|
+| **at-least-one** | at least one member is **engaged**. Members **may co-occur** -- engaging two, or all, satisfies it exactly as engaging one does |
+| **all-or-none** | either **every** member is engaged or **none** is. With nothing engaged it is vacuously satisfied -- that is the "none" half of its own name |
+| **requires** | if one flag is provided, another must also be provided |
+| **implies** | when one bool flag is provided, another is automatically set to a declared value; an explicit contradiction is a parse error |
+
+All four are declared through one container -- `constraints=[...]` in Python,
+`WithConstraints(...)` in Go, `constraints: [...]` in TypeScript -- and every
+one of them carries a **mandatory name**. The name is what a violation prints,
+what `--help` shows, and what lets one constraint be a member of another. It is
+mandatory rather than optional-with-a-fallback because a family plus a member
+list identifies a rule only until a command has two rules over overlapping
+members, which real commands do.
+
+**at-least-one is not exclusivity.** It has no upper bound and never refuses a
+second member. Exactly-one selection is a
+[choice flag](#choice-flags-a-choice-is-a-declaration-scope), not a constraint,
+and there is no at-most-one construct anywhere in strictcli -- no constructor,
+no cardinality parameter, no `min`/`max` pair.
 
 ```python
 @app.command(
     "cmd",
     help="a command",
     effect="mutating",
-    dependencies=[
-        # All must appear together or none
-        strictcli.CoRequired(flags=["host", "port"]),
+    constraints=[
+        # --host and --port must both appear, or neither
+        strictcli.AllOrNone("endpoint", [
+            strictcli.Member("host"), strictcli.Member("port"),
+        ]),
 
         # One-way: --trace requires --log-file
-        strictcli.Requires(flag="trace", depends_on="log-file"),
+        strictcli.Requires("trace-needs-log", flag="trace", depends_on="log-file"),
 
         # Auto-set: when --fast is passed, set --no-embeddings
-        strictcli.Implies(flag="fast", implies="embeddings", value=False),
+        strictcli.Implies("fast-skips-embeddings", flag="fast",
+                          implies="embeddings", value=False),
     ],
 )
 ```
 
-Dependencies can only reference flags you declared. The reserved quartet is not
-declarable, so `dry-run`, `approve-consequential`, `quiet` and `verbose` can
-never appear in a `Requires`, `CoRequired` or `Implies`.
+### Members
 
-All three read presence through the same predicate `ctx.provided` uses: a flag
-counts as present when the **invocation** caused its value, so a declared
-default -- including a `RelativeToRoot` default with the `infra` label -- never
-satisfies a `Requires` or completes a `CoRequired` group, and an `Implies`
-trigger never fires from its own default.
+A member is a **reference by name**, never an owned declaration: flags and args
+are declared once, in the normal places, and a constraint names them. A member
+carries no presence and no help of its own -- the declaration it points at
+carries every fact about the value. Registration resolves every name and refuses
+an unknown one.
+
+A member of an at-least-one or an all-or-none names one of three things:
+
+| Member kind | What it names |
+|---|---|
+| `flag` | a command flag, at **root scope** |
+| `arg` | a positional arg of the same command |
+| `constraint` | another **named** at-least-one or all-or-none of the same command |
+
+Names resolve in **one namespace** -- the command's flags, its args and its
+constraints. A constraint name that collides with a flag or arg name is a
+registration error, and so is a member name that resolves to both a flag and an
+arg: the framework refuses to guess rather than picking one.
+
+`requires` and `implies` are the exception, and deliberately so: their operand
+vocabulary stays **flags only**, by name, at root scope. Neither takes an arg,
+a nested constraint or an election selector.
+
+A co-occurrence constraint must declare **at least two** members. In Go and
+TypeScript that floor is a compile error rather than a registration one -- Go's
+constructors take two named members before the variadic tail, and TypeScript's
+`members` is typed `[ConstraintMember, ConstraintMember, ...ConstraintMember[]]`.
+
+### The election vocabulary: `when`
+
+Each flag or arg member declares **when it counts as engaged**, from a closed
+three-value vocabulary. What counts as "chosen" is a declaration, never a rule
+the parser applies on its own:
+
+| `when` | Engaged when | Legal on |
+|---|---|---|
+| `present` | the value was **provided** -- `cli`, `env`, `config` or `implied`, never `default` and never `infra` | every type |
+| `true` | provided **and** the resolved value is `true` | `bool` only |
+| `non_empty` | provided **and** the resolved value is a non-empty string, list or map | `str`, repeatable/list and dict flags, and variadic args |
+
+The default is `present`, **and omitting `when` on a bool member is a
+registration error**. Both halves are deliberate. A uniform default keeps the
+vocabulary from becoming type dispatch wearing a keyword, and the bool refusal
+closes the hole the default would otherwise open: `present` on a bool means
+`--no-all` engages a constraint while *selecting nothing*. The framework refuses
+to guess exactly where guessing is known to be wrong, so a bool member says
+which it means:
+
+```python
+strictcli.AtLeastOne("purge-selection", [
+    strictcli.Member("targets", when="non_empty"),
+    strictcli.Member("older-than"),
+    strictcli.Member("larger-than"),
+    strictcli.Member("all", when="true"),
+])
+```
+
+Declaring `when="true"` on a non-bool, or `when="non_empty"` on a bool, an int
+or a float, is a registration error: a selector that cannot be evaluated against
+the declared type is a mis-declaration, not a no-op. (A **variadic bool arg** is
+sized rather than bool -- its value is a sequence whatever its element type is --
+so `non_empty` is legal on it, `true` is not, and omitting `when` is legal.)
+
+There is no source filter in the vocabulary. There is exactly one definition of
+"was this supplied" in the framework, and it is the one `ctx.provided` answers.
+
+### Engaged, vacuous, satisfied
+
+Three words, defined once, because every surface below depends on them:
+
+- a **flag or arg member is engaged** when its `when` selector fires;
+- a **nested constraint member is engaged** when at least one of *its* members
+  is engaged. Engagement propagates upward; satisfaction does not;
+- **at-least-one is satisfied** when at least one member is engaged;
+- **all-or-none is satisfied** when every member is engaged or none is;
+- a constraint is **vacuous** when no member of it is engaged. A vacuous
+  all-or-none is satisfied; a vacuous at-least-one is violated, which is the
+  whole of what it says.
+
+**Children are evaluated before parents, siblings in declaration order.** A
+violated nested constraint reports its own sentence and its parent is never
+evaluated. That is not a tie-break convention -- it is the only order that
+reports the fixable fact: an operator who typed one half of a pair is told the
+pair is incomplete, not that the whole selection is missing.
+
+Constraints run at one fixed point in the parse pipeline: **after** `Implies`
+injection, so an implied value can engage a member, and **before** defaults are
+applied, so a declared default cannot.
+
+### Nesting
+
+A named at-least-one or all-or-none may be a member of another one. Nesting is a
+cycle-checked DAG at unlimited depth, and only the two co-occurrence families
+may be nested -- naming a `Requires` or an `Implies` as a member is a
+registration error, because those two are rules rather than co-occurrence
+predicates and "engaged" has no meaning for them.
+
+The shape that motivates it: *change the author name, or the email, or both --
+but never half of either.*
+
+```python
+@app.command("rewrite", help="Rewrite author identity across history",
+             effect="mutating",
+             constraints=[
+                 strictcli.AllOrNone("author-name", [
+                     strictcli.Member("old-name"), strictcli.Member("new-name"),
+                 ]),
+                 strictcli.AllOrNone("author-email", [
+                     strictcli.Member("old-email"), strictcli.Member("new-email"),
+                 ]),
+                 strictcli.AtLeastOne("author-change", [
+                     strictcli.Member("author-name"),
+                     strictcli.Member("author-email"),
+                 ]),
+             ])
+@strictcli.flag("old-name", type=str, presence="optional", help="Current display name")
+@strictcli.flag("new-name", type=str, presence="optional", help="New display name")
+@strictcli.flag("old-email", type=str, presence="optional", help="Current email address")
+@strictcli.flag("new-email", type=str, presence="optional", help="New email address")
+def rewrite(ctx, old_name, new_name, old_email, new_email):
+    ...
+```
+
+A vacuous all-or-none nested inside an at-least-one contributes nothing, so two
+vacuous pairs leave the parent unsatisfied -- which is exactly the rule above.
+Bare, that reads:
+
+```
+error: constraint "author-change": at least one of (--old-name with --new-name), (--old-email with --new-email) is required
+```
+
+Type one half of a pair and the child fires instead, by the children-before-parents
+order:
+
+```
+error: constraint "author-name": --old-name, --new-name must be used together
+```
+
+A member list is rendered **structurally, never by name**: a nested member
+renders its own operands, joined by ` with ` for all-or-none and ` or ` for
+at-least-one. The constraint's name identifies the rule that failed and appears
+once, in the prefix; the member list names tokens the reader can type.
+
+### A member never declares `required`
+
+Membership does not subtract from a declaration and does not add to one. **No
+member of a co-occurrence constraint may declare `required`** -- it is a
+registration error in both families:
+
+- in an **at-least-one**, a required member means the invocation always supplies
+  it, so the constraint is satisfied in every invocation and can never fire;
+- in an **all-or-none**, a required member turns the rule into "every other
+  member is required too", which already has a spelling: declare them required.
+
+A **default** is legal and is the ordinary bool shape -- a default is not
+*provided*, so it never engages the constraint by itself, and `default=False`
+with `when="true"` engages exactly when someone types `--all`. `optional` is
+legal and is the ordinary case.
+
+The consequence runs the other way too: **membership never makes a flag
+required, and never exempts it from being required.** An at-least-one over three
+optional flags leaves all three optional. What is required is that one of them
+engages, which is the constraint's own sentence and never a per-flag presence
+part.
+
+Constraints can only reference flags and args you declared. The reserved quartet
+is not declarable, so `dry-run`, `approve-consequential`, `quiet` and `verbose`
+can never appear in one, and a constraint naming a
+[scoped flag](#constraints-operate-at-root-scope-only) is a registration error.
+
+### Where constraints show up
+
+**In help**, as a `Constraints:` section after the last of the `Arguments:` /
+`Flags:` blocks. The declared name renders in the position a flag name occupies,
+so the identifier a violation prints is discoverable in the help the operator
+already read:
+
+```
+Flags:
+  --old-name <str>     Current display name [optional]
+  --new-name <str>     New display name [optional]
+  --old-email <str>    Current email address [optional]
+  --new-email <str>    New email address [optional]
+
+Constraints:
+  author-name      all or none of --old-name, --new-name
+  author-email     all or none of --old-email, --new-email
+  author-change    at least one of (--old-name with --new-name), (--old-email with --new-email)
+```
+
+One line per constraint in declaration order, including nested ones -- a nested
+constraint has its own line *and* appears inside its parent's line, because it
+is both a rule of its own and an operand. The block computes its own alignment
+column and never shares the flag block's. The per-family sentences are
+`at least one of <members>`, `all or none of <members>`,
+`--<flag> requires --<depends_on>` and `--<flag> implies --<implies>` (rendering
+`--no-<implies>` when the declared value is false). A member's presence part is
+never repeated here: every flag line already carries exactly one.
+
+**In the schema**, in each command's `constraints` array, in declaration order.
+The encoding is complete rather than indicative -- a consumer reconstructs the
+rule without re-reading the declaration:
+
+```json
+{"type": "all_or_none", "name": "author-name", "members": [
+  {"kind": "flag", "name": "old-name", "when": "present"},
+  {"kind": "flag", "name": "new-name", "when": "present"}]}
+{"type": "at_least_one", "name": "author-change", "members": [
+  {"kind": "constraint", "name": "author-name"},
+  {"kind": "constraint", "name": "author-email"}]}
+```
+
+The `kind` is the **resolved** kind, so no name lookup is needed; `when` is
+always emitted on a flag or arg member and never on a constraint member; nesting
+is published as constraint-kind members rather than flattened into leaves. See
+[constraint serialization](architecture.md#constraint-serialization) for the
+full catalogue.
+
+**In MCP tool schemas**, with a declared fidelity policy: a constraint is
+**never silently dropped**. Every kind is either *exact* -- a JSON Schema keyword
+expresses the rule completely -- or *partial*, in which case what can be emitted
+is emitted and the **remainder is stated in the tool description**. There is no
+third verdict in which a rule reaches the boundary unstated.
+
+| Kind and shape | Emitted | Fidelity |
+|---|---|---|
+| at-least-one, no election selector at any depth | `anyOf`, one branch per member (a nested all-or-none becomes one branch listing its leaves; a nested at-least-one is inlined) | exact |
+| at-least-one with a `true` or `non_empty` member at any depth | the same `anyOf` | partial -- `required` says a key is present, not what it holds |
+| all-or-none, every member a flag or arg with `when: present` | `dependentRequired`, mapping each member to all the others | exact |
+| all-or-none with a nested constraint member, or any non-`present` selector | nothing | partial -- the keyword cannot carry a group as an operand |
+| requires | `dependentRequired: {<flag>: [<depends_on>]}` | exact |
+| implies | nothing | partial -- it injects a value rather than constraining the input |
+
+A command declaring exactly one at-least-one emits its branches as the object's
+own `anyOf`; two or more emit `allOf: [{anyOf: ...}, {anyOf: ...}]`, one element
+per constraint, because two at-least-one rules must **both** hold and merging
+their branches would say "satisfy either".
+
+The description block names every constraint either way, in property names
+(underscored) rather than CLI tokens -- the caller writes keys, not argv -- and a
+partial projection appends its reason:
+
+```
+Constraints (enforced at call time):
+  at least one of: targets, older_than, larger_than, all -- not expressed in the schema: the "true" and "non_empty" selectors
+  all or none of: old_name, new_name
+```
+
+Enforcement at call time is unchanged and total: every constraint is evaluated at
+the machine doors exactly as at the argv door, and a violation returns the same
+sentence the CLI parser gives, on the framework's ordinary tool-result error
+channel. The runtime refusal is the authority; the schema is advisory.
 
 ## Help text is mandatory
 
