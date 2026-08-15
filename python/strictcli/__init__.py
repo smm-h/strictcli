@@ -11522,9 +11522,20 @@ def _coerce_member_payload(
     stdin_consumed_by: list,
     conflict_mode: str,
 ) -> object:
-    """The value phase for one elected member's payload (§24.4, §24.7)."""
+    """The value phase for one elected member's payload (§24.4, §24.7).
+
+    A member flag's own presence is `required`, read as required once this
+    member is elected (§24.4). On the command line the token and its value are
+    one occurrence, so an elected member always carries one; at the flat
+    machine boundary the selector's own property can elect a member whose
+    payload property is absent, and that is the flat reading of `--profile`
+    with nothing after it -- refused with the command line's own sentence
+    rather than delivered as a silent None (§24.11).
+    """
     hits = [o for o in occs if o.name == spec.name]
-    raw = hits[-1].raw if hits else None
+    raw = hits[-1].raw if hits else _MISSING
+    if raw is _MISSING:
+        raise _ParseError(f"flag '--{spec.name}' requires a value")
     value = (
         raw if pre_typed
         else _coerce_scoped_value(spec.payload, raw, stdin_consumed_by)
@@ -11817,6 +11828,14 @@ def _flat_occurrences(cmd: Command, arguments: dict) -> list[_Occ]:
     parser's own sentence instead of being silently discarded -- and a payload
     key with no selector key elects its member, which is the flat reading of a
     command line that never types the selector's name.
+
+    A PAYLOAD-LESS member's own key is that member's token too: `true` elects
+    it as `--<name>` does and an explicit `false` DECLINES it as `--no-<name>`
+    does. Ignoring the key would make the flat form a second election
+    vocabulary rather than the command line with its tokens removed, and would
+    discard a whole scope in silence. A decline never overrides the selector
+    property naming the same member: that property IS an election, and a JSON
+    object has no order for a later key to win by.
     """
     occs: list[_Occ] = []
     seen_selectors: set[int] = set()
@@ -11831,6 +11850,7 @@ def _flat_occurrences(cmd: Command, arguments: dict) -> list[_Occ]:
                 occs.append(_Occ(sel.name, arguments[param], f"--{sel.name}"))
             return
         elected: list = []
+        declined: list = []
         if param in arguments:
             value = arguments[param]
             spec = sel.choice_by_name(str(value))
@@ -11842,16 +11862,27 @@ def _flat_occurrences(cmd: Command, arguments: dict) -> list[_Occ]:
                 )
             elected.append(spec)
         for c in sel.choices:
-            if c.payload is None or any(e is c for e in elected):
+            if any(e is c for e in elected):
                 continue
-            if _flag_param_name(c.name) in arguments:
-                elected.append(c)
+            key = _flag_param_name(c.name)
+            if key not in arguments:
+                continue
+            if c.payload is None and arguments[key] is False:
+                declined.append(c)
+                continue
+            elected.append(c)
         for spec in elected:
-            payload = (
-                arguments.get(_flag_param_name(spec.name))
-                if spec.payload is not None else True
-            )
+            if spec.payload is None:
+                payload: object = True
+            else:
+                # The election is carried by the occurrence whether or not the
+                # payload property came with it, because the selector's own
+                # property elects too. `_MISSING` is what the value phase reads
+                # to tell "elected, nothing supplied" from a supplied null.
+                payload = arguments.get(_flag_param_name(spec.name), _MISSING)
             occs.append(_Occ(spec.name, payload, f"--{spec.name}"))
+        for spec in declined:
+            occs.append(_Occ(spec.name, False, f"--no-{spec.name}"))
 
     for sel in cmd.selectors:
         add_selector(sel)

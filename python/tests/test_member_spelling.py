@@ -450,3 +450,233 @@ def test_a_selector_key_naming_no_declared_member_is_still_refused():
         "--mode: invalid value 'nope', must be one of: profile, "
         "all-profiles, current-profile"
     )
+
+
+# ---------------------------------------------------------------------------
+# A payload-less member's OWN key at the flat boundary (§24.11)
+#
+# The flat form maps onto the command line, so a payload-less member's property
+# is the member's own token: true elects it exactly as `--<name>` does, and an
+# explicit false DECLINES it exactly as `--no-<name>` does. Ignoring the key
+# would make the flat form a second election vocabulary rather than the command
+# line with its tokens removed.
+# ---------------------------------------------------------------------------
+
+
+def test_a_payload_less_members_own_key_elects_it(capsys):
+    _flat(_election_app(), all_profiles=True)
+    assert capsys.readouterr().out == "all\n"
+
+
+def test_a_payload_less_members_own_key_elects_beside_the_selector_key(capsys):
+    """One member named twice and consistently is ONE election."""
+    _flat(_election_app(), mode="all-profiles", all_profiles=True)
+    assert capsys.readouterr().out == "all\n"
+
+
+def test_an_explicit_false_on_a_payload_less_member_declines_it():
+    """`--no-<name>` declines: it names the member and states it is not the
+    choice, so the selector is left unsatisfied and carries the clause."""
+    app = _election_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, all_profiles=False)
+    assert str(exc.value) == (
+        "one of --profile, --all-profiles, --current-profile is required "
+        "(--no-all-profiles declines an option; it does not choose one)"
+    )
+
+
+def test_the_decline_sentence_is_the_clis_own_bytes():
+    r = _election_app().test(["run", "--no-all-profiles"])
+    cli = r.stderr.split("\n")[0].removeprefix("error: ")
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(_election_app(), all_profiles=False)
+    assert str(exc.value) == cli
+
+
+def test_a_payload_less_members_key_beside_a_payload_key_is_a_double_election():
+    app = _election_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, profile="work", all_profiles=True)
+    assert str(exc.value) == "--profile and --all-profiles are mutually exclusive"
+
+
+def test_a_decline_beside_an_election_is_the_redundant_negation_refusal():
+    """§21.4's third error, reached through the flat form's own keys."""
+    app = _election_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, profile="work", all_profiles=False)
+    assert str(exc.value) == (
+        "--no-all-profiles cannot be combined with --profile "
+        "(--no-all-profiles declines an option; it does not choose one)"
+    )
+
+
+def test_the_selector_key_outranks_a_false_on_the_member_it_elects(capsys):
+    """The selector property naming a member IS an election of it, and a JSON
+    object has no order for a later key to win by, so the election stands."""
+    _flat(_election_app(), mode="all-profiles", all_profiles=False)
+    assert capsys.readouterr().out == "all\n"
+
+
+# ---------------------------------------------------------------------------
+# A member elected by the selector key must still carry its payload (§24.11)
+#
+# The member flag's own presence is `required`, read as required once this
+# member is elected (§24.4). Electing `profile` and supplying no `profile`
+# property is the flat reading of `--profile` with nothing after it.
+# ---------------------------------------------------------------------------
+
+
+def test_a_member_elected_by_the_selector_key_must_carry_its_payload():
+    app = _election_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, mode="profile")
+    assert str(exc.value) == "flag '--profile' requires a value"
+
+
+def test_the_missing_payload_sentence_is_the_clis_own_bytes():
+    r = _election_app().test(["run", "--profile"])
+    cli = r.stderr.split("\n")[0].removeprefix("error: ")
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(_election_app(), mode="profile")
+    assert str(exc.value) == cli
+
+
+def test_a_missing_payload_is_refused_though_its_scope_is_complete():
+    """The payload is the member's own value, not one of its scope's flags:
+    a complete scope beside a missing payload is still a missing payload."""
+    app = _scoped_member_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, mode="work", create_missing=True)
+    assert str(exc.value) == "flag '--work' requires a value"
+
+
+# ---------------------------------------------------------------------------
+# Cross-selector staging (§24.3's `election -> scope -> value -> presence`)
+#
+# The phase order is a property of the parser, not of one selector: EVERY
+# selector's election is resolved before any scope, value or presence problem
+# is reported, so a double election on a later selector outranks an earlier
+# selector's unsatisfied requirement and its missing payload alike.
+# ---------------------------------------------------------------------------
+
+
+@choice("one-tag", help="one named tag")
+class OneTag:
+    value: str = member_value(help="the tag name")
+    strict: bool = sub_flag(help="fail on an unknown tag", default=False)
+
+
+@choice("all-tags", help="every tag")
+class AllTags:
+    pass
+
+
+def _two_selector_app():
+    """`mode` is declared FIRST, `scope` second."""
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "mode", help="which profiles", presence="required",
+        elect_by="member-flags", choices=[Profile, AllProfiles],
+    )
+    @choice_flag(
+        "scope", help="which tags", presence="required",
+        elect_by="member-flags", choices=[OneTag, AllTags],
+    )
+    def run(ctx, mode: Profile | AllProfiles, scope: OneTag | AllTags):
+        print(f"{mode!r} {scope!r}")
+
+    return app
+
+
+def test_the_declaration_order_of_the_two_selector_app_is_mode_then_scope():
+    assert [s.name for s in _two_selector_app()._commands["run"].selectors] == [
+        "mode", "scope",
+    ]
+
+
+def test_a_later_double_election_outranks_an_earlier_missing_election():
+    app = _two_selector_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, scope="all-tags", one_tag="t")
+    assert str(exc.value) == "--one-tag and --all-tags are mutually exclusive"
+
+
+def test_a_later_double_election_by_member_keys_outranks_an_earlier_one():
+    """The double election is spelled with the members' own keys, which is
+    the pair rule 3 makes reachable at this boundary at all."""
+    app = _two_selector_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, one_tag="t", all_tags=True)
+    assert str(exc.value) == "--one-tag and --all-tags are mutually exclusive"
+
+
+def test_a_later_double_election_outranks_an_earlier_missing_payload():
+    """The missing payload is a VALUE problem, so it waits for every
+    selector's election -- including the one that turns out to be double."""
+    app = _two_selector_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, mode="profile", scope="all-tags", one_tag="t")
+    assert str(exc.value) == "--one-tag and --all-tags are mutually exclusive"
+
+
+def _valued_scope_app():
+    """`mode` is declared first and its `--work` member owns a checked flag."""
+
+    @choice("work", help="the work profile")
+    class WorkChecked:
+        value: str = member_value(help="the profile name")
+        level: str = sub_flag(
+            help="the level", presence="required",
+            choices=[strictcli.Choice("low"), strictcli.Choice("high")],
+        )
+
+    @choice("all", help="every profile")
+    class AllChecked:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "mode", help="which profiles", presence="required",
+        elect_by="member-flags", choices=[WorkChecked, AllChecked],
+    )
+    @choice_flag(
+        "scope", help="which tags", presence="required",
+        elect_by="member-flags", choices=[OneTag, AllTags],
+    )
+    def run(ctx, mode: WorkChecked | AllChecked, scope: OneTag | AllTags):
+        print(f"{mode!r} {scope!r}")
+
+    return app
+
+
+def test_an_earlier_scopes_value_problem_is_reported_when_nothing_else_is():
+    app = _valued_scope_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, work="w", level="sideways", scope="all-tags")
+    assert str(exc.value) == (
+        "--level: invalid value 'sideways', must be one of: low, high"
+    )
+
+
+def test_a_later_double_election_outranks_an_earlier_scopes_value_problem():
+    app = _valued_scope_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, work="w", level="sideways", one_tag="t", all_tags=True)
+    assert str(exc.value) == "--one-tag and --all-tags are mutually exclusive"
+
+
+def test_a_later_scope_violation_outranks_an_earlier_missing_payload():
+    """Scope precedes value in the same way, across selectors."""
+    app = _two_selector_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, mode="profile", scope="all-tags", strict=True)
+    assert str(exc.value) == (
+        "flag '--strict' is only valid under '--one-tag', but "
+        "'--all-tags' was elected"
+    )
