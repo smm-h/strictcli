@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -1424,6 +1425,57 @@ func findFieldDef(cd map[string]interface{}, key string) map[string]interface{} 
 	return nil
 }
 
+// formatFloatSCF renders a float in the strictcli canonical float form, the
+// one decimal form the three implementations share byte for byte
+// (go/strictcli/float.go, typescript/src/float.ts, and Python's repr, which is
+// where conformance/float_vectors.json's expected strings come from).
+//
+// The harness needs its own copy because the Go package's formatter is
+// unexported, and it cannot use fmt's %v: %v renders an integer-valued float
+// as `0` where the canon renders `0.0`, and picks its own notation switch
+// points. The TypeScript harness imports the real formatter and the Python
+// harness gets the canon from `str()`, so before this the Go harness was the
+// only target whose template output was not SCF -- which the differential
+// fuzzer's constraint family found the first time a generated float flag was
+// supplied an integral value.
+func formatFloatSCF(v float64) string {
+	if v == 0 {
+		if math.Signbit(v) {
+			return "-0.0"
+		}
+		return "0.0"
+	}
+	abs := math.Abs(v)
+	if abs >= 1e-6 && abs < 1e21 {
+		s := strconv.FormatFloat(v, 'f', -1, 64)
+		if !strings.Contains(s, ".") {
+			s += ".0"
+		}
+		return s
+	}
+	s := strconv.FormatFloat(v, 'e', -1, 64)
+	mantissa, exponent, _ := strings.Cut(s, "e")
+	sign := "+"
+	if strings.HasPrefix(exponent, "-") {
+		sign = "-"
+	}
+	digits := strings.TrimLeft(strings.TrimLeft(exponent, "+-"), "0")
+	if digits == "" {
+		digits = "0"
+	}
+	return mantissa + "e" + sign + digits
+}
+
+// renderElem renders one delivered element of the template vocabulary. It is
+// %v for every type the harness has always rendered that way, and the canonical
+// form for a float (formatFloatSCF's own comment says why).
+func renderElem(v interface{}) string {
+	if f, ok := v.(float64); ok {
+		return formatFloatSCF(f)
+	}
+	return fmt.Sprintf("%v", v)
+}
+
 // renderScoped renders one value out of a delivered record.
 func renderScoped(v interface{}, def map[string]interface{}) string {
 	switch tv := v.(type) {
@@ -1441,7 +1493,7 @@ func renderScoped(v interface{}, def map[string]interface{}) string {
 	case []interface{}:
 		parts := make([]string, len(tv))
 		for i, e := range tv {
-			parts[i] = fmt.Sprintf("%v", e)
+			parts[i] = renderElem(e)
 		}
 		return strings.Join(parts, ",")
 	case map[string]interface{}:
@@ -1452,11 +1504,11 @@ func renderScoped(v interface{}, def map[string]interface{}) string {
 		sort.Strings(keys)
 		parts := make([]string, len(keys))
 		for i, k := range keys {
-			parts[i] = fmt.Sprintf("%s=%v", k, tv[k])
+			parts[i] = k + "=" + renderElem(tv[k])
 		}
 		return strings.Join(parts, ",")
 	default:
-		return fmt.Sprintf("%v", v)
+		return renderElem(v)
 	}
 }
 
@@ -1759,7 +1811,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 						if itemType == "int" {
 							parts = append(parts, fmt.Sprintf("%d", v.(int)))
 						} else {
-							parts = append(parts, fmt.Sprintf("%v", v))
+							parts = append(parts, renderElem(v))
 						}
 					}
 					out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
@@ -1777,7 +1829,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 					}
 					sort.Strings(keys)
 					for _, k := range keys {
-						parts = append(parts, fmt.Sprintf("%s=%v", k, m[k]))
+						parts = append(parts, k+"="+renderElem(m[k]))
 					}
 					out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
 				}
@@ -1791,7 +1843,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 						if ftype == "int" {
 							parts = append(parts, fmt.Sprintf("%d", v.(int)))
 						} else {
-							parts = append(parts, fmt.Sprintf("%v", v))
+							parts = append(parts, renderElem(v))
 						}
 					}
 					out = strings.ReplaceAll(out, "{"+name+"}", strings.Join(parts, ","))
@@ -1816,7 +1868,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 				if args[key] == nil {
 					out = strings.ReplaceAll(out, "{"+name+"}", "None")
 				} else {
-					out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%v", args[key].(float64)))
+					out = strings.ReplaceAll(out, "{"+name+"}", formatFloatSCF(args[key].(float64)))
 				}
 			} else {
 				// str -- might be nil
@@ -1846,7 +1898,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 						case "int":
 							parts = append(parts, fmt.Sprintf("%d", v.(int)))
 						default:
-							parts = append(parts, fmt.Sprintf("%v", v))
+							parts = append(parts, renderElem(v))
 						}
 					}
 				}
@@ -1871,7 +1923,7 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 				if args[key] == nil {
 					out = strings.ReplaceAll(out, "{"+name+"}", "None")
 				} else {
-					out = strings.ReplaceAll(out, "{"+name+"}", fmt.Sprintf("%v", args[key].(float64)))
+					out = strings.ReplaceAll(out, "{"+name+"}", formatFloatSCF(args[key].(float64)))
 				}
 			} else {
 				if args[key] != nil {
