@@ -84,6 +84,11 @@
         },
         {
           "level": 3,
+          "text": "Choice-flag validation",
+          "anchor": "choice-flag-validation"
+        },
+        {
+          "level": 3,
           "text": "Global flag validation",
           "anchor": "global-flag-validation"
         },
@@ -99,8 +104,43 @@
         },
         {
           "level": 3,
+          "text": "Schema version 2",
+          "anchor": "schema-version-2"
+        },
+        {
+          "level": 3,
           "text": "Top-level fields",
           "anchor": "top-level-fields"
+        },
+        {
+          "level": 3,
+          "text": "`value_schema`: a real fragment from a closed subset",
+          "anchor": "value_schema-a-real-fragment-from-a-closed-subset"
+        },
+        {
+          "level": 3,
+          "text": "The choice-flag encoding",
+          "anchor": "the-choice-flag-encoding"
+        },
+        {
+          "level": 3,
+          "text": "Choices: the enum in the fragment, the records beside it",
+          "anchor": "choices-the-enum-in-the-fragment-the-records-beside-it"
+        },
+        {
+          "level": 3,
+          "text": "A dump",
+          "anchor": "a-dump"
+        },
+        {
+          "level": 3,
+          "text": "Canonical key order",
+          "anchor": "canonical-key-order"
+        },
+        {
+          "level": 3,
+          "text": "The byte canon",
+          "anchor": "the-byte-canon"
         },
         {
           "level": 3,
@@ -111,6 +151,11 @@
           "level": 3,
           "text": "Constraint serialization",
           "anchor": "constraint-serialization"
+        },
+        {
+          "level": 3,
+          "text": "Config fields, check entries and behavioral completeness",
+          "anchor": "config-fields-check-entries-and-behavioral-completeness"
         },
         {
           "level": 3,
@@ -583,28 +628,53 @@
         },
         {
           "level": 2,
-          "text": "Mutex groups",
-          "anchor": "mutex-groups"
+          "text": "Choice flags: a choice is a declaration scope",
+          "anchor": "choice-flags-a-choice-is-a-declaration-scope"
         },
         {
           "level": 3,
-          "text": "What elects a member",
-          "anchor": "what-elects-a-member"
+          "text": "The two spellings",
+          "anchor": "the-two-spellings"
         },
         {
           "level": 3,
-          "text": "Env and config do not elect",
-          "anchor": "env-and-config-do-not-elect"
+          "text": "Member spelling",
+          "anchor": "member-spelling"
         },
         {
           "level": 3,
-          "text": "Handlers test absence, never truthiness",
-          "anchor": "handlers-test-absence-never-truthiness"
+          "text": "Presence",
+          "anchor": "presence"
         },
         {
           "level": 3,
-          "text": "A member declares its own absence",
-          "anchor": "a-member-declares-its-own-absence"
+          "text": "Delivery: one tagged record per choice flag",
+          "anchor": "delivery-one-tagged-record-per-choice-flag"
+        },
+        {
+          "level": 3,
+          "text": "Order, recursion, and depth",
+          "anchor": "order-recursion-and-depth"
+        },
+        {
+          "level": 3,
+          "text": "Ambient values in a scope that was not elected",
+          "anchor": "ambient-values-in-a-scope-that-was-not-elected"
+        },
+        {
+          "level": 3,
+          "text": "Constraints operate at root scope only",
+          "anchor": "constraints-operate-at-root-scope-only"
+        },
+        {
+          "level": 3,
+          "text": "On the machine boundaries: schema, MCP and `call()`",
+          "anchor": "on-the-machine-boundaries-schema-mcp-and-call"
+        },
+        {
+          "level": 3,
+          "text": "Choosing between a choice flag and a `choices` flag",
+          "anchor": "choosing-between-a-choice-flag-and-a-choices-flag"
         },
         {
           "level": 2,
@@ -772,8 +842,23 @@
         },
         {
           "level": 2,
-          "text": "Mutex Groups",
-          "anchor": "mutex-groups"
+          "text": "Choice Flags",
+          "anchor": "choice-flags"
+        },
+        {
+          "level": 3,
+          "text": "Delivery: `GetElected`, `Match` and `When`",
+          "anchor": "delivery-getelected-match-and-when"
+        },
+        {
+          "level": 3,
+          "text": "Member spelling",
+          "anchor": "member-spelling"
+        },
+        {
+          "level": 3,
+          "text": "Presence, defaults, and recursion",
+          "anchor": "presence-defaults-and-recursion"
         },
         {
           "level": 2,
@@ -951,6 +1036,11 @@
         },
         {
           "level": 3,
+          "text": "`TypeChoice`",
+          "anchor": "typechoice"
+        },
+        {
+          "level": 3,
           "text": "`TypeListStr`",
           "anchor": "typeliststr"
         },
@@ -1106,6 +1196,21 @@
         },
         {
           "level": 3,
+          "text": "`ChoiceDecl`",
+          "anchor": "choicedecl"
+        },
+        {
+          "level": 3,
+          "text": "`Fields`",
+          "anchor": "fields"
+        },
+        {
+          "level": 3,
+          "text": "`Elected`",
+          "anchor": "elected"
+        },
+        {
+          "level": 3,
           "text": "`FlagType`",
           "anchor": "flagtype"
         },
@@ -1123,11 +1228,6 @@
           "level": 3,
           "text": "`FlagSet`",
           "anchor": "flagset"
-        },
-        {
-          "level": 3,
-          "text": "`MutexGroup`",
-          "anchor": "mutexgroup"
         },
         {
           "level": 3,
@@ -1188,6 +1288,11 @@
           "level": 3,
           "text": "`FlagOption`",
           "anchor": "flagoption"
+        },
+        {
+          "level": 3,
+          "text": "`ChoiceValue`",
+          "anchor": "choicevalue"
         },
         {
           "level": 3,
@@ -1318,6 +1423,36 @@
           "level": 3,
           "text": "`SchemaConst`",
           "anchor": "schemaconst"
+        },
+        {
+          "level": 3,
+          "text": "`Choice`",
+          "anchor": "choice"
+        },
+        {
+          "level": 3,
+          "text": "`MemberChoice`",
+          "anchor": "memberchoice"
+        },
+        {
+          "level": 3,
+          "text": "`ChoiceFlag`",
+          "anchor": "choiceflag"
+        },
+        {
+          "level": 3,
+          "text": "`MemberChoiceFlag`",
+          "anchor": "memberchoiceflag"
+        },
+        {
+          "level": 3,
+          "text": "`Elect`",
+          "anchor": "elect"
+        },
+        {
+          "level": 3,
+          "text": "`GetElected`",
+          "anchor": "getelected"
         },
         {
           "level": 3,
@@ -1471,6 +1606,11 @@
         },
         {
           "level": 3,
+          "text": "`Ch`",
+          "anchor": "ch"
+        },
+        {
+          "level": 3,
           "text": "`Choices`",
           "anchor": "choices"
         },
@@ -1553,11 +1693,6 @@
           "level": 3,
           "text": "`WithFlagSets`",
           "anchor": "withflagsets"
-        },
-        {
-          "level": 3,
-          "text": "`WithMutex`",
-          "anchor": "withmutex"
         },
         {
           "level": 3,
@@ -1956,6 +2091,26 @@
         },
         {
           "level": 3,
+          "text": "`Elected.Name`",
+          "anchor": "electedname"
+        },
+        {
+          "level": 3,
+          "text": "`Elected.Is`",
+          "anchor": "electedis"
+        },
+        {
+          "level": 3,
+          "text": "`Elected.Provided`",
+          "anchor": "electedprovided"
+        },
+        {
+          "level": 3,
+          "text": "`Elected.String`",
+          "anchor": "electedstring"
+        },
+        {
+          "level": 3,
           "text": "`InfraRootPath.String`",
           "anchor": "infrarootpathstring"
         },
@@ -2112,6 +2267,11 @@
           "level": 2,
           "text": "One semantic, three surfaces",
           "anchor": "one-semantic-three-surfaces"
+        },
+        {
+          "level": 2,
+          "text": "The same design, one construct further: choice flags",
+          "anchor": "the-same-design-one-construct-further-choice-flags"
         },
         {
           "level": 2,
@@ -2426,8 +2586,28 @@
         },
         {
           "level": 2,
-          "text": "Mutex Groups",
-          "anchor": "mutex-groups"
+          "text": "Choice Flags",
+          "anchor": "choice-flags"
+        },
+        {
+          "level": 3,
+          "text": "The handler annotation is mandatory",
+          "anchor": "the-handler-annotation-is-mandatory"
+        },
+        {
+          "level": 3,
+          "text": "Member spelling",
+          "anchor": "member-spelling"
+        },
+        {
+          "level": 3,
+          "text": "Presence, defaults, and recursion",
+          "anchor": "presence-defaults-and-recursion"
+        },
+        {
+          "level": 3,
+          "text": "What the handler sees",
+          "anchor": "what-the-handler-sees"
         },
         {
           "level": 2,
@@ -3458,6 +3638,11 @@
         },
         {
           "level": 3,
+          "text": "`_resolve_flag_env_value`",
+          "anchor": "_resolve_flag_env_value"
+        },
+        {
+          "level": 3,
           "text": "`_raise_flag_name_reserved_by_framework`",
           "anchor": "_raise_flag_name_reserved_by_framework"
         },
@@ -3518,11 +3703,6 @@
         },
         {
           "level": 3,
-          "text": "`_raise_flag_mutex_member_required`",
-          "anchor": "_raise_flag_mutex_member_required"
-        },
-        {
-          "level": 3,
           "text": "`_raise_arg_variadic_default`",
           "anchor": "_raise_arg_variadic_default"
         },
@@ -3548,6 +3728,36 @@
         },
         {
           "level": 3,
+          "text": "`Choice`",
+          "anchor": "choice"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_choices_entry_not_record`",
+          "anchor": "_raise_choices_entry_not_record"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_choices_entry_is_choice_class`",
+          "anchor": "_raise_choices_entry_is_choice_class"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_choice_magnitude`",
+          "anchor": "_raise_choice_magnitude"
+        },
+        {
+          "level": 3,
+          "text": "`_check_choice_magnitudes`",
+          "anchor": "_check_choice_magnitudes"
+        },
+        {
+          "level": 3,
+          "text": "`_resolve_choice_records`",
+          "anchor": "_resolve_choice_records"
+        },
+        {
+          "level": 3,
           "text": "`Flag`",
           "anchor": "flag"
         },
@@ -3563,8 +3773,188 @@
         },
         {
           "level": 3,
-          "text": "`MutexGroup`",
-          "anchor": "mutexgroup"
+          "text": "`_ChoiceDecl`",
+          "anchor": "_choicedecl"
+        },
+        {
+          "level": 3,
+          "text": "`_ChoiceSpec`",
+          "anchor": "_choicespec"
+        },
+        {
+          "level": 3,
+          "text": "`_Selector`",
+          "anchor": "_selector"
+        },
+        {
+          "level": 4,
+          "text": "`is_member_spelled`",
+          "anchor": "is_member_spelled"
+        },
+        {
+          "level": 4,
+          "text": "`choice_by_name`",
+          "anchor": "choice_by_name"
+        },
+        {
+          "level": 4,
+          "text": "`choice_by_class`",
+          "anchor": "choice_by_class"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_short_on_ambiguous_election`",
+          "anchor": "_raise_short_on_ambiguous_election"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_short_shape_mismatch`",
+          "anchor": "_raise_short_shape_mismatch"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_handler_selector_annotation`",
+          "anchor": "_raise_handler_selector_annotation"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_handler_kwargs_with_selector`",
+          "anchor": "_raise_handler_kwargs_with_selector"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_handler_annotation_unresolved`",
+          "anchor": "_raise_handler_annotation_unresolved"
+        },
+        {
+          "level": 3,
+          "text": "`_default_spelling_bare`",
+          "anchor": "_default_spelling_bare"
+        },
+        {
+          "level": 3,
+          "text": "`choice`",
+          "anchor": "choice-1"
+        },
+        {
+          "level": 3,
+          "text": "`sub_flag`",
+          "anchor": "sub_flag"
+        },
+        {
+          "level": 3,
+          "text": "`sub_choice_flag`",
+          "anchor": "sub_choice_flag"
+        },
+        {
+          "level": 3,
+          "text": "`_scope_field`",
+          "anchor": "_scope_field"
+        },
+        {
+          "level": 3,
+          "text": "`member_value`",
+          "anchor": "member_value"
+        },
+        {
+          "level": 3,
+          "text": "`choice_flag`",
+          "anchor": "choice_flag"
+        },
+        {
+          "level": 3,
+          "text": "`provided`",
+          "anchor": "provided-1"
+        },
+        {
+          "level": 3,
+          "text": "`_scope_field_name`",
+          "anchor": "_scope_field_name"
+        },
+        {
+          "level": 3,
+          "text": "`_render_union`",
+          "anchor": "_render_union"
+        },
+        {
+          "level": 3,
+          "text": "`_render_annotation`",
+          "anchor": "_render_annotation"
+        },
+        {
+          "level": 3,
+          "text": "`_make_selector`",
+          "anchor": "_make_selector"
+        },
+        {
+          "level": 3,
+          "text": "`_value_shape`",
+          "anchor": "_value_shape"
+        },
+        {
+          "level": 3,
+          "text": "`_check_flag_name_bans`",
+          "anchor": "_check_flag_name_bans"
+        },
+        {
+          "level": 3,
+          "text": "`_build_choice_spec`",
+          "anchor": "_build_choice_spec"
+        },
+        {
+          "level": 3,
+          "text": "`_check_handler_selector_annotations`",
+          "anchor": "_check_handler_selector_annotations"
+        },
+        {
+          "level": 3,
+          "text": "`_Site`",
+          "anchor": "_site"
+        },
+        {
+          "level": 4,
+          "text": "`takes_value`",
+          "anchor": "takes_value"
+        },
+        {
+          "level": 4,
+          "text": "`negatable`",
+          "anchor": "negatable"
+        },
+        {
+          "level": 4,
+          "text": "`value_flag`",
+          "anchor": "value_flag"
+        },
+        {
+          "level": 3,
+          "text": "`_walk_sites`",
+          "anchor": "_walk_sites"
+        },
+        {
+          "level": 3,
+          "text": "`_render_scope_path`",
+          "anchor": "_render_scope_path"
+        },
+        {
+          "level": 3,
+          "text": "`_member_spelling_map`",
+          "anchor": "_member_spelling_map"
+        },
+        {
+          "level": 3,
+          "text": "`_paths_mutually_exclusive`",
+          "anchor": "_paths_mutually_exclusive"
+        },
+        {
+          "level": 3,
+          "text": "`_divergent_selector`",
+          "anchor": "_divergent_selector"
+        },
+        {
+          "level": 3,
+          "text": "`_validate_scoped_names`",
+          "anchor": "_validate_scoped_names"
         },
         {
           "level": 3,
@@ -4183,8 +4573,28 @@
         },
         {
           "level": 3,
+          "text": "`_scalar_fragment`",
+          "anchor": "_scalar_fragment"
+        },
+        {
+          "level": 3,
+          "text": "`_value_schema_fragment`",
+          "anchor": "_value_schema_fragment"
+        },
+        {
+          "level": 3,
           "text": "`_build_json_schema`",
           "anchor": "_build_json_schema"
+        },
+        {
+          "level": 3,
+          "text": "`_tool_description`",
+          "anchor": "_tool_description"
+        },
+        {
+          "level": 3,
+          "text": "`_scope_description_lines`",
+          "anchor": "_scope_description_lines"
         },
         {
           "level": 3,
@@ -4200,6 +4610,156 @@
           "level": 3,
           "text": "`_validate_and_build_kwargs`",
           "anchor": "_validate_and_build_kwargs"
+        },
+        {
+          "level": 3,
+          "text": "`_Occ`",
+          "anchor": "_occ"
+        },
+        {
+          "level": 3,
+          "text": "`_ElectionState`",
+          "anchor": "_electionstate"
+        },
+        {
+          "level": 3,
+          "text": "`_SelectorResult`",
+          "anchor": "_selectorresult"
+        },
+        {
+          "level": 3,
+          "text": "`_msg_election_origin_suffix`",
+          "anchor": "_msg_election_origin_suffix"
+        },
+        {
+          "level": 3,
+          "text": "`_msg_scope_suffix`",
+          "anchor": "_msg_scope_suffix"
+        },
+        {
+          "level": 3,
+          "text": "`_path_origin`",
+          "anchor": "_path_origin"
+        },
+        {
+          "level": 3,
+          "text": "`_elect_all`",
+          "anchor": "_elect_all"
+        },
+        {
+          "level": 3,
+          "text": "`_elect_token_spelled`",
+          "anchor": "_elect_token_spelled"
+        },
+        {
+          "level": 3,
+          "text": "`_lookup_choice`",
+          "anchor": "_lookup_choice"
+        },
+        {
+          "level": 3,
+          "text": "`_elect_member_spelled`",
+          "anchor": "_elect_member_spelled"
+        },
+        {
+          "level": 3,
+          "text": "`_resolve_short_occurrences`",
+          "anchor": "_resolve_short_occurrences"
+        },
+        {
+          "level": 3,
+          "text": "`_validate_scopes`",
+          "anchor": "_validate_scopes"
+        },
+        {
+          "level": 3,
+          "text": "`_scope_why`",
+          "anchor": "_scope_why"
+        },
+        {
+          "level": 3,
+          "text": "`_report_skipped_bindings`",
+          "anchor": "_report_skipped_bindings"
+        },
+        {
+          "level": 3,
+          "text": "`_coerce_scoped_value`",
+          "anchor": "_coerce_scoped_value"
+        },
+        {
+          "level": 3,
+          "text": "`_check_scoped_config_conflict`",
+          "anchor": "_check_scoped_config_conflict"
+        },
+        {
+          "level": 3,
+          "text": "`_resolve_scoped_value`",
+          "anchor": "_resolve_scoped_value"
+        },
+        {
+          "level": 3,
+          "text": "`_check_scoped_value`",
+          "anchor": "_check_scoped_value"
+        },
+        {
+          "level": 3,
+          "text": "`_apply_scoped_presence`",
+          "anchor": "_apply_scoped_presence"
+        },
+        {
+          "level": 3,
+          "text": "`_coerce_member_payload`",
+          "anchor": "_coerce_member_payload"
+        },
+        {
+          "level": 3,
+          "text": "`_run_scope_value_phase`",
+          "anchor": "_run_scope_value_phase"
+        },
+        {
+          "level": 3,
+          "text": "`_instantiate_choice`",
+          "anchor": "_instantiate_choice"
+        },
+        {
+          "level": 3,
+          "text": "`_declared_default_record`",
+          "anchor": "_declared_default_record"
+        },
+        {
+          "level": 3,
+          "text": "`_build_scope_values`",
+          "anchor": "_build_scope_values"
+        },
+        {
+          "level": 3,
+          "text": "`_elect_and_validate_scopes`",
+          "anchor": "_elect_and_validate_scopes"
+        },
+        {
+          "level": 3,
+          "text": "`_resolve_selectors`",
+          "anchor": "_resolve_selectors"
+        },
+        {
+          "level": 3,
+          "text": "`_flat_selector_params`",
+          "anchor": "_flat_selector_params"
+        },
+        {
+          "level": 3,
+          "text": "`_flat_occurrences`",
+          "anchor": "_flat_occurrences"
+        },
+        {
+          "level": 3,
+          "text": "`_selector_result_from_records`",
+          "anchor": "_selector_result_from_records"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_invoke_selector_not_record`",
+          "anchor": "_raise_invoke_selector_not_record"
         },
         {
           "level": 3,
@@ -4265,6 +4825,36 @@
           "level": 3,
           "text": "`_format_declared_default_for_help`",
           "anchor": "_format_declared_default_for_help"
+        },
+        {
+          "level": 3,
+          "text": "`_format_value_for_help`",
+          "anchor": "_format_value_for_help"
+        },
+        {
+          "level": 3,
+          "text": "`_renders_as_block`",
+          "anchor": "_renders_as_block"
+        },
+        {
+          "level": 3,
+          "text": "`_build_selector_spec`",
+          "anchor": "_build_selector_spec"
+        },
+        {
+          "level": 3,
+          "text": "`_build_member_spec`",
+          "anchor": "_build_member_spec"
+        },
+        {
+          "level": 3,
+          "text": "`_format_selector_presence`",
+          "anchor": "_format_selector_presence"
+        },
+        {
+          "level": 3,
+          "text": "`_flag_block_rows`",
+          "anchor": "_flag_block_rows"
         },
         {
           "level": 3,
@@ -4353,8 +4943,33 @@
         },
         {
           "level": 3,
+          "text": "`_serialize_choice_records`",
+          "anchor": "_serialize_choice_records"
+        },
+        {
+          "level": 3,
+          "text": "`_serialize_default_value`",
+          "anchor": "_serialize_default_value"
+        },
+        {
+          "level": 3,
           "text": "`_serialize_flag`",
           "anchor": "_serialize_flag"
+        },
+        {
+          "level": 3,
+          "text": "`_serialize_choice_object`",
+          "anchor": "_serialize_choice_object"
+        },
+        {
+          "level": 3,
+          "text": "`_serialize_selector_default`",
+          "anchor": "_serialize_selector_default"
+        },
+        {
+          "level": 3,
+          "text": "`_serialize_selector`",
+          "anchor": "_serialize_selector"
         },
         {
           "level": 3,
@@ -4410,6 +5025,21 @@
           "level": 3,
           "text": "`_check_schema_project_id`",
           "anchor": "_check_schema_project_id"
+        },
+        {
+          "level": 3,
+          "text": "`_canonical_json_string`",
+          "anchor": "_canonical_json_string"
+        },
+        {
+          "level": 3,
+          "text": "`_write_canonical_json`",
+          "anchor": "_write_canonical_json"
+        },
+        {
+          "level": 3,
+          "text": "`_canonical_json`",
+          "anchor": "_canonical_json"
         },
         {
           "level": 3,
@@ -4735,8 +5365,23 @@
         },
         {
           "level": 2,
-          "text": "Mutex Groups",
-          "anchor": "mutex-groups"
+          "text": "Choice Flags",
+          "anchor": "choice-flags"
+        },
+        {
+          "level": 3,
+          "text": "The derived union",
+          "anchor": "the-derived-union"
+        },
+        {
+          "level": 3,
+          "text": "Member spelling",
+          "anchor": "member-spelling"
+        },
+        {
+          "level": 3,
+          "text": "Presence, defaults, and recursion",
+          "anchor": "presence-defaults-and-recursion"
         },
         {
           "level": 2,
@@ -5781,6 +6426,43 @@
       ]
     },
     {
+      "path": "typescript-src-elected.md",
+      "title": "typescript/src/elected",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/elected",
+          "anchor": "typescriptsrcelected"
+        },
+        {
+          "level": 2,
+          "text": "`typescript/src/elected`",
+          "anchor": "typescriptsrcelected"
+        },
+        {
+          "level": 3,
+          "text": "`ElectedRecord`",
+          "anchor": "electedrecord"
+        },
+        {
+          "level": 3,
+          "text": "`attachProvidedFields`",
+          "anchor": "attachprovidedfields"
+        },
+        {
+          "level": 3,
+          "text": "`provided`",
+          "anchor": "provided"
+        },
+        {
+          "level": 3,
+          "text": "`assertNever`",
+          "anchor": "assertnever"
+        }
+      ]
+    },
+    {
       "path": "typescript-src-env.md",
       "title": "typescript/src/env",
       "type": "doc",
@@ -5936,11 +6618,6 @@
           "level": 3,
           "text": "`errArgTypeBad`",
           "anchor": "errargtypebad"
-        },
-        {
-          "level": 3,
-          "text": "`errArgChoicesIncompatibleListType`",
-          "anchor": "errargchoicesincompatiblelisttype"
         },
         {
           "level": 3,
@@ -6301,16 +6978,6 @@
           "level": 3,
           "text": "`errDeprecatedAlreadyRegistered`",
           "anchor": "errdeprecatedalreadyregistered"
-        },
-        {
-          "level": 3,
-          "text": "`errCommandMutexMinFlags`",
-          "anchor": "errcommandmutexminflags"
-        },
-        {
-          "level": 3,
-          "text": "`errCommandFlagInMultipleMutex`",
-          "anchor": "errcommandflaginmultiplemutex"
         },
         {
           "level": 3,
@@ -7474,11 +8141,6 @@
         },
         {
           "level": 3,
-          "text": "`errFlagMutexMemberRequired`",
-          "anchor": "errflagmutexmemberrequired"
-        },
-        {
-          "level": 3,
           "text": "`errArgVariadicDefault`",
           "anchor": "errargvariadicdefault"
         },
@@ -7491,6 +8153,211 @@
           "level": 3,
           "text": "`errArgDefaultValueMissing`",
           "anchor": "errargdefaultvaluemissing"
+        },
+        {
+          "level": 3,
+          "text": "`RECORD_SPELLING`",
+          "anchor": "record_spelling"
+        },
+        {
+          "level": 3,
+          "text": "`SELECTOR_SPELLING`",
+          "anchor": "selector_spelling"
+        },
+        {
+          "level": 3,
+          "text": "`MEMBER_SELECTOR_SPELLING`",
+          "anchor": "member_selector_spelling"
+        },
+        {
+          "level": 3,
+          "text": "`errScopeSuffix`",
+          "anchor": "errscopesuffix"
+        },
+        {
+          "level": 3,
+          "text": "`errFlagOutOfScope`",
+          "anchor": "errflagoutofscope"
+        },
+        {
+          "level": 3,
+          "text": "`errScopeWhyElected`",
+          "anchor": "errscopewhyelected"
+        },
+        {
+          "level": 3,
+          "text": "`errScopeWhyNotProvided`",
+          "anchor": "errscopewhynotprovided"
+        },
+        {
+          "level": 3,
+          "text": "`errScopeWhyNoMemberElected`",
+          "anchor": "errscopewhynomemberelected"
+        },
+        {
+          "level": 3,
+          "text": "`errElectionOriginEnv`",
+          "anchor": "errelectionoriginenv"
+        },
+        {
+          "level": 3,
+          "text": "`errElectionOriginConfig`",
+          "anchor": "errelectionoriginconfig"
+        },
+        {
+          "level": 3,
+          "text": "`errElectionOriginDefault`",
+          "anchor": "errelectionorigindefault"
+        },
+        {
+          "level": 3,
+          "text": "`errElectionOriginSuffix`",
+          "anchor": "errelectionoriginsuffix"
+        },
+        {
+          "level": 3,
+          "text": "`errSelectorElectedTwice`",
+          "anchor": "errselectorelectedtwice"
+        },
+        {
+          "level": 3,
+          "text": "`errAmbientBindingSkippedEnv`",
+          "anchor": "errambientbindingskippedenv"
+        },
+        {
+          "level": 3,
+          "text": "`errAmbientBindingSkippedConfig`",
+          "anchor": "errambientbindingskippedconfig"
+        },
+        {
+          "level": 3,
+          "text": "`errSelectorOptional`",
+          "anchor": "errselectoroptional"
+        },
+        {
+          "level": 3,
+          "text": "`errSelectorNoChoices`",
+          "anchor": "errselectornochoices"
+        },
+        {
+          "level": 3,
+          "text": "`errChoiceDuplicateName`",
+          "anchor": "errchoiceduplicatename"
+        },
+        {
+          "level": 3,
+          "text": "`errChoiceHelpEmpty`",
+          "anchor": "errchoicehelpempty"
+        },
+        {
+          "level": 3,
+          "text": "`errChoiceNameCharset`",
+          "anchor": "errchoicenamecharset"
+        },
+        {
+          "level": 3,
+          "text": "`errSelectorDefaultUnknownChoice`",
+          "anchor": "errselectordefaultunknownchoice"
+        },
+        {
+          "level": 3,
+          "text": "`errSelectorDefaultIncomplete`",
+          "anchor": "errselectordefaultincomplete"
+        },
+        {
+          "level": 3,
+          "text": "`errMemberFlagPresence`",
+          "anchor": "errmemberflagpresence"
+        },
+        {
+          "level": 3,
+          "text": "`errMemberSelectorShort`",
+          "anchor": "errmemberselectorshort"
+        },
+        {
+          "level": 3,
+          "text": "`errMemberDefaultCarriesValue`",
+          "anchor": "errmemberdefaultcarriesvalue"
+        },
+        {
+          "level": 3,
+          "text": "`errTokenChoiceCarriesPayload`",
+          "anchor": "errtokenchoicecarriespayload"
+        },
+        {
+          "level": 3,
+          "text": "`errFlagChoiceMagnitude`",
+          "anchor": "errflagchoicemagnitude"
+        },
+        {
+          "level": 3,
+          "text": "`errArgChoiceMagnitude`",
+          "anchor": "errargchoicemagnitude"
+        },
+        {
+          "level": 3,
+          "text": "`errChoicesEntryNotRecord`",
+          "anchor": "errchoicesentrynotrecord"
+        },
+        {
+          "level": 3,
+          "text": "`errArgChoicesEntryNotRecord`",
+          "anchor": "errargchoicesentrynotrecord"
+        },
+        {
+          "level": 3,
+          "text": "`errScopedNameChoiceReserved`",
+          "anchor": "errscopednamechoicereserved"
+        },
+        {
+          "level": 3,
+          "text": "`errScopedNameValueReserved`",
+          "anchor": "errscopednamevaluereserved"
+        },
+        {
+          "level": 3,
+          "text": "`errScopedNameCollidesRoot`",
+          "anchor": "errscopednamecollidesroot"
+        },
+        {
+          "level": 3,
+          "text": "`errScopedNameCollidesSelector`",
+          "anchor": "errscopednamecollidesselector"
+        },
+        {
+          "level": 3,
+          "text": "`errSiblingScopeShapeMismatch`",
+          "anchor": "errsiblingscopeshapemismatch"
+        },
+        {
+          "level": 3,
+          "text": "`errCoElectableNameReuse`",
+          "anchor": "errcoelectablenamereuse"
+        },
+        {
+          "level": 3,
+          "text": "`errShortCollidesAcrossScopes`",
+          "anchor": "errshortcollidesacrossscopes"
+        },
+        {
+          "level": 3,
+          "text": "`errShortShapeMismatch`",
+          "anchor": "errshortshapemismatch"
+        },
+        {
+          "level": 3,
+          "text": "`errShortOnAmbiguousElection`",
+          "anchor": "errshortonambiguouselection"
+        },
+        {
+          "level": 3,
+          "text": "`errScopedPositional`",
+          "anchor": "errscopedpositional"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintReferencesScopedFlag`",
+          "anchor": "errconstraintreferencesscopedflag"
         }
       ]
     },
@@ -7536,6 +8403,26 @@
         },
         {
           "level": 3,
+          "text": "`ChoiceRecord`",
+          "anchor": "choicerecord"
+        },
+        {
+          "level": 3,
+          "text": "`ChoiceRecordView`",
+          "anchor": "choicerecordview"
+        },
+        {
+          "level": 3,
+          "text": "`choiceValues`",
+          "anchor": "choicevalues"
+        },
+        {
+          "level": 3,
+          "text": "`anyChoiceHasHelp`",
+          "anchor": "anychoicehashelp"
+        },
+        {
+          "level": 3,
           "text": "`FlagOpts`",
           "anchor": "flagopts"
         },
@@ -7571,6 +8458,26 @@
         },
         {
           "level": 3,
+          "text": "`JSON_SCHEMA_TYPES`",
+          "anchor": "json_schema_types"
+        },
+        {
+          "level": 3,
+          "text": "`scalarFragment`",
+          "anchor": "scalarfragment"
+        },
+        {
+          "level": 3,
+          "text": "`valueSchemaFragment`",
+          "anchor": "valueschemafragment"
+        },
+        {
+          "level": 3,
+          "text": "`argChoiceValues`",
+          "anchor": "argchoicevalues"
+        },
+        {
+          "level": 3,
           "text": "`RESERVED_FRAMEWORK_FLAG_NAMES`",
           "anchor": "reserved_framework_flag_names"
         },
@@ -7593,6 +8500,11 @@
           "level": 3,
           "text": "`flag`",
           "anchor": "flag"
+        },
+        {
+          "level": 3,
+          "text": "`ArgSchema`",
+          "anchor": "argschema"
         },
         {
           "level": 3,
@@ -7636,21 +8548,6 @@
         },
         {
           "level": 3,
-          "text": "`MutexGroup`",
-          "anchor": "mutexgroup"
-        },
-        {
-          "level": 3,
-          "text": "`AnyMutexGroup`",
-          "anchor": "anymutexgroup"
-        },
-        {
-          "level": 3,
-          "text": "`mutexGroup`",
-          "anchor": "mutexgroup-1"
-        },
-        {
-          "level": 3,
           "text": "`CoRequired`",
           "anchor": "corequired"
         },
@@ -7688,6 +8585,151 @@
           "level": 3,
           "text": "`FlagMap`",
           "anchor": "flagmap"
+        },
+        {
+          "level": 3,
+          "text": "`GlobalFlagMap`",
+          "anchor": "globalflagmap"
+        },
+        {
+          "level": 3,
+          "text": "`AnyDecl`",
+          "anchor": "anydecl"
+        },
+        {
+          "level": 3,
+          "text": "`CHOICE_TAG_KEY`",
+          "anchor": "choice_tag_key"
+        },
+        {
+          "level": 3,
+          "text": "`CHOICE_VALUE_KEY`",
+          "anchor": "choice_value_key"
+        },
+        {
+          "level": 3,
+          "text": "`ChoiceDef`",
+          "anchor": "choicedef"
+        },
+        {
+          "level": 3,
+          "text": "`ValueChoiceDef`",
+          "anchor": "valuechoicedef"
+        },
+        {
+          "level": 3,
+          "text": "`AnyChoice`",
+          "anchor": "anychoice"
+        },
+        {
+          "level": 3,
+          "text": "`ChoiceMap`",
+          "anchor": "choicemap"
+        },
+        {
+          "level": 3,
+          "text": "`choice`",
+          "anchor": "choice"
+        },
+        {
+          "level": 3,
+          "text": "`choice`",
+          "anchor": "choice-1"
+        },
+        {
+          "level": 3,
+          "text": "`choice`",
+          "anchor": "choice-2"
+        },
+        {
+          "level": 3,
+          "text": "`ChoiceFlagOpts`",
+          "anchor": "choiceflagopts"
+        },
+        {
+          "level": 3,
+          "text": "`ElectBy`",
+          "anchor": "electby"
+        },
+        {
+          "level": 3,
+          "text": "`ChoiceFlagDef`",
+          "anchor": "choiceflagdef"
+        },
+        {
+          "level": 3,
+          "text": "`AnyChoiceFlag`",
+          "anchor": "anychoiceflag"
+        },
+        {
+          "level": 3,
+          "text": "`flagParamName`",
+          "anchor": "flagparamname"
+        },
+        {
+          "level": 3,
+          "text": "`isChoiceFlag`",
+          "anchor": "ischoiceflag"
+        },
+        {
+          "level": 3,
+          "text": "`choiceFlag`",
+          "anchor": "choiceflag"
+        },
+        {
+          "level": 3,
+          "text": "`memberChoiceFlag`",
+          "anchor": "memberchoiceflag"
+        },
+        {
+          "level": 3,
+          "text": "`SurfaceName`",
+          "anchor": "surfacename"
+        },
+        {
+          "level": 3,
+          "text": "`surfaceNames`",
+          "anchor": "surfacenames"
+        },
+        {
+          "level": 3,
+          "text": "`ScopeStep`",
+          "anchor": "scopestep"
+        },
+        {
+          "level": 3,
+          "text": "`scopeSegment`",
+          "anchor": "scopesegment"
+        },
+        {
+          "level": 3,
+          "text": "`scopePath`",
+          "anchor": "scopepath"
+        },
+        {
+          "level": 3,
+          "text": "`memberList`",
+          "anchor": "memberlist"
+        },
+        {
+          "level": 3,
+          "text": "`ScopeIndexEntry`",
+          "anchor": "scopeindexentry"
+        },
+        {
+          "level": 3,
+          "text": "`ScopeIndex`",
+          "anchor": "scopeindex"
+        },
+        {
+          "level": 3,
+          "text": "`buildScopeIndex`",
+          "anchor": "buildscopeindex"
+        },
+        {
+          "level": 3,
+          "text": "`allScopedFlags`",
+          "anchor": "allscopedflags"
         },
         {
           "level": 3,
@@ -7922,6 +8964,16 @@
         },
         {
           "level": 3,
+          "text": "`assertNever`",
+          "anchor": "assertnever"
+        },
+        {
+          "level": 3,
+          "text": "`provided`",
+          "anchor": "provided"
+        },
+        {
+          "level": 3,
           "text": "`EffectFailed`",
           "anchor": "effectfailed"
         },
@@ -7934,6 +8986,16 @@
           "level": 3,
           "text": "`arg`",
           "anchor": "arg"
+        },
+        {
+          "level": 3,
+          "text": "`choice`",
+          "anchor": "choice"
+        },
+        {
+          "level": 3,
+          "text": "`choiceFlag`",
+          "anchor": "choiceflag"
         },
         {
           "level": 3,
@@ -7972,13 +9034,13 @@
         },
         {
           "level": 3,
-          "text": "`mutatingPassthrough`",
-          "anchor": "mutatingpassthrough"
+          "text": "`memberChoiceFlag`",
+          "anchor": "memberchoiceflag"
         },
         {
           "level": 3,
-          "text": "`mutexGroup`",
-          "anchor": "mutexgroup"
+          "text": "`mutatingPassthrough`",
+          "anchor": "mutatingpassthrough"
         },
         {
           "level": 3,
@@ -8054,6 +9116,16 @@
         },
         {
           "level": 3,
+          "text": "`Elected`",
+          "anchor": "elected"
+        },
+        {
+          "level": 3,
+          "text": "`InferScopeArgs`",
+          "anchor": "inferscopeargs"
+        },
+        {
+          "level": 3,
           "text": "`InferHandlerArgs`",
           "anchor": "inferhandlerargs"
         },
@@ -8066,6 +9138,16 @@
           "level": 3,
           "text": "`InferHandler`",
           "anchor": "inferhandler"
+        },
+        {
+          "level": 3,
+          "text": "`ElectedOf`",
+          "anchor": "electedof"
+        },
+        {
+          "level": 3,
+          "text": "`ChoiceOf`",
+          "anchor": "choiceof"
         }
       ]
     },
@@ -8254,11 +9336,6 @@
         },
         {
           "level": 3,
-          "text": "`flagParamName`",
-          "anchor": "flagparamname"
-        },
-        {
-          "level": 3,
           "text": "`ConfigLoadResult`",
           "anchor": "configloadresult"
         },
@@ -8276,6 +9353,11 @@
           "level": 3,
           "text": "`valuesEqualForConflict`",
           "anchor": "valuesequalforconflict"
+        },
+        {
+          "level": 3,
+          "text": "`parseRawFlagValue`",
+          "anchor": "parserawflagvalue"
         },
         {
           "level": 3,
@@ -8351,6 +9433,11 @@
           "level": 3,
           "text": "`formatParseErrorOutput`",
           "anchor": "formatparseerroroutput"
+        },
+        {
+          "level": 3,
+          "text": "`flagParamName`",
+          "anchor": "flagparamname"
         }
       ]
     },
@@ -8378,6 +9465,11 @@
           "level": 3,
           "text": "`PAYLOAD_JSON_TYPES`",
           "anchor": "payload_json_types"
+        },
+        {
+          "level": 3,
+          "text": "`PDETAIL_MAGNITUDE`",
+          "anchor": "pdetail_magnitude"
         },
         {
           "level": 3,
@@ -8511,6 +9603,88 @@
       ]
     },
     {
+      "path": "typescript-src-scopeparse.md",
+      "title": "typescript/src/scopeparse",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/scopeparse",
+          "anchor": "typescriptsrcscopeparse"
+        },
+        {
+          "level": 2,
+          "text": "`typescript/src/scopeparse`",
+          "anchor": "typescriptsrcscopeparse"
+        },
+        {
+          "level": 3,
+          "text": "`Occurrence`",
+          "anchor": "occurrence"
+        },
+        {
+          "level": 3,
+          "text": "`Occurrences`",
+          "anchor": "occurrences"
+        },
+        {
+          "level": 3,
+          "text": "`STAGE`",
+          "anchor": "stage"
+        },
+        {
+          "level": 3,
+          "text": "`ParseProblem`",
+          "anchor": "parseproblem"
+        },
+        {
+          "level": 3,
+          "text": "`ScopeConfig`",
+          "anchor": "scopeconfig"
+        },
+        {
+          "level": 3,
+          "text": "`ScopeParseInput`",
+          "anchor": "scopeparseinput"
+        },
+        {
+          "level": 3,
+          "text": "`ScopeParseResult`",
+          "anchor": "scopeparseresult"
+        },
+        {
+          "level": 3,
+          "text": "`Election`",
+          "anchor": "election"
+        },
+        {
+          "level": 3,
+          "text": "`ElectionLookup`",
+          "anchor": "electionlookup"
+        },
+        {
+          "level": 3,
+          "text": "`parseScopes`",
+          "anchor": "parsescopes"
+        },
+        {
+          "level": 3,
+          "text": "`outOfScopeMessage`",
+          "anchor": "outofscopemessage"
+        },
+        {
+          "level": 3,
+          "text": "`installScopedValueParser`",
+          "anchor": "installscopedvalueparser"
+        },
+        {
+          "level": 3,
+          "text": "`throwFirstProblem`",
+          "anchor": "throwfirstproblem"
+        }
+      ]
+    },
+    {
       "path": "typescript-src-sources.md",
       "title": "typescript/src/sources",
       "type": "doc",
@@ -8638,6 +9812,16 @@
           "level": 3,
           "text": "`asToolsForApp`",
           "anchor": "astoolsforapp"
+        },
+        {
+          "level": 3,
+          "text": "`scopeDescriptionBlock`",
+          "anchor": "scopedescriptionblock"
+        },
+        {
+          "level": 3,
+          "text": "`flatToCallKwargs`",
+          "anchor": "flattocallkwargs"
         }
       ]
     },
@@ -8906,5 +10090,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-14T17:35:37.576202+00:00"
+  "last_gen": "2026-08-15T04:33:24.048155+00:00"
 }
