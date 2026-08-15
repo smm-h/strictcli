@@ -11699,6 +11699,11 @@ def _build_scope_values(
     path_text = _render_scope_path(path, member_spelled)
     scope_suffix = _msg_scope_suffix(path_text)
     origin_suffix = _msg_election_origin_suffix(_path_origin(path, state))
+    # §12.13's two suffixes are one composed thing and travel together in this
+    # order: the scope names WHERE the requirement lives, the origin names WHAT
+    # caused it, and a clause that follows them is a note appended to a
+    # complete sentence rather than an aside spliced into the middle of one.
+    presence_suffix = scope_suffix + origin_suffix
     for m in members:
         if isinstance(m, Flag):
             resolved = values.get((path, m.name))
@@ -11723,8 +11728,10 @@ def _build_scope_values(
                 clause = (
                     _msg_mutex_decline_clause(declined[0]) if declined else ""
                 )
+                # The decline clause is a note about the token that WAS typed,
+                # so it follows both suffixes (§21.4 appended to §12.13).
                 raise _ParseError(
-                    f"one of {names} is required{scope_suffix}{clause}"
+                    f"one of {names} is required{presence_suffix}{clause}"
                 )
             raise _ParseError(
                 f"flag '--{m.name}' is required{scope_suffix}{origin_suffix}"

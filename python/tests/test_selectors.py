@@ -474,6 +474,84 @@ def test_an_ambient_election_names_itself_in_a_scope_error(monkeypatch):
     ) in r.stderr
 
 
+@choice("profile", help="a profile")
+class _OriginProfile:
+    value: str = member_value(help="the profile name")
+
+
+@choice("all-profiles", help="every profile")
+class _OriginAllProfiles:
+    pass
+
+
+@choice("email", help="deliver by email")
+class _OriginEmail:
+    mode: _OriginProfile | _OriginAllProfiles = sub_choice_flag(
+        help="which profiles", presence="required",
+        elect_by="member-flags",
+        choices=[_OriginProfile, _OriginAllProfiles],
+    )
+
+
+@choice("sms", help="deliver by text")
+class _OriginSms:
+    pass
+
+
+def _nested_member_selector_app():
+    """A required member-spelled selector one level down, under a token-spelled
+    selector that an environment variable can elect."""
+    app = strictcli.App(name="notify", version="1.0.0", help="notifier")
+
+    @app.command("send", effect="mutating", help="send one")
+    @choice_flag(
+        "via", help="delivery channel", presence="required",
+        elect_by="selector-token", choices=[_OriginEmail, _OriginSms],
+        env="NOTIFY_VIA",
+    )
+    def send(ctx, via: _OriginEmail | _OriginSms):
+        print(repr(via))
+
+    return app
+
+
+def test_the_three_clauses_compose_scope_then_origin_then_decline(monkeypatch):
+    """§18.23 item 239 (§12.13, §21.4): the scope suffix names WHERE the
+    requirement lives and belongs to the sentence; both parentheticals follow a
+    complete sentence, and the decline clause -- a note about the token that
+    WAS typed -- goes last. Composing them any other way splits the sentence
+    around an aside."""
+    monkeypatch.setenv("NOTIFY_VIA", "email")
+    r = _nested_member_selector_app().test(["send", "--no-all-profiles"])
+    assert r.exit_code == 1
+    assert (
+        "error: one of --profile, --all-profiles is required "
+        "under '--via email' (elected from env var 'NOTIFY_VIA') "
+        "(--no-all-profiles declines an option; it does not choose one)\n"
+    ) in r.stderr
+
+
+def test_an_unsatisfied_member_selector_names_its_ambient_election(monkeypatch):
+    """The origin suffix is not a decline-clause companion: it appears
+    whenever a non-command-line election caused the requirement."""
+    monkeypatch.setenv("NOTIFY_VIA", "email")
+    r = _nested_member_selector_app().test(["send"])
+    assert r.exit_code == 1
+    assert (
+        "error: one of --profile, --all-profiles is required "
+        "under '--via email' (elected from env var 'NOTIFY_VIA')\n"
+    ) in r.stderr
+
+
+def test_a_command_line_election_leaves_the_member_selector_suffix_alone():
+    r = _nested_member_selector_app().test(["send", "--via", "email"])
+    assert r.exit_code == 1
+    assert (
+        "error: one of --profile, --all-profiles is required "
+        "under '--via email'\n"
+    ) in r.stderr
+
+
 def test_a_command_line_election_produces_the_empty_origin_suffix():
     """§12.13 item 212: the wrapper exists exactly when the clause it wraps
     does -- never a bare `(elected)`."""
