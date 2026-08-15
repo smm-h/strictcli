@@ -155,8 +155,37 @@ against the resolved command's declared flags and positional arguments. The
 parser builds three lookup tables from the command's flags (long form, short
 form, and negation form), then consumes tokens left-to-right. After CLI tokens
 are processed, the value resolution cascade applies env vars, config values, and
-defaults in that order, followed by constraint validation for mutex groups and
-dependencies.
+defaults in that order, followed by dependency-constraint validation.
+
+**Parsing is phased**, and the phase order is what makes order independence, the
+distinct out-of-scope error and that error's priority over a missing required
+flag fall out instead of being special-cased:
+
+1. **Tokenize** every occurrence, without interpreting any of it.
+2. **Resolve elections** for [choice flags](flag-system.md#choice-flags-a-choice-is-a-declaration-scope),
+   outermost first, then recursively inside each elected choice.
+3. **Validate scope membership** of every supplied flag.
+4. **Resolve values and presence** within the live scopes only.
+
+Error precedence follows that order -- **election, then scope, then value, then
+presence** -- so a command line with several problems reports the same error
+every time, never one that depends on declaration order. `--via sms --subject hi`
+says *`--subject` belongs to `email`*, never *`--phone-number` is required*: the
+spelling mistake is reported before its consequence.
+
+**The precedence is normative for every command, choice-flag-free ones
+included.** The phase order is a property of the parser, not of the declaration:
+a structural problem -- an unknown flag, an unknown choice, a double election, a
+scope violation -- is reported before a value problem -- a coercion failure, a
+`validate` refusal, an at-prefix failure -- whether or not the command declares
+a choice flag. Within a phase, ordering is command-line order, except in the
+value phase, where every coercion failure is reported before any `validate`
+refusal: a value is coerced as its token is consumed, and `validate` callbacks
+run in a later pass over the command's declared flags.
+
+Tokenization cannot wait for an election -- whether `--target` consumes the next
+argv element is decided before any choice is elected -- which is why sibling
+scopes may reuse a name only with an identical type and arity.
 
 - **Long lookup**: `--flag-name` to flag definition.
 - **Short lookup**: `-x` to flag definition.
@@ -206,19 +235,11 @@ skipped under `--hermetic`):
    marker, it is resolved against the declared infrastructure roots at this
    point, and its source is labeled "infra" instead of "default."
 
-After all values are resolved, constraint validation runs:
+After all values are resolved, constraint validation runs. Exactly-one selection
+is **not** among the constraints: it is a choice flag, resolved in the election
+phase above, and a dependency constraint naming a scoped flag is a
+registration-time error -- the scope already is the constraint.
 
-- **Mutex groups**: exactly one member must be *elected*, and only a
-  command-line token elects. A bool member elects only when it resolves to
-  true, so `--no-x` declines instead of choosing; every other type elects on
-  presence with any value. Env- and config-sourced values on a mutex member
-  elect nothing and are dropped, so an unelected member delivers whatever its
-  own presence declaration says -- its declared default, or absence when it
-  declares `optional`. The group enforces cardinality on top of presence, never
-  instead of it, and a member declaring `required` does not register. Two
-  elections are "mutually exclusive", an election
-  beside a declined member is "cannot be combined with", and no election is
-  "one of ... is required". See the flag-system page for the full rules.
 - **CoRequired**: all named flags must be present together, or none.
 - **Requires**: if flag A is present, flag B must also be present.
 - **Implies**: if flag A is present, flag B is automatically set to the implied
@@ -261,9 +282,9 @@ only under the framework-owned `--json`; `Test()` / `test()` and `Call()` /
 ## Source provenance
 
 Every resolved flag value carries a source label tracking where its value came
-from. Source provenance enables intelligent constraint evaluation: mutex checks
-consider only the cli source, while dependency checks consider everything
-except defaults. Handlers can inspect provenance at runtime
+from. Source provenance enables intelligent constraint evaluation: a
+member-spelled election considers only the cli source, while dependency checks
+consider everything except defaults. Handlers can inspect provenance at runtime
 to alter behavior based on whether a value was explicitly provided or fell
 through to its default. The six source labels are:
 
@@ -284,9 +305,18 @@ Provenance is tracked internally by a `SourcedStore` (Go/TypeScript) or
 `_SourcedStore` (Python) that pairs each value with its source label.
 Provenance matters for constraint evaluation:
 
-- **Mutex election** considers only the `cli` source. A member whose value came
-  from `env` or `config` neither elects nor keeps that value: the entry is
-  dropped before dependency validation, so the member ends up labeled `default`.
+- **Member-spelled election** considers only the `cli` source. Env and config
+  are not consulted for a member flag at all: the spelling exists to make the
+  operator choose in the invocation. A **token-spelled** choice flag is an
+  ordinary value flag whose value happens to name a choice, so it elects from
+  any source, and the election's origin is named in every message it causes
+  (` from env var '<VAR>'`, ` from config key '<key>'`, ` by default`).
+- **Ambient values for flags in non-elected scopes** are conditional bindings by
+  declaration: an env var or config key bound to a scoped flag is consulted when
+  its scope is elected and otherwise never consulted. Every skipped binding that
+  actually carried a value is named on the debug channel (`not consulted: env
+  var '<VAR>' binds flag '--<x>' under '<scope path>', which was not elected`),
+  hidden by default and shown by `--verbose`.
 - **Dependency checks** (`CoRequired`, `Requires`, and the `Implies` trigger)
   consider `cli`, `env`, `config` and `implied`, and exclude both `default` and
   `infra`. A flag that got its value from `implied` is considered "present" for
@@ -380,19 +410,49 @@ Command-level validation is enforced by `buildAndValidateCommand` (Go),
 `_build_and_validate_command` (Python), and the equivalent validation in
 `app.ts` (TypeScript). These checks verify that each command is internally
 consistent: no duplicate flag names, no collisions with global flags, valid
-mutex groups and dependency declarations, and mandatory help text on every
+choice-flag and dependency declarations, and mandatory help text on every
 command.
 
 - Help text is mandatory.
 - Duplicate flag names within a command are a hard error.
 - Flags cannot collide with global flags.
-- Mutex groups must have at least 2 flags.
-- A flag cannot appear in multiple mutex groups.
 - `CoRequired` must reference at least 2 flags and all must be declared.
 - `Requires` must reference declared flags and cannot be self-referential.
 - `Implies` trigger and target must be bool flags; target must be different
   from trigger.
-- Passthrough commands cannot have flags, args, flag sets, or mutex groups.
+- A dependency constraint may not name a scoped flag: constraints operate at
+  root scope only.
+- Passthrough commands cannot have flags, args, or flag sets, so they declare
+  nothing a choice flag could scope.
+
+### Choice-flag validation
+
+Every rule below runs at **every depth**, because a choice flag may be declared
+inside a choice's scope without limit and a ban enforced only against a flat
+root list is the construct's most likely correctness defect:
+
+- A choice flag must declare at least two choices, each with a unique name and
+  non-empty help.
+- A choice flag declares `required` or a `default`; `optional` is refused with a
+  redirect that names the remedy.
+- A default must name a declared choice, and its selection must be **complete**:
+  a choice whose scope declares a required sub-flag cannot be a default (Go and
+  TypeScript check it; in Python the default is a choice instance, so the
+  incomplete state is unconstructable).
+- A member flag must declare `required`, read as *required once this member is
+  elected*. A member-spelled choice flag cannot carry a short. A defaulted
+  member-spelled choice flag may only default to a payload-less member.
+- A token-spelled choice cannot carry a payload.
+- `choice` and `value` are reserved flag names inside every scope; every other
+  name rule (the reserved quartet, `json`, `yes`, bare `force`, the `no-`
+  prefix, `approve_consequential`, the charset, mandatory help) re-runs there
+  too.
+- A scoped flag may not reuse a command-level flag's name, nor its own choice
+  flag's name. Sibling scopes may reuse a name only with an identical type and
+  arity; simultaneously electable scopes may not reuse one at all. Shorts are
+  claimed across every simultaneously live scope.
+- Positional args cannot be declared inside a scope.
+- Every `choices` entry is a value-plus-help record; a bare value is refused.
 
 ### Global flag validation
 
@@ -429,106 +489,420 @@ The anchor is what keeps the write off the caller's working directory: a `chdir`
 between construction and dispatch cannot move the file, exactly as it cannot
 move the test-coverage root.
 
+### Schema version 2
+
+The dump is at **`schema_version: 2`**, emitted at both sites -- the top-level
+key and the copy inside the `defaults` block. There is no v1 compatibility path:
+no dual-reader, no shim, no negotiated fallback. A reader sees `schema_version`
+and knows which format it holds, and a v1 file stays readable as exactly what it
+is.
+
+What v2 changed, relative to v1:
+
+| Change | What it replaces |
+|---|---|
+| `value_schema` -- a real JSON Schema fragment on every flag and arg entry | the `type` key, which had three different spellings across the implementations |
+| arity is part of the value's shape | the `repeatable` key on the flag entry, deleted |
+| a native encoding for choice flags (`choices` + `elect_by`) | nothing -- v1 could not describe one |
+| value-plus-help records under `choices` | the bare value list |
+| one declared key order and one byte canon | per-implementation serializer behavior |
+| the rewritten `defaults` block, plus `config_format`, `config_path`, `config_conflict_mode`, `prefixed` and `flag_sets` | a block with a phantom key and three stale baselines |
+| the `co_required` / `requires` / `implies` catalogue | the four-entry catalogue that included `mutex` |
+
 ### Top-level fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema_version` | `int` | Always `1` |
+| `schema_version` | `int` | Always `2` |
+| `defaults` | `object` | What an omitted key means (see below) |
+| `project_id` | `string` | Language-specific project identifier (Go module path, Python package name, npm package name) |
 | `name` | `string` | App name |
 | `version` | `string` | App version |
 | `help` | `string` | App help text |
-| `project_id` | `string` | Language-specific project identifier (Go module path, Python package name, npm package name) |
-| `env_prefix` | `string?` | Env var prefix (null if not set) |
+| `env_prefix` | `string?` | Env var prefix (omitted when unset) |
 | `config` | `bool` | Whether config file support is enabled |
+| `config_format` | `string` | `"json"` or `"toml"`; omitted when `"json"` |
+| `config_path` | `string \| object?` | The **declared** config path, never the resolution; a `RelativeToRoot` declaration is emitted in its marker shape |
+| `config_conflict_mode` | `string` | Omitted when `"cli-wins"` |
+| `proc_observe_allowlist` | `string[]` | Declared process-observation prefixes |
 | `global_flags` | `Flag[]` | Global flag definitions |
-| `commands` | `{name: Command}` | Top-level commands |
-| `groups` | `{name: Group}` | Top-level groups |
-| `deprecated` | `{name: message}` | Deprecated command names and messages |
-| `tag_contracts` | `{tag: flag_name}` | Tag contract declarations |
-| `defaults` | `object` | Default values for omitted fields (see below) |
-| `config_fields` | `{name: ConfigFieldSchema}?` | Config field declarations (only when fields are declared) |
-| `checks` | `{name: CheckSchema}?` | Check declarations (only when checks are enabled) |
-| `infra` | `InfraSchema?` | Infrastructure env var declarations (only when roots/handshakes/connections exist) |
+| `commands` | `{name: Command}` | Top-level commands, in declaration order |
+| `groups` | `{name: Group}` | Top-level groups, in declaration order |
+| `deprecated` | `{name: message}` | Deprecated command names and messages, sorted by key |
+| `tag_contracts` | `{tag: flag_name}` | Tag contract declarations, sorted by key |
+| `checks` | `{name: CheckSchema}` | Check declarations; provider-sourced checks are excluded, so the block is a function of the declaration alone |
+| `config_fields` | `{name: ConfigFieldSchema}` | Config field declarations, in declaration order |
+| `infra` | `InfraSchema` | Infrastructure env var declarations |
 
-### Defaults object
+### `value_schema`: a real fragment from a closed subset
 
-The `defaults` key contains the canonical default value for every field that can
-be omitted from the schema. A consumer reconstructs omitted fields by reading
-from `defaults`. For example, if a flag has no `short` key, the consumer uses
-`defaults.flag.short` (which is `null`). This convention keeps the schema
-compact while remaining lossless.
+Every flag entry and every arg entry carries a `value_schema` -- a JSON Schema
+fragment describing the shape of the value the declaration delivers, using JSON
+Schema's own type names (`string`, `boolean`, `integer`, `number`, `array`,
+`object`). **The subset is closed at four keywords**: `type`, `items`,
+`additionalProperties`, `enum`. Nothing else may appear in a fragment, and one
+conformance check (`schema-fragments`) validates every fragment in all three
+targets' dumps against exactly that closure.
 
-`presence` appears in neither the `flag` nor the `arg` defaults, and that is
-deliberate: it is **always emitted** on every flag and arg entry, so there is no
-default to omit against. Its value is `"required"`, `"optional"` or `"default"`,
-and a `default` key accompanies it exactly when `presence` is `"default"` --
-then always, including for `[]`, `{}`, `""`, `false` and `0`. The arg entry's
-old `required` key is deleted with the derivation behind it.
+| Carrier | `value_schema` |
+|---|---|
+| `str` scalar | `{"type": "string"}` |
+| `bool` scalar | `{"type": "boolean"}` |
+| `int` scalar | `{"type": "integer"}` |
+| `float` scalar | `{"type": "number"}` |
+| `list[T]` flag, and a repeatable scalar `T` flag | `{"type": "array", "items": {"type": "<T>"}}` |
+| `dict[str, T]` flag | `{"type": "object", "additionalProperties": {"type": "<T>"}}` |
+| variadic arg of element type `T`, in either spelling | `{"type": "array", "items": {"type": "<T>"}}` |
+| any scalar carrier with `choices` | `{"type": "<T>", "enum": [<values>]}` |
+| any array-shaped carrier with `choices` | `{"type": "array", "items": {"type": "<T>", "enum": [<values>]}}` |
+| a config field (always scalar) | the matching scalar row |
+| a **choice flag** | **none** -- the key is absent |
+
+Keys inside a fragment are emitted in the order `type`, `items`,
+`additionalProperties`, `enum`.
+
+**Arity is value shape.** A repeatable scalar flag delivers a list, so it
+publishes the identical array fragment a `list[T]` carrier does; the `repeatable`
+key is gone. `variadic` survives on the arg entry, because it names a
+token-consumption rule (this arg takes every remaining positional token) rather
+than restating a value shape.
+
+**An optional flag emits the plain type. There is no `null` in any fragment**,
+and no type list. Presence is the sole authority on absence; a fragment that
+added `null` would be a second statement about the same fact. The fragment
+describes the shape of a value when there is one, and `presence` answers whether
+there is one.
+
+### The choice-flag encoding
+
+**A choice flag has no `value_schema`, and its absence is the declaration.** Its
+value is a *variant* -- one tagged record chosen from several, each with a
+different set of fields -- which the closed four-keyword subset cannot express.
+Publishing a wrong fragment would be worse than publishing none: a reader would
+validate against it and be told a record is invalid.
+
+So the entry carries a framework-native encoding beside the fragments its scopes'
+entries carry, under two keys:
+
+- **`choices`** -- an array of choice objects in declaration order, each
+  `name`, `help` (mandatory on a choice, so always emitted), `flags` (omitted
+  when the scope is empty). **Each scoped entry is a full flag entry**, with its
+  own `value_schema`, `presence` and `default`, which is what makes recursion
+  free: a nested choice flag is an entry inside a `flags` array carrying its own
+  `choices` and `elect_by`, to any depth.
+- **`elect_by`** -- `"selector-token"` or `"member-flags"`, marking the spelling.
+
+**The presence of `elect_by` is the discriminator.** An entry with it is a choice
+flag: it has no `value_schema`, and its `choices` entries are choice objects. An
+entry without it is an ordinary flag: it has a `value_schema`, and its `choices`
+entries (if any) are value records. A reader never has to guess which shape it
+is holding.
+
+A member-spelled choice's payload appears as the **first** entry of that choice's
+`flags` array, under the reserved name `value`, with `"presence": "required"`. A
+choice flag's `default` is published in the delivery record's own flat map form:
+`{"choice": "<name>", "<field>": <value>, ...}`.
+
+### Choices: the enum in the fragment, the records beside it
+
+A value flag's `choices` declaration produces **two** keys, each carrying the
+half it is good at. `value_schema` carries the values as an `enum` -- inside
+`items` for an array-shaped carrier, at the fragment root for a scalar one --
+which a validator can use as-is. `choices` carries the value-plus-help records,
+for which JSON Schema has no vocabulary:
+
+```json
+"choices": [
+  {"value": "head", "help": "the current commit only"},
+  {"value": "branches"}
+]
+```
+
+Entries are in declaration order, `value` is emitted with its own type (never
+stringified), and `help` is omitted when the entry declares none.
+
+### A dump
+
+A real dump of a one-command app declaring one token-spelled choice flag, one
+list flag, one `choices` flag and one positional arg. Only the `defaults` block
+is elided, and it is reproduced verbatim further down:
 
 ```json
 {
-  "schema_version": 1,
-  "app": {
-    "env_prefix": null,
-    "config": false,
-    "global_flags": [],
-    "commands": {},
-    "groups": {},
-    "deprecated": {},
-    "tag_contracts": {}
-  },
-  "flag": {
-    "short": null,
-    "default": null,
-    "env": null,
-    "choices": null,
-    "repeatable": false,
-    "unique": false,
-    "env_separator": null,
-    "negatable": null,
-    "hidden": false
-  },
-  "arg": {
-    "type": "str",
-    "default": null,
-    "variadic": false,
-    "choices": null
-  },
-  "command": {
-    "passthrough": false,
-    "flags": [],
-    "args": [],
-    "tags": [],
-    "constraints": [],
-    "hidden": false,
-    "interactive": false
-  },
-  "group": {
-    "commands": {},
-    "groups": {},
-    "deprecated": {},
-    "tags": [],
-    "hidden": false
+  "schema_version": 2,
+  "defaults": { "...": "elided; see below" },
+  "project_id": "notify",
+  "name": "notify",
+  "version": "0.1.0",
+  "help": "Send notifications",
+  "commands": {
+    "send": {
+      "name": "send",
+      "help": "Send one notification",
+      "effect": "mutating",
+      "flags": [
+        {
+          "name": "via",
+          "help": "Delivery channel",
+          "short": "v",
+          "presence": "required",
+          "choices": [
+            {
+              "name": "email",
+              "help": "deliver the notification as an email message",
+              "flags": [
+                {
+                  "name": "subject",
+                  "help": "subject line of the message",
+                  "value_schema": {
+                    "type": "string"
+                  },
+                  "presence": "required"
+                }
+              ]
+            },
+            {
+              "name": "webhook",
+              "help": "post the notification to a URL",
+              "flags": [
+                {
+                  "name": "url",
+                  "help": "endpoint to post to",
+                  "value_schema": {
+                    "type": "string"
+                  },
+                  "presence": "required"
+                },
+                {
+                  "name": "retries",
+                  "help": "delivery attempts before giving up",
+                  "value_schema": {
+                    "type": "integer"
+                  },
+                  "presence": "default",
+                  "default": 3
+                }
+              ]
+            }
+          ],
+          "elect_by": "selector-token"
+        },
+        {
+          "name": "tag",
+          "help": "Tags to attach",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "default",
+          "default": []
+        },
+        {
+          "name": "format",
+          "help": "Output format",
+          "value_schema": {
+            "type": "string",
+            "enum": [
+              "json",
+              "csv"
+            ]
+          },
+          "presence": "default",
+          "default": "json",
+          "choices": [
+            {
+              "value": "json",
+              "help": "one JSON document"
+            },
+            {
+              "value": "csv"
+            }
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "recipient",
+          "help": "Who to notify",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "required"
+        }
+      ]
+    }
   }
 }
 ```
 
+### Canonical key order
+
+Object keys are emitted in a **declared order**, identical in all three
+implementations. No implementation sorts them at serialization time.
+
+| Entity | Key order |
+|---|---|
+| top level | `schema_version`, `defaults`, `project_id`, `name`, `version`, `help`, `env_prefix`, `config`, `config_format`, `config_path`, `config_conflict_mode`, `proc_observe_allowlist`, `global_flags`, `commands`, `groups`, `deprecated`, `tag_contracts`, `checks`, `config_fields`, `infra` |
+| flag entry | `name`, `help`, `value_schema`, `short`, `presence`, `default`, `env`, `env_separator`, `prefixed`, `choices`, `elect_by`, `unique`, `conflict_mode`, `negatable` |
+| arg entry | `name`, `help`, `value_schema`, `presence`, `default`, `variadic`, `choices` |
+| choice object | `name`, `help`, `flags` |
+| choice record | `value`, `help` |
+| command entry | `name`, `help`, `effect`, `consequential`, `dry_run_supported`, `dry_run_unsupported_reason`, `payload_schema`, `owns_stdout`, `passthrough`, `flags`, `flag_sets`, `args`, `tags`, `constraints`, `hidden`, `interactive`, `config_fields`, `grants`, `forwarding` |
+| group entry | `name`, `help`, `commands`, `groups`, `deprecated`, `tags`, `hidden` |
+| config-field entry | `value_schema`, `help`, `required`, `default`, `bound_commands` |
+| check entry | `tags`, `severity`, `fast`, `pure`, `needs_network`, `depends_on`, `scope` |
+| grant entry | `name`, `reason`, `kind` |
+| infra block | `roots`, `handshakes`, `connections` |
+
+`commands`, `groups` and `config_fields` are emitted in **declaration order**,
+which all three implementations retain. `checks`, `deprecated` and
+`tag_contracts` are emitted **sorted ascending by key**, because no
+implementation retains a declaration order for them -- a canon that cannot be
+produced from what an implementation holds is not a canon. Every key in those
+positions is ASCII by registration rule, so byte order, code-point order and
+UTF-16 order coincide.
+
+Array order is always declaration order: flags, args, choices, grants,
+constraints, `bound_commands`, `proc_observe_allowlist`. `tags` remain sorted.
+The one pinned position is a member-spelled choice's payload, which sits first
+in that choice's `flags` array.
+
+### The byte canon
+
+A committed `.strictcli/schema.json` must be **dumper-independent**: a repository
+whose file is written sometimes by a Go binary and sometimes by a Python one must
+see a diff exactly when something changed. The `schema-parity` conformance check
+therefore compares **bytes**, with no normalization layer.
+
+- **Numbers.** Every float is written in the strictcli canonical float form
+  (SCF), the same one-form-three-implementations canon the float vectors already
+  enforce. Integers are bare integer tokens -- no decimal point, no exponent, no
+  separators.
+- **Escaping.** Escape exactly what JSON mandates and emit everything else
+  literally. `"` and `\` are escaped; control characters below U+0020 use JSON's
+  short escapes where one exists and `\u00XX` otherwise. **Non-ASCII is never
+  escaped** (raw UTF-8, no `\uXXXX`); **HTML-significant characters are never
+  escaped** (`<`, `>` and `&` are literal); `/` is never escaped. A lone
+  surrogate is escaped as `\uDXXX` -- the one escape not mandated by the
+  character itself, and the alternative is emitting invalid UTF-8.
+- **Layout.** Two-space indent; one member or element per line; `": "` between a
+  key and its value; `,` then a newline between siblings; empty containers as
+  `{}` and `[]` on a single line; **exactly one trailing newline** at end of
+  file.
+
+### Defaults object
+
+The `defaults` key is the machine-readable map of **what an omitted key means**.
+A consumer reconstructs omitted fields by reading from it: a flag with no `short`
+key means `defaults.flag.short`, which is `null`.
+
+Keys with **no** baseline are absent from the block on purpose, and the list is
+exactly the set of always-emitted facts: `name`, `help`, `version`,
+`schema_version`, `project_id`, `effect`, `presence`, `value_schema` on every
+entry that has one, a choice object's `name` and `help`, a choice record's
+`value`, a config field's `help` and `required`, and a check's six mandatory
+fields.
+
+`presence` is always emitted on every flag and arg entry, so there is no baseline
+to omit against; its value is `"required"`, `"optional"` or `"default"`, and a
+`default` key accompanies it exactly when `presence` is `"default"` -- then
+always, including for `[]`, `{}`, `""`, `false` and `0`. `default` therefore has
+no baseline either.
+
+`value_schema` is the one always-emitted key with a stated exception, and the
+exception is not an omission at a baseline: a **choice flag** carries no fragment
+at all, and its absence *is* the declaration. A baseline would have to say what
+an absent fragment means, and every answer it could give is false for the one
+entry that omits the key.
+
+```json
+{
+  "schema_version": 2,
+  "app": {
+    "env_prefix": null, "config": false, "config_format": "json", "config_path": null,
+    "config_conflict_mode": "cli-wins", "proc_observe_allowlist": [], "global_flags": [],
+    "commands": {}, "groups": {}, "deprecated": {}, "tag_contracts": {}, "checks": {},
+    "config_fields": {}, "infra": {}
+  },
+  "flag": {
+    "short": null, "env": null, "env_separator": null, "prefixed": true, "choices": null,
+    "elect_by": null, "unique": false, "conflict_mode": null, "negatable": null
+  },
+  "arg": { "variadic": false, "choices": null },
+  "choice": { "flags": [] },
+  "choice_record": { "help": null },
+  "command": {
+    "consequential": false, "dry_run_supported": true, "dry_run_unsupported_reason": null,
+    "payload_schema": null, "owns_stdout": false, "passthrough": false, "flags": [],
+    "flag_sets": [], "args": [], "tags": [], "constraints": [], "hidden": false,
+    "interactive": false, "config_fields": [], "grants": [], "forwarding": null
+  },
+  "group": { "commands": {}, "groups": {}, "deprecated": {}, "tags": [], "hidden": false },
+  "config_field": { "default": null, "bound_commands": [] },
+  "check": { "scope": null },
+  "infra": { "roots": [], "handshakes": [], "connections": [] }
+}
+```
+
+The two choice entities carry the block's last two omission rules: a choice
+object's `flags` is omitted when the scope is empty, and a choice record's `help`
+is omitted when the entry declares none. The unqualified name goes to the choice
+flag's choice object, because a choice flag's entry *is* a choice while a value
+flag's entry is a value that may carry help.
+
 ### Constraint serialization
 
-Constraints (mutex groups and dependencies) are serialized in the `constraints`
-array of each command. The schema supports four constraint types: `mutex` for
-mutually exclusive flag groups, `co_required` for flags that must appear
-together, `requires` for one-way dependencies between flags, and `implies` for
-automatic boolean flag injection when a trigger flag is present.
+Dependency constraints are serialized in the `constraints` array of each command.
+The catalogue is closed at three types, and there is no `mutex` entry -- exactly
+one selection is a choice flag, which is published on the flag entry itself:
+
+| `type` | Keys, in order |
+|---|---|
+| `co_required` | `type`, `flags` |
+| `requires` | `type`, `flag`, `depends_on` |
+| `implies` | `type`, `flag`, `implies`, `value` |
 
 ```json
 [
-  {"type": "mutex", "flags": ["as-table", "as-csv"]},
   {"type": "co_required", "flags": ["host", "port"]},
   {"type": "requires", "flag": "port", "depends_on": "host"},
   {"type": "implies", "flag": "trace", "implies": "debug", "value": true}
 ]
 ```
+
+### Config fields, check entries and behavioral completeness
+
+Config-field entries carry a `value_schema` from the scalar rows of the fragment
+table. Their `required` key **stays**: it is not the presence declaration wearing
+another name -- a config field has no CLI surface, no three-way declaration and
+no `presence` key, and `required` there means "the config file must contain it".
+
+Check entries carry no value shape, so nothing converts. What v2 does reach in
+the `checks` block is its purity: **the dumped block is a function of the
+declaration alone**, so provider-sourced check names are filtered out by every
+serializer rather than by comment.
+
+Five keys close v1's blind spots -- declarations that change what a user's
+installation does but were invisible in the dump. Each is omitted at its
+baseline, so a departure from the framework's behavior is exactly what makes a
+key appear:
+
+| Key | Where | Emission |
+|---|---|---|
+| `config_format` | app | omitted when `"json"` |
+| `config_path` | app | omitted when the app declares none |
+| `config_conflict_mode` | app | omitted when `"cli-wins"` |
+| `prefixed` | flag | omitted when `true` |
+| `flag_sets` | command | omitted when empty |
+
+`config_path` publishes the **declaration**, never the resolution: a declared
+literal path is emitted as declared, a `RelativeToRoot` declaration in its marker
+shape, and the resolved absolute path never. And with `config_conflict_mode`
+emitted at the app level, a per-flag `conflict_mode: null` becomes resolvable --
+its absence has always meant "inherit the app default", and until v2 the app
+default was not published at all.
 
 ### InfraRootPath serialization
 
@@ -536,8 +910,7 @@ Flag defaults that are `RelativeToRoot` markers are serialized in a
 machine-stable form that never contains resolved, machine-specific paths. The
 serialized shape includes the environment variable name and the relative path
 parts, allowing any consumer to reconstruct the absolute path on their own
-machine. This representation is identical across all three implementations so
-schemas byte-compare across languages.
+machine.
 
 ```json
 {
@@ -550,9 +923,8 @@ schemas byte-compare across languages.
 }
 ```
 
-This shape is identical across all three implementations so schemas
-byte-compare across languages.
-
+This shape is identical across all three implementations so schemas byte-compare
+across languages.
 ### Schema freshness
 
 The schema file is used by external tools (rlsbl uses it during release to
