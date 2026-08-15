@@ -2865,6 +2865,25 @@ level down reads `one of --profile, --all-profiles is required under '--mode adv
 suffix is empty at root scope, which is what makes every root-scope message byte-identical to what
 it was before this round.
 
+**The suffix composes onto the presence sentence the declaration actually takes, which for a
+required bool is not "is required"** *(added 2026-08-15, contract-pin round, §18.24 item 245)*. A
+required bool has a presence sentence of its own at root -- `flag '--watch' must be passed as
+--watch or --no-watch`, and `flag '--watch' must be passed as --watch` when it is declared
+non-negatable -- because §23 makes a binary decision a thing the caller states rather than omits,
+and naming both accepted tokens is the whole point of that sentence. A scope is not a second
+declaration language (§24.3), so one level down the sentence is **that** sentence plus this suffix
+plus the origin suffix, in the order the block below closes:
+
+```
+flag '--watch' must be passed as --watch or --no-watch under '--via email'
+flag '--watch' must be passed as --watch or --no-watch under '--via email' (elected from env var 'NOTIFY_VIA')
+```
+
+Substituting the generic `flag '--<x>' is required` inside a scope makes one declaration say two
+different things about itself depending on where it was written, and drops the pair of tokens the
+sentence exists to name -- so a scoped path composes the suffix onto whatever the root path's
+presence resolution returns, and never onto a sentence chosen at the scope.
+
 **Composition, when more than one clause applies, is closed** *(added 2026-08-15, contract-pin
 round, §18.23 item 239)*: **the scope suffix, then the origin suffix, then §21.4's decline clause**,
 and never any other order. Each pair had been pinned against one neighbour -- the origin suffix goes
@@ -6753,6 +6772,178 @@ classification struck).
      the day Go's structure changes, the block's own machinery says the acknowledgment is no longer
      earned.
 
+### 18.24 Pins forced by the machine boundary's last edges (2026-08-15)
+
+§18.22 pinned the states the flat form can spell that item 229's bullets had not reached; §18.23
+closed the residuals that fixing those pins left. Four edges remain, and they are all the same kind
+of hole: a place where the boundary's own **namespace**, its own **phase order**, or its own
+**sentence** was never stated, so each implementation delivered whatever its shortest path
+produced. None of the four is a state a caller has to be clever to reach -- spelling a parameter
+the way the CLI spells it, handing `call()` two selectors at once, passing a positional, declaring
+a required bool inside a scope. Numbering continues §18.22's and §18.23's, for the reason §18.14
+gave: the same campaign's ledger.
+
+**Nothing below changes a guarantee.** Items 242 and 244 are **new pins** on states this document
+had left to the implementations. Item 243 **extends** item 232's rule to a door that rule was
+written beside rather than about. Item 245 is a **composition pin** in item 239's class: two
+sentences this document already pins, with the order they compose in never stated.
+
+**Every claim below was probed against all three implementations** through the door the claim is
+about -- Python's `_call_with_kwargs(..., flat=True)` and `App.call`, Go's `invoke` behind both
+`App.Call` and the flat form, TypeScript's `asTools()[n].execute` and `App.call` -- plus each
+implementation's own `test()` for the command-line baselines. **Two claims the round was filed with
+are false, and the probe wins in both**: item 244 was filed as changing all three, and Python
+already does the whole of it; item 245 was filed against TypeScript, and Python diverges
+identically.
+
+**Origin tags**, per §18.14's preamble. Every item here is **untagged**: none is a `(D)` directive
+and none is a `[%%]` adopted recommendation. They are implementation-forced pins in the §18.3 class.
+
+**Sites amended in place**: §24.11 (three new blocks after item 240's, plus item 234's block
+respelled -- it wrote a payload-less member's own key dashed, which item 242 makes an unknown
+parameter, while item 236's block beside it already wrote the same key underscored) and §12.13 (one
+composition paragraph added to the scope-suffix block).
+
+242. **A dash-spelled key names nothing the command declares, and is refused as an unknown parameter
+     (§24.11, §24.3, §18.23 item 238).** The key namespace at this boundary is the **underscored
+     delivery-name space** -- the parameter name a handler receives, which is exactly what the flat
+     schema publishes, as §24.11's description-map block has pinned since item 222 ("Parameter names
+     in the list after the colon are property names and **are** underscored"). A flag's dashed
+     spelling is its **command-line token**, and the flat form is the command line *with the tokens
+     removed*. So `{"all-profiles": false}`, `{"phone-number": "555"}` and `{"keep-going": "yes"}`
+     name nothing, at root scope and at every depth alike, and item 238 decides them without
+     amendment: a fact about the object's **shape**, refused ahead of every election, scope, value
+     and presence problem, as **`unknown parameter "all-profiles" for command "run"`**. No template
+     is authored. The two alternatives are refused by name: **accepting** the key gives one
+     parameter two spellings where §23's one-spelling rule and the published schema each say one,
+     and makes a key the schema never published work anyway; **ignoring** it is §3.5's answer for a
+     dropped election, refused there for the reason it is refused here. **Python is the reference**
+     and refuses everywhere: `{"dry-target": "x"}` at root, `{"phone-number": "x"}` inside a scope
+     and `{"all-profiles": false}` on a member's own key all print `unknown parameter '<key>' for
+     command '<cmd>'` (Python's own quoting; Go and TypeScript quote Go-style, the acknowledged
+     per-language difference the conformance corpus already records for this template). **Go accepts
+     a dash-spelled root key and half-reads a dash-spelled scoped one.** `paramToFlagName` maps `_`
+     to `-` and nothing else, so a dashed key is a fixed point that matches the flag index directly:
+     `{"dry-target": "x"}` reaches the handler as `dry_target="x"`, with no refusal anywhere. Inside
+     a scope the outcome is worse than an accept, because the key is read for one purpose and not
+     the other: `collectInvokeElections` records it in `suppliedNames`, so it takes full part in
+     **scope validation** -- `{"via": "email", "phone-number": "x"}` prints `flag '--phone-number'
+     is only valid under '--via sms', but '--via email' was elected`, byte-identical to the
+     underscored spelling -- while its **value** is never read, so under the electing scope the same
+     key leaves the flag missing: `{"via": "sms", "phone-number": "x"}` prints `flag
+     '--phone-number' is required under '--via sms'`, a sentence about a value the caller did
+     supply. `{"all-profiles": false}` neither elects nor declines either. **TypeScript refuses at
+     one door and accepts at the other.** Its flat door refuses every dashed key -- `unknown
+     parameter "all-profiles" for command "send"`, `unknown parameter "dry-target" for command
+     "run"` -- while `call()`'s own shape pass runs the same `paramToFlagName` before consulting the
+     flag index, so `call("run", {"dry-target": "x"})` is accepted and delivered. Two doors of one
+     implementation disagreeing about one key is the same defect as two implementations disagreeing.
+
+243. **The phase order is the parser's, so it governs the record door too (§24.11, §24.3, §18.22
+     item 232).** Item 232 pinned command-wide election staging *at the flat boundary* and named
+     TypeScript's `buildRecord` for throwing where it stands. The rule it pinned was never about the
+     flat form: item 224 made the phase order a property of the **parser** rather than of the input,
+     so it governs **every** programmatic door, and `call()`'s elected-record door is one. A door
+     converts every selector's record before it reports anything, and the stage table decides which
+     refusal is heard -- shape, election, scope, value, presence, with declaration order inside one
+     stage. **Go stages at both doors**: `collectInvokeElections` walks every selector's record into
+     `suppliedElections` before `elect()` runs and before any value is coerced, so on a command
+     declaring `via` (token-spelled) then `target` (member-spelled), a call carrying
+     `Elect(email, Fields{"retries": "nope"})` beside a `target` record naming an undeclared choice
+     prints the second selector's election refusal, `--target: elected value names choice "other",
+     which is not declared by this choice flag`, and prints it identically when the first record
+     omits a required scoped flag or carries a key that scope does not declare. **Python's record
+     door cannot express most of these states at all** -- a `@choice` dataclass refuses a missing
+     field and an unknown field at construction -- and the one it can express it stages correctly:
+     `call("send", via=Email(retries="nope"), target=Other())` prints `parameter 'target' for
+     command 'send' must be an instance of a declared choice of '--target' (Profile | AllProfiles),
+     got Other`. **TypeScript's record door diverges**: `validateElectedRecord` throws where it
+     stands, inside the loop that reads the kwargs, so every stage below election is decided for one
+     selector before the next selector's record is looked at. Three probes on the app above, each
+     with `target` carrying an undeclared choice tag whose election refusal is what should be heard:
+     a **value** problem wins (`{via: {choice: "email", retries: "nope"}}` prints `--retries:
+     expected integer, got str`), a **presence** problem wins (`{via: {choice: "email"}}` prints
+     `flag '--retries' is required under '--via email'`), and a **scope** problem wins
+     (`{via: {choice: "email", retries: 1, phone_number: "x"}}` prints `flag '--phone_number' is
+     only valid under '--via email', but that scope does not declare it`). It is item 232's
+     TypeScript defect one door over, in the same shape and for the same reason. **One further
+     divergence belongs to this item, on TypeScript's flat door**, and it is a placement rather than
+     an ordering: TypeScript's pre-typed value check runs in `call()` **after** `flatToCallKwargs`
+     has already thrown, so a value refusal can never outrank anything the conversion found, and a
+     **presence** problem is reported where item 240 puts a **value** one. On a command whose second
+     selector is required and unelected, `{"via": "email", "retries": "nope"}` prints `--retries:
+     expected integer, got str` in Python and `one of --profile, --all-profiles is required` in
+     TypeScript. Item 240 pins the check as the value phase's; Python is the reference.
+
+244. **A positional's declaration binds a pre-typed value exactly as a flag's does, and stringifying
+     one is worse than not checking it (§24.11 item 240, §23.3).** Item 240 was authored over flags,
+     and a positional is declared with the same three presence spellings and the same four types
+     (§23.3), so nothing about being a positional makes a supplied value exempt from it. Two duties
+     follow, and the second is the one the implementations were failing without noticing: the value
+     is **checked against the arg's declared type**, and it is **handed on as supplied** rather than
+     stringified into a token the caller did not write. Stringifying does not merely skip a check --
+     it **manufactures an argv**, so `5` becomes the token `"5"` and re-parses to the right answer
+     by luck, `7` becomes `"7"` and satisfies a `str`-declared arg, and `null` becomes the *text* of
+     a null, delivered as a value no command line could produce. `null` is legal for nothing here
+     either: an arg that may be absent declares `optional` and is delivered absent when the key is
+     omitted, and a required arg with no key keeps the argv path's own `missing required argument
+     '<name>'`. **The wrapper is the arg side's own** -- `argument '<name>': expected integer, got
+     str`, never `--<name>` -- because that is the prefix every arg-side value refusal already uses.
+     No sentence is authored. **The round filed this as changing all three, and the probe says two.
+     Python is the reference and already does the whole of it**: `_check_pre_typed_arg_value` runs
+     in the positional phase behind `pre_typed_args`, so `count=5` delivers the int, `count="5"` is
+     `argument 'count': expected integer, got str`, `count=None` is `... got null`, `count=1.5` is
+     `... got float`, `count=True` is `... got bool`, `label=7` is `argument 'label': expected
+     string, got int`, an omitted optional arg is still delivered as a present key holding absence,
+     and an empty array for a required variadic is `missing required argument '<name>'`. **Go
+     stringifies with `fmt.Sprintf("%v")`** and **TypeScript with `String(v)`**, both in the loop
+     that builds the positional list, so both accept `count="5"`, both deliver `label=7` to a
+     `str`-declared arg as `"7"`, both deliver an explicit null to that same arg as the string
+     `"<nil>"` (Go) and `"null"` (TypeScript), and both refuse a null for an `int`-declared arg with
+     a rendering the caller never wrote: `argument 'count': expected integer, got '<nil>'` and
+     `argument 'count': expected integer, got 'null'`.
+
+245. **A required bool's presence sentence is the one a scope suffix composes onto (§12.13, §24.3,
+     §18.23 item 239).** §12.13 says the scope suffix is appended to "the two presence messages",
+     and a required **bool** takes neither of them at root: §23 makes a binary decision something
+     the caller states rather than omits, and the sentence names both accepted tokens. Probed at
+     root, byte-identical in all three, from the command line and from both programmatic doors:
+     **`flag '--watch' must be passed as --watch or --no-watch`** -- and `flag '--watch' must be
+     passed as --watch` when the bool is declared non-negatable, and the `global flag '--watch' ...`
+     prefixed form at app level. A scope is not a second declaration language (§24.3), so the scoped
+     form is that same root sentence plus the scope suffix plus item 239's origin suffix, in item
+     239's order:
+
+     ```
+     flag '--watch' must be passed as --watch or --no-watch under '--via email'
+     flag '--watch' must be passed as --watch or --no-watch under '--via email' (elected from env var 'NOTIFY_VIA')
+     ```
+
+     Substituting the generic `flag '--<x>' is required` inside a scope makes one declaration say
+     two different things about itself depending on where it was written, and drops the pair of
+     tokens the sentence exists to name -- a reader is told a value is required and not told that
+     typing `--no-watch` is one of the two ways to supply it. **Go is the reference, structurally
+     rather than by care**: its scoped path resolves presence through the same `applyFlagDefault`
+     the root path calls and appends the suffix to whatever that returns, so the bool branch comes
+     over for free and both composed forms above are Go's exact bytes today. **Python and TypeScript
+     each author the scoped refusal separately, and each wrote only the generic one**: Python's
+     `_apply_scoped_presence` raises `flag '--<x>' is required<scope suffix><origin suffix>`, and
+     TypeScript's `resolveScopedFlag` pushes `flag '--<x>' is required<suffix>` -- with a **third**
+     copy in TypeScript's `validateElectedRecord`, so its record door repeats the divergence a third
+     time. All of them print `flag '--watch' is required under '--via email'` where the same
+     declaration at root prints the must-be-passed-as sentence. **The round filed this against
+     TypeScript alone; Python diverges identically**, and the shared cause is the shared shape: a
+     hand-written presence refusal at the scope, rather than the root path's own answer with a
+     suffix on it.
+
+**Re-probed and unchanged: item 238's Go residual stands as recorded.** §18.23 item 238 named one
+residual as Go's own -- a selector property naming no declared choice refused inside the declaration
+walk, ahead of an unknown key beside it -- and this round re-probed it rather than assuming it.
+`{"target": "nope", "bogus": 1}` still prints `--target: invalid value 'nope', must be one of:
+profile, all-profiles` in Go, where Python and TypeScript both print the unknown-parameter refusal,
+and where Go itself prints the unknown-parameter refusal when the same key sits beside a double
+election. The record needs no extension; it needs the fix item 238 already assigned.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -8644,14 +8835,17 @@ command line could produce and that the record's own declared type forbids.
 **A payload-less member's own key elects on `true` and declines on `false`** *(added 2026-08-15,
 contract-pin round, §18.22 item 234)*. §24.4 carries §21's election semantics over verbatim -- a
 bool member elects only on **true**, and `--no-<name>` **declines** rather than choosing -- and the
-flat form is the command line with the tokens removed, so the key spells both. `{"all-profiles":
-true}` elects; `{"all-profiles": false}` is `--no-all-profiles`, elects nothing, and carries §21.4's
-decline clause into whatever the election phase then says -- `one of --profile, --all-profiles is
-required (--no-all-profiles declines an option; it does not choose one)` when nothing else elected,
-and the redundant-negation refusal when something did. Reading a key the flattened property map does
-not publish (§18.21 item 231) is not a contradiction: the map publishes what a caller should send,
-and this boundary reads the command line the flat object spells. Ignoring the key is refused for
-§3.5's reason, the same one that refuses dropping a losing election above.
+flat form is the command line with the tokens removed, so the key spells both. ~~`{"all-profiles":
+true}` elects; `{"all-profiles": false}`~~ *(respelled 2026-08-15, contract-pin round, §18.24 item
+242: the key is the **parameter** name, underscored, and the dashed spelling names nothing)*
+**`{"all_profiles": true}` elects; `{"all_profiles": false}`** is `--no-all-profiles`, elects
+nothing, and carries §21.4's decline clause into whatever the election phase then says --
+`one of --profile, --all-profiles is required (--no-all-profiles declines an option; it does not
+choose one)` when nothing else elected, and the redundant-negation refusal when something did.
+Reading a key the flattened property map does not publish (§18.21 item 231) is not a contradiction:
+the map publishes what a caller should send, and this boundary reads the command line the flat
+object spells. Ignoring the key is refused for §3.5's reason, the same one that refuses dropping a
+losing election above.
 
 **When the two ways of naming one member contradict each other, the selector's property wins**
 *(added 2026-08-15, contract-pin round, §18.23 item 236)*. `{"target": "all-profiles",
@@ -8694,6 +8888,54 @@ after every election and every scope decision, in declaration order (§24.3, §1
 it never outranks an election refusal, and it sits beside the `choices` check this path already
 performs on pre-typed values. The same rule governs the record front door below: two spellings of
 one declaration cannot mean two different things about what a value may be.
+
+**A positional's declaration binds a supplied value exactly as a flag's does** *(added 2026-08-15,
+contract-pin round, §18.24 item 244)*. §23.3 gives a positional the same three presence spellings
+and the same four types a flag has, so nothing about being a positional makes a supplied value
+exempt from the block above. Two duties, both of them that block read one declaration over: the
+value is **checked against the arg's declared type**, and it is **handed on as supplied** rather
+than stringified into a token the caller did not write. Stringifying is the sharper of the two,
+because it does not merely skip a check -- it manufactures an argv the caller never typed, so
+`5` arrives as the token `"5"` and re-parses by luck while `null` arrives as the *text* of a null
+and is delivered to a `str`-declared arg as a value no command line could produce. `null` is legal
+for nothing here either: an arg that may be absent declares `optional` and is delivered absent when
+the key is omitted, and a required arg with no key is `missing required argument '<name>'`, the
+argv path's own sentence for a token that was never typed. **The wrapper is the arg side's own** --
+`argument '<name>': expected integer, got str`, never `--<name>` -- because that is the prefix
+every arg-side value refusal already uses. No template is authored.
+
+**A dash-spelled key names nothing** *(added 2026-08-15, contract-pin round, §18.24 item 242)*. The
+key namespace at this boundary is the **underscored delivery-name space**: the parameter name a
+handler receives, which is exactly what the flat schema publishes (the description-map block below
+already pins that parameter names **are** underscored). A flag's dashed spelling is its
+command-line token, and there are no tokens here (§24.11's opening) -- so `{"all-profiles": false}`,
+`{"phone-number": "555"}` and `{"keep-going": "yes"}` name nothing the command declares, at root
+scope and at every depth, and each is refused by the rule above for an unknown property: a fact
+about the object's **shape**, reported ahead of every election, scope, value and presence problem,
+as `unknown parameter "all-profiles" for command "run"`. No template is authored -- it is
+`errUnknownParameterForCommand` with the key the caller sent in the slot. The two other answers are
+refused by name. **Accepting it** gives one parameter two spellings, where §23's one-spelling rule
+and the published schema each say one, and makes a key the schema never published work anyway.
+**Ignoring it** is §3.5's answer for the losing key, refused there for the same reason it is
+refused here: a caller who spelled a parameter the way the CLI spells it has made a mistake worth
+a sentence, and silence turns it into a value that vanished. The rule reaches **keys only**: a
+choice *name* is a value, not a property, and rides as declared -- `{"via": "user-facing"}`, never
+`user_facing` -- which is the split the description-map block below already pins.
+
+**Both doors are one parser, and the phase order is the parser's** *(added 2026-08-15,
+contract-pin round, §18.24 item 243)*. Item 232 pinned command-wide election staging at the flat
+boundary; the rule it pinned was never about the flat form. The phase order is a property of the
+**parser** and not of the input (§18.19 item 224), so it governs **every** programmatic door --
+`call()`'s elected-record door as much as the flat machine form. A door converts every selector's
+record first, and only then reports, with the stage deciding which refusal is heard: **shape,
+election, scope, value, presence**, and declaration order within one stage. A door that validates
+one record and throws where it stands reports whichever problem its walk reached first, which is
+the outcome the phase order exists to prevent -- and it also makes the two doors say different
+things about the same call, which the sentence above ("the same election, scope and presence
+machinery the argv path uses") already forbids. So a call whose first selector's record carries an
+uncoercible value and whose second names no declared choice reports the **second selector's
+election refusal**, and a call whose first record omits a required scoped flag and whose second
+names no declared choice reports that election refusal too.
 
 **Choice names ride the description map exactly as declared** *(added 2026-08-15, implementation
 round, §18.19 item 222)*. The block's key is `<selector>=<choice>` where the **selector** is the
