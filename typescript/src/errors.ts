@@ -2397,6 +2397,17 @@ export function errChoiceHelpEmpty(sel: string, c: string): string {
 	return `${choicePrefix(c, sel)}help text is required`;
 }
 
+/**
+ * §24.7's choice-name charset. TypeScript spells a choice name as a property
+ * key of the choice map, which imposes no charset of its own, so the rule is a
+ * runtime check like every other name ban -- and it runs BEFORE member
+ * spelling's flag-name bans, so a name that fails both is reported as the
+ * charset failure it is.
+ */
+export function errChoiceNameCharset(sel: string, c: string): string {
+	return `Flag ${q(sel)}: choice name ${q(c)} must match [a-z][a-z0-9-]*`;
+}
+
 export function errSelectorDefaultUnknownChoice(
 	sel: string,
 	defaultSpelling: string,

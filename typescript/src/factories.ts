@@ -40,6 +40,7 @@ import {
 	errArgVariadicDefault,
 	errChoiceDuplicateName,
 	errChoiceHelpEmpty,
+	errChoiceNameCharset,
 	errChoicesEntryNotRecord,
 	errCoElectableNameReuse,
 	errCommandAtMostOneVariadic,
@@ -554,6 +555,9 @@ export const RESERVED_FRAMEWORK_FLAG_NAMES: ReadonlySet<string> = new Set([
  * memory -- exactly what the rename removed.
  */
 export const BANNED_FLAG_NAMES: ReadonlySet<string> = new Set(["yes"]);
+
+/** §24.7's choice-name charset, checked at registration in both spellings. */
+const CHOICE_NAME_RE = /^[a-z][a-z0-9-]*$/;
 
 /**
  * The machine-mode flag name, reserved on the SAME unconditional every-level
@@ -1443,6 +1447,13 @@ function buildChoiceFlag<
 		seenChoiceNames.add(choiceName);
 		if (typeof c?.help !== "string" || c.help.trim() === "") {
 			throw new RegistrationError(errChoiceHelpEmpty(name, choiceName));
+		}
+		// A choice name is a surface name whatever the spelling elects it: the
+		// token-spelled one publishes it in an enum and the member-spelled one
+		// puts it on the command line as a flag. Both take §24.7's charset, and
+		// the keyed choice map -- a property key -- imposes none of its own.
+		if (!CHOICE_NAME_RE.test(choiceName)) {
+			throw new RegistrationError(errChoiceNameCharset(name, choiceName));
 		}
 		// A payload rides the electing token, and a token-spelled choice's
 		// electing token IS its name -- there is nowhere to put one (§24.4).

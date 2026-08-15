@@ -780,6 +780,67 @@ test("guard: a selector cannot declare optional", () => {
 	);
 });
 
+test("guard: a choice name must match the declared charset, both spellings", () => {
+	// §24.7's charset, enforced at REGISTRATION. The keyed map makes the name a
+	// property key and imposes no charset of its own, so the rule needs a runtime
+	// check exactly as every other name ban does -- a JSON-driven or widened
+	// caller reaches the same factories.
+	for (const bad of ["Email", "1email", "e_mail", "email!", "-email", ""]) {
+		// A computed key does not even compile -- the keyed map's literal-key
+		// guard refuses it -- so each bad name is widened past the type system
+		// the way a JSON-driven caller reaches the factory.
+		const choices = loose({
+			[bad]: choice({ help: "the bad one" }),
+			sms: choice({ help: "sms" }),
+		});
+		rejects(
+			() => choiceFlag("via", choices, { help: "h", presence: "required" }),
+			`Flag "via": choice name "${bad}" must match [a-z][a-z0-9-]*`,
+		);
+		rejects(
+			() =>
+				memberChoiceFlag("via", choices, { help: "h", presence: "required" }),
+			`Flag "via": choice name "${bad}" must match [a-z][a-z0-9-]*`,
+		);
+	}
+	// The charset is checked BEFORE the member-spelled name bans: a name that
+	// fails both is a charset failure, as it is in the sibling implementations.
+	rejects(
+		() =>
+			memberChoiceFlag(
+				"via",
+				{ "No-Thing": choice({ help: "h" }), sms: choice({ help: "sms" }) },
+				{ help: "h", presence: "required" },
+			),
+		'Flag "via": choice name "No-Thing" must match [a-z][a-z0-9-]*',
+	);
+	// A charset-legal name still meets the bans under member spelling only.
+	rejects(
+		() =>
+			memberChoiceFlag(
+				"via",
+				{ "no-thing": choice({ help: "h" }), sms: choice({ help: "sms" }) },
+				{ help: "h", presence: "required" },
+			),
+		"flag 'no-thing': names starting with 'no-' are reserved for the negation system; use a positive name instead",
+	);
+	assert.doesNotThrow(() =>
+		choiceFlag(
+			"via",
+			{ "no-thing": choice({ help: "h" }), sms: choice({ help: "sms" }) },
+			{ help: "h", presence: "required" },
+		),
+	);
+	// The legal shape: lowercase, digits and hyphens after the first letter.
+	assert.doesNotThrow(() =>
+		memberChoiceFlag(
+			"via",
+			{ "all-profiles2": choice({ help: "h" }), sms: choice({ help: "sms" }) },
+			{ help: "h", presence: "required" },
+		),
+	);
+});
+
 test("guard: a selector must declare at least two choices", () => {
 	rejects(
 		() =>
@@ -1378,7 +1439,7 @@ test("guard: the short-claim table walks member scopes too", () => {
 									}),
 								},
 							}),
-							all_profiles: choice({
+							"all-profiles": choice({
 								help: "every profile",
 								flags: {
 									silent: flag("silent", t.bool, {
@@ -2186,6 +2247,10 @@ test("templates: the scope path, suffix and origin clauses compose as pinned", (
 		errors.errChoiceDuplicateName("via", "email"),
 		'Flag "via": choice "email" is declared twice',
 	);
+	assert.equal(
+		errors.errChoiceNameCharset("via", "Email"),
+		'Flag "via": choice name "Email" must match [a-z][a-z0-9-]*',
+	);
 });
 
 test("member spelling: an out-of-scope flag under an unelected member names no token", () => {
@@ -2438,7 +2503,7 @@ test("schema: a member-spelled choice's payload is the first scope entry", () =>
 								}),
 							},
 						}),
-						all_profiles: choice({ help: "operate on every profile" }),
+						"all-profiles": choice({ help: "operate on every profile" }),
 					},
 					{ help: "which profiles to operate on", presence: "required" },
 				),
@@ -2473,7 +2538,7 @@ test("schema: a member-spelled choice's payload is the first scope entry", () =>
 				},
 			],
 		},
-		{ name: "all_profiles", help: "operate on every profile" },
+		{ name: "all-profiles", help: "operate on every profile" },
 	]);
 	assert.equal(entry.elect_by, "member-flags");
 });

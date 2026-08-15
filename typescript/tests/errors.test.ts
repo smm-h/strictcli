@@ -89,7 +89,10 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // errArgChoiceMagnitude, one condition on two surfaces -- an int choice whose
 // magnitude a JSON reader's double cannot carry back. The clause after the
 // colon is the payload regime's own, reused byte-for-byte.
-const EXPECTED_TEMPLATE_COUNT = 357;
+// §24.7's choice-name charset adds 1: errChoiceNameCharset. TypeScript spells
+// a choice name as a property key, which imposes no charset of its own, so the
+// rule needs a runtime check like every other name ban.
+const EXPECTED_TEMPLATE_COUNT = 358;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,
