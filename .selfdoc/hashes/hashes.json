@@ -1,12 +1,12 @@
 {
   "_hash_version": 3,
   "en/architecture.md": {
-    "content": "a8ebbe2be45dde6b90b24b657cf3b140c575bf7e4ee3191193f91289b5868cdb",
-    "description": "663eccaf6357c19daa5139c6f4e311d30cb4db72dea80205b8d331fca5c3f2d2"
+    "content": "966095c0ebbd13a4f821aab2618c1fcf5bfeba0264535d0176633bc5c3fa5736",
+    "description": "5931d7de50e860d69f443077281028ae0bba260a848b7e2ba84c614a211329a4"
   },
   "en/conformance.md": {
-    "content": "68d82ba178a4e28202ccdc7204c9fb75cd757b3a0023532e532e4a940b52df0a",
-    "description": "1dc672fe860817f8c23deada722096353b8def5ae7d1f4a224b9292037484ff2"
+    "content": "b3fffce35abce6a3f7a41e07b70890637d2c685b3a49d720f6abd82979f0e568",
+    "description": "0b736bfb4c8a30023e37c4fcab94561d13c0e94121990d4a62a05dda01f2a3e1"
   },
   "en/flag-system.md": {
     "content": "0152b58b1c7343bc088336426745938db943708cd519c9aeb82282c42d5aaa1b",
@@ -17,8 +17,8 @@
     "description": "de421ec712350fd2336eb5ecdb2b218864da7af30526828f1b7c7f55293aa31b"
   },
   "en/go-quickstart.md": {
-    "content": "46814c9e66cbc9e4819330e61b8026c739b4e4814ac50113af7a20d81c3810e6",
-    "description": "0ffadb8fad382add3e75e9e21ba893f1e236dc5b11a70d45a39d26811045a45e"
+    "content": "658e648ad432ee028cbe6871e145f07339abe3e6c741b37ea5f498df82c4e3f1",
+    "description": "a585a426e64e80010506f19f62122db3795bb05d85025b764f491e189e154b55"
   },
   "en/go-strictcli-testdata-noncomparable.md": {
     "content": "3e51fdc0997f38707db188e2cce1590da01f17bdcd6361a5dc8e805303ac7af0",
@@ -32,12 +32,12 @@
     "source_docstring": "c4bd1e785222cae85398e6022bb33df51025520b5ce7ad3c1f4946d55fff76a3"
   },
   "en/index.md": {
-    "content": "a80303747e2d5ef7dc67de687751b134072dbd60224d0a72312d7280c4eba0cf",
-    "description": "7a218c63b41408a17c3151115b55af30060803978f196dc6a7fef28a7ccbc7ec"
+    "content": "d511c4960240f0d58f169097a22a83e5e4f1dd4e58d8c681b9f9708243744655",
+    "description": "e9d90c393db26b69ec4f7d6c3fe4e41614f97b4a74609669d86522f28ea15f7d"
   },
   "en/language-idioms.md": {
-    "content": "bfe5335cd2a5c1d9570e1bda3e0d831f67c8afcea86f011b3abe15298f7f01a5",
-    "description": "4f70c435303797a9b749df233589c1497cd14b110e21896acd1e198af2264c38"
+    "content": "8bf6ae54aabe806ca0037eeafe85df887a4b4e8d1e8ae0f869cba23a0896017e",
+    "description": "086d3618e2fe2c38b636ca87b6a4cdce724e3796ab87e535ec1f01f234255f2a"
   },
   "en/mcp-confirmation.md": {
     "content": "a9a1065413384efade9e20688bc5a5536113971047899b49c7675388c5a6ab1e",
@@ -48,8 +48,8 @@
     "description": "70bfdba9b524dd0d01ed386281d43243f71b63b87c54551fe0ee9f7109ce3e73"
   },
   "en/python-quickstart.md": {
-    "content": "7048eb352d7726bcb4fce69d6d430468237e30d58084e7d8d3934f3086bea21a",
-    "description": "a8405280a3a348f6a57c67ea0bb08e1d73f46da3744b7a13a4cc2220f0e33574"
+    "content": "6a5deafa375dd0c4ca0428b382174d667d59dfaa3a526d5b2778046704ad6541",
+    "description": "484fe1e9686b2893562775f1221a20b107146f32914be4e996061e01ac86b191"
   },
   "en/python-strictcli.md": {
     "content": "6f1b6e55f543e1bfc7464a15348000471faada959c6686d2ed797541d3d806f7",
@@ -57,8 +57,8 @@
     "source_docstring": "869d760f17632ede6f9b09aa15d41ddd3e3626fd1471d84ece919e2402507969"
   },
   "en/typescript-quickstart.md": {
-    "content": "b0fd81637cc090f9a58a2e5309f53e8795a0417f399dad5a8f4d4728bf34f5b2",
-    "description": "59fc5d58b6fb2419f78b2e9c92a2560c568c6eed0df9b09c915b5102442f0a96"
+    "content": "02f88865af1e44fb889ea714bad7ccec24e981976e8e6bd386078e7737e1d483",
+    "description": "e6cd0b97e5350106e6dbbe9faa04aea7c2040886b2f93d62eaf48607b524916c"
   },
   "en/typescript-src-app.md": {
     "content": "b3a7b96dc80757525ecf75be7b79145d23b295e3225f88200eaf98dec991d7a5",
