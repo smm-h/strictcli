@@ -969,19 +969,21 @@ def _emit_command_registration(
     # `choice_flag(...)` decorator rather than a `flag(...)` one.
     emitter = _ChoiceClassEmitter()
     selector_vars: dict[str, list[str]] = {}
-    selector_decorators: list[str] = []
     for f in cmd_def.get("flags", []):
         if not _is_selector(f):
             continue
-        class_vars = emitter.emit_selector(f, indent)
-        selector_vars[f["name"]] = class_vars
-        selector_decorators.append(
-            _emit_selector_decorator(f, class_vars, emitter, indent)
-        )
+        selector_vars[f["name"]] = emitter.emit_selector(f, indent)
 
+    # Selectors and plain flags share ONE decorator list, in the case's own
+    # declaration order: Python reverses the list it collects (decorators run
+    # bottom-to-top), and the two constructs' relative order is what §24.10's
+    # help block renders.
     flag_decorators = []
     for f in cmd_def.get("flags", []):
         if _is_selector(f):
+            flag_decorators.append(_emit_selector_decorator(
+                f, selector_vars[f["name"]], emitter, indent,
+            ))
             continue
         fd_parts = [f"{f['name']!r}"]
         ftype = f.get("type", "str")
@@ -1079,8 +1081,6 @@ def _emit_command_registration(
 
     lines.extend(emitter.lines)
     lines.extend(decorator_parts)
-    for sd in selector_decorators:
-        lines.append(sd)
     for fd in flag_decorators:
         lines.append(fd)
     lines.append(f"{indent}def {fn_name}({sig_params}):")

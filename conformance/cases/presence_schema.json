@@ -80,42 +80,54 @@
           "flags": [
             {
               "name": "req",
-              "type": "str",
               "help": "required flag",
+              "value_schema": {
+                "type": "string"
+              },
               "presence": "required"
             },
             {
               "name": "opt",
-              "type": "str",
               "help": "optional flag",
+              "value_schema": {
+                "type": "string"
+              },
               "presence": "optional"
             },
             {
               "name": "lvl",
-              "type": "str",
               "help": "level",
+              "value_schema": {
+                "type": "string"
+              },
               "presence": "default",
               "default": "info"
             },
             {
               "name": "flagged",
-              "type": "bool",
               "help": "a bool",
+              "value_schema": {
+                "type": "boolean"
+              },
               "presence": "default",
               "default": false,
               "negatable": true
             },
             {
               "name": "zero",
-              "type": "int",
               "help": "an int",
+              "value_schema": {
+                "type": "integer"
+              },
               "presence": "default",
               "default": 0
             },
             {
               "name": "blank",
-              "type": "str",
               "help": "a blank string",
+              "value_schema": {
+                "type": "string"
+              },
               "presence": "default",
               "default": ""
             }
@@ -206,16 +218,25 @@
             {
               "name": "a1",
               "help": "required arg",
+              "value_schema": {
+                "type": "string"
+              },
               "presence": "required"
             },
             {
               "name": "a2",
               "help": "optional arg",
+              "value_schema": {
+                "type": "string"
+              },
               "presence": "optional"
             },
             {
               "name": "a3",
               "help": "defaulted arg",
+              "value_schema": {
+                "type": "string"
+              },
               "presence": "default",
               "default": "out.txt"
             }

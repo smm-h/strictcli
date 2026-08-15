@@ -297,7 +297,7 @@
         "--muted",
         "--name"
       ],
-      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>                 your name [default: anon]\n  mode                         how loud to be (exactly one of the following) [required]\n    --chatter                  chatter output [required]\n    --muted                    muted output [required]"
+      "stdout_equals": "myapp cmd -- a command\n\nFlags:\n  --name <str>    your name [default: anon]\n  mode            how loud to be (exactly one of the following) [required]\n    --chatter     chatter output [required]\n    --muted       muted output [required]"
     }
   },
   {
