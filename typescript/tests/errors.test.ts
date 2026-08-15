@@ -96,7 +96,12 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // of a rule the round deleted. Unifying the two variadic-arg spellings onto one
 // published shape left the ban with no input that could reach it, and Go
 // deleted its twin outright.
-const EXPECTED_TEMPLATE_COUNT = 357;
+// §25.5's array row removes 1 more: errFlagChoicesIncompatibleCompound, the
+// flag-side twin of the same deletion. Its condition was compound-wide while
+// the only reachable half is dict-only -- the list half is the declaration
+// whose enum belongs inside `items` -- and the dict half already has
+// errFlagDictCannotCombineChoices. No TypeScript path ever called it.
+const EXPECTED_TEMPLATE_COUNT = 356;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

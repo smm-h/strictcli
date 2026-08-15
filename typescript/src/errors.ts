@@ -310,9 +310,12 @@ export function errFlagRepeatableIncompatibleBool(name: string): string {
 	return `Flag ${q(name)}: repeatable is incompatible with type=bool`;
 }
 
-export function errFlagChoicesIncompatibleCompound(name: string): string {
-	return `Flag ${q(name)}: choices is incompatible with compound types (list/dict)`;
-}
+// The compound-wide `choices is incompatible with compound types (list/dict)`
+// template lived here with no caller: the dict branch raises
+// errFlagDictCannotCombineChoices and the list branch ACCEPTS choices, because
+// a list carrier with choices is exactly the declaration whose enum goes inside
+// `items` (§25.5). One condition keeps one sentence, and the narrow one is the
+// sentence, so the wide template is deleted rather than kept unreachable.
 
 export function errFlagRepeatableRequiresExplicitUnique(name: string): string {
 	return `Flag ${q(name)}: repeatable requires explicit unique (unique=True or unique=False)`;
