@@ -994,43 +994,124 @@ Name every parameter explicitly. A handler that accepts `**kwargs` without the
 command declaring `forwarding=strictcli.Forwarding(reason=...)` is a
 registration-time error -- an unnamed parameter bag hides which flags a handler
 actually consumes, and on a choice-flag command it is banned outright.
-## Dependencies
+## Constraints
 
-Declare relationships between flags using the `dependencies` parameter. Three
-dependency types are available: `Requires` (one-way dependency), `CoRequired`
-(must appear together or not at all), and `Implies` (automatically sets a target
-flag when a trigger is provided):
+Declare rules over a command's flags and args using the `constraints` parameter.
+Four kinds are available, all frozen dataclasses whose **first field is `name`**:
+
+| Constraint | Behavior |
+|------------|----------|
+| `AtLeastOne(name, members)` | At least one member is engaged. Members may co-occur -- it has no upper bound and is never exclusivity. |
+| `AllOrNone(name, members)` | Either every member is engaged or none is. Nothing engaged is vacuously satisfied. |
+| `Requires(name, flag, depends_on)` | If `flag` is provided, `depends_on` must also be provided. |
+| `Implies(name, flag, implies, value)` | When `flag` is provided, automatically set `implies` to `value`. |
+
+The name is mandatory: it is what a violation prints, what `--help` shows, and
+what lets one constraint be a member of another.
 
 ```python
-@app.command("deploy", help="Deploy the app", effect="mutating", dependencies=[
-    # --region requires --target to be present
-    strictcli.Requires(flag="region", depends_on="target"),
+@app.command("deploy", help="Deploy the app", effect="mutating", constraints=[
     # --target and --region must both appear or neither
-    strictcli.CoRequired(flags=["target", "region"]),
-    # --canary implies --wait=True
-    strictcli.Implies(flag="canary", implies="wait", value=True),
+    strictcli.AllOrNone("deploy-destination", [
+        strictcli.Member("target"), strictcli.Member("region"),
+    ]),
+    # at least one rollout control has to be chosen
+    strictcli.AtLeastOne("rollout-mode", [
+        strictcli.Member("staged", when="true"),
+        strictcli.Member("batch-size"),
+    ]),
+    # --staged implies --wait=True
+    strictcli.Implies("staged-waits", flag="staged", implies="wait", value=True),
 ])
 @strictcli.flag("target", type=str, presence="optional", help="Deploy target")
 @strictcli.flag("region", type=str, presence="optional", help="Target region")
-@strictcli.flag("canary", type=bool, default=False, help="Roll out to the canary fleet first")
+@strictcli.flag("staged", type=bool, default=False, help="Roll out in stages")
+@strictcli.flag("batch-size", type=int, presence="optional", help="Instances per batch")
 @strictcli.flag("wait", type=bool, default=False, help="Block until the rollout settles")
-def deploy(ctx, target, region, canary, wait):
+def deploy(ctx, target, region, staged, batch_size, wait):
     ctx.info(f"Deploying to {target} in {region}")
 ```
 
-Dependencies cannot reference the reserved quartet: `dry-run` is not a flag you
-declare, so it cannot be a `Requires` target or an `Implies` subject.
+### Members
 
-All three read presence through the same predicate `ctx.provided` uses -- a flag
-counts as present when the invocation caused its value. A declared default never
-satisfies a `Requires`, never completes a `CoRequired` group, and never fires an
-`Implies` trigger.
+A member is a `Member(name, when=...)` **record** -- a bare string is refused,
+for the same reason a bare `choices=` entry is. It references, by name, a
+command flag, a positional arg, or another named `AtLeastOne` / `AllOrNone` of
+the same command; nesting is a cycle-checked DAG at unlimited depth. A member
+carries no presence and no help of its own, and a co-occurrence constraint needs
+at least two of them.
 
-| Dependency | Behavior |
-|------------|----------|
-| `Requires(flag, depends_on)` | If `flag` is provided, `depends_on` must also be provided. |
-| `CoRequired(flags)` | All listed flags must appear together, or none of them. |
-| `Implies(flag, implies, value)` | When `flag` is provided, automatically set `implies` to `value`. |
+`Requires` and `Implies` are narrower on purpose: their operands are **flags
+only**, by name, and they take no `when`.
+
+`when` is the closed election vocabulary that decides when a member counts as
+engaged:
+
+| `when` | Engaged when | Legal on |
+|---|---|---|
+| `"present"` (the default) | the value was provided -- `cli`, `env`, `config` or `implied` | every type |
+| `"true"` | provided **and** the value is `True` | `bool` only |
+| `"non_empty"` | provided **and** the value is a non-empty string, list or map | `str`, list and dict flags, and variadic args |
+
+**A bool member must declare its election explicitly** -- omitting `when` on a
+bool is a registration error. Without that rule `--no-staged` would engage a
+constraint while selecting nothing. Declaring `when="true"` on a non-bool, or
+`when="non_empty"` on a bool, int or float, is a registration error too.
+
+Nesting is what expresses "either identity pair, but never half of one":
+
+```python
+@app.command("rewrite", help="Rewrite author identity", effect="mutating",
+             constraints=[
+                 strictcli.AllOrNone("author-name", [
+                     strictcli.Member("old-name"), strictcli.Member("new-name"),
+                 ]),
+                 strictcli.AllOrNone("author-email", [
+                     strictcli.Member("old-email"), strictcli.Member("new-email"),
+                 ]),
+                 strictcli.AtLeastOne("author-change", [
+                     strictcli.Member("author-name"),
+                     strictcli.Member("author-email"),
+                 ]),
+             ])
+@strictcli.flag("old-name", type=str, presence="optional", help="Current display name")
+@strictcli.flag("new-name", type=str, presence="optional", help="New display name")
+@strictcli.flag("old-email", type=str, presence="optional", help="Current email address")
+@strictcli.flag("new-email", type=str, presence="optional", help="New email address")
+def rewrite(ctx, old_name, new_name, old_email, new_email):
+    ...
+```
+
+```
+Constraints:
+  author-name      all or none of --old-name, --new-name
+  author-email     all or none of --old-email, --new-email
+  author-change    at least one of (--old-name with --new-name), (--old-email with --new-email)
+```
+
+Children are evaluated before parents, so an operator who typed one half of a
+pair reads `constraint "author-name": --old-name, --new-name must be used
+together` rather than a complaint about the whole selection.
+
+No member of a co-occurrence constraint may declare `presence="required"` -- a
+member the invocation must always supply leaves the constraint nothing to
+decide. A `default` is legal and never engages the constraint on its own;
+`optional` is the ordinary case, and membership neither makes a flag required
+nor exempts it from being required.
+
+Constraints cannot reference the reserved quartet: `dry-run` is not a flag you
+declare, so it can never be a member, a `Requires` target or an `Implies`
+subject. They operate at root scope only -- naming a flag declared inside a
+choice's scope is a registration error, because the scope already *is* the
+constraint.
+
+Engagement reads presence through the same predicate `ctx.provided` uses -- a
+flag counts as provided when the invocation caused its value. A declared default
+never engages a member, never satisfies a `Requires`, and never fires an
+`Implies` trigger. Every constraint renders in `--help` under a `Constraints:`
+section, publishes its members in `--dump-schema`, and projects into MCP tool
+schemas (`anyOf` / `dependentRequired`) with anything a JSON Schema keyword
+cannot carry stated in the tool description instead.
 
 ## Flag Sets
 
@@ -1254,7 +1335,7 @@ parse-time errors are user input mistakes caught during command-line parsing.
 Both produce specific, actionable messages:
 
 - **Registration-time errors** (`ValueError`): raised when declaring apps, commands, flags, or args with invalid configuration (missing help text, banned flag names, type mismatches). These are programmer errors caught at startup.
-- **Parse-time errors**: printed to stderr and exit 1. Include unknown flags, missing required values, type coercion failures, election and scope violations on a choice flag, and dependency errors.
+- **Parse-time errors**: printed to stderr and exit 1. Include unknown flags, missing required values, type coercion failures, election and scope violations on a choice flag, and constraint violations.
 
 ```
 $ mytool deploy --unknown-flag

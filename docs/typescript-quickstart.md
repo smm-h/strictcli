@@ -226,8 +226,8 @@ handler reconstructs that boolean out of a sentinel:
 
 An optional flag that received nothing carries source `default` and reports
 `false`. An unknown name throws exactly as `ctx.source` does. The same predicate
-decides presence for `coRequired`, `requires` and `implies`, so a declared
-default never satisfies a dependency. Inside a choice flag's scope the answer
+decides engagement for every [constraint](#constraints), so a declared
+default never engages a member. Inside a choice flag's scope the answer
 depends on the door a value arrived through: a scoped field the caller supplied
 answers `true` from the command line and from the flat machine door, and `false`
 from the record door, where a constructed record has already filled its declared
@@ -799,15 +799,24 @@ elected value. A defaulted choice flag renders its complete elected value:
 Electing a choice on the command line never borrows the default's values. A
 choice flag is a flag, so a choice flag may be declared inside a choice's scope,
 to unlimited depth.
-## Flag Dependencies
+## Constraints
 
-Declare relationships between flags using dependency descriptors. Three
-dependency types are available: `requires` (one-way dependency), `coRequired`
-(must appear together or not at all), and `implies` (automatically sets a target
-flag when a trigger is provided).
+Declare rules over a command's flags and args using the `constraints` key. Four
+factories are available, all taking **one option object** with a mandatory
+`name`:
+
+| Factory | Behavior |
+|---------|----------|
+| `atLeastOne({ name, members })` | At least one member is engaged. Members may co-occur -- it has no upper bound and is never exclusivity. |
+| `allOrNone({ name, members })` | Either every member is engaged or none is. Nothing engaged is vacuously satisfied. |
+| `requires({ name, flag, dependsOn })` | If `flag` is provided, `dependsOn` must also be provided. |
+| `implies({ name, flag, implies, value })` | When `flag` is provided, automatically set `implies` to `value`. |
+
+The name is what a violation prints, what `--help` shows, and what lets one
+constraint be a member of another.
 
 ```typescript
-import { requires, coRequired, implies } from "strictcli";
+import { allOrNone, atLeastOne, implies } from "strictcli";
 
 app.command(
   defineMutatingCommand("deploy", {
@@ -815,10 +824,14 @@ app.command(
     flags: {
       target: flag("target", t.str, { help: "Deploy target", presence: "optional" }),
       region: flag("region", t.str, { help: "AWS region", presence: "optional" }),
-      canary: flag("canary", t.bool, {
-        help: "Canary rollout first",
+      staged: flag("staged", t.bool, {
+        help: "Roll out in stages",
         presence: "default",
         default: false,
+      }),
+      batch_size: flag("batch-size", t.int, {
+        help: "Instances per batch",
+        presence: "optional",
       }),
       wait: flag("wait", t.bool, {
         help: "Block until settled",
@@ -826,13 +839,18 @@ app.command(
         default: false,
       }),
     },
-    dependencies: [
-      // --target requires --region to also be provided
-      requires({ flag: "target", dependsOn: "region" }),
-      // --target and --region must appear together
-      coRequired(["target", "region"]),
-      // When --canary is set, auto-set --wait to true
-      implies({ flag: "canary", implies: "wait", value: true }),
+    constraints: [
+      // --target and --region must appear together, or neither
+      allOrNone({ name: "deploy-destination", members: [
+        { name: "target" }, { name: "region" },
+      ]}),
+      // at least one rollout control has to be chosen
+      atLeastOne({ name: "rollout-mode", members: [
+        { name: "staged", when: "true" },
+        { name: "batch-size" },
+      ]}),
+      // When --staged is set, auto-set --wait to true
+      implies({ name: "staged-waits", flag: "staged", implies: "wait", value: true }),
     ],
     handler: (args, ctx) => {
       ctx.info(`Deploying to ${args.target} in ${args.region}`);
@@ -841,11 +859,83 @@ app.command(
 );
 ```
 
-All three read presence through the same predicate `ctx.provided` uses -- a flag
-counts as present when the invocation caused its value. A declared default never
-satisfies a `requires`, never completes a `coRequired` group, and never fires an
+### Members
+
+A member is a plain object literal `{ name, when? }`, matching the shape the
+value-flag choice record `{ value, help }` already has. It references, by name,
+a command flag, a positional arg, or another named `atLeastOne` / `allOrNone` of
+the same command; nesting is a cycle-checked DAG at unlimited depth. A member
+carries no presence and no help of its own.
+
+`members` is typed
+`readonly [ConstraintMember, ConstraintMember, ...ConstraintMember[]]`, so the
+two-member floor is a **compile** error rather than a registration one.
+
+`requires` and `implies` are narrower on purpose: their operands are **flags
+only**, by name, and they take no `when`.
+
+`when` is the literal union `"present" | "true" | "non_empty"`, so a typo is a
+compile error:
+
+| `when` | Engaged when | Legal on |
+|---|---|---|
+| `"present"` (the default) | the value was provided -- `cli`, `env`, `config` or `implied` | every type |
+| `"true"` | provided **and** the value is `true` | `bool` only |
+| `"non_empty"` | provided **and** the value is a non-empty string, list or map | `str`, list and dict flags, and variadic args |
+
+**A bool member must declare its election explicitly** -- omitting `when` on a
+bool is a registration error. Without that rule `--no-staged` would engage a
+constraint while selecting nothing. Declaring `when: "true"` on a non-bool, or
+`when: "non_empty"` on a bool, an int or a float, is a registration error too.
+
+Nesting is what expresses "either identity pair, but never half of one":
+
+```typescript
+constraints: [
+  allOrNone({ name: "author-name", members: [
+    { name: "old-name" }, { name: "new-name" },
+  ]}),
+  allOrNone({ name: "author-email", members: [
+    { name: "old-email" }, { name: "new-email" },
+  ]}),
+  atLeastOne({ name: "author-change", members: [
+    { name: "author-name" }, { name: "author-email" },
+  ]}),
+],
+```
+
+```
+Constraints:
+  author-name      all or none of --old-name, --new-name
+  author-email     all or none of --old-email, --new-email
+  author-change    at least one of (--old-name with --new-name), (--old-email with --new-email)
+```
+
+Children are evaluated before parents, so an operator who typed one half of a
+pair reads `constraint "author-name": --old-name, --new-name must be used
+together` rather than a complaint about the whole selection.
+
+No member of a co-occurrence constraint may declare `presence: "required"` -- a
+member the invocation must always supply leaves the constraint nothing to
+decide. A `presence: "default"` is legal and never engages the constraint on its
+own; `presence: "optional"` is the ordinary case, and membership neither makes a
+flag required nor exempts it from being required.
+
+Constraints cannot reference the reserved quartet: `dry-run` is not a flag you
+declare, so it can never be a member, a `requires` target or an `implies`
+subject. They operate at root scope only -- naming a flag declared inside a
+choice's scope is a registration error, because the scope already *is* the
+constraint.
+
+Engagement reads presence through the same predicate `ctx.provided` uses -- a
+flag counts as provided when the invocation caused its value. A declared default
+never engages a member, never satisfies a `requires`, and never fires an
 `implies` trigger. That includes a `relativeToRoot` default with the `infra`
-source label: it is still the declaration deciding.
+source label: it is still the declaration deciding. Every constraint renders in
+`--help` under a `Constraints:` section, publishes its members in
+`--dump-schema`, and projects into MCP tool schemas (`anyOf` /
+`dependentRequired`) with anything a JSON Schema keyword cannot carry stated in
+the tool description instead.
 
 ## Command Groups
 

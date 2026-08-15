@@ -322,8 +322,8 @@ handler reconstructs that boolean out of a sentinel:
 
 An `Optional()` flag that received nothing carries source `default` and reports
 false. An unknown name panics exactly as `ctx.Source` does. The same predicate
-decides presence for `CoRequired`, `Requires` and `Implies`, so a declared
-default never satisfies a dependency. Inside a choice flag's scope the answer
+decides engagement for every [constraint](#constraints), so a declared
+default never engages a member. Inside a choice flag's scope the answer
 depends on the door a value arrived through: a scoped field the caller supplied
 answers true from the command line and from the flat machine door, and false from
 the record door, where a constructed `Elect(...)` has already filled its declared
@@ -877,12 +877,24 @@ A defaulted choice flag renders its complete elected value:
 Electing a choice on the command line never borrows the default's values. A
 choice flag is a flag, so a choice flag may be declared inside a choice's scope,
 to unlimited depth.
-## Dependencies
+## Constraints
 
-Declare relationships between flags using `WithDependencies`. Three dependency
-types are available: `Requires` (one-way dependency), `CoRequired` (must appear
-together or not at all), and `Implies` (automatically sets a target flag when a
-trigger is provided):
+Declare rules over a command's flags and args using `WithConstraints`. Four
+kinds are available, each a constructor returning a `Constraint` and each taking
+a **mandatory name** as its first parameter:
+
+| Constructor | Behavior |
+|-------------|----------|
+| `AtLeastOne(name, a, b, rest...)` | At least one member is engaged. Members may co-occur -- it has no upper bound and is never exclusivity. |
+| `AllOrNone(name, a, b, rest...)` | Either every member is engaged or none is. Nothing engaged is vacuously satisfied. |
+| `Requires(name, flag, dependsOn)` | If `flag` is provided, `dependsOn` must also be provided. |
+| `Implies(name, flag, implies, value)` | When `flag` is provided, automatically set `implies` to `value`. |
+
+The name is what a violation prints, what `--help` shows, and what lets one
+constraint be a member of another. The four constructors are the only things
+that mint a `Constraint`: the interface is closed over an unexported type, so a
+struct literal cannot declare a constraint and therefore cannot declare a
+half-formed one.
 
 ```go
 app.Command("deploy", "Deploy the app", handler,
@@ -890,28 +902,110 @@ app.Command("deploy", "Deploy the app", handler,
     strictcli.WithFlags(
         strictcli.StringFlag("target", "Deploy target", strictcli.Optional()),
         strictcli.StringFlag("region", "Target region", strictcli.Optional()),
-        strictcli.BoolFlag("canary", "Roll out to the canary fleet first", strictcli.Default(false)),
+        strictcli.BoolFlag("staged", "Roll out in stages", strictcli.Default(false)),
+        strictcli.IntFlag("batch-size", "Instances per batch", strictcli.Optional()),
         strictcli.BoolFlag("wait", "Block until the rollout settles", strictcli.Default(false)),
     ),
-    strictcli.WithDependencies(
-        // --region requires --target to be present
-        strictcli.Requires{Flag: "region", DependsOn: "target"},
+    strictcli.WithConstraints(
         // --target and --region must both appear or neither
-        strictcli.CoRequired{Flags: []string{"target", "region"}},
-        // --canary implies --wait=true
-        strictcli.Implies{Flag: "canary", Implies: "wait", Value: true},
+        strictcli.AllOrNone("deploy-destination",
+            strictcli.Member("target"), strictcli.Member("region")),
+        // at least one rollout control has to be chosen
+        strictcli.AtLeastOne("rollout-mode",
+            strictcli.Member("staged", strictcli.WhenTrue()),
+            strictcli.Member("batch-size")),
+        // --staged implies --wait=true
+        strictcli.Implies("staged-waits", "staged", "wait", true),
     ),
 )
 ```
 
-Dependencies cannot reference the reserved quartet: `dry-run` is not a flag you
-declare, so it cannot be a `Requires` target or an `Implies` subject.
+### Members
 
-All three read presence through the same predicate `ctx.Provided` uses -- a flag
-counts as present when the invocation caused its value. A declared default never
-satisfies a `Requires`, never completes a `CoRequired` group, and never fires an
+`Member(name, opts...)` references, by name, a command flag, a positional arg,
+or another named `AtLeastOne` / `AllOrNone` of the same command; nesting is a
+cycle-checked DAG at unlimited depth. A member carries no presence and no help
+of its own -- the declaration it names carries every fact about the value.
+
+The two co-occurrence constructors take **two named members before the variadic
+tail**, so a one-member constraint is a *compile* error. A caller holding a
+slice writes `AllOrNone(n, ms[0], ms[1], ms[2:]...)`, which fails at the caller
+rather than inside the framework.
+
+`Requires` and `Implies` are narrower on purpose: their operands are **flags
+only**, by name, and they take no election selector.
+
+Election selectors are functional options, matching every other option surface
+in the package:
+
+| Option | Engaged when | Legal on |
+|---|---|---|
+| `WhenPresent()` (the default) | the value was provided -- `cli`, `env`, `config` or `implied` | every type |
+| `WhenTrue()` | provided **and** the value is `true` | `bool` only |
+| `WhenNonEmpty()` | provided **and** the value is a non-empty string, list or map | `str`, list and dict flags, and variadic args |
+
+**A bool member must declare its election explicitly** -- omitting it is a
+registration error. Without that rule `--no-staged` would engage a constraint
+while selecting nothing. `WhenTrue()` on a non-bool, or `WhenNonEmpty()` on a
+bool, an int or a float, is a registration error too.
+
+Nesting is what expresses "either identity pair, but never half of one":
+
+```go
+strictcli.WithFlags(
+    strictcli.StringFlag("old-name", "Current display name", strictcli.Optional()),
+    strictcli.StringFlag("new-name", "New display name", strictcli.Optional()),
+    strictcli.StringFlag("old-email", "Current email address", strictcli.Optional()),
+    strictcli.StringFlag("new-email", "New email address", strictcli.Optional()),
+),
+strictcli.WithConstraints(
+    strictcli.AllOrNone("author-name",
+        strictcli.Member("old-name"), strictcli.Member("new-name")),
+    strictcli.AllOrNone("author-email",
+        strictcli.Member("old-email"), strictcli.Member("new-email")),
+    strictcli.AtLeastOne("author-change",
+        strictcli.Member("author-name"), strictcli.Member("author-email")),
+),
+```
+
+```
+Constraints:
+  author-name      all or none of --old-name, --new-name
+  author-email     all or none of --old-email, --new-email
+  author-change    at least one of (--old-name with --new-name), (--old-email with --new-email)
+```
+
+Children are evaluated before parents, so an operator who typed one half of a
+pair reads `constraint "author-name": --old-name, --new-name must be used
+together` rather than a complaint about the whole selection. A member list
+mixing kinds renders each by its own spelling -- `--older-than` for a flag,
+bare `targets` for a positional arg:
+
+```
+constraint "purge-selection": at least one of targets, --older-than, --larger-than, --all is required
+```
+
+No member of a co-occurrence constraint may declare `Required()` -- a member the
+invocation must always supply leaves the constraint nothing to decide. A
+`Default(v)` is legal and never engages the constraint on its own; `Optional()`
+is the ordinary case, and membership neither makes a flag required nor exempts
+it from being required.
+
+Constraints cannot reference the reserved quartet: `dry-run` is not a flag you
+declare, so it can never be a member, a `Requires` target or an `Implies`
+subject. They operate at root scope only -- naming a flag declared inside a
+choice's scope is a registration error, because the scope already *is* the
+constraint.
+
+Engagement reads presence through the same predicate `ctx.Provided` uses -- a
+flag counts as provided when the invocation caused its value. A declared default
+never engages a member, never satisfies a `Requires`, and never fires an
 `Implies` trigger. That includes a `RelativeToRoot` default with the `infra`
-source label: it is still the declaration deciding.
+source label: it is still the declaration deciding. Every constraint renders in
+`--help` under a `Constraints:` section, publishes its members in
+`--dump-schema`, and projects into MCP tool schemas (`anyOf` /
+`dependentRequired`) with anything a JSON Schema keyword cannot carry stated in
+the tool description instead.
 
 ## WithConfig -- Config File Support
 
