@@ -43,7 +43,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -183,7 +183,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -361,7 +361,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -519,7 +519,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -682,7 +682,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -812,7 +812,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -952,7 +952,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -1112,7 +1112,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -1247,7 +1247,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -1390,7 +1390,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -1520,7 +1520,7 @@
       ]
     },
     "acknowledged_divergence": {
-      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so \u00a726.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
       "streams": {
         "stdout": [
           "python",
@@ -1547,6 +1547,190 @@
                 }
               ],
               "isError": true,
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "myapp",
+                  "version": "1.0.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "mcp constraints: an explicitly empty array is not a provision at the flat machine door, so the at-least-one is violated",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "purge",
+          "help": "purge it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "targets",
+              "help": "the targets",
+              "presence": "optional",
+              "variadic": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "targets",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "older-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "targets={targets}"
+        }
+      ]
+    },
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the behaviour.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"purge\",\"arguments\":{\"targets\":[]},\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}",
+        "expect_line": {
+          "json_equals": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "resultType": "complete",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "constraint \"purge-selection\": at least one of targets, --older-than is required"
+                }
+              ],
+              "isError": true,
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "myapp",
+                  "version": "1.0.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "mcp constraints: one element at the flat machine door is a provision, and engages the member",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "purge",
+          "help": "purge it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "targets",
+              "help": "the targets",
+              "presence": "optional",
+              "variadic": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "targets",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "older-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "targets={targets}"
+        }
+      ]
+    },
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the behaviour.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"purge\",\"arguments\":{\"targets\":[\"a\"]},\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}",
+        "expect_line": {
+          "equals": "targets=a"
+        }
+      },
+      {
+        "expect_line": {
+          "json_equals": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "resultType": "complete",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "$ANY"
+                }
+              ],
               "_meta": {
                 "io.modelcontextprotocol/serverInfo": {
                   "name": "myapp",
