@@ -108,20 +108,34 @@ export interface ScopeConfig {
 	coerce(f: AnyFlag, value: unknown): unknown;
 }
 
+/**
+ * Everything phases 2-4 read. It is a snapshot taken by parse.ts once the
+ * token scan is done: nothing here is looked up again while the phases run, so
+ * the same command line and the same environment always produce the same
+ * elections.
+ */
 export interface ScopeParseInput {
+	/** The command's root declarations, in declaration order. */
 	readonly decls: readonly AnyDecl[];
+	/** Every surface name's raw occurrences, as the token scan collected them. */
 	readonly occ: Occurrences;
+	/** Hermetic mode: env vars and config are not consulted for anything. */
 	readonly hermetic: boolean;
+	/** The loaded config, or null when the app declares none. */
 	readonly cfg: ScopeConfig | null;
+	/** The per-parse stdin claim, so `@-` can be consumed exactly once. */
 	readonly tracker: StdinTracker;
+	/** The app's resolved infrastructure roots, keyed by env var name. */
 	readonly infraRoots: ReadonlyMap<string, string>;
 }
 
+/** What phases 2-4 produced: the records, and everything parse.ts reports from. */
 export interface ScopeParseResult {
 	/** Elected record per selector, keyed by the selector's dash name. */
 	readonly records: Map<string, unknown>;
 	/** The selector's own source label, for ctx.source / ctx.provided. */
 	readonly sources: Map<string, SourceLabel>;
+	/** Every problem the phases recorded, unordered -- the stage decides. */
 	readonly problems: ParseProblem[];
 	/** Every surface name that belongs to a scope the invocation made live. */
 	readonly liveNames: Set<string>;
@@ -135,6 +149,11 @@ export interface ScopeParseResult {
 /** How a selector's election came about, as the pinned origin clause (§12.13). */
 type Origin = "" | string;
 
+/**
+ * One selector's settled election: which choice, and how it came about. Both
+ * front doors record one per selector, so a later refusal can name the
+ * election that caused it without re-deriving anything (§12.13, §24.11).
+ */
 export interface Election {
 	/** The choice name elected, or undefined when nothing was. */
 	readonly elected: string | undefined;
@@ -145,13 +164,25 @@ export interface Election {
 /** What an election lookup answers, for either front door's own record of them. */
 export type ElectionLookup = (sel: AnyChoiceFlag) => Election | undefined;
 
+/**
+ * One run's accumulating state, threaded through the phases. Package-internal:
+ * the input is read-only for its whole life and everything else is written
+ * exactly once per declaration the phases visit.
+ */
 interface Run {
+	/** The snapshot the phases read. */
 	readonly input: ScopeParseInput;
+	/** Problems recorded so far, in recording order within each stage. */
 	readonly problems: ParseProblem[];
+	/** Each selector's settled election, for the refusals that name one. */
 	readonly elections: Map<AnyChoiceFlag, Election>;
+	/** Every surface name a live scope claims (phase 3 reads it). */
 	readonly liveNames: Set<string>;
+	/** The §24.6 diagnostics: bindings inside scopes that were not elected. */
 	readonly skippedBindings: string[];
+	/** The elected record per root selector, keyed by its dash name. */
 	readonly records: Map<string, unknown>;
+	/** Each root selector's own source label. */
 	readonly sources: Map<string, SourceLabel>;
 }
 
