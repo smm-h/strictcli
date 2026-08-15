@@ -2199,7 +2199,8 @@ interface ConstraintSetInput {
 /**
  * Resolves and validates a command's constraint set in §26.8's pinned order:
  * name legality, member arity, member resolution, scope, nesting legality,
- * election legality, presence legality.
+ * election legality, presence legality -- then, as a TRAILING phase after all
+ * seven, the two dependency families' own legacy operand guards.
  *
  * The order runs from the constraint's own identity outward to the
  * declarations it names, so a message never blames a member for a fault in
@@ -2336,11 +2337,9 @@ function validateConstraintSet(input: ConstraintSetInput): void {
 	refuseConstraintCycle(cn, constraints, byName, declByName, argByName);
 
 	// 6. Election legality: `when` against the member's declared type,
-	// including the bool refusal -- and the two dependency families' own
-	// operand-type guards.
+	// including the bool refusal.
 	for (const c of constraints) {
 		if (!isCoOccurrence(c)) {
-			validateDependencyFamily(cn, c, declByName);
 			continue;
 		}
 		for (const m of c.members) {
@@ -2403,6 +2402,17 @@ function validateConstraintSet(input: ConstraintSetInput): void {
 					quotedMember(decl !== undefined ? "flag" : "arg", m.name),
 				),
 			);
+		}
+	}
+
+	// The two dependency families' own legacy guards, whose sentences §26
+	// leaves alone. They are a TRAILING phase rather than a step inside the
+	// seven: the seven are the co-occurrence order, and folding these into one
+	// of them would let an operand-type fault outrank a fault the pinned order
+	// puts ahead of it.
+	for (const c of constraints) {
+		if (!isCoOccurrence(c)) {
+			validateDependencyFamily(cn, c, declByName);
 		}
 	}
 }

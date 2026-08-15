@@ -1326,6 +1326,53 @@ test("constraint: the resolution order runs identity-outward across the whole se
 	);
 });
 
+test("constraint: the dependency families' own guards are a TRAILING phase", () => {
+	// §26.8: the four legacy Requires/Implies guards run after all seven
+	// co-occurrence steps, not folded into step 6. A required member is a
+	// fault inside the seven, so it is reported before an Implies whose
+	// trigger is not a bool.
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: {
+					src: optStrFlag("src"),
+					loud: boolFlag("loud"),
+					a: strFlag("a"),
+					b: optStrFlag("b"),
+				},
+				constraints: [
+					implies({ name: "imp", flag: "src", implies: "loud", value: true }),
+					allOrNone({ name: "pair", members: [{ name: "a" }, { name: "b" }] }),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "pair" member \'--a\' declares presence: "required": a member the invocation must always supply leaves the constraint nothing to decide',
+	);
+	// The same ordering for the bool-election refusal, which is step 6 itself.
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: {
+					src: optStrFlag("src"),
+					loud: boolFlag("loud"),
+					quietish: boolFlag("quietish"),
+					b: optStrFlag("b"),
+				},
+				constraints: [
+					implies({ name: "imp", flag: "src", implies: "loud", value: true }),
+					allOrNone({
+						name: "pair",
+						members: [{ name: "quietish" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "pair" member \'--quietish\' is a bool and must declare its election: when: "true" counts only a true value, when: "present" counts any',
+	);
+});
+
 test("constraint: Requires reference validation (unknown reported before same-flag)", () => {
 	rejects(
 		() =>
