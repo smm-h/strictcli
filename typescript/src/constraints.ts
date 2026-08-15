@@ -11,9 +11,7 @@
 
 import type {
 	AllOrNone,
-	AnyArg,
 	AnyCommand,
-	AnyDecl,
 	AtLeastOne,
 	Constraint,
 	Implies,
@@ -222,30 +220,6 @@ export function isEngaged(
 		return false;
 	}
 	return nested.members.some((sub) => isEngaged(sub, index, probe));
-}
-
-/** A constraint is VACUOUS in an invocation when no member of it is engaged. */
-export function isVacuous(
-	c: ResolvedCoOccurrence,
-	index: ReadonlyMap<string, ResolvedConstraint>,
-	probe: EngagementProbe,
-): boolean {
-	return !c.members.some((m) => isEngaged(m, index, probe));
-}
-
-/**
- * The declared shape of a member reference, used by the parse pipeline to
- * find the declaration a probe must read.
- */
-export function findFlagDecl(
-	def: AnyCommand,
-	name: string,
-): AnyDecl | undefined {
-	return def.allDecls.find((d) => d.name === name);
-}
-
-export function findArgDecl(def: AnyCommand, name: string): AnyArg | undefined {
-	return def.args.find((a) => a.name === name);
 }
 
 /** The declaration surface's own union, re-exported for the consumers. */
