@@ -12237,9 +12237,9 @@ def _record_from_caller(
             values[key] = _declared_default_record(raw)
             sources[key] = "default"
             continue
-        # Phase 1 already proved this field holds a declared choice.
-        sub = m.choice_by_class(type(raw))
-        assert sub is not None
+        # Phase 1 already proved this field holds a declared choice, so the
+        # lookup is the same one again rather than a second chance to refuse.
+        sub = _record_choice_spec(cmd_name, m, raw)
         values[key] = _record_from_caller(
             cmd_name, m, sub, raw, path + ((m.name, sub.name),),
             member_spelled=member_spelled, infra_roots=infra_roots,
