@@ -457,3 +457,113 @@ func TestMarkerDefaultInHelp(t *testing.T) {
 		t.Fatalf("help line missing:\nwant %q\ngot  %q", want, r.Stdout)
 	}
 }
+
+// --- config show and a marker default ---
+
+// newMarkerConfigShowApp is an app whose one flag carries a RelativeToRoot
+// default, with a config file that leaves it alone: the flag resolves to its
+// declared default, which is the marker itself.
+func newMarkerConfigShowApp(t *testing.T) *App {
+	t.Helper()
+	os.Unsetenv("MYAPP_HOME")
+	configFile := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configFile, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	app := NewApp("myapp", "1.0.0", "test app",
+		WithConfig(), WithConfigPath(configFile),
+		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"))
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithFlags(
+		StringFlag("db", "db path", Default(RelativeToRoot("MYAPP_HOME", "db.sqlite"))),
+	), WithEffect(EffectReadOnly))
+	return app
+}
+
+// config show prints a marker-defaulted flag as the DECLARATION it was written
+// as, labelled `default` -- not the path a run would deliver (contract §13,
+// §25.10, §18.26 item 261). This line is byte-identical in Python and is the
+// pin the machine form below must not disturb.
+func TestConfigShowMarkerDefaultHumanForm(t *testing.T) {
+	app := newMarkerConfigShowApp(t)
+	r := app.Test([]string{"config", "show", "--plain"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	want := "db = RelativeToRoot('MYAPP_HOME', 'db.sqlite')  (source: default)"
+	if !strings.Contains(r.Stdout, want) {
+		t.Fatalf("config show line missing:\nwant %q\ngot  %q", want, r.Stdout)
+	}
+}
+
+// The machine form publishes §13's marker shape -- the same
+// {"relative_to_root": {"env_var": ..., "parts": [...]}} the dumped schema
+// publishes for the same declaration. Go used to hand the marker straight to
+// encoding/json, whose unexported fields marshal to `{}`: a read-only command
+// published an empty object where the document pins one shape.
+func TestConfigShowMarkerDefaultMachineForm(t *testing.T) {
+	app := newMarkerConfigShowApp(t)
+	r := app.Test([]string{"config", "show", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit %d: stderr=%q stdout=%q", r.ExitCode, r.Stderr, r.Stdout)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &payload); err != nil {
+		t.Fatalf("json parse: %s\n%s", err, r.Stdout)
+	}
+	entry, ok := payload["db"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("no db entry in payload: %v", payload)
+	}
+	if entry["source"] != "default" {
+		t.Fatalf("source = %v, want default", entry["source"])
+	}
+	got, err := json.Marshal(entry["value"])
+	if err != nil {
+		t.Fatalf("marshal value: %v", err)
+	}
+	want := `{"relative_to_root":{"env_var":"MYAPP_HOME","parts":["db.sqlite"]}}`
+	if string(got) != want {
+		t.Fatalf("value = %s, want %s", got, want)
+	}
+	// The human rendering rides the envelope's diagnostics unchanged (§19.1).
+	if !strings.Contains(r.Stderr+r.Stdout, "db = RelativeToRoot('MYAPP_HOME', 'db.sqlite')  (source: default)") {
+		t.Fatalf("machine-mode diagnostics lost the human line: stdout=%q stderr=%q", r.Stdout, r.Stderr)
+	}
+}
+
+// A marker with no parts publishes an empty parts array, not a missing key or
+// a null -- the same shape the schema dump publishes for the same declaration.
+func TestConfigShowMarkerDefaultNoPartsMachineForm(t *testing.T) {
+	os.Unsetenv("MYAPP_HOME")
+	configFile := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configFile, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	app := NewApp("myapp", "1.0.0", "test app",
+		WithConfig(), WithConfigPath(configFile),
+		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"))
+	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithFlags(
+		StringFlag("home", "the root itself", Default(RelativeToRoot("MYAPP_HOME"))),
+	), WithEffect(EffectReadOnly))
+	r := app.Test([]string{"config", "show", "--json"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(envelopePayload(t, r.Stdout), &payload); err != nil {
+		t.Fatalf("json parse: %s\n%s", err, r.Stdout)
+	}
+	entry := payload["home"].(map[string]interface{})
+	got, err := json.Marshal(entry["value"])
+	if err != nil {
+		t.Fatalf("marshal value: %v", err)
+	}
+	want := `{"relative_to_root":{"env_var":"MYAPP_HOME","parts":[]}}`
+	if string(got) != want {
+		t.Fatalf("value = %s, want %s", got, want)
+	}
+}

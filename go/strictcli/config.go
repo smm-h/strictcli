@@ -839,7 +839,16 @@ func (a *App) registerConfigGroup() {
 			param := flagParamName(f.Name)
 			value, source := resolveFlagShowSource(&f, configData)
 			result[param] = map[string]interface{}{
-				"value":  value,
+				// A RelativeToRoot default reaches the payload as the marker
+				// itself (the human form below prints the declaration, not the
+				// path a run would deliver). Its fields are unexported, so
+				// handing it to encoding/json publishes "{}" -- an empty object
+				// where the document pins one marker shape (§13). It rides the
+				// same serializer the dumped schema uses, flattened to plain
+				// maps because a payload is written by encoding/json rather
+				// than by the schema canon's writer. Every other value passes
+				// through both calls unchanged.
+				"value":  toPlain(serializeDefault(value)),
 				"source": source,
 			}
 		}
