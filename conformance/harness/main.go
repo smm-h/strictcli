@@ -595,7 +595,15 @@ func choiceRecords(d map[string]interface{}) ([]strictcli.ChoiceValue, bool) {
 		}
 		var out []strictcli.ChoiceValue
 		for _, item := range raw.([]interface{}) {
-			rec := item.(map[string]interface{})
+			rec, isRecord := item.(map[string]interface{})
+			if !isRecord {
+				// A BARE entry is spellable so the deleted-entry refusal has a
+				// covering input (§12.13). Go's bare spelling is a struct
+				// literal, which reaches the constructor without Ch's mark and
+				// is refused there.
+				out = append(out, strictcli.ChoiceValue{Value: conv(item)})
+				continue
+			}
 			help := ""
 			if h, ok := rec["help"]; ok {
 				help = h.(string)

@@ -153,6 +153,12 @@ def _choices_part(decl: dict) -> list[str]:
             continue
         entries = []
         for rec in decl[key]:
+            # A BARE entry is spellable so the deleted-entry refusal has a
+            # covering input (§12.13's errChoicesEntryNotRecord); it is emitted
+            # as the bare value the framework refuses, never wrapped.
+            if not isinstance(rec, dict):
+                entries.append(cast(rec))
+                continue
             parts = [cast(rec["value"])]
             if "help" in rec:
                 parts.append(f"help={rec['help']!r}")

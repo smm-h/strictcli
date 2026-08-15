@@ -187,10 +187,17 @@ function choiceRecords(d) {
 }
 
 function choiceRecord(conv) {
-	return (rec) =>
-		"help" in rec
+	return (rec) => {
+		// A BARE entry is spellable so the deleted-entry refusal has a covering
+		// input (§12.13's errChoicesEntryNotRecord): it reaches the factory as
+		// the bare value the public type would have rejected.
+		if (rec === null || typeof rec !== "object") {
+			return conv(rec);
+		}
+		return "help" in rec
 			? { value: conv(rec.value), help: rec.help }
 			: { value: conv(rec.value) };
+	};
 }
 
 /** `elect_by` is the input-side discriminator (§13's item-207 box, §25.6). */

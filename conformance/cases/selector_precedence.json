@@ -1,0 +1,577 @@
+[
+  {
+    "name": "selector precedence: an unknown choice is reported before a scope violation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "carrier-pigeon",
+      "--subject",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --via: invalid value 'carrier-pigeon', must be one of: email, sms\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector precedence: a double election is reported before a scope violation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--via",
+      "sms",
+      "--phone-number",
+      "+1"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --via: elected more than once, as 'email' and 'sms'\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector precedence: a scope violation is reported before a coercion failure",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--subject",
+      "hi",
+      "--phone-number",
+      "+1"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--phone-number' is only valid under '--via sms', but '--via email' was elected\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector precedence: a scope violation is reported before a coercion failure in its own scope",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "sms",
+      "--phone-number",
+      "+1",
+      "--retries",
+      "abc"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--retries' is only valid under '--via email', but '--via sms' was elected\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector precedence: a coercion failure is reported before a missing required flag",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--retries",
+      "abc"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --retries: expected integer, got 'abc'\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector precedence: an unknown flag beats a coercion failure on a selector-free command",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "handler_prints": "count={count}",
+          "flags": [
+            {
+              "name": "count",
+              "help": "how many",
+              "type": "int",
+              "presence": "required"
+            },
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "presence": "optional",
+              "validate": {
+                "rejects": [
+                  "bad"
+                ],
+                "message": "that name is refused"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--count",
+      "abc",
+      "--nosuch"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: unknown flag '--nosuch'\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "selector precedence: an unknown flag beats a coercion failure whatever the argv order",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "handler_prints": "count={count}",
+          "flags": [
+            {
+              "name": "count",
+              "help": "how many",
+              "type": "int",
+              "presence": "required"
+            },
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "presence": "optional",
+              "validate": {
+                "rejects": [
+                  "bad"
+                ],
+                "message": "that name is refused"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--nosuch",
+      "--count",
+      "abc"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: unknown flag '--nosuch'\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "selector precedence: an unknown flag beats a validate refusal on a selector-free command",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "handler_prints": "count={count}",
+          "flags": [
+            {
+              "name": "count",
+              "help": "how many",
+              "type": "int",
+              "presence": "required"
+            },
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "presence": "optional",
+              "validate": {
+                "rejects": [
+                  "bad"
+                ],
+                "message": "that name is refused"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--count",
+      "1",
+      "--name",
+      "bad",
+      "--nosuch"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: unknown flag '--nosuch'\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "selector precedence: within one phase, command-line order decides",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "handler_prints": "count={count}",
+          "flags": [
+            {
+              "name": "count",
+              "help": "how many",
+              "type": "int",
+              "presence": "required"
+            },
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "presence": "optional",
+              "validate": {
+                "rejects": [
+                  "bad"
+                ],
+                "message": "that name is refused"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--count",
+      "abc",
+      "--name",
+      "bad"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --count: expected integer, got 'abc'\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "selector precedence: inside the value phase, a coercion failure is reported before a validate refusal",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "handler_prints": "count={count}",
+          "flags": [
+            {
+              "name": "name",
+              "help": "a name",
+              "type": "str",
+              "presence": "optional",
+              "validate": {
+                "rejects": [
+                  "bad"
+                ],
+                "message": "that name is refused"
+              }
+            },
+            {
+              "name": "count",
+              "help": "how many",
+              "type": "int",
+              "presence": "required"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--count",
+      "abc",
+      "--name",
+      "bad"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: --count: expected integer, got 'abc'\ntry 'myapp run --help'"
+    }
+  }
+]
