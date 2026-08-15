@@ -2391,6 +2391,21 @@ function buildCommandDef<
 		}
 		seenFlagNames.add(d.name);
 	}
+	// Every token declared at ROOT, which under member spelling includes each
+	// member's own name: electing a member IS the election, so a member token
+	// opens no scope of its own and sits beside the command-level flags rather
+	// than under them (§18.19 item 223). Two of them naming one token is the
+	// plain duplicate-flag error -- the co-electable template one level down
+	// could only state it with two empty scope paths, which says nothing.
+	const seenRootTokens = new Set<string>();
+	for (const d of allDecls) {
+		for (const s of surfaceNames(d)) {
+			if (seenRootTokens.has(s.name)) {
+				throw new RegistrationError(errCommandDuplicateFlag(name, s.name));
+			}
+			seenRootTokens.add(s.name);
+		}
+	}
 	// The whole declaration TREE: root collisions, simultaneously-electable
 	// name and short reuse, and the scoped keys of every nested scope
 	// (contract §24.7).

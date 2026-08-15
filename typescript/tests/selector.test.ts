@@ -872,6 +872,149 @@ test("guard: a scoped flag may not reuse a command-level flag's name", () => {
 	);
 });
 
+test("guard: a member token colliding at root is the plain duplicate-flag error", () => {
+	// §18.19 item 223: a member's own name is a ROOT token -- electing it IS the
+	// election, so it opens no scope of its own. A collision with a command-level
+	// flag is therefore two declarations of one root name, which the pre-existing
+	// duplicate-flag error already states; the co-electable template would have
+	// to render two empty scope paths to say it.
+	rejects(
+		() =>
+			defineReadOnlyCommand("run", {
+				help: "h",
+				flags: {
+					profile: flag("profile", t.str, { help: "h", presence: "optional" }),
+					mode: memberChoiceFlag(
+						"mode",
+						{
+							profile: choice({
+								help: "one profile",
+								value: { carrier: t.str, help: "profile name" },
+							}),
+							"all-profiles": choice({ help: "every profile" }),
+						},
+						{ help: "h", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		'command "run": duplicate flag name "profile"',
+	);
+	// Declaration order does not change the diagnosis.
+	rejects(
+		() =>
+			defineReadOnlyCommand("run", {
+				help: "h",
+				flags: {
+					mode: memberChoiceFlag(
+						"mode",
+						{
+							profile: choice({
+								help: "one profile",
+								value: { carrier: t.str, help: "profile name" },
+							}),
+							"all-profiles": choice({ help: "every profile" }),
+						},
+						{ help: "h", presence: "required" },
+					),
+					profile: flag("profile", t.str, { help: "h", presence: "optional" }),
+				},
+				handler: () => 0,
+			}),
+		'command "run": duplicate flag name "profile"',
+	);
+	// Two member-spelled selectors sharing a member name are the same fact.
+	rejects(
+		() =>
+			defineReadOnlyCommand("run", {
+				help: "h",
+				flags: {
+					mode: memberChoiceFlag(
+						"mode",
+						{
+							profile: choice({
+								help: "one profile",
+								value: { carrier: t.str, help: "profile name" },
+							}),
+							"all-profiles": choice({ help: "every profile" }),
+						},
+						{ help: "h", presence: "required" },
+					),
+					other: memberChoiceFlag(
+						"other",
+						{
+							profile: choice({
+								help: "one profile",
+								value: { carrier: t.str, help: "profile name" },
+							}),
+							none: choice({ help: "none of them" }),
+						},
+						{ help: "h", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		'command "run": duplicate flag name "profile"',
+	);
+	// A member token may still carry its own selector's name: that name is never
+	// typed under member spelling, so the two never collide on the command line.
+	assert.doesNotThrow(() =>
+		defineReadOnlyCommand("run", {
+			help: "h",
+			flags: {
+				mode: memberChoiceFlag(
+					"mode",
+					{
+						mode: choice({
+							help: "the mode itself",
+							value: { carrier: t.str, help: "mode name" },
+						}),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "h", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	// A NESTED member token colliding with a root flag keeps the scoped
+	// diagnosis: it is reachable only under an election, so it really is scoped.
+	rejects(
+		() =>
+			defineReadOnlyCommand("send", {
+				help: "h",
+				flags: {
+					profile: flag("profile", t.str, { help: "h", presence: "optional" }),
+					via: choiceFlag(
+						"via",
+						{
+							email: choice({
+								help: "email",
+								flags: {
+									mode: memberChoiceFlag(
+										"mode",
+										{
+											profile: choice({
+												help: "one profile",
+												value: { carrier: t.str, help: "profile name" },
+											}),
+											"all-profiles": choice({ help: "every profile" }),
+										},
+										{ help: "h", presence: "required" },
+									),
+								},
+							}),
+							sms: choice({ help: "sms" }),
+						},
+						{ help: "h", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		'Choice "email" of "via": flag \'--profile\' collides with a command-level flag of the same name: the scoped one could never be reached',
+	);
+});
+
 test("guard: sibling scopes may reuse a name only with an identical value shape", () => {
 	// Same shape is legal: the two can never be elected together.
 	assert.doesNotThrow(() =>
