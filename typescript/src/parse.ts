@@ -504,17 +504,24 @@ function newScopedLookups(decls: readonly AnyDecl[]): ScopedLookups {
 	return { long, short, negation, empty: long.size === 0 };
 }
 
-/** Records one raw occurrence of a scoped surface name, in command-line order. */
+/**
+ * Records one raw occurrence of a scoped surface name, in command-line order.
+ * `seq` is the occurrence's position in the whole token scan -- the same
+ * counter root occurrences take -- so the value phase can report a scoped
+ * coercion failure against a root one by the order they were TYPED (§24.3,
+ * §18.27 item 257).
+ */
 function recordOccurrence(
 	occ: Occurrences,
 	name: string,
 	raw: string | undefined,
+	seq: number,
 ): void {
 	const entry: Occurrence = occ.get(name) ?? { positive: [], negated: false };
 	if (raw === undefined) {
 		entry.negated = true;
 	} else {
-		entry.positive.push(raw);
+		entry.positive.push({ raw, seq });
 	}
 	occ.set(name, entry);
 }
@@ -560,9 +567,27 @@ export function parseCommand(
 	const record = (message: string): void => {
 		problems.push({ stage: STAGE.shape, message });
 	};
-	/** One root-scope occurrence, uninterpreted: a raw token, or a bool. */
-	const rootOccs: { readonly f: AnyFlag; readonly raw: string | boolean }[] =
-		[];
+	/**
+	 * One root-scope occurrence, uninterpreted: a raw token, or a bool, plus
+	 * the position the scan gave it.
+	 */
+	const rootOccs: {
+		readonly f: AnyFlag;
+		readonly raw: string | boolean;
+		readonly seq: number;
+	}[] = [];
+	/**
+	 * The scan's own counter, shared by root and scoped occurrences: the value
+	 * phase is ONE sweep in command-line order over both (§24.3, §18.27 item
+	 * 257), so the two kinds of occurrence must be positioned on one scale.
+	 */
+	let seq = 0;
+	const pushRoot = (f: AnyFlag, raw: string | boolean): void => {
+		rootOccs.push({ f, raw, seq: seq++ });
+	};
+	const pushScoped = (name: string, raw: string | undefined): void => {
+		recordOccurrence(occ, name, raw, seq++);
+	};
 
 	let i = 0;
 	let stopFlags = false;
@@ -592,13 +617,13 @@ export function parseCommand(
 				if (f.schema === "bool") {
 					record(errBoolFlagNoValue(flagPart));
 				} else {
-					rootOccs.push({ f, raw: valuePart });
+					pushRoot(f, valuePart);
 				}
 			} else if (sc !== undefined) {
 				if (!sc.takesValue) {
 					record(errBoolFlagNoValue(flagPart));
 				} else {
-					recordOccurrence(occ, sc.name, valuePart);
+					pushScoped(sc.name, valuePart);
 				}
 			} else if (
 				lookups.negation.has(flagPart) ||
@@ -615,13 +640,13 @@ export function parseCommand(
 		// --no-flag negation
 		const negated = lookups.negation.get(tok);
 		if (negated !== undefined) {
-			rootOccs.push({ f: negated, raw: false });
+			pushRoot(negated, false);
 			i++;
 			continue;
 		}
 		const scopedNegated = scoped.negation.get(tok);
 		if (scopedNegated !== undefined) {
-			recordOccurrence(occ, scopedNegated.name, undefined);
+			pushScoped(scopedNegated.name, undefined);
 			i++;
 			continue;
 		}
@@ -641,9 +666,9 @@ export function parseCommand(
 					: (sc as ScopedTokenTarget).takesValue;
 			if (!takesValue) {
 				if (f !== undefined) {
-					rootOccs.push({ f, raw: true });
+					pushRoot(f, true);
 				} else {
-					recordOccurrence(occ, (sc as ScopedTokenTarget).name, "true");
+					pushScoped((sc as ScopedTokenTarget).name, "true");
 				}
 				i++;
 				continue;
@@ -654,13 +679,9 @@ export function parseCommand(
 				continue;
 			}
 			if (f !== undefined) {
-				rootOccs.push({ f, raw: tokens[i + 1] as string });
+				pushRoot(f, tokens[i + 1] as string);
 			} else {
-				recordOccurrence(
-					occ,
-					(sc as ScopedTokenTarget).name,
-					tokens[i + 1] as string,
-				);
+				pushScoped((sc as ScopedTokenTarget).name, tokens[i + 1] as string);
 			}
 			i += 2;
 			continue;
@@ -677,9 +698,9 @@ export function parseCommand(
 						: (sc as ScopedTokenTarget).takesValue;
 				if (!takesValue) {
 					if (f !== undefined) {
-						rootOccs.push({ f, raw: true });
+						pushRoot(f, true);
 					} else {
-						recordOccurrence(occ, (sc as ScopedTokenTarget).name, "true");
+						pushScoped((sc as ScopedTokenTarget).name, "true");
 					}
 					i++;
 					continue;
@@ -690,13 +711,9 @@ export function parseCommand(
 					continue;
 				}
 				if (f !== undefined) {
-					rootOccs.push({ f, raw: tokens[i + 1] as string });
+					pushRoot(f, tokens[i + 1] as string);
 				} else {
-					recordOccurrence(
-						occ,
-						(sc as ScopedTokenTarget).name,
-						tokens[i + 1] as string,
-					);
+					pushScoped((sc as ScopedTokenTarget).name, tokens[i + 1] as string);
 				}
 				i += 2;
 				continue;
@@ -709,11 +726,14 @@ export function parseCommand(
 		i++;
 	}
 
-	// The value pass over the root-scope occurrences, in command-line order.
-	// It runs after the whole scan, so a coercion failure can never outrank a
-	// structural verdict, and before the scopes' own value phase, so root
-	// values are reported ahead of scoped ones (contract §24.3).
-	for (const { f, raw } of rootOccs) {
+	// The value pass over the root-scope occurrences. It runs after the whole
+	// scan, so a coercion failure can never outrank a structural verdict; each
+	// failure carries the position of the token that produced it, so the value
+	// stage reports root and scoped coercions in ONE command-line order rather
+	// than root-first (contract §24.3, §18.27 item 257). Nothing here partitions
+	// the two: the scopes' own value phase runs below and its failures are
+	// positioned on the same scale.
+	for (const { f, raw, seq } of rootOccs) {
 		if (typeof raw === "boolean") {
 			cliSet.set(f.name, raw);
 			continue;
@@ -722,7 +742,7 @@ export function parseCommand(
 			parseRawFlagValue(f, raw, cliSet, tracker);
 		} catch (e) {
 			if (e instanceof ParseError) {
-				problems.push({ stage: STAGE.value, message: e.message });
+				problems.push({ stage: STAGE.value, message: e.message, seq });
 				continue;
 			}
 			throw e;

@@ -3492,3 +3492,149 @@ test("precedence: an unknown flag outranks an unknown choice on a selector", asy
 	const r = await run(app, ["send", "--via", "pigeon", "--unknown"]);
 	assert.match(r.stderr, /^error: unknown flag '--unknown'\n/);
 });
+
+// ---------------------------------------------------------------------------
+// The argv value phase's own order: COMMAND-LINE order, root and scoped alike
+// (§24.3, §18.27 item 257), with §18.20 item 226's exception intact -- every
+// coercion failure is reported before any `validate` refusal.
+//
+// The command's declaration order decides the two PROGRAMMATIC doors' sweep
+// (§18.25 item 249) and nothing on this path: a root flag's refusal does not
+// outrank a scoped one for being root, nor for being declared first.
+// ---------------------------------------------------------------------------
+
+/**
+ * A root int declared BEFORE the selector, a scoped int inside it, and a root
+ * int declared AFTER it -- so a reported refusal names which of the three
+ * orders the value phase used.
+ */
+function argvOrderApp(): AppImpl {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "test app",
+	}) as unknown as AppImpl;
+	(app as unknown as { command: (d: unknown) => void }).command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			flags: {
+				before: flag("before", t.int, {
+					help: "a root int declared before the selector",
+					presence: "optional",
+				}),
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "by email",
+							flags: {
+								subject: flag("subject", t.str, {
+									help: "subject line",
+									presence: "optional",
+									validate: (v: string) => {
+										if (v === "bad") {
+											throw new Error("subject is not allowed");
+										}
+									},
+								}),
+								retries: flag("retries", t.int, {
+									help: "delivery attempts",
+									presence: "optional",
+								}),
+							},
+						}),
+						sms: choice({ help: "by text" }),
+					},
+					{ help: "delivery channel", presence: "required" },
+				),
+				after: flag("after", t.int, {
+					help: "a root int declared after the selector",
+					presence: "optional",
+				}),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("argv value order: a scoped coercion failure typed first outranks a root one", async () => {
+	const r = await run(argvOrderApp(), [
+		"run",
+		"--via",
+		"email",
+		"--retries",
+		"nope",
+		"--before",
+		"nope",
+	]);
+	assert.match(r.stderr, /^error: --retries: expected integer, got 'nope'\n/);
+});
+
+test("argv value order: the root flag wins when its token comes first", async () => {
+	const r = await run(argvOrderApp(), [
+		"run",
+		"--via",
+		"email",
+		"--before",
+		"nope",
+		"--retries",
+		"nope",
+	]);
+	assert.match(r.stderr, /^error: --before: expected integer, got 'nope'\n/);
+});
+
+test("argv value order: a root flag declared AFTER the selector orders the same way", async () => {
+	const first = await run(argvOrderApp(), [
+		"run",
+		"--via",
+		"email",
+		"--retries",
+		"nope",
+		"--after",
+		"nope",
+	]);
+	assert.match(
+		first.stderr,
+		/^error: --retries: expected integer, got 'nope'\n/,
+	);
+	const second = await run(argvOrderApp(), [
+		"run",
+		"--via",
+		"email",
+		"--after",
+		"nope",
+		"--retries",
+		"nope",
+	]);
+	assert.match(
+		second.stderr,
+		/^error: --after: expected integer, got 'nope'\n/,
+	);
+});
+
+test("argv value order: coercion outranks validate whatever either's position", async () => {
+	// §18.20 item 226: a value is coerced as its token is consumed, and
+	// `validate` runs in a later pass -- so no argv order and no declaration
+	// order produces the refusal ahead of the coercion failure.
+	for (const argv of [
+		["run", "--via", "email", "--subject", "bad", "--retries", "nope"],
+		["run", "--via", "email", "--retries", "nope", "--subject", "bad"],
+		["run", "--via", "email", "--subject", "bad", "--before", "nope"],
+		["run", "--via", "email", "--before", "nope", "--subject", "bad"],
+	]) {
+		const r = await run(argvOrderApp(), argv);
+		assert.match(r.stderr, /^error: --(retries|before): expected integer/);
+	}
+});
+
+test("argv value order: a validate refusal alone still reports itself", async () => {
+	const r = await run(argvOrderApp(), [
+		"run",
+		"--via",
+		"email",
+		"--subject",
+		"bad",
+	]);
+	assert.match(r.stderr, /^error: --subject: subject is not allowed\n/);
+});

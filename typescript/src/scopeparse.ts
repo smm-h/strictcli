@@ -69,10 +69,23 @@ import {
 	validateChoices,
 } from "./values.js";
 
+/**
+ * One positive occurrence: the raw token text, and the position the token scan
+ * gave it. The position is what makes the VALUE phase report in command-line
+ * order across root and scoped flags alike (§24.3, §18.27 item 257) -- a scope
+ * is a position on the command line, never a group behind the root flags.
+ */
+export interface OccurrenceValue {
+	/** The raw token text, uninterpreted. */
+	readonly raw: string;
+	/** This occurrence's position in the whole token scan, root and scoped alike. */
+	readonly seq: number;
+}
+
 /** One surface name's raw occurrences, collected before anything is interpreted. */
 export interface Occurrence {
-	/** Raw values of every positive occurrence, in command-line order. */
-	readonly positive: string[];
+	/** Every positive occurrence, in command-line order. */
+	readonly positive: OccurrenceValue[];
 	/** Whether `--no-<name>` was typed (a bool declines; it elects nothing). */
 	negated: boolean;
 }
@@ -98,10 +111,24 @@ export const STAGE = {
 	presence: 4,
 } as const;
 
-/** One recorded problem: reported in stage order, then in recording order. */
+/**
+ * One recorded problem: reported in stage order, then -- within the value
+ * stage -- in command-line order, then in recording order.
+ *
+ * `seq` is the position of the token whose COERCION produced the problem, and
+ * it is set for exactly those: a value is coerced as its token is consumed, so
+ * a coercion failure is ordered by the command line (§24.3, §18.27 item 257).
+ * Everything else in the value stage -- a `choices` refusal, a `validate`
+ * refusal, an env or config coercion -- belongs to a later pass over the
+ * declarations, carries no position, and is therefore reported after every
+ * coercion failure, which is §18.20 item 226's pinned exception. The two
+ * programmatic doors set no position at all, so their declaration-ordered
+ * sweep (§18.25 item 249) is decided by recording order alone.
+ */
 export interface ParseProblem {
 	readonly stage: number;
 	readonly message: string;
+	readonly seq?: number;
 }
 
 /** The config seam this module needs (parse.ts owns loading and precedence). */
@@ -371,7 +398,7 @@ function resolveSelector(
 	};
 	const provided = new Set<string>();
 	if (chosen.value !== undefined) {
-		const raw = run.input.occ.get(election.elected)?.positive[0];
+		const raw = run.input.occ.get(election.elected)?.positive[0]?.raw;
 		if (raw !== undefined) {
 			try {
 				record[CHOICE_VALUE_KEY] = chosen.value.carrier.parse(raw);
@@ -428,7 +455,7 @@ function electByToken(sel: AnyChoiceFlag, run: Run, suffix: string): Election {
 			stage: STAGE.election,
 			message: errSelectorElectedTwice(
 				sel.name,
-				typed.map((v) => `'${v}'`).join(" and "),
+				typed.map((v) => `'${v.raw}'`).join(" and "),
 			),
 		});
 		return { elected: undefined, origin: "" };
@@ -449,7 +476,7 @@ function electByToken(sel: AnyChoiceFlag, run: Run, suffix: string): Election {
 	};
 	const first = typed[0];
 	if (first !== undefined) {
-		return named(first, "");
+		return named(first.raw, "");
 	}
 	const ambient = ambientElection(sel, run);
 	if (ambient !== undefined) {
@@ -585,13 +612,17 @@ function resolveScopedFlag(
 		if (f.schema === "bool") {
 			store.set(f.name, occ.positive.length > 0);
 		} else {
-			for (const raw of occ.positive) {
+			for (const { raw, seq } of occ.positive) {
 				try {
 					parseScopedRawValue(f, raw, store, run.input.tracker);
 				} catch (e) {
+					// The token's own position: a scoped value is coerced where its
+					// token sits on the command line, exactly as a root one is
+					// (§24.3, §18.27 item 257).
 					run.problems.push({
 						stage: STAGE.value,
 						message: (e as Error).message,
+						seq,
 					});
 					return;
 				}
@@ -886,12 +917,16 @@ function recordSkipped(
 }
 
 /**
- * The problem to report: the lowest stage, and among equals the one recorded
- * first. Undefined when the run had none.
+ * The problem to report: the lowest stage; among equals the earliest COMMAND-
+ * LINE position; among those the one recorded first. Undefined when the run had
+ * none.
  *
- * Both front doors select their refusal through this one function, which is
- * what makes §24.3's precedence a property of the phases rather than of each
- * caller's walk order.
+ * Every front door selects its refusal through this one function, which is what
+ * makes §24.3's precedence a property of the phases rather than of each caller's
+ * walk order. A problem with no position sorts after every positioned one, which
+ * is how the value stage reports every coercion failure ahead of any `validate`
+ * refusal (§18.20 item 226) and how the programmatic doors keep their
+ * declaration-ordered sweep (§18.25 item 249): they position nothing.
  */
 export function firstProblem(
 	problems: readonly ParseProblem[],
@@ -900,9 +935,18 @@ export function firstProblem(
 	for (const p of problems) {
 		if (best === undefined || p.stage < best.stage) {
 			best = p;
+			continue;
+		}
+		if (p.stage === best.stage && positionOf(p) < positionOf(best)) {
+			best = p;
 		}
 	}
 	return best;
+}
+
+/** A problem's command-line position; unpositioned problems sort last. */
+function positionOf(p: ParseProblem): number {
+	return p.seq ?? Number.POSITIVE_INFINITY;
 }
 
 /** Throws the first problem in stage order, or returns when there are none. */
