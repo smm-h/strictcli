@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// The RECORD door's own reading of an explicit nil (contract §24.11, §18.26
-// item 252).
+// The RECORD door's own reading of an explicit nil, and its own label on every
+// field it delivers (contract §24.11, §18.26 items 252, 253).
 //
 // A record has no way to omit a key the way a flat object does -- a scope class
 // cannot be constructed without naming every field -- so an explicit nil on an
@@ -15,6 +15,15 @@ import (
 // exactly as the omitted key does. The carve-out is this door's alone and stops
 // at optionality: a required or defaulted field still refuses a nil, and at the
 // flat door, where absence has its own spelling, a nil stays legal for nothing.
+//
+// Every field a caller's record supplies reports source `default`, so Provided
+// answers false for all of them: a scope class fills a declared default at
+// construction, so a field holding its declared default cannot be told from one
+// the caller wrote, and `provided` asks whether the invocation caused the value
+// rather than whether it differs from the declaration. The one exception is
+// pinned -- a RelativeToRoot default resolved at this door still reports
+// `infra` and still resolves to the path through the declared root. The pin is
+// the record door's: the flat door and the command line are untouched.
 
 const recordDoorRoot = "RECORDDOOR_ROOT"
 
@@ -222,4 +231,102 @@ func TestFlatDoorOptionalScopedFieldStillRefusesAnExplicitNil(t *testing.T) {
 	// a SECOND spelling of one fact: it stays refused.
 	_, errStr := flatDoorCall(t, map[string]interface{}{"note": nil})
 	wantRefusal(t, errStr, "--note: expected string, got null")
+}
+
+// ---------------------------------------------------------------------------
+// Item 253: every field a record supplies reports `default`
+// ---------------------------------------------------------------------------
+
+func TestRecordDoorSuppliedFieldIsNotProvided(t *testing.T) {
+	e := recordDoorDelivered(t, recordDoorEmail(Fields{"strict": true}))
+	for _, key := range []string{"retries", "note", "strict", "fmt", "checked", "cache", "speed"} {
+		if e.Provided(key) {
+			t.Fatalf("%s: the record door labels every field it delivers default", key)
+		}
+	}
+	if e.Fields["retries"] != 1 || e.Fields["strict"] != true {
+		t.Fatalf("the values themselves are unchanged: %#v", e.Fields)
+	}
+}
+
+func TestRecordDoorMemberPayloadIsNotProvided(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDoorApp(&captured)
+	kwargs := map[string]interface{}{
+		"via":  Elect(recordDoorChoice(app, "via", "email"), recordDoorEmail(Fields{})),
+		"mode": Elect(recordDoorChoice(app, "mode", "profile"), Fields{"value": "work"}),
+	}
+	if ir := app.invoke("run", kwargs); ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+	mode := GetElected(captured, "mode")
+	if mode.Fields["value"] != "work" {
+		t.Fatalf("value = %#v, want work", mode.Fields["value"])
+	}
+	if mode.Provided("value") {
+		t.Fatal("a member payload supplied in a record is a field like any other")
+	}
+}
+
+func TestRecordDoorNestedSelectionIsNotProvided(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDoorApp(&captured)
+	kwargs := map[string]interface{}{
+		"via": Elect(recordDoorChoice(app, "via", "email"), recordDoorEmail(Fields{
+			"speed": Elect(recordDoorChoice(app, "speed", "slow"), Fields{"patience": 9}),
+		})),
+		"mode": Elect(recordDoorChoice(app, "mode", "all-profiles"), Fields{}),
+	}
+	if ir := app.invoke("run", kwargs); ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+	e := GetElected(captured, "via")
+	if e.Provided("speed") {
+		t.Fatal("a nested selection a record supplies is a field of that record")
+	}
+	inner := e.Fields["speed"].(*Elected)
+	if inner.Provided("patience") {
+		t.Fatal("depth is not a door: a nested record's fields are labelled default too")
+	}
+}
+
+func TestRecordDoorResolvedMarkerKeepsItsInfraAnswer(t *testing.T) {
+	// The pinned exception: a RelativeToRoot default resolved at this door is
+	// still the resolved path, and still not provided.
+	e := recordDoorDelivered(t, recordDoorEmail(Fields{}))
+	if got := e.Fields["cache"]; got != "/var/lib/myapp/cache/e.db" {
+		t.Fatalf("cache = %#v, want the resolved path", got)
+	}
+	if e.Provided("cache") {
+		t.Fatal("an infra default is a declared default: provided must be false")
+	}
+}
+
+func TestFlatDoorScopedValueStaysProvided(t *testing.T) {
+	// The pin is the RECORD door's. The flat door keeps the answer it has.
+	captured, errStr := flatDoorCall(t, nil)
+	if errStr != "" {
+		t.Fatalf("invoke error: %s", errStr)
+	}
+	e := GetElected(captured, "via")
+	if !e.Provided("retries") {
+		t.Fatal("a value supplied at the flat door is caused by the invocation")
+	}
+	if e.Provided("cache") {
+		t.Fatal("a declared default is not provided at any door")
+	}
+}
+
+func TestCommandLineScopedValueStaysProvided(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDoorApp(&captured)
+	r := app.Test([]string{"run", "--via", "email", "--retries", "1", "--fmt", "text",
+		"--checked", "x", "--all-profiles"})
+	if r.ExitCode != 0 {
+		t.Fatalf("exit %d: %s", r.ExitCode, r.Stderr)
+	}
+	e := GetElected(captured, "via")
+	if !e.Provided("retries") {
+		t.Fatal("a typed token is the invocation causing the value")
+	}
 }

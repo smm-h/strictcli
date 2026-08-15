@@ -289,7 +289,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 						// own optional path -- the one an omitted key takes.
 						continue
 					}
-					cliByFlag[b.flag] = checked
+					cliByFlag[b.flag] = recordSupplied{value: checked}
 					continue
 				}
 				checked, errStr := checkPreTypedValue(b.flag, b.raw)
@@ -830,6 +830,18 @@ type pendingBind struct {
 	record bool
 }
 
+// recordSupplied wraps a value the RECORD door supplied, so the shared
+// resolution path can tell it from a value the flat door or the command line
+// supplied (contract §18.26 item 253).
+//
+// Every field a caller's record delivers reports source `default`, which is a
+// property of the door rather than of the value -- and the values a record
+// collects re-enter the same pipeline the argv path uses, so the door has to
+// travel with the value.
+type recordSupplied struct {
+	value interface{}
+}
+
 // collectInvokeElections converts a programmatic call's selector arguments into
 // the same election-and-value input the argv path produces (contract §24.11).
 //
@@ -858,15 +870,21 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 		}
 	}
 
-	// fromRecord says whether the object THIS level reads is a record's fields:
-	// the door a value came through decides how its declaration is read
-	// (§18.26 item 252).
+	// fromRecord says whether the object THIS level reads is a record's fields.
+	// The door a value came through decides how its declaration is read
+	// (§18.26 item 252), and an election read out of a record's fields is a
+	// FIELD of that record, so it earns the label every other field of a record
+	// earns (§18.26 item 253) -- while the top-level object, at either door, is
+	// the call's own kwargs.
 	var walk func(flags []Flag, args map[string]interface{}, fromRecord bool) string
 	walk = func(flags []Flag, args map[string]interface{}, fromRecord bool) string {
 		for i := range flags {
 			f := &flags[i]
 			if f.Type != TypeChoice {
 				continue
+			}
+			if fromRecord {
+				sup.recordElected[f] = true
 			}
 			raw, named := args[flagParamName(f.Name)]
 			if rec, isRecord := raw.(*Elected); named && isRecord {

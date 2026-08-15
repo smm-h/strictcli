@@ -65,6 +65,9 @@ type liveSel struct {
 	// memberImplied records a member flag whose value is implied by the
 	// selector's own default electing it (a payload-less bool member).
 	memberImplied bool
+	// recordField records an election supplied inside a RECORD's fields, which
+	// makes it one of that record's fields for §18.26 item 253's purposes.
+	recordField bool
 }
 
 // ambientSource is the environment/config lookup the election phase needs. It is
@@ -118,6 +121,10 @@ type suppliedElections struct {
 	// preElected short-circuits election for the programmatic front door, where
 	// the caller hands over an already-elected record.
 	preElected map[*Flag]*ChoiceDecl
+	// recordElected records the selectors whose election was read out of a
+	// RECORD's fields. Such an election is a FIELD of that record, so it earns
+	// the label every field of a record earns (§18.26 item 253).
+	recordElected map[*Flag]bool
 }
 
 func newSuppliedElections() *suppliedElections {
@@ -126,6 +133,7 @@ func newSuppliedElections() *suppliedElections {
 		memberElected: map[string]bool{},
 		suppliedNames: map[string]bool{},
 		preElected:    map[*Flag]*ChoiceDecl{},
+		recordElected: map[*Flag]bool{},
 	}
 }
 
@@ -181,7 +189,7 @@ func (st *electionState) electScope(flags []Flag, path []pathSeg, sup *suppliedE
 }
 
 func (st *electionState) electOne(sel *Flag, path []pathSeg, sup *suppliedElections, amb ambientSource) (*liveSel, string) {
-	ls := &liveSel{sel: sel, path: path}
+	ls := &liveSel{sel: sel, path: path, recordField: sup.recordElected[sel]}
 	// The programmatic front door hands over an already-elected record.
 	if ch, ok := sup.preElected[sel]; ok {
 		ls.choice = ch
@@ -580,7 +588,10 @@ func (st *electionState) resolveElected(ls *liveSel, cliByFlag map[*Flag]interfa
 				return nil, errMsg
 			}
 			fields[key] = nested
-			provided[key] = electionSource(inner.origin) != SourceDefault
+			// An election supplied inside a record is one of that record's
+			// fields, and every field a record supplies is labelled `default`
+			// (§18.26 item 253).
+			provided[key] = electionSource(inner.origin) != SourceDefault && !inner.recordField
 			continue
 		}
 
@@ -619,6 +630,18 @@ func (st *electionState) resolveElected(ls *liveSel, cliByFlag map[*Flag]interfa
 // rule, carried over with its reason intact.
 func (st *electionState) resolveScopedValue(f *Flag, isMember bool, ls *liveSel, cliByFlag map[*Flag]interface{}, amb ambientSource, infraRoots map[string]string, stdinConsumedBy **string, suffix string) (interface{}, Source, string) {
 	if v, ok := cliByFlag[f]; ok {
+		if rs, isRecord := v.(recordSupplied); isRecord {
+			// The RECORD door labels every field it delivers `default`: a scope
+			// class fills a declared default at construction, so a field holding
+			// its declared default cannot be told from one the caller wrote, and
+			// `provided` answers "did the invocation cause this value" rather
+			// than "does this value differ from the declaration" (§18.26 item
+			// 253, §23.6). The one exception -- a RelativeToRoot default
+			// resolved at this door, which reports `infra` -- needs nothing
+			// here: an unsupplied field takes applyFlagDefault's marker branch
+			// below, exactly as it does at every other door.
+			return rs.value, SourceDefault, ""
+		}
 		return v, SourceCLI, ""
 	}
 	if isMember {
