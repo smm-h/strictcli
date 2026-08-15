@@ -155,7 +155,7 @@ against the resolved command's declared flags and positional arguments. The
 parser builds three lookup tables from the command's flags (long form, short
 form, and negation form), then consumes tokens left-to-right. After CLI tokens
 are processed, the value resolution cascade applies env vars, config values, and
-defaults in that order, followed by dependency-constraint validation.
+defaults in that order, followed by constraint validation.
 
 **Parsing is phased**, and the phase order is what makes order independence, the
 distinct out-of-scope error and that error's priority over a missing required
@@ -237,14 +237,28 @@ skipped under `--hermetic`):
 
 After all values are resolved, constraint validation runs. Exactly-one selection
 is **not** among the constraints: it is a choice flag, resolved in the election
-phase above, and a dependency constraint naming a scoped flag is a
+phase above, and a constraint naming a scoped flag is a
 registration-time error -- the scope already is the constraint.
 
-- **CoRequired**: all named flags must be present together, or none.
-- **Requires**: if flag A is present, flag B must also be present.
-- **Implies**: if flag A is present, flag B is automatically set to the implied
+- **at-least-one**: at least one member is engaged. Members may co-occur; the
+  family has no upper bound and is never exclusivity.
+- **all-or-none**: either every member is engaged or none is. With nothing
+  engaged it is vacuously satisfied.
+- **requires**: if flag A is present, flag B must also be present.
+- **implies**: if flag A is present, flag B is automatically set to the implied
   value. If the user explicitly provided a contradicting value for B, it is a
   parse error.
+
+A member of the two co-occurrence families names a flag, a positional arg, or
+another named co-occurrence constraint, and carries an election selector --
+`present`, `true` or `non_empty` -- deciding when it counts as **engaged**. A
+nested constraint is engaged when at least one of its own members is: engagement
+propagates upward, satisfaction does not. **Children are evaluated before
+parents, siblings in declaration order**, so a violated nested constraint reports
+its own sentence and its parent is never evaluated. `implies` injection runs
+first, so an implied value can engage a member; defaults are applied after, so a
+declared default cannot. See
+[the constraint system](flag-system.md#constraints) for the declaration surface.
 
 Finally, choices validation runs for any flag or arg with a declared set of
 allowed values.
@@ -283,8 +297,8 @@ only under the framework-owned `--json`; `Test()` / `test()` and `Call()` /
 
 Every resolved flag value carries a source label tracking where its value came
 from. Source provenance enables intelligent constraint evaluation: a
-member-spelled election considers only the cli source, while dependency checks
-consider everything except defaults. Handlers can inspect provenance at runtime
+member-spelled election considers only the cli source, while constraint
+engagement considers everything except defaults and infra. Handlers can inspect provenance at runtime
 to alter behavior based on whether a value was explicitly provided or fell
 through to its default. The six source labels are:
 
@@ -294,7 +308,7 @@ through to its default. The six source labels are:
 | `env` | From an environment variable |
 | `config` | From a config file |
 | `default` | From the flag's declared default value -- and the label an `optional` declaration carries when nothing supplied a value |
-| `implied` | Injected by an `Implies` dependency |
+| `implied` | Injected by an `Implies` constraint |
 | `infra` | Default resolved through a `RelativeToRoot` infrastructure root |
 
 No seventh label is minted for "declared optional, received nothing": `default`
@@ -317,11 +331,13 @@ Provenance matters for constraint evaluation:
   actually carried a value is named on the debug channel (`not consulted: env
   var '<VAR>' binds flag '--<x>' under '<scope path>', which was not elected`),
   hidden by default and shown by `--verbose`.
-- **Dependency checks** (`CoRequired`, `Requires`, and the `Implies` trigger)
-  consider `cli`, `env`, `config` and `implied`, and exclude both `default` and
-  `infra`. A flag that got its value from `implied` is considered "present" for
-  dependency purposes; a flag carrying only a declared default -- including a
-  `RelativeToRoot` default with the `infra` label -- is not.
+- **Constraint engagement** (a co-occurrence member's `present` selector, the
+  `requires` predicate, and the `implies` trigger) considers `cli`, `env`,
+  `config` and `implied`, and excludes both `default` and `infra`. A flag that
+  got its value from `implied` counts as provided; a flag carrying only a
+  declared default -- including a `RelativeToRoot` default with the `infra`
+  label -- does not. The `true` and `non_empty` selectors are that same
+  predicate plus a test on the resolved value.
 
 Handlers access provenance via `ctx.Source(name)` (Go) / `ctx.source(name)`
 (Python) / `ctx.source(name)` (TypeScript). The name can be dashed
@@ -329,7 +345,7 @@ Handlers access provenance via `ctx.Source(name)` (Go) / `ctx.source(name)`
 
 For the yes/no question -- *did the invocation cause this value?* -- handlers use
 `ctx.Provided(name)` (Go) / `ctx.provided(name)` (Python and TypeScript), which
-reads the same predicate the dependency checks do, so the framework has one
+reads the same predicate constraint engagement does, so the framework has one
 definition of "was this supplied" rather than two. An unknown name behaves
 exactly as it does on `ctx.source`, with the same message.
 
@@ -410,20 +426,44 @@ Command-level validation is enforced by `buildAndValidateCommand` (Go),
 `_build_and_validate_command` (Python), and the equivalent validation in
 `app.ts` (TypeScript). These checks verify that each command is internally
 consistent: no duplicate flag names, no collisions with global flags, valid
-choice-flag and dependency declarations, and mandatory help text on every
+choice-flag and constraint declarations, and mandatory help text on every
 command.
 
 - Help text is mandatory.
 - Duplicate flag names within a command are a hard error.
 - Flags cannot collide with global flags.
-- `CoRequired` must reference at least 2 flags and all must be declared.
 - `Requires` must reference declared flags and cannot be self-referential.
 - `Implies` trigger and target must be bool flags; target must be different
   from trigger.
-- A dependency constraint may not name a scoped flag: constraints operate at
-  root scope only.
+- A constraint may not name a scoped flag: constraints operate at root scope
+  only.
 - Passthrough commands cannot have flags, args, or flag sets, so they declare
   nothing a choice flag could scope.
+
+### Constraint validation
+
+A command's constraint set is resolved in a pinned order, so a declaration with
+two faults reports the same first error in every implementation. The order runs
+from the constraint's own identity outward to the declarations it names, so a
+message never blames a member for a fault in the constraint that names it:
+
+1. **name legality** -- charset (`[a-z][a-z0-9-]*`), duplicates, and collision
+   with a root flag or arg name (a member reference resolves by name and would
+   otherwise be ambiguous);
+2. **member arity** -- at least two members. Go and TypeScript reach this state
+   only through a widened caller: their two-member floors are compile errors;
+3. **member resolution** -- each name resolves to exactly one flag, arg or
+   constraint. Unknown names refuse here, and so does a name that resolves to
+   **both** a flag and an arg;
+4. **scope** -- a resolved flag declared inside a choice scope refuses;
+5. **nesting legality** -- a nested member is an at-least-one or an all-or-none
+   (naming a `Requires` or an `Implies` refuses, "engaged" having no meaning for
+   them), carries no election selector of its own, and the reference graph is
+   acyclic;
+6. **election legality** -- the selector against the member's declared type,
+   including the mandatory-election refusal on a bool member;
+7. **presence legality** -- no member of a co-occurrence constraint may declare
+   `required`.
 
 ### Choice-flag validation
 
@@ -507,7 +547,7 @@ What v2 changed, relative to v1:
 | value-plus-help records under `choices` | the bare value list |
 | one declared key order and one byte canon | per-implementation serializer behavior |
 | the rewritten `defaults` block, plus `config_format`, `config_path`, `config_conflict_mode`, `prefixed` and `flag_sets` | a block with a phantom key and three stale baselines |
-| the `co_required` / `requires` / `implies` catalogue | the four-entry catalogue that included `mutex` |
+| the `at_least_one` / `all_or_none` / `requires` / `implies` catalogue, every entry carrying a mandatory `name` | the four-entry catalogue that included `mutex`, and the flat `co_required` flag list |
 
 ### Top-level fields
 
@@ -855,21 +895,46 @@ flag's entry is a value that may carry help.
 
 ### Constraint serialization
 
-Dependency constraints are serialized in the `constraints` array of each command.
-The catalogue is closed at three types, and there is no `mutex` entry -- exactly
-one selection is a choice flag, which is published on the flag entry itself:
+Constraints are serialized in the `constraints` array of each command, in
+declaration order. The catalogue is closed at four types, and there is no
+`mutex` entry -- exactly one selection is a choice flag, which is published on
+the flag entry itself. Every entry carries a mandatory `name`:
 
 | `type` | Keys, in order |
 |---|---|
-| `co_required` | `type`, `flags` |
-| `requires` | `type`, `flag`, `depends_on` |
-| `implies` | `type`, `flag`, `implies`, `value` |
+| `at_least_one` | `type`, `name`, `members` |
+| `all_or_none` | `type`, `name`, `members` |
+| `requires` | `type`, `name`, `flag`, `depends_on` |
+| `implies` | `type`, `name`, `flag`, `implies`, `value` |
+
+A **member object** emits its keys in the order `kind`, `name`, `when`. `kind`
+is one of `flag`, `arg`, `constraint` -- the **resolved** kind, so a consumer
+never has to search the flag and arg lists to learn what a name refers to, which
+is the same reason a flag entry publishes a `value_schema` rather than a type
+word. `when` is one of `present`, `true`, `non_empty`; it is **always** emitted
+on a `flag` or `arg` member and **never** on a `constraint` member, a nested
+member having no election of its own. Because it is never omitted it takes no
+`defaults` block entry -- that block is the map of what an omitted key means.
+
+The encoding is complete rather than indicative: a consumer reconstructs the
+rule without re-reading the declaration, so nesting is published as
+constraint-kind members rather than flattened into leaves, and a partially
+encoded constraint is not a legal intermediate state.
 
 ```json
 [
-  {"type": "co_required", "flags": ["host", "port"]},
-  {"type": "requires", "flag": "port", "depends_on": "host"},
-  {"type": "implies", "flag": "trace", "implies": "debug", "value": true}
+  {"type": "all_or_none", "name": "author-name", "members": [
+    {"kind": "flag", "name": "old-name", "when": "present"},
+    {"kind": "flag", "name": "new-name", "when": "present"}]},
+  {"type": "at_least_one", "name": "purge-selection", "members": [
+    {"kind": "arg", "name": "targets", "when": "non_empty"},
+    {"kind": "flag", "name": "older-than", "when": "present"},
+    {"kind": "flag", "name": "all", "when": "true"}]},
+  {"type": "at_least_one", "name": "author-change", "members": [
+    {"kind": "constraint", "name": "author-name"},
+    {"kind": "constraint", "name": "author-email"}]},
+  {"type": "requires", "name": "port-needs-host", "flag": "port", "depends_on": "host"},
+  {"type": "implies", "name": "trace-debugs", "flag": "trace", "implies": "debug", "value": true}
 ]
 ```
 
