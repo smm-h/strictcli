@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Differential argv fuzzer for strictcli conformance.
+"""Differential fuzzer for strictcli conformance.
 
-Generates random argv sequences and runs them against every registered
-implementation (Python, Go, TypeScript) of the same app definition, then
-compares their results N-way. A divergence is any disagreement in exit code, or
-in stdout when all implementations exit 0; the odd-one-out is identified by
-majority. Divergences are recorded and minimized.
+Generates random argv sequences -- and, for the constraint family, the
+declaration they run against -- then runs each pair against every registered
+implementation (Python, Go, TypeScript) and compares their results N-way. A
+divergence is any disagreement in exit code, or in stdout when all
+implementations exit 0; the odd-one-out is identified by majority. Divergences
+are recorded and minimized.
 
 Execution reuses run.py's target machinery: the Python reference script is
 generated via ref_python codegen, while Go and TypeScript run through the same
@@ -21,11 +22,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 import subprocess
 import sys
 import time
+from typing import Callable
 
 # Reuse run.py's target descriptors, harness builds, and N-way divergence
 # reporting rather than duplicating any of it here.
@@ -138,10 +141,147 @@ COMPLEX_APP: dict = {
     ],
 }
 
-APP_DEFS: list[tuple[str, dict]] = [
-    ("simple", SIMPLE_APP),
-    ("complex", COMPLEX_APP),
-]
+# ---------------------------------------------------------------------------
+# The constraint app is GENERATED per iteration (contract §26)
+# ---------------------------------------------------------------------------
+#
+# The two fixed apps above are hand-written; the constraint family is not,
+# because what has to be fuzzed is the interaction between a random declaration
+# and a random invocation: which members a constraint names, which election
+# selector each one declares, whether a nested constraint sits between them, and
+# which of them the argv engages. A fixed app would fuzz only the second half.
+#
+# The generator obeys the same FILTERED-STATE discipline generate_pairwise.py
+# states for its own axes: it never emits a declaration that registration
+# refuses, so every divergence this family reports is a parse-time or
+# rendering-time disagreement rather than three implementations agreeing that a
+# declaration is illegal. What is filtered, and the rule that filters it:
+#
+#   - no member declares `required` (§26.5 refuses one in both families);
+#   - a bool member always declares its election, `true` or `present` (§26.3's
+#     mandatory-election refusal);
+#   - `true` is emitted only on a bool and `non_empty` only on a sized value --
+#     str, list, dict and the variadic arg (§26.3's two type refusals);
+#   - a nested member names an EARLIER constraint only, so the reference graph
+#     is acyclic by construction (§26.2), and it carries no election of its own;
+#   - every member of one constraint is a distinct name (errConstraintMemberDuplicate);
+#   - a token-spelled selector member declares a choice default rather than
+#     requiredness, since a choice flag may not declare optional (§23) and a
+#     required member is refused;
+#   - constraint names are `c<i>` and flag names `f<i>`, so a name never
+#     collides with a flag or arg name (§26.8's step 1).
+
+_CONSTRAINT_FLAG_TYPES = ["str", "bool", "int", "float", "list[str]", "dict[str,str]"]
+
+_CONSTRAINT_DEFAULTS: dict = {
+    "str": "dflt",
+    "bool": False,
+    "int": 7,
+    "float": 1.5,
+    "list[str]": ["dflt"],
+    "dict[str,str]": {"k": "v"},
+}
+
+
+def _legal_whens(type_word: str, variadic: bool = False) -> list[str | None]:
+    """The election selectors §26.3 allows on a member of this declared type.
+
+    `None` means the member omits `when` entirely, which is the `present`
+    default and a declaration state of its own. A bool never gets it: omitting
+    the election on a bool is a registration error, because `present` there
+    would let `--no-x` engage a constraint while selecting nothing.
+    """
+    if variadic:
+        # A variadic arg is SIZED whatever its element type, so `non_empty` is
+        # legal on it and equal to `present` (§26.3's pinned box).
+        return [None, "present", "non_empty"]
+    if type_word == "bool":
+        return ["true", "present"]
+    if type_word in ("int", "float"):
+        return [None, "present"]
+    return [None, "present", "non_empty"]
+
+
+def _gen_constraint_app(rng: random.Random) -> dict:
+    """Generate one app whose command declares a random legal constraint set."""
+    flags: list[dict] = []
+    # (member name, the elections legal on it)
+    pool: list[tuple[str, list[str | None]]] = []
+
+    for i in range(rng.randint(2, 4)):
+        type_word = rng.choice(_CONSTRAINT_FLAG_TYPES)
+        name = f"f{i}"
+        flag = {"name": name, "type": type_word, "help": f"flag {i}"}
+        if rng.random() < 0.5:
+            flag["presence"] = "optional"
+        else:
+            flag["presence"] = "default"
+            flag["default"] = _CONSTRAINT_DEFAULTS[type_word]
+        flags.append(flag)
+        pool.append((name, _legal_whens(type_word)))
+
+    args: list[dict] = []
+    if rng.random() < 0.5:
+        args.append({
+            "name": "targets",
+            "help": "the targets",
+            "presence": "optional",
+            "variadic": True,
+        })
+        pool.append(("targets", _legal_whens("str", variadic=True)))
+
+    if rng.random() < 0.35:
+        # A token-spelled selector is an ordinary root-scope flag here, and
+        # `present` is the only election legal on it -- its value is a record,
+        # so `true` and `non_empty` have nothing to test (§26.2).
+        flags.append({
+            "name": "via",
+            "help": "delivery channel",
+            "presence": "default",
+            "default": {"choice": "email"},
+            "elect_by": "selector-token",
+            "choices": [
+                {"name": "email", "help": "as email"},
+                {"name": "sms", "help": "as sms"},
+            ],
+        })
+        pool.append(("via", [None, "present"]))
+
+    constraints: list[dict] = []
+    for ci in range(rng.randint(1, 2)):
+        count = rng.randint(2, min(3, len(pool)))
+        members = []
+        for name, whens in rng.sample(pool, count):
+            when = rng.choice(whens)
+            members.append({"name": name} if when is None else {"name": name, "when": when})
+        if constraints and rng.random() < 0.5:
+            # A nested member is engaged when its own members are, and declares
+            # no election of its own.
+            members.append({"name": rng.choice([c["name"] for c in constraints])})
+        constraints.append({
+            "type": rng.choice(["at_least_one", "all_or_none"]),
+            "name": f"c{ci}",
+            "members": members,
+        })
+
+    printed = [f["name"] for f in flags] + [a["name"] for a in args]
+    command = {
+        "name": "run",
+        "help": "run something",
+        "effect": "read_only",
+        "flags": flags,
+        "constraints": constraints,
+        "handler_prints": " ".join(f"{n}={{{n}}}" for n in printed),
+    }
+    if args:
+        command["args"] = args
+
+    return {
+        "name": "fuzzapp",
+        "version": "3.0.0",
+        "help": "a generated app for constraint fuzzing",
+        "commands": [command],
+    }
 
 # ---------------------------------------------------------------------------
 # Execution (through run.py's runtime-harness target machinery)
@@ -411,6 +551,100 @@ def _gen_argv_complex(rng: random.Random) -> list[str]:
     return tokens
 
 
+def _supply_tokens(rng: random.Random, flag: dict) -> list[str]:
+    """Argv tokens that supply one generated flag, sometimes ill-formed."""
+    name = flag["name"]
+    type_word = flag.get("type")
+    if flag.get("elect_by"):
+        return ["--via", rng.choice(["email", "sms", "carrier-pigeon"])]
+    if type_word == "bool":
+        return [rng.choice([f"--{name}", f"--no-{name}"])]
+    if type_word == "list[str]":
+        return [tok for v in rng.sample(["a", "b", "c"], rng.randint(1, 3))
+                for tok in (f"--{name}", v)]
+    if type_word == "dict[str,str]":
+        return [f"--{name}", rng.choice(["k=v", "k=", "novalue"])]
+    if type_word == "int":
+        return [f"--{name}", rng.choice(["3", "0", "-1", "abc", ""])]
+    if type_word == "float":
+        return [f"--{name}", rng.choice(["1.5", "0", "nan", "abc", ""])]
+    value = rng.choice(["x", "", "a b", "--looks-like-a-flag"])
+    return [f"--{name}={value}"] if rng.random() < 0.3 else [f"--{name}", value]
+
+
+def _gen_argv_constraints(rng: random.Random, app_def: dict) -> list[str]:
+    """Generate a random argv for a generated constraint app."""
+    command = app_def["commands"][0]
+    flags = command["flags"]
+    has_args = bool(command.get("args"))
+
+    strategy = rng.choice([
+        "engage_none", "engage_some", "engage_all", "decline_bools",
+        "garbage", "help_interspersed", "double_dash",
+    ])
+
+    if strategy == "engage_none":
+        return ["run"]
+
+    if strategy == "help_interspersed":
+        tokens = ["run"]
+        for flag in flags:
+            if rng.random() < 0.4:
+                tokens.extend(_supply_tokens(rng, flag))
+        tokens.insert(rng.randint(0, len(tokens)), rng.choice(["--help", "-h"]))
+        return tokens
+
+    if strategy == "garbage":
+        return ["run"] + [rng.choice(_GARBAGE) for _ in range(rng.randint(1, 4))]
+
+    tokens = ["run"]
+    for flag in flags:
+        if strategy == "engage_all":
+            supply = True
+        elif strategy == "decline_bools":
+            supply = flag.get("type") == "bool" or rng.random() < 0.3
+        else:
+            supply = rng.random() < 0.5
+        if not supply:
+            continue
+        if strategy == "decline_bools" and flag.get("type") == "bool":
+            tokens.append(f"--no-{flag['name']}")
+        else:
+            tokens.extend(_supply_tokens(rng, flag))
+
+    if has_args and (strategy == "engage_all" or rng.random() < 0.5):
+        tokens.extend(rng.sample(["one", "two", "three"], rng.randint(1, 3)))
+
+    if strategy == "double_dash":
+        tokens.append("--")
+        tokens.extend(rng.choice([[], ["extra"], ["--f0", "pos"]]))
+
+    return tokens
+
+
+def _case_simple(rng: random.Random) -> tuple[dict, list[str]]:
+    return SIMPLE_APP, _gen_argv_simple(rng)
+
+
+def _case_complex(rng: random.Random) -> tuple[dict, list[str]]:
+    return COMPLEX_APP, _gen_argv_complex(rng)
+
+
+def _case_constraints(rng: random.Random) -> tuple[dict, list[str]]:
+    app_def = _gen_constraint_app(rng)
+    return app_def, _gen_argv_constraints(rng, app_def)
+
+
+# One entry per fuzzed family: the label, and the factory producing this
+# iteration's (app definition, argv) pair. The first two families reuse a fixed
+# app; the constraint family generates its declaration too.
+FAMILIES: list[tuple[str, Callable[[random.Random], tuple[dict, list[str]]]]] = [
+    ("simple", _case_simple),
+    ("complex", _case_complex),
+    ("constraints", _case_constraints),
+]
+
+
 # ---------------------------------------------------------------------------
 # Minimization
 # ---------------------------------------------------------------------------
@@ -448,7 +682,7 @@ def fuzz(iterations: int, seed: int | None) -> list[dict]:
     if seed is None:
         seed = int(time.time() * 1000) % (2**32)
     print(f"Seed: {seed}")
-    print(f"Iterations: {iterations} ({iterations} per app definition)")
+    print(f"Iterations: {iterations} ({iterations} per fuzzed family)")
 
     rng = random.Random(seed)
 
@@ -463,18 +697,13 @@ def fuzz(iterations: int, seed: int | None) -> list[dict]:
     print()
 
     divergences: list[dict] = []
-    generators = {
-        "simple": _gen_argv_simple,
-        "complex": _gen_argv_complex,
-    }
 
     total = 0
-    for label, app_def in APP_DEFS:
-        gen = generators[label]
+    for label, factory in FAMILIES:
         print(f"--- Fuzzing '{label}' app ({iterations} iterations) ---")
 
         for i in range(1, iterations + 1):
-            argv = gen(rng)
+            app_def, argv = factory(rng)
             results = {t: _run(t, app_def, argv) for t in target_names}
 
             desc = _check_divergence(results)
@@ -489,6 +718,7 @@ def fuzz(iterations: int, seed: int | None) -> list[dict]:
                     "app": label,
                     "seed": seed,
                     "iteration": i,
+                    "app_def": app_def,
                     "original_argv": argv,
                     "minimal_argv": minimal,
                     "description": min_desc,
@@ -515,7 +745,10 @@ def fuzz(iterations: int, seed: int | None) -> list[dict]:
         seen: set[str] = set()
         unique: list[dict] = []
         for d in divergences:
-            key = f"{d['app']}:{d['minimal_argv']}"
+            # The app definition is part of the key: the constraint family
+            # generates one per iteration, so two records may share an argv and
+            # disagree about a different declaration.
+            key = f"{d['app']}:{json.dumps(d['app_def'], sort_keys=True)}:{d['minimal_argv']}"
             if key not in seen:
                 seen.add(key)
                 unique.append(d)
@@ -524,6 +757,7 @@ def fuzz(iterations: int, seed: int | None) -> list[dict]:
         print()
         for j, d in enumerate(unique, 1):
             print(f"Reproducer {j} ({d['app']} app):")
+            print(f"  app: {json.dumps(d['app_def'])}")
             print(f"  argv: {d['minimal_argv']}")
             for line in d["description"].splitlines():
                 print(f"  {line}")
@@ -547,7 +781,7 @@ def main() -> None:
         "--iterations",
         type=int,
         required=True,
-        help="Number of random inputs per app definition",
+        help="Number of random inputs per fuzzed family",
     )
     parser.add_argument(
         "--seed",
