@@ -22,10 +22,11 @@ import {
 } from "../../typescript/dist/errors.js";
 import { formatFloatCanonical } from "../../typescript/dist/float.js";
 import {
+	allOrNone,
 	arg,
+	atLeastOne,
 	choice,
 	choiceFlag,
-	coRequired,
 	createApp,
 	defineMutatingCommand,
 	defineReadOnlyCommand,
@@ -568,18 +569,47 @@ function buildArg(ad) {
 }
 
 // ---------------------------------------------------------------------------
-// Dependencies
+// Constraints (contract §26)
 // ---------------------------------------------------------------------------
-function buildDependency(dd) {
-	switch (dd.type) {
-		case "co_required":
-			return coRequired(dd.flags);
+
+/**
+ * Members are passed through as the plain `{name, when?}` records the TS
+ * declaration surface takes. A case may declare fewer than two of them: the
+ * two-member floor is a COMPILE-time rule here (`readonly [M, M, ...M[]]`),
+ * and this harness is plain JS, so it is exactly the widened caller
+ * errConstraintMinMembers stays reachable through (§26.6).
+ */
+function buildConstraintMembers(cd) {
+	return cd.members.map((m) =>
+		typeof m === "string"
+			? m
+			: "when" in m
+				? { name: m.name, when: m.when }
+				: { name: m.name },
+	);
+}
+
+function buildConstraint(cd) {
+	switch (cd.type) {
+		case "at_least_one":
+			return atLeastOne({ name: cd.name, members: buildConstraintMembers(cd) });
+		case "all_or_none":
+			return allOrNone({ name: cd.name, members: buildConstraintMembers(cd) });
 		case "requires":
-			return requires({ flag: dd.flag, dependsOn: dd.depends_on });
+			return requires({
+				name: cd.name,
+				flag: cd.flag,
+				dependsOn: cd.depends_on,
+			});
 		case "implies":
-			return implies({ flag: dd.flag, implies: dd.implies, value: dd.value });
+			return implies({
+				name: cd.name,
+				flag: cd.flag,
+				implies: cd.implies,
+				value: cd.value,
+			});
 		default:
-			throw new Error(`unknown dependency type: ${dd.type}`);
+			throw new Error(`unknown constraint type: ${cd.type}`);
 	}
 }
 
@@ -1004,8 +1034,8 @@ function registerCommand(cmdDef, target, globalFlags) {
 			),
 		);
 	}
-	if ("dependencies" in cmdDef) {
-		spec.dependencies = cmdDef.dependencies.map(buildDependency);
+	if ("constraints" in cmdDef) {
+		spec.constraints = cmdDef.constraints.map(buildConstraint);
 	}
 	if ("tags" in cmdDef) {
 		spec.tags = cmdDef.tags;
