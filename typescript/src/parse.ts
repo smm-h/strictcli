@@ -14,14 +14,17 @@
 
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import { newStdinTracker, type StdinTracker } from "./atprefix.js";
+import { coerceConfigScalarLong, widenJsonIntegers } from "./config.js";
 import type { ReservedFlags } from "./context.js";
 import { resolveEnvValue } from "./env.js";
 import {
+	errArgumentWrapped,
 	errBoolFlagNoValue,
 	errBoolNegationNoValue,
 	errConfigValueDuplicate,
 	errConfigValueError,
 	errDryRunNotSupported,
+	errFlagRequired,
 	errFlagRequiresFlag,
 	errFlagRequiresValue,
 	errFlagSetInBothAndConfig,
@@ -47,6 +50,7 @@ import {
 	elemSchemaOf,
 	flagOpts,
 	flagParamName,
+	requiredFlagForm,
 	type ScopeIndexEntry,
 	schemaKind,
 } from "./factories.js";
@@ -211,7 +215,7 @@ interface FlagLookups {
 }
 
 function isNegatableBool(f: AnyFlag): boolean {
-	return f.schema === "bool" && flagOpts(f).negatable !== false;
+	return requiredFlagForm(f) === "negatable-bool";
 }
 
 function addToLookups(lookups: FlagLookups, flags: readonly AnyFlag[]): void {
@@ -420,18 +424,11 @@ export function applyFlagDefault(
 		}
 		return { value: dflt, source: "default" };
 	}
-	// Inline message templates, mirroring the siblings' inline fmt/f-strings.
-	if (f.schema === "bool" && isNegatableBool(f)) {
-		throw new ParseError(
-			`${prefix}flag '--${f.name}' must be passed as --${f.name} or --no-${f.name}`,
-		);
-	}
-	if (f.schema === "bool") {
-		throw new ParseError(
-			`${prefix}flag '--${f.name}' must be passed as --${f.name}`,
-		);
-	}
-	throw new ParseError(`${prefix}flag '--${f.name}' is required`);
+	// The one required-flag sentence, rendered from the declaration. The scoped
+	// sites append their suffix to this same sentence (§12.13).
+	throw new ParseError(
+		`${prefix}${errFlagRequired(f.name, requiredFlagForm(f))}`,
+	);
 }
 
 // --- Command parsing ---
@@ -801,12 +798,51 @@ export function parseCommand(
 		cmd,
 		def.args,
 		store,
-		positionals,
+		{ kind: "tokens", values: positionals },
 		globalFlagNames,
 		infraRoots,
 		[...scopeResult.records.keys()],
 		scopeResult.skippedBindings,
 	);
+}
+
+/**
+ * The positional values reaching the pipeline, and how they were produced
+ * (contract §24.11). `tokens` are argv strings the parser must READ; a
+ * `pre-typed` value comes from a programmatic front door already of the
+ * declared type and is CHECKED against the declaration instead. The caller
+ * says which it has -- the pipeline never guesses from the value's runtime
+ * type, because "already a string" is exactly what a str declaration expects
+ * and what an int declaration must refuse.
+ */
+export type Positionals =
+	| { readonly kind: "tokens"; readonly values: readonly string[] }
+	| { readonly kind: "pre-typed"; readonly values: readonly unknown[] };
+
+/**
+ * One positional value becomes the type its arg declares. A token is parsed;
+ * a pre-typed value is checked, with the arg's own "argument '<name>':"
+ * prefix over the sentences the config reader uses (§24.11, §23.4).
+ *
+ * *Pre-typed* means ALREADY OF THE DECLARED TYPE, never exempt from the
+ * declaration: an arg is a declaration exactly as a flag is, so a value
+ * supplied for one is checked exactly as a flag's is, and nothing is
+ * stringified on the way in.
+ */
+function coercePositional(
+	a: AnyArg,
+	raw: unknown,
+	kind: Positionals["kind"],
+): unknown {
+	const schema = elemSchemaOf(a.carrier);
+	if (kind === "tokens") {
+		return coerceArgValue(a.name, raw as string, schema);
+	}
+	try {
+		return coerceConfigScalarLong(widenJsonIntegers(raw), schema);
+	} catch (e) {
+		throw new ParseError(errArgumentWrapped(a.name, (e as Error).message));
+	}
 }
 
 /**
@@ -819,7 +855,7 @@ export function validateAndBuildKwargs(
 	cmd: RegisteredCommand,
 	args: readonly AnyArg[],
 	store: SourcedStore,
-	positionals: readonly string[],
+	positionals: Positionals,
 	globalFlagNames: ReadonlySet<string>,
 	infraRoots: ReadonlyMap<string, string>,
 	selectorNames: readonly string[] = [],
@@ -932,19 +968,16 @@ export function validateAndBuildKwargs(
 
 	// Positional args
 	const argValues = new Map<string, unknown>();
+	const supplied = positionals.values;
 	const lastArg =
 		args.length > 0 ? (args[args.length - 1] as AnyArg) : undefined;
 	const hasVariadic = lastArg?.opts.variadic === true;
 	const fixedArgs = hasVariadic ? args.slice(0, -1) : args;
 	fixedArgs.forEach((a, idx) => {
-		if (idx < positionals.length) {
+		if (idx < supplied.length) {
 			argValues.set(
 				a.name,
-				coerceArgValue(
-					a.name,
-					positionals[idx] as string,
-					elemSchemaOf(a.carrier),
-				),
+				coercePositional(a, supplied[idx], positionals.kind),
 			);
 		} else if (a.opts.presence === "required") {
 			throw new ParseError(errMissingRequiredArgument(a.name));
@@ -957,20 +990,16 @@ export function validateAndBuildKwargs(
 		}
 	});
 	if (hasVariadic && lastArg !== undefined) {
-		const remaining = positionals.slice(fixedArgs.length);
+		const remaining = supplied.slice(fixedArgs.length);
 		if (lastArg.opts.presence === "required" && remaining.length === 0) {
 			throw new ParseError(errMissingRequiredArgument(lastArg.name));
 		}
 		argValues.set(
 			lastArg.name,
-			remaining.map((p) =>
-				coerceArgValue(lastArg.name, p, elemSchemaOf(lastArg.carrier)),
-			),
+			remaining.map((p) => coercePositional(lastArg, p, positionals.kind)),
 		);
-	} else if (positionals.length > args.length) {
-		throw new ParseError(
-			errUnexpectedArgument(positionals[args.length] as string),
-		);
+	} else if (supplied.length > args.length) {
+		throw new ParseError(errUnexpectedArgument(String(supplied[args.length])));
 	}
 
 	// Arg choices (after type coercion)

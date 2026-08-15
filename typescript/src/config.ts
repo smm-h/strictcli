@@ -63,14 +63,16 @@ import {
 	elemSchemaOf,
 	flag,
 	flagOpts,
+	flagParamName,
 	type Presence,
 	pyRepr,
 	schemaKind,
 } from "./factories.js";
 import { formatFloatCanonical } from "./float.js";
 import { expandTilde, isInfraRootPath } from "./infra.js";
+// Type-only, deliberately: parse.ts reads this module's pre-typed value check,
+// so a runtime import back the other way would close a cycle.
 import type { ConfigLoadResult, ConfigProvider } from "./parse.js";
-import { flagParamName } from "./parse.js";
 import {
 	deepEqualTrees,
 	parseTomlConfig,
@@ -530,8 +532,15 @@ export function configTypename(v: unknown): string {
  * Coerces one config value to a scalar schema with the long type-name
  * vocabulary ("expected boolean/integer/string/float"), the flag coercion
  * path. Throws a plain Error with the bare message.
+ *
+ * Exported because a pre-typed value handed to a programmatic front door poses
+ * the identical question -- does this value satisfy the declared type
+ * (§24.11)? -- and parse.ts asks it of every supplied positional.
  */
-function coerceConfigScalarLong(value: unknown, schema: ScalarSchema): unknown {
+export function coerceConfigScalarLong(
+	value: unknown,
+	schema: ScalarSchema,
+): unknown {
 	switch (schema) {
 		case "bool":
 			if (typeof value === "boolean") {
@@ -559,6 +568,30 @@ function coerceConfigScalarLong(value: unknown, schema: ScalarSchema): unknown {
 			}
 			throw new Error(errConfigExpectedStringGot(configTypename(value)));
 	}
+}
+
+/**
+ * JSON has no bigint, so an integer arriving over the machine boundary is a
+ * `number` where every other layer of this implementation carries one as a
+ * `bigint` -- this module's own JSON parser turns an integer token into a
+ * bigint before any value is checked. This is that same normalization for the
+ * values a caller hands in directly, and it runs whatever the declaration
+ * says: it decides what the value IS, which is what a refusal must name, and
+ * only then does the declaration decide whether that is acceptable. A
+ * fractional number, a string and a null are all left exactly as they are.
+ */
+export function widenJsonIntegers(value: unknown): unknown {
+	const widen = (v: unknown): unknown =>
+		typeof v === "number" && Number.isInteger(v) ? BigInt(v) : v;
+	if (Array.isArray(value)) {
+		return value.map(widen);
+	}
+	if (isRecord(value)) {
+		return Object.fromEntries(
+			Object.entries(value).map(([k, v]) => [k, widen(v)]),
+		);
+	}
+	return widen(value);
 }
 
 /**
