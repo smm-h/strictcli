@@ -901,6 +901,27 @@ test("constraint: the two-member floor is a compile error, and a widened caller 
 	);
 });
 
+test("constraint: the record-shape sweep is set-wide and precedes the arity count", () => {
+	// §26.8's pinned order (item 293, as corrected by item 299): the
+	// member-record-shape checks run as a SET-WIDE step between steps 1 and 2,
+	// so a bare-string member in a LATER constraint refuses ahead of an
+	// EARLIER constraint's arity fault -- the framework has not agreed to read
+	// entries whose shape it has not yet accepted.
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					allOrNone(loose({ name: "one", members: [{ name: "a" }] })),
+					allOrNone(loose({ name: "two", members: ["a", { name: "b" }] })),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "two" member 0 is a bare name: declare it as { name: "<x>" }',
+	);
+});
+
 test("constraint: member resolution -- unknown, ambiguous, duplicate", () => {
 	rejects(
 		() =>

@@ -2217,9 +2217,10 @@ interface ConstraintSetInput {
 
 /**
  * Resolves and validates a command's constraint set in §26.8's pinned order:
- * name legality, member arity, member resolution, scope, nesting legality,
- * election legality, presence legality -- then, as a TRAILING phase after all
- * seven, the two dependency families' own legacy operand guards.
+ * name legality, the member-record-shape sweep (a set-wide step between steps 1
+ * and 2), member arity, member resolution, scope, nesting legality, election
+ * legality, presence legality -- then, as a TRAILING phase after all seven, the
+ * two dependency families' own legacy operand guards.
  *
  * The order runs from the constraint's own identity outward to the
  * declarations it names, so a message never blames a member for a fault in
@@ -2250,9 +2251,29 @@ function validateConstraintSet(input: ConstraintSetInput): void {
 		byName.set(c.name, c);
 	}
 
-	// 2. Member arity, and the member RECORD shape. A bare string is refused
-	// for §24.2's reason: a spelling that lets one member carry an election
-	// and another not carry the word for it is two spellings for one fact.
+	// Member RECORD shape -- a SET-WIDE step between steps 1 and 2. A bare name
+	// is a fault in how a member is WRITTEN rather than in what it names, so it
+	// is refused across the whole set before any constraint's members are
+	// counted or resolved: a member that is not a record has no name to resolve
+	// and no arity question worth asking, and the count would otherwise report a
+	// number over entries the framework has not yet agreed to read. The refusal
+	// itself is §24.2's: a spelling that lets one member carry an election and
+	// another not carry the word for it is two spellings for one fact.
+	for (const c of constraints) {
+		if (!isCoOccurrence(c)) {
+			continue;
+		}
+		c.members.forEach((m, i) => {
+			if (typeof m !== "object" || m === null || typeof m.name !== "string") {
+				throw new RegistrationError(
+					errConstraintMemberNotRecord(cn, c.name, i),
+				);
+			}
+		});
+	}
+
+	// 2. Member arity -- at least two members. Every member is a record by now:
+	// the shape step above ran over the whole set.
 	for (const c of constraints) {
 		if (!isCoOccurrence(c)) {
 			continue;
@@ -2262,13 +2283,6 @@ function validateConstraintSet(input: ConstraintSetInput): void {
 				errConstraintMinMembers(cn, c.name, c.members.length),
 			);
 		}
-		c.members.forEach((m, i) => {
-			if (typeof m !== "object" || m === null || typeof m.name !== "string") {
-				throw new RegistrationError(
-					errConstraintMemberNotRecord(cn, c.name, i),
-				);
-			}
-		});
 	}
 
 	// 3. Member resolution. A SCOPED name resolves here and is refused at step
