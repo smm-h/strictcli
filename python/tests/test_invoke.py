@@ -544,7 +544,7 @@ class TestInvokeSelectors:
 class TestInvokeDependencies:
     """_invoke enforces the co-occurrence families and Requires (§26)."""
 
-    def test_co_required_violation(self):
+    def test_all_or_none_violation(self):
         app = _build_app()
 
         @app.command(

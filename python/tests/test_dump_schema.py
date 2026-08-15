@@ -835,7 +835,8 @@ class TestSchemaVersion:
 
 
 class TestSchemaConstraints:
-    """Schema serializes command constraints (mutex, co_required, requires, implies)."""
+    """Schema serializes command constraints (§25.7's four `type` values:
+    at_least_one, all_or_none, requires, implies)."""
 
     def test_no_constraints_omitted(self, tmp_path, monkeypatch):
         """Commands without constraints omit the constraints field."""

@@ -116,9 +116,9 @@ func (s *sourcedStore) delete(name string) {
 // the declaration deciding rather than the invocation. Context.Provided
 // answers the same question off the same set of source labels.
 //
-// It drives the dependency checks (CoRequired, Requires, the Implies
-// trigger) and the custom-validator step, which runs on a supplied value
-// only (contract §23.5's validate row).
+// It drives constraint evaluation -- a member's `present` election, the
+// Requires operands and the Implies trigger (§26) -- and the custom-validator
+// step, which runs on a supplied value only (contract §23.5's validate row).
 func (s *sourcedStore) isPresentForDeps(name string) bool {
 	e, ok := s.entries[name]
 	if !ok {
