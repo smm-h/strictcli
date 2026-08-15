@@ -1059,6 +1059,215 @@ test("constraint: election legality -- the bool refusal and the two type guards"
 			}),
 		'command "cmd": constraint "sel" member \'--n\' declares when: "non_empty", which needs a string or a collection; \'--n\' is a int',
 	);
+	// A scalar bool ARG reaches the same refusal, and renders BARE (§12.15's
+	// member rule is all four member-naming guards').
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { b: optStrFlag("b") },
+				args: [arg("force-it", t.bool, { help: "h", presence: "optional" })],
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "force-it" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'force-it\' is a bool and must declare its election: when: "true" counts only a true value, when: "present" counts any',
+	);
+});
+
+test("constraint: `<t>` is the framework's own closed vocabulary", () => {
+	// §12.15's pinned set: the four scalar words, the collection spellings
+	// `list[<elem>]` and `dict[<value>]` formed from them, and `choice flag`.
+	// A dict renders its VALUE type in ONE argument -- the key type is `str`
+	// by construction, so the carrier's `dict[str,<v>]` spelling is a carrier
+	// spelling and never reaches a message.
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: {
+					labels: flag("labels", t.dict(t.int), {
+						help: "h",
+						presence: "optional",
+					}),
+					b: optStrFlag("b"),
+				},
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "labels", when: "true" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'--labels\' declares when: "true", which needs a bool; \'--labels\' is a dict[int]',
+	);
+	// A repeatable flag holds a sequence, so it renders its COLLECTION
+	// spelling: the word names the value the selector would be evaluated
+	// against.
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: {
+					tags: flag("tags", t.list(t.str), {
+						help: "h",
+						presence: "optional",
+						repeatable: true,
+					}),
+					b: optStrFlag("b"),
+				},
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "tags", when: "true" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'--tags\' declares when: "true", which needs a bool; \'--tags\' is a list[str]',
+	);
+	// A variadic arg is the same fact on the arg side, and it renders BARE in
+	// both positions of the sentence (§12.15's member rule, all four guards).
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { b: optStrFlag("b") },
+				args: [
+					arg("targets", t.str, {
+						help: "h",
+						variadic: true,
+						presence: "optional",
+					}),
+				],
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "targets", when: "true" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'targets\' declares when: "true", which needs a bool; \'targets\' is a list[str]',
+	);
+	// `list[bool]` is the one shape that reaches the word: a variadic bool arg,
+	// which classifies as SIZED and never as bool (§26.3), so `true` is what
+	// the sentence refuses rather than what it demands.
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { b: optStrFlag("b") },
+				args: [
+					arg("flags", t.bool, {
+						help: "h",
+						variadic: true,
+						presence: "optional",
+					}),
+				],
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "flags", when: "true" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'flags\' declares when: "true", which needs a bool; \'flags\' is a list[bool]',
+	);
+	// A non-variadic arg keeps its scalar word.
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { b: optStrFlag("b") },
+				args: [arg("count", t.int, { help: "h", presence: "optional" })],
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "count", when: "non_empty" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'count\' declares when: "non_empty", which needs a string or a collection; \'count\' is a int',
+	);
+	// A token-spelled selector names its CONSTRUCT: its value is a record
+	// neither `true` nor `non_empty` can test.
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: {
+					via: choiceFlag(
+						"via",
+						{ email: choice({ help: "email" }), sms: choice({ help: "sms" }) },
+						{ help: "h", presence: "required" },
+					),
+					b: optStrFlag("b"),
+				},
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "via", when: "true" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'--via\' declares when: "true", which needs a bool; \'--via\' is a choice flag',
+	);
+});
+
+test("constraint: a variadic bool arg is sized, so it declares no election", () => {
+	// §26.3's mandatory-election refusal has no referent on a variadic arg:
+	// its value is a sequence whatever its element type, it has no `--no-`
+	// spelling, and no way to be provided while selecting nothing.
+	assert.ok(
+		defineReadOnlyCommand("cmd", {
+			help: "h",
+			flags: { b: optStrFlag("b") },
+			args: [
+				arg("flags", t.bool, {
+					help: "h",
+					variadic: true,
+					presence: "optional",
+				}),
+			],
+			constraints: [
+				atLeastOne({
+					name: "sel",
+					members: [{ name: "flags" }, { name: "b" }],
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
+	// And `non_empty` is legal on it, which is what `sized` means.
+	assert.ok(
+		defineReadOnlyCommand("cmd2", {
+			help: "h",
+			flags: { b: optStrFlag("b") },
+			args: [
+				arg("flags", t.bool, {
+					help: "h",
+					variadic: true,
+					presence: "optional",
+				}),
+			],
+			constraints: [
+				atLeastOne({
+					name: "sel",
+					members: [{ name: "flags", when: "non_empty" }, { name: "b" }],
+				}),
+			],
+			handler: () => 0,
+		}),
+	);
 });
 
 test("constraint: presence legality -- a required member is refused, flag and arg alike", () => {

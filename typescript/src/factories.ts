@@ -2158,12 +2158,34 @@ function argShape(a: AnyArg): MemberShape {
 }
 
 /**
- * `<t>`: the FRAMEWORK's own type word, never a language type name. A
- * selector has no value schema at all -- its value is a record -- so it names
- * itself by construct.
+ * `<t>`: the FRAMEWORK's own type word from §12.15's closed set -- the four
+ * scalars, `list[<elem>]`, `dict[<value>]`, and `choice flag` -- never a
+ * language type name and never a carrier spelling.
+ *
+ * A dict renders its VALUE type in one argument: the key type is `str` by
+ * construction, so the carrier's `dict[str,<v>]` string states a fact no
+ * declaration can vary and never reaches a message. A selector has no value
+ * schema at all -- its value is a record neither `true` nor `non_empty` can
+ * test -- so it names itself by construct.
  */
 function declTypeWord(d: AnyDecl): string {
-	return d.kind === "flag" ? d.schema : "choice flag";
+	if (d.kind !== "flag") {
+		return "choice flag";
+	}
+	return schemaKind(d.schema) === "dict"
+		? `dict[${elemSchemaOf(d.carrier)}]`
+		: d.schema;
+}
+
+/**
+ * The same word on the arg side. A variadic arg renders its COLLECTION
+ * spelling, whatever its element type: what the sentence describes is the
+ * value the selector would be evaluated against, and that value is a sequence
+ * (§12.15). `list[bool]` is the one shape that reaches the word.
+ */
+function argTypeWord(a: AnyArg): string {
+	const elem = elemSchemaOf(a.carrier as Carrier<unknown, Schema>);
+	return a.opts.variadic === true ? `list[${elem}]` : elem;
 }
 
 interface ConstraintSetInput {
@@ -2333,9 +2355,7 @@ function validateConstraintSet(input: ConstraintSetInput): void {
 			const typeWord =
 				decl !== undefined
 					? declTypeWord(decl)
-					: elemSchemaOf(
-							(argDecl as AnyArg).carrier as Carrier<unknown, Schema>,
-						);
+					: argTypeWord(argDecl as AnyArg);
 			if (m.when === undefined) {
 				// The default is `present`, and the bool refusal closes the hole
 				// that default would otherwise re-open: `present` on a bool means
