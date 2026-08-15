@@ -643,6 +643,15 @@ def test_the_underscored_spelling_is_the_one_that_works():
     ) is None
 
 
+def test_the_record_door_refuses_a_dash_spelled_key_too():
+    """Both programmatic doors read one namespace: a door that ran the token
+    mapping over its keys before consulting the index would accept there what
+    the other refuses."""
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _dashed_app().call("run", **{"keep-going": True, "all_profiles": True})
+    assert str(exc.value) == "unknown parameter 'keep-going' for command 'run'"
+
+
 def test_the_dashed_spelling_is_the_command_lines_own():
     """The token spelling is not wrong -- it is just not a key."""
     r = _dashed_app().test(
