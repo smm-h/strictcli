@@ -10,10 +10,12 @@ import { PassThrough, Readable } from "node:stream";
 import { test } from "node:test";
 import type { App } from "../src/app.js";
 import {
+	choice,
 	createApp,
 	defineMutatingCommand,
 	defineReadOnlyCommand,
 	flag,
+	memberChoiceFlag,
 	outcome,
 	t,
 } from "../src/index.js";
@@ -526,6 +528,50 @@ test("mcp: missing required flag surfaces as isError content", async () => {
 	assert.equal(content.length, 1);
 	assert.equal(content[0]?.type, "text");
 	assert.equal(content[0]?.text, "flag '--target' is required");
+});
+
+test("mcp: a double member election surfaces as isError content", async () => {
+	// Supplying a member's payload property elects that member, so a payload
+	// beside a selector property naming a DIFFERENT member is a double election
+	// (§24.11, §21.4). It is a call the server ran and refused, which is the
+	// invocation-error channel -- never a -32602 protocol error.
+	const app = buildApp();
+	app.command(
+		defineReadOnlyCommand("launch", {
+			help: "launch",
+			flags: {
+				target: memberChoiceFlag(
+					"target",
+					{
+						profile: choice({
+							help: "one profile",
+							value: { carrier: t.str, help: "profile name" },
+						}),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "what to launch", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	const resp = await sendOne(app, {
+		jsonrpc: "2.0",
+		id: 17,
+		method: "tools/call",
+		params: {
+			name: "launch",
+			arguments: { target: "all-profiles", profile: "work" },
+		},
+	});
+	assert.equal("error" in resp, false);
+	assert.equal(resultOf(resp).isError, true);
+	const content = contentOf(resp);
+	assert.equal(content.length, 1);
+	assert.equal(
+		content[0]?.text,
+		"--profile and --all-profiles are mutually exclusive",
+	);
 });
 
 test("mcp: tools/call without name is -32602", async () => {

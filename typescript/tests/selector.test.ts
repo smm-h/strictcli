@@ -1708,6 +1708,156 @@ test("mcp: the refusal names a member-spelled scope by its own member token", as
 	);
 });
 
+/** A member-spelled selector whose first member carries a payload. */
+function memberBoundaryApp(): App {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("launch", {
+			help: "launch",
+			flags: {
+				target: memberChoiceFlag(
+					"target",
+					{
+						profile: choice({
+							help: "one profile",
+							value: { carrier: t.str, help: "profile name" },
+							flags: {
+								create_missing: flag("create-missing", t.bool, {
+									help: "create it when absent",
+									presence: "default",
+									default: false,
+								}),
+							},
+						}),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "what to launch", presence: "required" },
+				),
+			},
+			handler: (a, ctx) => {
+				ctx.info(
+					a.target.choice === "profile"
+						? `profile=${a.target.value} create=${a.target.create_missing}`
+						: "all",
+				);
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+test("mcp: a member's payload property elects that member", async () => {
+	// The flat form has no tokens, so supplying the payload IS the election --
+	// the boundary's projection of the command line, where typing the member's
+	// token elects it and carries its value in one act (§24.11, §21.4).
+	const launch = memberBoundaryApp()
+		.asTools()
+		.find((t2) => t2.name === "launch");
+	assert.ok(launch);
+	assert.equal(await launch.execute({ profile: "work" }), 0);
+	assert.equal(
+		await launch.execute({ profile: "work", create_missing: true }),
+		0,
+	);
+	// Naming the same member beside its payload is ONE election, unchanged.
+	assert.equal(await launch.execute({ target: "profile", profile: "work" }), 0);
+	// A payload-less member is elected by the selector property alone.
+	assert.equal(await launch.execute({ target: "all-profiles" }), 0);
+});
+
+test("mcp: a payload beside another member's election is a double election", async () => {
+	// Supplying `profile` elects `--profile`, and `target: "all-profiles"` elects
+	// `--all-profiles`: two elections of one selector, which is §21.4's
+	// mutual-exclusion sentence and NOT a scope refusal naming the member's own
+	// election as its owner.
+	const launch = memberBoundaryApp()
+		.asTools()
+		.find((t2) => t2.name === "launch");
+	assert.ok(launch);
+	await assert.rejects(
+		launch.execute({ target: "all-profiles", profile: "work" }),
+		{ message: "--profile and --all-profiles are mutually exclusive" },
+	);
+	// The CLI's own bytes for the same double election.
+	assert.equal(
+		(
+			await memberBoundaryApp().test([
+				"launch",
+				"--profile",
+				"work",
+				"--all-profiles",
+			])
+		).stderr,
+		errOut(
+			"--profile and --all-profiles are mutually exclusive",
+			"myapp launch",
+		),
+	);
+});
+
+test("mcp: a member payload under an unelected outer scope names the outer scope", async () => {
+	// One level down the same rule holds: the payload belongs to the scope its
+	// SELECTOR sits in, so the refusal names `--via email` -- byte-identical to
+	// the CLI's sentence for the same combination.
+	const build = (): App => {
+		const app = makeApp();
+		app.command(
+			defineReadOnlyCommand("send", {
+				help: "send",
+				flags: {
+					via: choiceFlag(
+						"via",
+						{
+							email: choice({
+								help: "email",
+								flags: {
+									mode: memberChoiceFlag(
+										"mode",
+										{
+											profile: choice({
+												help: "one profile",
+												value: { carrier: t.str, help: "profile name" },
+											}),
+											"all-profiles": choice({ help: "every profile" }),
+										},
+										{ help: "what to launch", presence: "required" },
+									),
+								},
+							}),
+							sms: choice({ help: "sms" }),
+						},
+						{ help: "delivery channel", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		);
+		return app;
+	};
+	const send = build()
+		.asTools()
+		.find((t2) => t2.name === "send");
+	assert.ok(send);
+	await assert.rejects(send.execute({ via: "sms", profile: "work" }), {
+		message:
+			"flag '--profile' is only valid under '--via email', but '--via sms' was elected",
+	});
+	assert.equal(
+		(await build().test(["send", "--via", "sms", "--profile", "work"])).stderr,
+		errOut(
+			"flag '--profile' is only valid under '--via email', but '--via sms' was elected",
+			"myapp send",
+		),
+	);
+	// Inside the live scope the payload elects, exactly as at root.
+	assert.equal(await send.execute({ via: "email", profile: "work" }), 0);
+	await assert.rejects(
+		send.execute({ via: "email", mode: "all-profiles", profile: "work" }),
+		{ message: "--profile and --all-profiles are mutually exclusive" },
+	);
+});
+
 test("mcp: a defaulted election is blamed with the CLI's origin clause", async () => {
 	const app = makeApp();
 	app.command(

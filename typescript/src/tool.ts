@@ -18,6 +18,7 @@ import {
 	errFlagInvalidChoice,
 	errJsonSchemaIsGroup,
 	errJsonSchemaRouteError,
+	errMutuallyExclusive,
 	errOneOfRequired,
 	errRouterCommandMustBeString,
 	InvokeError,
@@ -351,11 +352,13 @@ export function flatToCallKwargs(
 			for (const [choiceName, c] of Object.entries(d.choices)) {
 				const next: ScopeStep[] = [...path, { selector: d, choiceName }];
 				// A member's payload flattens under the member's own flag name, and
-				// the property is valid only while that member is the election --
-				// so the election it belongs to is ON its owner path, unlike on the
-				// command line where typing the member's token IS the election.
+				// supplying that property IS electing the member -- exactly as typing
+				// the member's token is on the command line. So the property belongs
+				// to the scope the SELECTOR sits in, never to the member's own scope:
+				// naming the member's own election as its owner would say the flag is
+				// only valid under itself (§24.11, §21.4).
 				if (c.value !== undefined) {
-					ownedBy(choiceName, next);
+					ownedBy(choiceName, path);
 				}
 				collectScoped(Object.values(c.flags), next);
 			}
@@ -369,16 +372,44 @@ export function flatToCallKwargs(
 	);
 
 	const elections = new Map<AnyChoiceFlag, Election>();
+	/**
+	 * Every member a caller elected, in DECLARATION order. A member-spelled
+	 * selector is elected two ways at this boundary and they are one fact: the
+	 * selector's own property naming the member, and the member's payload
+	 * property carrying its value. Supplying the payload IS electing the member
+	 * (§24.11's projection of §21.4), so supplying two of them -- or one beside a
+	 * selector property naming a different member -- is a DOUBLE election, which
+	 * takes §21.4's mutual-exclusion sentence rather than a scope refusal.
+	 */
+	const electedMembers = (sel: AnyChoiceFlag, named: unknown): string[] =>
+		Object.entries(sel.choices)
+			.filter(
+				([choiceName, c]) =>
+					named === choiceName ||
+					(c.value !== undefined &&
+						Object.hasOwn(kwargs, flagParamName(choiceName))),
+			)
+			.map(([choiceName]) => choiceName);
 	const buildRecord = (sel: AnyChoiceFlag): unknown => {
 		const key = flagParamName(sel.name);
 		const named = kwargs[key];
 		consumed.add(key);
+		const byMembers =
+			sel.electBy === "member-flags" ? electedMembers(sel, named) : [];
+		if (byMembers.length > 1) {
+			throw new InvokeError(
+				errMutuallyExclusive(byMembers.map((c) => `--${c}`).join(" and ")),
+			);
+		}
+		const elected = byMembers[0];
 		const tag =
-			typeof named === "string"
-				? named
-				: sel.opts.presence === "default"
-					? sel.opts.default
-					: undefined;
+			elected !== undefined
+				? elected
+				: typeof named === "string"
+					? named
+					: sel.opts.presence === "default"
+						? sel.opts.default
+						: undefined;
 		if (tag === undefined) {
 			throw new InvokeError(
 				sel.electBy === "member-flags"
@@ -397,10 +428,14 @@ export function flatToCallKwargs(
 			);
 		}
 		// The origin clause the CLI would give for the same election: empty when
-		// the caller named the choice, `by default` when the declaration did.
+		// the caller elected -- by naming the choice or by supplying a member's
+		// payload -- and `by default` when the declaration did.
 		elections.set(sel, {
 			elected: tag,
-			origin: typeof named === "string" ? "" : errElectionOriginDefault,
+			origin:
+				elected !== undefined || typeof named === "string"
+					? ""
+					: errElectionOriginDefault,
 		});
 		const record: Record<string, unknown> = { choice: tag };
 		if (chosen.value !== undefined) {
