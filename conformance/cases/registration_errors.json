@@ -678,7 +678,7 @@
     }
   },
   {
-    "name": "registration: CoRequired fewer than 2 flags",
+    "name": "registration: a co-occurrence constraint with one member (Python and TypeScript; a compile error in Go)",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -697,29 +697,35 @@
               "default": "none"
             }
           ],
-          "dependencies": [
+          "handler_prints": "ok",
+          "constraints": [
             {
-              "type": "co_required",
-              "flags": [
-                "output"
+              "type": "all_or_none",
+              "name": "output-format",
+              "members": [
+                {
+                  "name": "output"
+                }
               ]
             }
-          ],
-          "handler_prints": "ok"
+          ]
         }
       ]
     },
-    "skip_schema_validation": true,
     "argv": [
       "cmd"
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "command \"cmd\": CoRequired must have at least 2 flags, got 1"
-    }
+      "stderr_equals": "error: command \"cmd\": constraint \"output-format\" must declare at least two members, got 1"
+    },
+    "targets": [
+      "python",
+      "typescript"
+    ]
   },
   {
-    "name": "registration: CoRequired references unknown flag",
+    "name": "registration: a constraint member naming nothing declared",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -745,16 +751,21 @@
               "default": "none"
             }
           ],
-          "dependencies": [
+          "handler_prints": "ok",
+          "constraints": [
             {
-              "type": "co_required",
-              "flags": [
-                "output",
-                "missing"
+              "type": "all_or_none",
+              "name": "output-format",
+              "members": [
+                {
+                  "name": "output"
+                },
+                {
+                  "name": "missing"
+                }
               ]
             }
-          ],
-          "handler_prints": "ok"
+          ]
         }
       ]
     },
@@ -763,11 +774,11 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "command \"cmd\": CoRequired references unknown flag \"missing\""
+      "stderr_equals": "error: command \"cmd\": constraint \"output-format\" references unknown member \"missing\""
     }
   },
   {
-    "name": "registration: CoRequired has duplicate flag",
+    "name": "registration: a constraint declaring one member twice",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -793,16 +804,21 @@
               "default": "none"
             }
           ],
-          "dependencies": [
+          "handler_prints": "ok",
+          "constraints": [
             {
-              "type": "co_required",
-              "flags": [
-                "output",
-                "output"
+              "type": "all_or_none",
+              "name": "output-format",
+              "members": [
+                {
+                  "name": "output"
+                },
+                {
+                  "name": "output"
+                }
               ]
             }
-          ],
-          "handler_prints": "ok"
+          ]
         }
       ]
     },
@@ -811,11 +827,11 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "command \"cmd\": CoRequired has duplicate flag \"output\""
+      "stderr_equals": "error: command \"cmd\": constraint \"output-format\" declares member \"output\" twice"
     }
   },
   {
-    "name": "registration: Requires references unknown flag",
+    "name": "registration: a Requires operand naming nothing declared",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -834,14 +850,15 @@
               "default": "none"
             }
           ],
-          "dependencies": [
+          "handler_prints": "ok",
+          "constraints": [
             {
               "type": "requires",
+              "name": "missing-output",
               "flag": "missing",
               "depends_on": "output"
             }
-          ],
-          "handler_prints": "ok"
+          ]
         }
       ]
     },
@@ -850,7 +867,7 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "command \"cmd\": Requires references unknown flag \"missing\""
+      "stderr_equals": "error: command \"cmd\": constraint \"missing-output\" references unknown flag \"missing\""
     }
   },
   {
@@ -873,14 +890,15 @@
               "default": "none"
             }
           ],
-          "dependencies": [
+          "handler_prints": "ok",
+          "constraints": [
             {
               "type": "requires",
+              "name": "output-itself",
               "flag": "output",
               "depends_on": "output"
             }
-          ],
-          "handler_prints": "ok"
+          ]
         }
       ]
     },
@@ -889,7 +907,7 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "command \"cmd\": Requires flag and depends_on cannot be the same (\"output\")"
+      "stderr_equals": "error: command \"cmd\": Requires flag and depends_on cannot be the same (\"output\")"
     }
   },
   {

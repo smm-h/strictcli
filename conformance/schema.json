@@ -795,7 +795,7 @@
         "deprecated": {
           "type": "boolean",
           "default": false,
-          "description": "If true, this is a deprecated command. It must have deprecated_message and must NOT have handler_prints, handler_exit_code, flags, args, flag_sets, dependencies, passthrough, or passthrough_handler_prints."
+          "description": "If true, this is a deprecated command. It must have deprecated_message and must NOT have handler_prints, handler_exit_code, flags, args, flag_sets, constraints, passthrough, or passthrough_handler_prints."
         },
         "deprecated_message": {
           "type": "string",
@@ -867,11 +867,12 @@
             "$ref": "#/$defs/flag_set"
           }
         },
-        "dependencies": {
+        "constraints": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/dependency"
-          }
+            "$ref": "#/$defs/constraint"
+          },
+          "description": "The command's constraint set (contract §26), in declaration order. The pre-§26 `dependencies` key is deleted with the construct it carried."
         },
         "handler_param_defaults": {
           "type": "object",
@@ -923,7 +924,7 @@
           "flags": false,
           "args": false,
           "flag_sets": false,
-          "dependencies": false,
+          "constraints": false,
           "passthrough": false,
           "passthrough_handler_prints": false,
           "tags": false,
@@ -1692,30 +1693,91 @@
         }
       }
     },
-    "co_required": {
+    "constraint_member_record": {
       "type": "object",
+      "description": "The record form of a member: the two declared facts, and nothing else. It is its own $def so the API-surface check can compare it against `Member` / `ConstraintMember` field by field.",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "when": {
+          "enum": [
+            "present",
+            "true",
+            "non_empty"
+          ]
+        }
+      }
+    },
+    "constraint_member": {
+      "description": "One operand of a co-occurrence constraint (contract §26.2), referenced BY NAME. A member declares no `kind`: registration resolves the name against the command's flags, args and other constraints, which is item 200's declaration-versus-published-fact distinction and is what keeps errConstraintMemberAmbiguous spellable at all. `when` is OMITTED when not declared -- the omission is a declaration state of its own, which §26.3's bool refusal reads. A bare string is a member entry a case may still write on purpose: it is the covering input for errConstraintMemberNotRecord, which Python and TypeScript reach and Go cannot express.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/constraint_member_record"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "at_least_one": {
+      "type": "object",
+      "description": "At least one member is engaged (contract §26.1). Members MAY co-occur; there is no upper bound and this is never exclusivity. `members` may carry fewer than two entries on purpose -- that is errConstraintMinMembers's covering input, which Go's two-named-parameter constructor makes a compile error rather than a message.",
       "required": [
         "type",
-        "flags"
+        "name",
+        "members"
       ],
       "additionalProperties": false,
       "properties": {
         "type": {
-          "const": "co_required"
+          "const": "at_least_one"
         },
-        "flags": {
+        "name": {
+          "type": "string"
+        },
+        "members": {
           "type": "array",
           "items": {
-            "type": "string"
-          },
-          "minItems": 2
+            "$ref": "#/$defs/constraint_member"
+          }
+        }
+      }
+    },
+    "all_or_none": {
+      "type": "object",
+      "description": "Every member is engaged or none is (contract §26.1); vacuously satisfied with nothing engaged. This family absorbed the deleted `co_required`, which went the way `mutex` went.",
+      "required": [
+        "type",
+        "name",
+        "members"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "all_or_none"
+        },
+        "name": {
+          "type": "string"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/constraint_member"
+          }
         }
       }
     },
     "requires": {
       "type": "object",
+      "description": "One-way dependency, semantics untouched by §26 (§26.13): flags only, by name, at root scope -- no args, no nesting, no `when`.",
       "required": [
         "type",
+        "name",
         "flag",
         "depends_on"
       ],
@@ -1723,6 +1785,9 @@
       "properties": {
         "type": {
           "const": "requires"
+        },
+        "name": {
+          "type": "string"
         },
         "flag": {
           "type": "string"
@@ -1734,8 +1799,10 @@
     },
     "implies": {
       "type": "object",
+      "description": "Value injection, semantics untouched by §26 (§26.13), including the injection order: it resolves before the co-occurrence families, so an implied value can engage a member.",
       "required": [
         "type",
+        "name",
         "flag",
         "implies",
         "value"
@@ -1744,6 +1811,9 @@
       "properties": {
         "type": {
           "const": "implies"
+        },
+        "name": {
+          "type": "string"
         },
         "flag": {
           "type": "string"
@@ -1756,10 +1826,14 @@
         }
       }
     },
-    "dependency": {
+    "constraint": {
+      "description": "One entry of the `constraints` command key (contract §26, case encoding ratified as §13's surface by §18.31 item 291). Every entry carries a mandatory `name` and a `type` from §25.7's four values.",
       "oneOf": [
         {
-          "$ref": "#/$defs/co_required"
+          "$ref": "#/$defs/at_least_one"
+        },
+        {
+          "$ref": "#/$defs/all_or_none"
         },
         {
           "$ref": "#/$defs/requires"

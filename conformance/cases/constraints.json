@@ -1,0 +1,2416 @@
+[
+  {
+    "name": "constraints: all_or_none both provided ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "presence": "default",
+              "default": "none"
+            },
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "presence": "default",
+              "default": "none"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "output-format",
+              "members": [
+                {
+                  "name": "output"
+                },
+                {
+                  "name": "format"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "output={output} format={format}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--output",
+      "file.txt",
+      "--format",
+      "json"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "output=file.txt format=json"
+    }
+  },
+  {
+    "name": "constraints: all_or_none neither provided is vacuously satisfied",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "presence": "default",
+              "default": "none"
+            },
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "presence": "default",
+              "default": "none"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "output-format",
+              "members": [
+                {
+                  "name": "output"
+                },
+                {
+                  "name": "format"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "output={output} format={format}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "output=none format=none"
+    }
+  },
+  {
+    "name": "constraints: all_or_none one provided is the violation, byte for byte",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "presence": "default",
+              "default": "none"
+            },
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "presence": "default",
+              "default": "none"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "output-format",
+              "members": [
+                {
+                  "name": "output"
+                },
+                {
+                  "name": "format"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--output",
+      "file.txt"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"output-format\": --output, --format must be used together\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: all_or_none second member alone is the same violation, every member listed",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "presence": "default",
+              "default": "none"
+            },
+            {
+              "name": "format",
+              "type": "str",
+              "help": "output format",
+              "presence": "default",
+              "default": "none"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "output-format",
+              "members": [
+                {
+                  "name": "output"
+                },
+                {
+                  "name": "format"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--format",
+      "json"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"output-format\": --output, --format must be used together\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: all_or_none over three members, two engaged is still the violation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "host",
+              "type": "str",
+              "help": "the host",
+              "presence": "optional"
+            },
+            {
+              "name": "port",
+              "type": "int",
+              "help": "the port",
+              "presence": "optional"
+            },
+            {
+              "name": "token",
+              "type": "str",
+              "help": "the token",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "endpoint",
+              "members": [
+                {
+                  "name": "host"
+                },
+                {
+                  "name": "port"
+                },
+                {
+                  "name": "token"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--host",
+      "example.com",
+      "--port",
+      "443"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"endpoint\": --host, --port, --token must be used together\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: at_least_one satisfied by one engaged member",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "purge items older than this duration",
+              "presence": "optional"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "purge items larger than this size",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "older={older-than} larger={larger-than}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--older-than",
+      "7d"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "older=7d larger=None"
+    }
+  },
+  {
+    "name": "constraints: at_least_one is not exclusivity -- every member engaged is satisfied",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "purge items older than this duration",
+              "presence": "optional"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "purge items larger than this size",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "older={older-than} larger={larger-than}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--older-than",
+      "7d",
+      "--larger-than",
+      "1G"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "older=7d larger=1G"
+    }
+  },
+  {
+    "name": "constraints: at_least_one with nothing engaged is the violation, byte for byte",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "purge items older than this duration",
+              "presence": "optional"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "purge items larger than this size",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"purge-selection\": at least one of --older-than, --larger-than is required\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: at_least_one violation appends the decline clause for a declined when=true bool",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "purge items older than this duration",
+              "presence": "optional"
+            },
+            {
+              "name": "all",
+              "type": "bool",
+              "help": "select every archived item",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "all",
+                  "when": "true"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--no-all"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"purge-selection\": at least one of --older-than, --all is required (--no-all declines an option; it does not choose one)\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: the decline clause names the FIRST declined member in declaration order",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "all",
+              "type": "bool",
+              "help": "select every archived item",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "expired",
+              "type": "bool",
+              "help": "select every expired item",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "all",
+                  "when": "true"
+                },
+                {
+                  "name": "expired",
+                  "when": "true"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--no-expired",
+      "--no-all"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"purge-selection\": at least one of --all, --expired is required (--no-all declines an option; it does not choose one)\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: no decline clause for a when=non_empty member supplied empty",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "targets",
+              "type": "str",
+              "help": "the targets",
+              "presence": "optional"
+            },
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "purge items older than this duration",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "targets",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "older-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--targets",
+      ""
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"purge-selection\": at least one of --targets, --older-than is required\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: two constraints over overlapping members, each named in its own violation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "old-name",
+              "type": "str",
+              "help": "current display name",
+              "presence": "optional"
+            },
+            {
+              "name": "new-name",
+              "type": "str",
+              "help": "new display name",
+              "presence": "optional"
+            },
+            {
+              "name": "old-email",
+              "type": "str",
+              "help": "current email address",
+              "presence": "optional"
+            },
+            {
+              "name": "new-email",
+              "type": "str",
+              "help": "new email address",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "author-name",
+              "members": [
+                {
+                  "name": "old-name"
+                },
+                {
+                  "name": "new-name"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "author-email",
+              "members": [
+                {
+                  "name": "old-email"
+                },
+                {
+                  "name": "new-email"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--old-email",
+      "a@example.com"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"author-email\": --old-email, --new-email must be used together\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: requires both provided ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "chatter",
+              "type": "bool",
+              "help": "chatter output",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "presence": "default",
+              "default": "none"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "requires",
+              "name": "chatter-output",
+              "flag": "chatter",
+              "depends_on": "output"
+            }
+          ],
+          "handler_prints": "chatter={chatter} output={output}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--chatter",
+      "--output",
+      "log.txt"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "chatter=true output=log.txt"
+    }
+  },
+  {
+    "name": "constraints: requires flag not provided ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "chatter",
+              "type": "bool",
+              "help": "chatter output",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "presence": "default",
+              "default": "none"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "requires",
+              "name": "chatter-output",
+              "flag": "chatter",
+              "depends_on": "output"
+            }
+          ],
+          "handler_prints": "chatter={chatter} output={output}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "chatter=false output=none"
+    }
+  },
+  {
+    "name": "constraints: requires depends_on alone ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "chatter",
+              "type": "bool",
+              "help": "chatter output",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "presence": "default",
+              "default": "none"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "requires",
+              "name": "chatter-output",
+              "flag": "chatter",
+              "depends_on": "output"
+            }
+          ],
+          "handler_prints": "chatter={chatter} output={output}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--output",
+      "log.txt"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "chatter=false output=log.txt"
+    }
+  },
+  {
+    "name": "constraints: requires flag without depends_on is the violation, prefixed and otherwise untouched",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "chatter",
+              "type": "bool",
+              "help": "chatter output",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "presence": "default",
+              "default": "none"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "requires",
+              "name": "chatter-output",
+              "flag": "chatter",
+              "depends_on": "output"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--chatter"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"chatter-output\": flag '--chatter' requires '--output'\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: implies trigger set auto-sets target",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "presence": "default",
+              "default": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "fast-embeddings",
+              "flag": "fast",
+              "implies": "embeddings",
+              "value": false
+            }
+          ],
+          "handler_prints": "fast={fast} embeddings={embeddings}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--fast"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "fast=true embeddings=false"
+    }
+  },
+  {
+    "name": "constraints: implies trigger not set target gets default",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "presence": "default",
+              "default": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "fast-embeddings",
+              "flag": "fast",
+              "implies": "embeddings",
+              "value": false
+            }
+          ],
+          "handler_prints": "fast={fast} embeddings={embeddings}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "fast=false embeddings=true"
+    }
+  },
+  {
+    "name": "constraints: implies trigger defaulted true does not fire",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "release",
+              "type": "bool",
+              "help": "release build",
+              "presence": "default",
+              "default": true
+            },
+            {
+              "name": "signed",
+              "type": "bool",
+              "help": "signed build",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "release-signed",
+              "flag": "release",
+              "implies": "signed",
+              "value": true
+            }
+          ],
+          "handler_prints": "release={release} signed={signed}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "release=true signed=None"
+    }
+  },
+  {
+    "name": "constraints: implies trigger supplied at its default value fires",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "release",
+              "type": "bool",
+              "help": "release build",
+              "presence": "default",
+              "default": true
+            },
+            {
+              "name": "signed",
+              "type": "bool",
+              "help": "signed build",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "release-signed",
+              "flag": "release",
+              "implies": "signed",
+              "value": true
+            }
+          ],
+          "handler_prints": "release={release} signed={signed}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--release"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "release=true signed=true"
+    }
+  },
+  {
+    "name": "constraints: implies explicit conflict is the violation, prefixed and otherwise untouched",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "presence": "default",
+              "default": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "fast-embeddings",
+              "flag": "fast",
+              "implies": "embeddings",
+              "value": false
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--fast",
+      "--embeddings"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"fast-embeddings\": flag '--fast' implies '--no-embeddings', but '--embeddings' was explicitly provided\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: implies explicit agreement ok",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "presence": "default",
+              "default": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "fast-embeddings",
+              "flag": "fast",
+              "implies": "embeddings",
+              "value": false
+            }
+          ],
+          "handler_prints": "fast={fast} embeddings={embeddings}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--fast",
+      "--no-embeddings"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "fast=true embeddings=false"
+    }
+  },
+  {
+    "name": "constraints: implies env var trigger fires implication",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "env_prefix": "MYAPP",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "presence": "default",
+              "env": "MYAPP_FAST",
+              "default": false
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "presence": "default",
+              "default": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "fast-embeddings",
+              "flag": "fast",
+              "implies": "embeddings",
+              "value": false
+            }
+          ],
+          "handler_prints": "fast={fast} embeddings={embeddings}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "env": {
+      "MYAPP_FAST": "true"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "fast=true embeddings=false"
+    }
+  },
+  {
+    "name": "constraints: an implied value engages a member -- Implies resolves before the co-occurrence families",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "cached",
+              "type": "bool",
+              "help": "read from the cache",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "only items older than this duration",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "fast-cached",
+              "flag": "fast",
+              "implies": "cached",
+              "value": true
+            },
+            {
+              "type": "at_least_one",
+              "name": "selection",
+              "members": [
+                {
+                  "name": "cached",
+                  "when": "true"
+                },
+                {
+                  "name": "older-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "fast={fast} cached={cached}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--fast"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "fast=true cached=true"
+    }
+  },
+  {
+    "name": "constraints: a declared default never engages a member -- constraints run before defaults are applied",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "only items older than this duration",
+              "presence": "default",
+              "default": "7d"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "only items larger than this size",
+              "presence": "default",
+              "default": "1G"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"purge-selection\": at least one of --older-than, --larger-than is required\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: implies unknown trigger flag registration error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "presence": "default",
+              "default": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "fast-embeddings",
+              "flag": "nonexistent",
+              "implies": "embeddings",
+              "value": false
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: command \"cmd\": constraint \"fast-embeddings\" references unknown flag \"nonexistent\""
+    }
+  },
+  {
+    "name": "constraints: implies unknown target flag registration error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "presence": "default",
+              "default": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "fast-embeddings",
+              "flag": "fast",
+              "implies": "nonexistent",
+              "value": false
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: command \"cmd\": constraint \"fast-embeddings\" references unknown flag \"nonexistent\""
+    }
+  },
+  {
+    "name": "constraints: implies self-implication registration error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "fast-itself",
+              "flag": "fast",
+              "implies": "fast",
+              "value": false
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "Implies flag and implies cannot be the same"
+    }
+  },
+  {
+    "name": "constraints: implies non-bool trigger registration error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "mode",
+              "type": "str",
+              "help": "operation mode",
+              "presence": "default",
+              "default": "normal"
+            },
+            {
+              "name": "embeddings",
+              "type": "bool",
+              "help": "enable embeddings",
+              "presence": "default",
+              "default": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "mode-embeddings",
+              "flag": "mode",
+              "implies": "embeddings",
+              "value": false
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "Implies trigger flag"
+    }
+  },
+  {
+    "name": "constraints: implies non-bool target registration error",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "fast",
+              "type": "bool",
+              "help": "fast mode",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "output",
+              "type": "str",
+              "help": "output file",
+              "presence": "default",
+              "default": "none"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "fast-output",
+              "flag": "fast",
+              "implies": "output",
+              "value": false
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_contains": "Implies target flag"
+    }
+  },
+  {
+    "name": "constraints: two vacuous nested pairs leave the parent unsatisfied, and a nested member renders structurally",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "rewrite",
+          "help": "rewrite author identity across history",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "old-name",
+              "type": "str",
+              "help": "the old-name",
+              "presence": "optional"
+            },
+            {
+              "name": "new-name",
+              "type": "str",
+              "help": "the new-name",
+              "presence": "optional"
+            },
+            {
+              "name": "old-email",
+              "type": "str",
+              "help": "the old-email",
+              "presence": "optional"
+            },
+            {
+              "name": "new-email",
+              "type": "str",
+              "help": "the new-email",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "author-name",
+              "members": [
+                {
+                  "name": "old-name"
+                },
+                {
+                  "name": "new-name"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "author-email",
+              "members": [
+                {
+                  "name": "old-email"
+                },
+                {
+                  "name": "new-email"
+                }
+              ]
+            },
+            {
+              "type": "at_least_one",
+              "name": "author-change",
+              "members": [
+                {
+                  "name": "author-name"
+                },
+                {
+                  "name": "author-email"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "rewrite"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"author-change\": at least one of (--old-name with --new-name), (--old-email with --new-email) is required\ntry 'myapp rewrite --help'\n"
+    }
+  },
+  {
+    "name": "constraints: children before parents -- one half of a pair reports the pair, not the whole selection",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "rewrite",
+          "help": "rewrite author identity across history",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "old-name",
+              "type": "str",
+              "help": "the old-name",
+              "presence": "optional"
+            },
+            {
+              "name": "new-name",
+              "type": "str",
+              "help": "the new-name",
+              "presence": "optional"
+            },
+            {
+              "name": "old-email",
+              "type": "str",
+              "help": "the old-email",
+              "presence": "optional"
+            },
+            {
+              "name": "new-email",
+              "type": "str",
+              "help": "the new-email",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "author-name",
+              "members": [
+                {
+                  "name": "old-name"
+                },
+                {
+                  "name": "new-name"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "author-email",
+              "members": [
+                {
+                  "name": "old-email"
+                },
+                {
+                  "name": "new-email"
+                }
+              ]
+            },
+            {
+              "type": "at_least_one",
+              "name": "author-change",
+              "members": [
+                {
+                  "name": "author-name"
+                },
+                {
+                  "name": "author-email"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "rewrite",
+      "--old-name",
+      "ada"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"author-name\": --old-name, --new-name must be used together\ntry 'myapp rewrite --help'\n"
+    }
+  },
+  {
+    "name": "constraints: one complete nested pair engages the parent",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "rewrite",
+          "help": "rewrite author identity across history",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "old-name",
+              "type": "str",
+              "help": "the old-name",
+              "presence": "optional"
+            },
+            {
+              "name": "new-name",
+              "type": "str",
+              "help": "the new-name",
+              "presence": "optional"
+            },
+            {
+              "name": "old-email",
+              "type": "str",
+              "help": "the old-email",
+              "presence": "optional"
+            },
+            {
+              "name": "new-email",
+              "type": "str",
+              "help": "the new-email",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "author-name",
+              "members": [
+                {
+                  "name": "old-name"
+                },
+                {
+                  "name": "new-name"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "author-email",
+              "members": [
+                {
+                  "name": "old-email"
+                },
+                {
+                  "name": "new-email"
+                }
+              ]
+            },
+            {
+              "type": "at_least_one",
+              "name": "author-change",
+              "members": [
+                {
+                  "name": "author-name"
+                },
+                {
+                  "name": "author-email"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "old={old-name} new={new-name}"
+        }
+      ]
+    },
+    "argv": [
+      "rewrite",
+      "--old-name",
+      "ada",
+      "--new-name",
+      "grace"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "old=ada new=grace\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "constraints: the at-least-one over a variadic arg and three flags, with nothing engaged",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "purge",
+          "help": "permanently destroy archived items",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "the larger-than",
+              "presence": "optional"
+            },
+            {
+              "name": "all",
+              "type": "bool",
+              "help": "the all",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "args": [
+            {
+              "name": "targets",
+              "help": "Record UUIDs or numeric database IDs",
+              "presence": "optional",
+              "variadic": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "targets",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                },
+                {
+                  "name": "all",
+                  "when": "true"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "purge"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"purge-selection\": at least one of targets, --older-than, --larger-than, --all is required\ntry 'myapp purge --help'\n"
+    }
+  },
+  {
+    "name": "constraints: a variadic arg member engages the constraint when the invocation supplies a token",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "purge",
+          "help": "permanently destroy archived items",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "the larger-than",
+              "presence": "optional"
+            },
+            {
+              "name": "all",
+              "type": "bool",
+              "help": "the all",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "args": [
+            {
+              "name": "targets",
+              "help": "Record UUIDs or numeric database IDs",
+              "presence": "optional",
+              "variadic": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "targets",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                },
+                {
+                  "name": "all",
+                  "when": "true"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "targets={targets}"
+        }
+      ]
+    },
+    "argv": [
+      "purge",
+      "abc"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "targets=abc\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "constraints: the decline clause beside an arg member, which renders its bare name",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "purge",
+          "help": "permanently destroy archived items",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "the larger-than",
+              "presence": "optional"
+            },
+            {
+              "name": "all",
+              "type": "bool",
+              "help": "the all",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "args": [
+            {
+              "name": "targets",
+              "help": "Record UUIDs or numeric database IDs",
+              "presence": "optional",
+              "variadic": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "targets",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                },
+                {
+                  "name": "all",
+                  "when": "true"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "purge",
+      "--no-all"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"purge-selection\": at least one of targets, --older-than, --larger-than, --all is required (--no-all declines an option; it does not choose one)\ntry 'myapp purge --help'\n"
+    }
+  },
+  {
+    "name": "constraints: the decline clause searches DIRECT members only -- a decline inside a nested group appends nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "optional"
+            },
+            {
+              "name": "all",
+              "type": "bool",
+              "help": "the all",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "c",
+              "type": "str",
+              "help": "the c",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "inner",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "all",
+                  "when": "true"
+                }
+              ]
+            },
+            {
+              "type": "at_least_one",
+              "name": "outer",
+              "members": [
+                {
+                  "name": "inner"
+                },
+                {
+                  "name": "c"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--no-all"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"outer\": at least one of (--a with --all), --c is required\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: a nested at-least-one renders (--a or --b) inside its parent's sentence",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "optional"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            },
+            {
+              "name": "c",
+              "type": "str",
+              "help": "the c",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "inner",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "outer",
+              "members": [
+                {
+                  "name": "inner"
+                },
+                {
+                  "name": "c"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--a",
+      "x"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"outer\": (--a or --b), --c must be used together\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: a variadic bool arg member may omit when -- it is sized, never a bool",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "switches",
+              "type": "bool",
+              "help": "the switches",
+              "presence": "optional",
+              "variadic": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "selection",
+              "members": [
+                {
+                  "name": "switches"
+                },
+                {
+                  "name": "older-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "engaged"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "true"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "engaged\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "constraints: an arg member renders its bare name in the at-least-one violation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "switches",
+              "type": "bool",
+              "help": "the switches",
+              "presence": "optional",
+              "variadic": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "selection",
+              "members": [
+                {
+                  "name": "switches"
+                },
+                {
+                  "name": "older-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"selection\": at least one of switches, --older-than is required\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: engagement propagates upward -- one engaged member engages the nested constraint",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "a",
+              "type": "str",
+              "help": "the a",
+              "presence": "optional"
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            },
+            {
+              "name": "c",
+              "type": "str",
+              "help": "the c",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "inner",
+              "members": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            },
+            {
+              "type": "at_least_one",
+              "name": "outer",
+              "members": [
+                {
+                  "name": "inner"
+                },
+                {
+                  "name": "c"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "a={a}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--a",
+      "x"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "a=x\n",
+      "stderr_equals": ""
+    }
+  }
+]

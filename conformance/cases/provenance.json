@@ -170,9 +170,10 @@
               "default": false
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
               "type": "implies",
+              "name": "all-chatter",
               "flag": "all",
               "implies": "chatter",
               "value": true

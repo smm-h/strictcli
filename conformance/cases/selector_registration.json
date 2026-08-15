@@ -797,7 +797,7 @@
     ]
   },
   {
-    "name": "selector registration: a CoRequired constraint naming a scoped flag is refused",
+    "name": "selector registration: an AllOrNone member naming a scoped flag is refused",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -841,12 +841,18 @@
               ]
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
-              "type": "co_required",
-              "flags": [
-                "subject",
-                "other"
+              "type": "all_or_none",
+              "name": "subject-other",
+              "members": [
+                {
+                  "name": "subject"
+                },
+                {
+                  "name": "other",
+                  "when": "true"
+                }
               ]
             }
           ]
@@ -858,7 +864,7 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_equals": "error: command \"cmd\": CoRequired references 'subject', which is declared under '--via email': dependency constraints operate at root scope only"
+      "stderr_equals": "error: command \"cmd\": constraint \"subject-other\" references 'subject', which is declared under '--via email': constraints operate at root scope only"
     }
   },
   {
@@ -906,9 +912,10 @@
               ]
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
               "type": "requires",
+              "name": "other-subject",
               "flag": "other",
               "depends_on": "subject"
             }
@@ -921,11 +928,11 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_equals": "error: command \"cmd\": Requires references 'subject', which is declared under '--via email': dependency constraints operate at root scope only"
+      "stderr_equals": "error: command \"cmd\": constraint \"other-subject\" references 'subject', which is declared under '--via email': constraints operate at root scope only"
     }
   },
   {
-    "name": "selector registration: a Implies constraint naming a scoped flag is refused",
+    "name": "selector registration: an Implies constraint naming a scoped flag is refused",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -969,9 +976,10 @@
               ]
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
               "type": "implies",
+              "name": "other-subject",
               "flag": "other",
               "implies": "subject",
               "value": true
@@ -985,7 +993,7 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_equals": "error: command \"cmd\": Implies references 'subject', which is declared under '--via email': dependency constraints operate at root scope only"
+      "stderr_equals": "error: command \"cmd\": constraint \"other-subject\" references 'subject', which is declared under '--via email': constraints operate at root scope only"
     }
   },
   {

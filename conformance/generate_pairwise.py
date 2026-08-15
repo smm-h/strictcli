@@ -22,7 +22,7 @@ spelled here as independent axes rather than one three-column table, so the
   - choices: present, absent
   - negatable: true, false, na (bool only)
   - selector: yes, no                           <- the scoped-selector axis
-  - constraint: plain, validate, co_required, implies
+  - constraint: plain, validate, all_or_none, at_least_one, implies
   - repeatable: yes, no, na (scalar str/int/float only)
 
 **A `selector=yes` row declares the subject flag inside a CHOICE'S SCOPE**
@@ -47,9 +47,16 @@ Invalid combinations filtered:
   - non-bool + negatable in (true, false)  [forced to "na"]
   - list/dict + repeatable in (yes, no)    [forced to "na"]
   - list/dict + choices=present            [choices are a scalar declaration]
-  - selector=yes + constraint in (co_required, implies)  [§24.8: a constraint
-    naming a scoped flag is a registration error -- the scope already IS the
-    constraint]
+  - selector=yes + constraint in (all_or_none, at_least_one, implies)  [§24.8: a
+    constraint naming a scoped flag is a registration error -- the scope already
+    IS the constraint]
+  - presence=required + constraint in (all_or_none, at_least_one): §26.5 refuses
+    a member that declares required -- in at-least-one because the invocation
+    always supplies it, so the constraint could never fire, and in all-or-none
+    because it silently means "every other member is required too". The refusal
+    itself is asserted byte for byte, both families, every target, by
+    cases/constraint_registration.json; here it would make the row a
+    registration error rather than the green parse this generator emits.
   - constraint=validate + type in (bool, dict): the corpus's validator compares
     the value through each language's own default formatting, which agrees for
     strings, ints, floats and their list elements, and does NOT agree for a
@@ -76,7 +83,12 @@ ENV_OPTS = ["present", "absent"]
 CHOICES_OPTS = ["present", "absent"]
 NEGATABLE_OPTS = ["true", "false", "na"]
 SELECTOR_OPTS = ["yes", "no"]
-CONSTRAINT_OPTS = ["plain", "validate", "co_required", "implies"]
+CONSTRAINT_OPTS = ["plain", "validate", "all_or_none", "at_least_one", "implies"]
+
+# The two co-occurrence families (contract §26.1), which share every emitter
+# rule that differs from the dependency families': a member record per operand,
+# a mandatory constraint name, and §26.5's refusal of a required member.
+CO_OCCURRENCE = ("all_or_none", "at_least_one")
 REPEATABLE_OPTS = ["yes", "no", "na"]
 
 PARAMETERS = [
@@ -133,7 +145,10 @@ def is_valid_combination(row: list) -> bool:
         # A constraint naming a scoped flag is a registration error (§24.8):
         # the scope already IS the constraint, and expressing one fact in two
         # mechanisms is how the two disagree later.
-        if row[6] == "yes" and constraint in ("co_required", "implies"):
+        if row[6] == "yes" and constraint in CO_OCCURRENCE + ("implies",):
+            return False
+        # §26.5: no member of a co-occurrence constraint may declare required.
+        if row[1] == "required" and constraint in CO_OCCURRENCE:
             return False
         if constraint == "validate" and flag_type in ("bool", "dict"):
             return False
@@ -396,7 +411,7 @@ def generate_test_case(row_idx: int, row: list) -> dict:
 
     command: dict = {"name": "cmd", "help": "a command", "effect": "read_only"}
     flags: list[dict] = []
-    dependencies: list[dict] = []
+    constraints: list[dict] = []
 
     if is_scoped:
         # The subject flag lives in the scope of the elected choice; the sibling
@@ -419,17 +434,41 @@ def generate_test_case(row_idx: int, row: list) -> dict:
     else:
         flags.append(flag_def)
 
-    if constraint == "co_required":
+    if constraint in CO_OCCURRENCE:
         partner_name = f"part{row_idx}"
-        # A `default` member is NOT provided by its default (§23.5's CoRequired
-        # row), so the partner is supplied exactly when the subject is.
-        partner_provided = supply in ("cli", "env")
+        # The subject is ENGAGED exactly when the invocation provided it
+        # (§26.3's `present`, §23.6's predicate): a declared default never
+        # engages a member, and constraints run before defaults are applied.
+        subject_engaged = supply in ("cli", "env")
+        # A bool member must declare its election (§26.3): omitting `when`
+        # there is the registration error that keeps `--no-x` from engaging a
+        # constraint while selecting nothing. `present` is legal spelled OUT --
+        # only the omission is refused -- and it keeps this row's engagement
+        # rule the same one every other type takes.
+        subject_member: dict = {"name": flag_name}
+        if flag_type == "bool":
+            subject_member["when"] = "present"
         flags.append({
             "name": partner_name,
-            "help": f"co-required partner {row_idx}",
+            "help": f"co-occurrence partner {row_idx}",
             "presence": "optional",
         })
-        dependencies.append({"type": "co_required", "flags": [flag_name, partner_name]})
+        constraints.append({
+            "type": constraint,
+            "name": f"pair{row_idx}",
+            "members": [subject_member, {"name": partner_name}],
+        })
+        if constraint == "all_or_none":
+            # Either every member is engaged or none is, so the partner is
+            # supplied exactly when the subject is. The not-supplied half is
+            # the VACUOUS satisfaction, which is the "none" of its own name.
+            partner_provided = subject_engaged
+        else:
+            # at-least-one needs one engaged member and refuses no second one.
+            # Supplying the partner only when the subject is absent exercises
+            # both halves across the matrix: satisfied by the subject alone,
+            # and satisfied by the partner alone.
+            partner_provided = not subject_engaged
         if partner_provided:
             argv.extend([f"--{partner_name}", "together"])
             expected_parts.append(f"{partner_name}=together")
@@ -450,9 +489,13 @@ def generate_test_case(row_idx: int, row: list) -> dict:
         handler_parts.append(f"{trigger_name}={{{trigger_name}}}")
         expected_parts.append(f"{trigger_name}=true")
         if subject_is_implied:
-            dependencies.append(
-                {"type": "implies", "flag": trigger_name, "implies": flag_name, "value": True}
-            )
+            constraints.append({
+                "type": "implies",
+                "name": f"link{row_idx}",
+                "flag": trigger_name,
+                "implies": flag_name,
+                "value": True,
+            })
         else:
             target_name = f"imp{row_idx}"
             flags.append({
@@ -462,16 +505,20 @@ def generate_test_case(row_idx: int, row: list) -> dict:
                 "presence": "default",
                 "default": False,
             })
-            dependencies.append(
-                {"type": "implies", "flag": trigger_name, "implies": target_name, "value": True}
-            )
+            constraints.append({
+                "type": "implies",
+                "name": f"link{row_idx}",
+                "flag": trigger_name,
+                "implies": target_name,
+                "value": True,
+            })
             handler_parts.append(f"{target_name}={{{target_name}}}")
             expected_parts.append(f"{target_name}=true")
 
     if flags:
         command["flags"] = flags
-    if dependencies:
-        command["dependencies"] = dependencies
+    if constraints:
+        command["constraints"] = constraints
     command["handler_prints"] = " ".join(handler_parts)
 
     app: dict = {

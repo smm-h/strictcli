@@ -71,7 +71,7 @@
     }
   },
   {
-    "name": "pairwise: type=bool, presence=defaulted, negatable=true, co_required",
+    "name": "pairwise: type=bool, presence=defaulted, negatable=true, all_or_none",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -92,16 +92,22 @@
             },
             {
               "name": "part1",
-              "help": "co-required partner 1",
+              "help": "co-occurrence partner 1",
               "presence": "optional"
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
-              "type": "co_required",
-              "flags": [
-                "flag1",
-                "part1"
+              "type": "all_or_none",
+              "name": "pair1",
+              "members": [
+                {
+                  "name": "flag1",
+                  "when": "present"
+                },
+                {
+                  "name": "part1"
+                }
               ]
             }
           ],
@@ -323,9 +329,10 @@
               "default": false
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
               "type": "implies",
+              "name": "link5",
               "flag": "trig5",
               "implies": "imp5",
               "value": true
@@ -347,7 +354,7 @@
     }
   },
   {
-    "name": "pairwise: type=dict, presence=optional, short, env, co_required",
+    "name": "pairwise: type=dict, presence=optional, short, env, at_least_one",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -368,16 +375,21 @@
             },
             {
               "name": "part6",
-              "help": "co-required partner 6",
+              "help": "co-occurrence partner 6",
               "presence": "optional"
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
-              "type": "co_required",
-              "flags": [
-                "flag6",
-                "part6"
+              "type": "at_least_one",
+              "name": "pair6",
+              "members": [
+                {
+                  "name": "flag6"
+                },
+                {
+                  "name": "part6"
+                }
               ]
             }
           ],
@@ -387,20 +399,18 @@
       "env_prefix": "MYAPP"
     },
     "argv": [
-      "cmd",
-      "--part6",
-      "together"
+      "cmd"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag6=k=v part6=together"
+      "stdout_equals": "flag6=k=v part6=None"
     },
     "env": {
       "MYAPP_FLAG6": "{\"k\": \"v\"}"
     }
   },
   {
-    "name": "pairwise: type=list, presence=optional",
+    "name": "pairwise: type=list, presence=optional, scoped",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -412,19 +422,39 @@
           "effect": "read_only",
           "flags": [
             {
-              "name": "flag7",
-              "type": "list[str]",
-              "help": "test flag 7",
-              "presence": "optional",
-              "unique": false
+              "name": "sel7",
+              "help": "scope selector 7",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "on",
+                  "help": "the scope that owns the subject flag",
+                  "flags": [
+                    {
+                      "name": "flag7",
+                      "type": "list[str]",
+                      "help": "test flag 7",
+                      "presence": "optional",
+                      "unique": false
+                    }
+                  ]
+                },
+                {
+                  "name": "off",
+                  "help": "the sibling scope, which owns nothing"
+                }
+              ]
             }
           ],
-          "handler_prints": "flag7={flag7}"
+          "handler_prints": "flag7={sel7.flag7}"
         }
       ]
     },
     "argv": [
-      "cmd"
+      "cmd",
+      "--sel7",
+      "on"
     ],
     "expect": {
       "exit_code": 0,
@@ -432,7 +462,7 @@
     }
   },
   {
-    "name": "pairwise: type=float, presence=defaulted, env, choices, repeatable, implies",
+    "name": "pairwise: type=float, presence=defaulted, env, choices, repeatable, at_least_one",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -468,40 +498,36 @@
               ]
             },
             {
-              "name": "trig8",
-              "type": "bool",
-              "help": "implication trigger 8",
-              "presence": "default",
-              "default": false
-            },
-            {
-              "name": "imp8",
-              "type": "bool",
-              "help": "implication target 8",
-              "presence": "default",
-              "default": false
+              "name": "part8",
+              "help": "co-occurrence partner 8",
+              "presence": "optional"
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
-              "type": "implies",
-              "flag": "trig8",
-              "implies": "imp8",
-              "value": true
+              "type": "at_least_one",
+              "name": "pair8",
+              "members": [
+                {
+                  "name": "flag8"
+                },
+                {
+                  "name": "part8"
+                }
+              ]
             }
           ],
-          "handler_prints": "flag8={flag8} trig8={trig8} imp8={imp8}"
+          "handler_prints": "flag8={flag8} part8={part8}"
         }
       ],
       "env_prefix": "MYAPP"
     },
     "argv": [
-      "cmd",
-      "--trig8"
+      "cmd"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag8=1.5,2.5 trig8=true imp8=true"
+      "stdout_equals": "flag8=1.5,2.5 part8=None"
     },
     "env": {
       "MYAPP_FLAG8": "1.5,2.5"
@@ -641,7 +667,7 @@
     }
   },
   {
-    "name": "pairwise: type=str, presence=optional, repeatable, scoped, validate",
+    "name": "pairwise: type=str, presence=optional, repeatable, all_or_none",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -653,54 +679,47 @@
           "effect": "read_only",
           "flags": [
             {
-              "name": "sel11",
-              "help": "scope selector 11",
-              "presence": "required",
-              "elect_by": "selector-token",
-              "choices": [
+              "name": "flag11",
+              "type": "str",
+              "help": "test flag 11",
+              "presence": "optional",
+              "repeatable": true,
+              "unique": false
+            },
+            {
+              "name": "part11",
+              "help": "co-occurrence partner 11",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair11",
+              "members": [
                 {
-                  "name": "on",
-                  "help": "the scope that owns the subject flag",
-                  "flags": [
-                    {
-                      "name": "flag11",
-                      "type": "str",
-                      "help": "test flag 11",
-                      "presence": "optional",
-                      "repeatable": true,
-                      "unique": false,
-                      "validate": {
-                        "rejects": [
-                          "REJECTED_VALUE"
-                        ],
-                        "message": "flag11 refuses that value"
-                      }
-                    }
-                  ]
+                  "name": "flag11"
                 },
                 {
-                  "name": "off",
-                  "help": "the sibling scope, which owns nothing"
+                  "name": "part11"
                 }
               ]
             }
           ],
-          "handler_prints": "flag11={sel11.flag11}"
+          "handler_prints": "flag11={flag11} part11={part11}"
         }
       ]
     },
     "argv": [
-      "cmd",
-      "--sel11",
-      "on"
+      "cmd"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag11=None"
+      "stdout_equals": "flag11=None part11=None"
     }
   },
   {
-    "name": "pairwise: type=list, presence=required, short, scoped, validate",
+    "name": "pairwise: type=list, presence=required, short, env, implies",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -712,58 +731,58 @@
           "effect": "read_only",
           "flags": [
             {
-              "name": "sel12",
-              "help": "scope selector 12",
+              "name": "flag12",
+              "type": "list[str]",
+              "help": "test flag 12",
               "presence": "required",
-              "elect_by": "selector-token",
-              "choices": [
-                {
-                  "name": "on",
-                  "help": "the scope that owns the subject flag",
-                  "flags": [
-                    {
-                      "name": "flag12",
-                      "type": "list[str]",
-                      "help": "test flag 12",
-                      "presence": "required",
-                      "short": "l",
-                      "unique": false,
-                      "validate": {
-                        "rejects": [
-                          "REJECTED_VALUE"
-                        ],
-                        "message": "flag12 refuses that value"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "name": "off",
-                  "help": "the sibling scope, which owns nothing"
-                }
-              ]
+              "short": "l",
+              "env": "MYAPP_FLAG12",
+              "unique": false,
+              "env_separator": ","
+            },
+            {
+              "name": "trig12",
+              "type": "bool",
+              "help": "implication trigger 12",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "imp12",
+              "type": "bool",
+              "help": "implication target 12",
+              "presence": "default",
+              "default": false
             }
           ],
-          "handler_prints": "flag12={sel12.flag12}"
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "link12",
+              "flag": "trig12",
+              "implies": "imp12",
+              "value": true
+            }
+          ],
+          "handler_prints": "flag12={flag12} trig12={trig12} imp12={imp12}"
         }
-      ]
+      ],
+      "env_prefix": "MYAPP"
     },
     "argv": [
       "cmd",
-      "--sel12",
-      "on",
-      "-l",
-      "alpha",
-      "-l",
-      "beta"
+      "--trig12"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag12=alpha,beta"
+      "stdout_equals": "flag12=alpha,beta trig12=true imp12=true"
+    },
+    "env": {
+      "MYAPP_FLAG12": "alpha,beta"
     }
   },
   {
-    "name": "pairwise: type=dict, presence=defaulted, short, scoped",
+    "name": "pairwise: type=dict, presence=defaulted, short, env, scoped",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -792,7 +811,8 @@
                       "default": {
                         "d": "1"
                       },
-                      "short": "d"
+                      "short": "d",
+                      "env": "MYAPP_FLAG13"
                     }
                   ]
                 },
@@ -805,7 +825,8 @@
           ],
           "handler_prints": "flag13={sel13.flag13}"
         }
-      ]
+      ],
+      "env_prefix": "MYAPP"
     },
     "argv": [
       "cmd",
@@ -814,11 +835,14 @@
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag13=d=1"
+      "stdout_equals": "flag13=k=v"
+    },
+    "env": {
+      "MYAPP_FLAG13": "{\"k\": \"v\"}"
     }
   },
   {
-    "name": "pairwise: type=str, presence=defaulted, short, choices, co_required",
+    "name": "pairwise: type=list, presence=required, short, env, scoped, validate",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -830,104 +854,60 @@
           "effect": "read_only",
           "flags": [
             {
-              "name": "flag14",
-              "type": "str",
-              "help": "test flag 14",
-              "presence": "default",
-              "default": "third_val",
-              "short": "s",
-              "choices_str": [
+              "name": "sel14",
+              "help": "scope selector 14",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
                 {
-                  "value": "test_val"
+                  "name": "on",
+                  "help": "the scope that owns the subject flag",
+                  "flags": [
+                    {
+                      "name": "flag14",
+                      "type": "list[str]",
+                      "help": "test flag 14",
+                      "presence": "required",
+                      "short": "l",
+                      "env": "MYAPP_FLAG14",
+                      "unique": false,
+                      "env_separator": ",",
+                      "validate": {
+                        "rejects": [
+                          "REJECTED_VALUE"
+                        ],
+                        "message": "flag14 refuses that value"
+                      }
+                    }
+                  ]
                 },
                 {
-                  "value": "other_val"
-                },
-                {
-                  "value": "third_val"
+                  "name": "off",
+                  "help": "the sibling scope, which owns nothing"
                 }
               ]
-            },
-            {
-              "name": "part14",
-              "help": "co-required partner 14",
-              "presence": "optional"
             }
           ],
-          "dependencies": [
-            {
-              "type": "co_required",
-              "flags": [
-                "flag14",
-                "part14"
-              ]
-            }
-          ],
-          "handler_prints": "flag14={flag14} part14={part14}"
-        }
-      ]
-    },
-    "argv": [
-      "cmd"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_equals": "flag14=third_val part14=None"
-    }
-  },
-  {
-    "name": "pairwise: type=bool, presence=required, short, env, negatable=true, implies",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "flags": [
-            {
-              "name": "flag15",
-              "type": "bool",
-              "help": "test flag 15",
-              "presence": "required",
-              "short": "b",
-              "env": "MYAPP_FLAG15",
-              "negatable": true
-            },
-            {
-              "name": "trig15",
-              "type": "bool",
-              "help": "implication trigger 15",
-              "presence": "default",
-              "default": false
-            }
-          ],
-          "dependencies": [
-            {
-              "type": "implies",
-              "flag": "trig15",
-              "implies": "flag15",
-              "value": true
-            }
-          ],
-          "handler_prints": "flag15={flag15} trig15={trig15}"
+          "handler_prints": "flag14={sel14.flag14}"
         }
       ],
       "env_prefix": "MYAPP"
     },
     "argv": [
       "cmd",
-      "--trig15"
+      "--sel14",
+      "on"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag15=true trig15=true"
+      "stdout_equals": "flag14=alpha,beta"
+    },
+    "env": {
+      "MYAPP_FLAG14": "alpha,beta"
     }
   },
   {
-    "name": "pairwise: type=bool, presence=required, negatable=false, co_required",
+    "name": "pairwise: type=str, presence=defaulted, short, env, choices, scoped, validate",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -939,44 +919,128 @@
           "effect": "read_only",
           "flags": [
             {
-              "name": "flag16",
-              "type": "bool",
-              "help": "test flag 16",
+              "name": "sel15",
+              "help": "scope selector 15",
               "presence": "required",
-              "negatable": false
-            },
-            {
-              "name": "part16",
-              "help": "co-required partner 16",
-              "presence": "optional"
-            }
-          ],
-          "dependencies": [
-            {
-              "type": "co_required",
-              "flags": [
-                "flag16",
-                "part16"
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "on",
+                  "help": "the scope that owns the subject flag",
+                  "flags": [
+                    {
+                      "name": "flag15",
+                      "type": "str",
+                      "help": "test flag 15",
+                      "presence": "default",
+                      "default": "third_val",
+                      "short": "s",
+                      "env": "MYAPP_FLAG15",
+                      "choices_str": [
+                        {
+                          "value": "test_val"
+                        },
+                        {
+                          "value": "other_val"
+                        },
+                        {
+                          "value": "third_val"
+                        }
+                      ],
+                      "validate": {
+                        "rejects": [
+                          "REJECTED_VALUE"
+                        ],
+                        "message": "flag15 refuses that value"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "off",
+                  "help": "the sibling scope, which owns nothing"
+                }
               ]
             }
           ],
-          "handler_prints": "flag16={flag16} part16={part16}"
+          "handler_prints": "flag15={sel15.flag15}"
         }
-      ]
+      ],
+      "env_prefix": "MYAPP"
     },
     "argv": [
       "cmd",
-      "--flag16",
-      "--part16",
-      "together"
+      "--sel15",
+      "on"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag16=true part16=together"
+      "stdout_equals": "flag15=other_val"
+    },
+    "env": {
+      "MYAPP_FLAG15": "other_val"
     }
   },
   {
-    "name": "pairwise: type=float, presence=required, short, env, scoped",
+    "name": "pairwise: type=bool, presence=required, short, env, negatable=true, scoped",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "sel16",
+              "help": "scope selector 16",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "on",
+                  "help": "the scope that owns the subject flag",
+                  "flags": [
+                    {
+                      "name": "flag16",
+                      "type": "bool",
+                      "help": "test flag 16",
+                      "presence": "required",
+                      "short": "b",
+                      "env": "MYAPP_FLAG16",
+                      "negatable": true
+                    }
+                  ]
+                },
+                {
+                  "name": "off",
+                  "help": "the sibling scope, which owns nothing"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag16={sel16.flag16}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd",
+      "--sel16",
+      "on"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag16=true"
+    },
+    "env": {
+      "MYAPP_FLAG16": "true"
+    }
+  },
+  {
+    "name": "pairwise: type=int, presence=defaulted, short, choices, scoped",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -999,402 +1063,11 @@
                   "flags": [
                     {
                       "name": "flag17",
-                      "type": "float",
-                      "help": "test flag 17",
-                      "presence": "required",
-                      "short": "f",
-                      "env": "MYAPP_FLAG17"
-                    }
-                  ]
-                },
-                {
-                  "name": "off",
-                  "help": "the sibling scope, which owns nothing"
-                }
-              ]
-            }
-          ],
-          "handler_prints": "flag17={sel17.flag17}"
-        }
-      ],
-      "env_prefix": "MYAPP"
-    },
-    "argv": [
-      "cmd",
-      "--sel17",
-      "on"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_equals": "flag17=2.25"
-    },
-    "env": {
-      "MYAPP_FLAG17": "2.25"
-    }
-  },
-  {
-    "name": "pairwise: type=str, presence=optional, short, env, choices, implies",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "flags": [
-            {
-              "name": "flag18",
-              "type": "str",
-              "help": "test flag 18",
-              "presence": "optional",
-              "short": "s",
-              "env": "MYAPP_FLAG18",
-              "choices_str": [
-                {
-                  "value": "test_val"
-                },
-                {
-                  "value": "other_val"
-                },
-                {
-                  "value": "third_val"
-                }
-              ]
-            },
-            {
-              "name": "trig18",
-              "type": "bool",
-              "help": "implication trigger 18",
-              "presence": "default",
-              "default": false
-            },
-            {
-              "name": "imp18",
-              "type": "bool",
-              "help": "implication target 18",
-              "presence": "default",
-              "default": false
-            }
-          ],
-          "dependencies": [
-            {
-              "type": "implies",
-              "flag": "trig18",
-              "implies": "imp18",
-              "value": true
-            }
-          ],
-          "handler_prints": "flag18={flag18} trig18={trig18} imp18={imp18}"
-        }
-      ],
-      "env_prefix": "MYAPP"
-    },
-    "argv": [
-      "cmd",
-      "--trig18"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_equals": "flag18=other_val trig18=true imp18=true"
-    },
-    "env": {
-      "MYAPP_FLAG18": "other_val"
-    }
-  },
-  {
-    "name": "pairwise: type=bool, presence=optional, short, env, negatable=true, scoped",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "flags": [
-            {
-              "name": "sel19",
-              "help": "scope selector 19",
-              "presence": "required",
-              "elect_by": "selector-token",
-              "choices": [
-                {
-                  "name": "on",
-                  "help": "the scope that owns the subject flag",
-                  "flags": [
-                    {
-                      "name": "flag19",
-                      "type": "bool",
-                      "help": "test flag 19",
-                      "presence": "optional",
-                      "short": "b",
-                      "env": "MYAPP_FLAG19",
-                      "negatable": true
-                    }
-                  ]
-                },
-                {
-                  "name": "off",
-                  "help": "the sibling scope, which owns nothing"
-                }
-              ]
-            }
-          ],
-          "handler_prints": "flag19={sel19.flag19}"
-        }
-      ],
-      "env_prefix": "MYAPP"
-    },
-    "argv": [
-      "cmd",
-      "--sel19",
-      "on"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_equals": "flag19=true"
-    },
-    "env": {
-      "MYAPP_FLAG19": "true"
-    }
-  },
-  {
-    "name": "pairwise: type=int, presence=defaulted, short, env, choices, repeatable, co_required",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "flags": [
-            {
-              "name": "flag20",
-              "type": "int",
-              "help": "test flag 20",
-              "presence": "default",
-              "default": [
-                1
-              ],
-              "short": "n",
-              "env": "MYAPP_FLAG20",
-              "repeatable": true,
-              "unique": false,
-              "env_separator": ",",
-              "choices_int": [
-                {
-                  "value": 99
-                },
-                {
-                  "value": 50
-                },
-                {
-                  "value": 1
-                }
-              ]
-            },
-            {
-              "name": "part20",
-              "help": "co-required partner 20",
-              "presence": "optional"
-            }
-          ],
-          "dependencies": [
-            {
-              "type": "co_required",
-              "flags": [
-                "flag20",
-                "part20"
-              ]
-            }
-          ],
-          "handler_prints": "flag20={flag20} part20={part20}"
-        }
-      ],
-      "env_prefix": "MYAPP"
-    },
-    "argv": [
-      "cmd",
-      "--part20",
-      "together"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_equals": "flag20=99,50 part20=together"
-    },
-    "env": {
-      "MYAPP_FLAG20": "99,50"
-    }
-  },
-  {
-    "name": "pairwise: type=bool, presence=defaulted, short, env, negatable=false, implies",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "flags": [
-            {
-              "name": "flag21",
-              "type": "bool",
-              "help": "test flag 21",
-              "presence": "default",
-              "default": false,
-              "short": "b",
-              "env": "MYAPP_FLAG21",
-              "negatable": false
-            },
-            {
-              "name": "trig21",
-              "type": "bool",
-              "help": "implication trigger 21",
-              "presence": "default",
-              "default": false
-            }
-          ],
-          "dependencies": [
-            {
-              "type": "implies",
-              "flag": "trig21",
-              "implies": "flag21",
-              "value": true
-            }
-          ],
-          "handler_prints": "flag21={flag21} trig21={trig21}"
-        }
-      ],
-      "env_prefix": "MYAPP"
-    },
-    "argv": [
-      "cmd",
-      "--trig21"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_equals": "flag21=true trig21=true"
-    }
-  },
-  {
-    "name": "pairwise: type=str, presence=defaulted, short, env, choices, repeatable, scoped, validate",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "flags": [
-            {
-              "name": "sel22",
-              "help": "scope selector 22",
-              "presence": "required",
-              "elect_by": "selector-token",
-              "choices": [
-                {
-                  "name": "on",
-                  "help": "the scope that owns the subject flag",
-                  "flags": [
-                    {
-                      "name": "flag22",
-                      "type": "str",
-                      "help": "test flag 22",
-                      "presence": "default",
-                      "default": [
-                        "third_val"
-                      ],
-                      "short": "s",
-                      "env": "MYAPP_FLAG22",
-                      "repeatable": true,
-                      "unique": false,
-                      "env_separator": ",",
-                      "choices_str": [
-                        {
-                          "value": "test_val"
-                        },
-                        {
-                          "value": "other_val"
-                        },
-                        {
-                          "value": "third_val"
-                        }
-                      ],
-                      "validate": {
-                        "rejects": [
-                          "REJECTED_VALUE"
-                        ],
-                        "message": "flag22 refuses that value"
-                      }
-                    }
-                  ]
-                },
-                {
-                  "name": "off",
-                  "help": "the sibling scope, which owns nothing"
-                }
-              ]
-            }
-          ],
-          "handler_prints": "flag22={sel22.flag22}"
-        }
-      ],
-      "env_prefix": "MYAPP"
-    },
-    "argv": [
-      "cmd",
-      "--sel22",
-      "on"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_equals": "flag22=test_val,other_val"
-    },
-    "env": {
-      "MYAPP_FLAG22": "test_val,other_val"
-    }
-  },
-  {
-    "name": "pairwise: type=int, presence=required, short, env, choices, repeatable, scoped",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "flags": [
-            {
-              "name": "sel23",
-              "help": "scope selector 23",
-              "presence": "required",
-              "elect_by": "selector-token",
-              "choices": [
-                {
-                  "name": "on",
-                  "help": "the scope that owns the subject flag",
-                  "flags": [
-                    {
-                      "name": "flag23",
                       "type": "int",
-                      "help": "test flag 23",
-                      "presence": "required",
+                      "help": "test flag 17",
+                      "presence": "default",
+                      "default": 1,
                       "short": "n",
-                      "env": "MYAPP_FLAG23",
-                      "repeatable": true,
-                      "unique": false,
-                      "env_separator": ",",
                       "choices_int": [
                         {
                           "value": 99
@@ -1416,26 +1089,399 @@
               ]
             }
           ],
-          "handler_prints": "flag23={sel23.flag23}"
+          "handler_prints": "flag17={sel17.flag17}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--sel17",
+      "on"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag17=1"
+    }
+  },
+  {
+    "name": "pairwise: type=float, presence=required, short, scoped",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "sel18",
+              "help": "scope selector 18",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "on",
+                  "help": "the scope that owns the subject flag",
+                  "flags": [
+                    {
+                      "name": "flag18",
+                      "type": "float",
+                      "help": "test flag 18",
+                      "presence": "required",
+                      "short": "f"
+                    }
+                  ]
+                },
+                {
+                  "name": "off",
+                  "help": "the sibling scope, which owns nothing"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag18={sel18.flag18}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--sel18",
+      "on",
+      "-f",
+      "1.5"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag18=1.5"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, presence=defaulted, negatable=false, at_least_one",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag19",
+              "type": "bool",
+              "help": "test flag 19",
+              "presence": "default",
+              "default": false,
+              "negatable": false
+            },
+            {
+              "name": "part19",
+              "help": "co-occurrence partner 19",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pair19",
+              "members": [
+                {
+                  "name": "flag19",
+                  "when": "present"
+                },
+                {
+                  "name": "part19"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag19={flag19} part19={part19}"
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--part19",
+      "together"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag19=false part19=together"
+    }
+  },
+  {
+    "name": "pairwise: type=int, presence=defaulted, short, env, choices, all_or_none",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag20",
+              "type": "int",
+              "help": "test flag 20",
+              "presence": "default",
+              "default": 1,
+              "short": "n",
+              "env": "MYAPP_FLAG20",
+              "choices_int": [
+                {
+                  "value": 99
+                },
+                {
+                  "value": 50
+                },
+                {
+                  "value": 1
+                }
+              ]
+            },
+            {
+              "name": "part20",
+              "help": "co-occurrence partner 20",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair20",
+              "members": [
+                {
+                  "name": "flag20"
+                },
+                {
+                  "name": "part20"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag20={flag20} part20={part20}"
         }
       ],
       "env_prefix": "MYAPP"
     },
     "argv": [
       "cmd",
-      "--sel23",
-      "on"
+      "--part20",
+      "together"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag23=99,50"
+      "stdout_equals": "flag20=50 part20=together"
     },
     "env": {
-      "MYAPP_FLAG23": "99,50"
+      "MYAPP_FLAG20": "50"
     }
   },
   {
-    "name": "pairwise: type=int, presence=required, short, env, choices, repeatable, implies",
+    "name": "pairwise: type=str, presence=defaulted, short, env, choices, repeatable, implies",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag21",
+              "type": "str",
+              "help": "test flag 21",
+              "presence": "default",
+              "default": [
+                "third_val"
+              ],
+              "short": "s",
+              "env": "MYAPP_FLAG21",
+              "repeatable": true,
+              "unique": false,
+              "env_separator": ",",
+              "choices_str": [
+                {
+                  "value": "test_val"
+                },
+                {
+                  "value": "other_val"
+                },
+                {
+                  "value": "third_val"
+                }
+              ]
+            },
+            {
+              "name": "trig21",
+              "type": "bool",
+              "help": "implication trigger 21",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "imp21",
+              "type": "bool",
+              "help": "implication target 21",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "link21",
+              "flag": "trig21",
+              "implies": "imp21",
+              "value": true
+            }
+          ],
+          "handler_prints": "flag21={flag21} trig21={trig21} imp21={imp21}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd",
+      "--trig21"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag21=test_val,other_val trig21=true imp21=true"
+    },
+    "env": {
+      "MYAPP_FLAG21": "test_val,other_val"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, presence=optional, short, env, negatable=true, implies",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag22",
+              "type": "bool",
+              "help": "test flag 22",
+              "presence": "optional",
+              "short": "b",
+              "env": "MYAPP_FLAG22",
+              "negatable": true
+            },
+            {
+              "name": "trig22",
+              "type": "bool",
+              "help": "implication trigger 22",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "link22",
+              "flag": "trig22",
+              "implies": "flag22",
+              "value": true
+            }
+          ],
+          "handler_prints": "flag22={flag22} trig22={trig22}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd",
+      "--trig22"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag22=true trig22=true"
+    }
+  },
+  {
+    "name": "pairwise: type=str, presence=defaulted, short, env, choices, at_least_one",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag23",
+              "type": "str",
+              "help": "test flag 23",
+              "presence": "default",
+              "default": "third_val",
+              "short": "s",
+              "env": "MYAPP_FLAG23",
+              "choices_str": [
+                {
+                  "value": "test_val"
+                },
+                {
+                  "value": "other_val"
+                },
+                {
+                  "value": "third_val"
+                }
+              ]
+            },
+            {
+              "name": "part23",
+              "help": "co-occurrence partner 23",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pair23",
+              "members": [
+                {
+                  "name": "flag23"
+                },
+                {
+                  "name": "part23"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag23={flag23} part23={part23}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag23=other_val part23=None"
+    },
+    "env": {
+      "MYAPP_FLAG23": "other_val"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, presence=required, short, env, negatable=false",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -1448,11 +1494,296 @@
           "flags": [
             {
               "name": "flag24",
-              "type": "int",
+              "type": "bool",
               "help": "test flag 24",
               "presence": "required",
-              "short": "n",
+              "short": "b",
               "env": "MYAPP_FLAG24",
+              "negatable": false
+            }
+          ],
+          "handler_prints": "flag24={flag24}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag24=true"
+    },
+    "env": {
+      "MYAPP_FLAG24": "true"
+    }
+  },
+  {
+    "name": "pairwise: type=int, presence=required, short, env, choices, implies",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag25",
+              "type": "int",
+              "help": "test flag 25",
+              "presence": "required",
+              "short": "n",
+              "env": "MYAPP_FLAG25",
+              "choices_int": [
+                {
+                  "value": 99
+                },
+                {
+                  "value": 50
+                },
+                {
+                  "value": 1
+                }
+              ]
+            },
+            {
+              "name": "trig25",
+              "type": "bool",
+              "help": "implication trigger 25",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "imp25",
+              "type": "bool",
+              "help": "implication target 25",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "link25",
+              "flag": "trig25",
+              "implies": "imp25",
+              "value": true
+            }
+          ],
+          "handler_prints": "flag25={flag25} trig25={trig25} imp25={imp25}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd",
+      "--trig25"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag25=50 trig25=true imp25=true"
+    },
+    "env": {
+      "MYAPP_FLAG25": "50"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, presence=required, short, env, negatable=false, implies",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag26",
+              "type": "bool",
+              "help": "test flag 26",
+              "presence": "required",
+              "short": "b",
+              "env": "MYAPP_FLAG26",
+              "negatable": false
+            },
+            {
+              "name": "trig26",
+              "type": "bool",
+              "help": "implication trigger 26",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "link26",
+              "flag": "trig26",
+              "implies": "flag26",
+              "value": true
+            }
+          ],
+          "handler_prints": "flag26={flag26} trig26={trig26}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd",
+      "--trig26"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag26=true trig26=true"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, presence=defaulted, short, env, negatable=true, at_least_one",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag27",
+              "type": "bool",
+              "help": "test flag 27",
+              "presence": "default",
+              "default": false,
+              "short": "b",
+              "env": "MYAPP_FLAG27",
+              "negatable": true
+            },
+            {
+              "name": "part27",
+              "help": "co-occurrence partner 27",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pair27",
+              "members": [
+                {
+                  "name": "flag27",
+                  "when": "present"
+                },
+                {
+                  "name": "part27"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag27={flag27} part27={part27}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag27=true part27=None"
+    },
+    "env": {
+      "MYAPP_FLAG27": "true"
+    }
+  },
+  {
+    "name": "pairwise: type=bool, presence=defaulted, short, env, negatable=false, all_or_none",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag28",
+              "type": "bool",
+              "help": "test flag 28",
+              "presence": "default",
+              "default": false,
+              "short": "b",
+              "env": "MYAPP_FLAG28",
+              "negatable": false
+            },
+            {
+              "name": "part28",
+              "help": "co-occurrence partner 28",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair28",
+              "members": [
+                {
+                  "name": "flag28",
+                  "when": "present"
+                },
+                {
+                  "name": "part28"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag28={flag28} part28={part28}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd",
+      "--part28",
+      "together"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag28=true part28=together"
+    },
+    "env": {
+      "MYAPP_FLAG28": "true"
+    }
+  },
+  {
+    "name": "pairwise: type=int, presence=defaulted, short, env, choices, repeatable, at_least_one",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag29",
+              "type": "int",
+              "help": "test flag 29",
+              "presence": "default",
+              "default": [
+                1
+              ],
+              "short": "n",
+              "env": "MYAPP_FLAG29",
               "repeatable": true,
               "unique": false,
               "env_separator": ",",
@@ -1469,47 +1800,43 @@
               ]
             },
             {
-              "name": "trig24",
-              "type": "bool",
-              "help": "implication trigger 24",
-              "presence": "default",
-              "default": false
-            },
-            {
-              "name": "imp24",
-              "type": "bool",
-              "help": "implication target 24",
-              "presence": "default",
-              "default": false
+              "name": "part29",
+              "help": "co-occurrence partner 29",
+              "presence": "optional"
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
-              "type": "implies",
-              "flag": "trig24",
-              "implies": "imp24",
-              "value": true
+              "type": "at_least_one",
+              "name": "pair29",
+              "members": [
+                {
+                  "name": "flag29"
+                },
+                {
+                  "name": "part29"
+                }
+              ]
             }
           ],
-          "handler_prints": "flag24={flag24} trig24={trig24} imp24={imp24}"
+          "handler_prints": "flag29={flag29} part29={part29}"
         }
       ],
       "env_prefix": "MYAPP"
     },
     "argv": [
-      "cmd",
-      "--trig24"
+      "cmd"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag24=99,50 trig24=true imp24=true"
+      "stdout_equals": "flag29=99,50 part29=None"
     },
     "env": {
-      "MYAPP_FLAG24": "99,50"
+      "MYAPP_FLAG29": "99,50"
     }
   },
   {
-    "name": "pairwise: type=float, presence=required, short, env, choices, repeatable, co_required",
+    "name": "pairwise: type=float, presence=required, short, env, choices, repeatable, implies",
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -1521,12 +1848,12 @@
           "effect": "read_only",
           "flags": [
             {
-              "name": "flag25",
+              "name": "flag30",
               "type": "float",
-              "help": "test flag 25",
+              "help": "test flag 30",
               "presence": "required",
               "short": "f",
-              "env": "MYAPP_FLAG25",
+              "env": "MYAPP_FLAG30",
               "repeatable": true,
               "unique": false,
               "env_separator": ",",
@@ -1543,153 +1870,304 @@
               ]
             },
             {
-              "name": "part25",
-              "help": "co-required partner 25",
-              "presence": "optional"
-            }
-          ],
-          "dependencies": [
-            {
-              "type": "co_required",
-              "flags": [
-                "flag25",
-                "part25"
-              ]
-            }
-          ],
-          "handler_prints": "flag25={flag25} part25={part25}"
-        }
-      ],
-      "env_prefix": "MYAPP"
-    },
-    "argv": [
-      "cmd",
-      "--part25",
-      "together"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_equals": "flag25=1.5,2.5 part25=together"
-    },
-    "env": {
-      "MYAPP_FLAG25": "1.5,2.5"
-    }
-  },
-  {
-    "name": "pairwise: type=list, presence=required, short, env, co_required",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "flags": [
-            {
-              "name": "flag26",
-              "type": "list[str]",
-              "help": "test flag 26",
-              "presence": "required",
-              "short": "l",
-              "env": "MYAPP_FLAG26",
-              "unique": false,
-              "env_separator": ","
-            },
-            {
-              "name": "part26",
-              "help": "co-required partner 26",
-              "presence": "optional"
-            }
-          ],
-          "dependencies": [
-            {
-              "type": "co_required",
-              "flags": [
-                "flag26",
-                "part26"
-              ]
-            }
-          ],
-          "handler_prints": "flag26={flag26} part26={part26}"
-        }
-      ],
-      "env_prefix": "MYAPP"
-    },
-    "argv": [
-      "cmd",
-      "--part26",
-      "together"
-    ],
-    "expect": {
-      "exit_code": 0,
-      "stdout_equals": "flag26=alpha,beta part26=together"
-    },
-    "env": {
-      "MYAPP_FLAG26": "alpha,beta"
-    }
-  },
-  {
-    "name": "pairwise: type=list, presence=required, short, env, implies",
-    "app": {
-      "name": "myapp",
-      "version": "1.0.0",
-      "help": "test",
-      "commands": [
-        {
-          "name": "cmd",
-          "help": "a command",
-          "effect": "read_only",
-          "flags": [
-            {
-              "name": "flag27",
-              "type": "list[str]",
-              "help": "test flag 27",
-              "presence": "required",
-              "short": "l",
-              "env": "MYAPP_FLAG27",
-              "unique": false,
-              "env_separator": ","
-            },
-            {
-              "name": "trig27",
+              "name": "trig30",
               "type": "bool",
-              "help": "implication trigger 27",
+              "help": "implication trigger 30",
               "presence": "default",
               "default": false
             },
             {
-              "name": "imp27",
+              "name": "imp30",
               "type": "bool",
-              "help": "implication target 27",
+              "help": "implication target 30",
               "presence": "default",
               "default": false
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
               "type": "implies",
-              "flag": "trig27",
-              "implies": "imp27",
+              "name": "link30",
+              "flag": "trig30",
+              "implies": "imp30",
               "value": true
             }
           ],
-          "handler_prints": "flag27={flag27} trig27={trig27} imp27={imp27}"
+          "handler_prints": "flag30={flag30} trig30={trig30} imp30={imp30}"
         }
       ],
       "env_prefix": "MYAPP"
     },
     "argv": [
       "cmd",
-      "--trig27"
+      "--trig30"
     ],
     "expect": {
       "exit_code": 0,
-      "stdout_equals": "flag27=alpha,beta trig27=true imp27=true"
+      "stdout_equals": "flag30=1.5,2.5 trig30=true imp30=true"
     },
     "env": {
-      "MYAPP_FLAG27": "alpha,beta"
+      "MYAPP_FLAG30": "1.5,2.5"
+    }
+  },
+  {
+    "name": "pairwise: type=float, presence=defaulted, short, env, choices, repeatable, all_or_none",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag31",
+              "type": "float",
+              "help": "test flag 31",
+              "presence": "default",
+              "default": [
+                3.5
+              ],
+              "short": "f",
+              "env": "MYAPP_FLAG31",
+              "repeatable": true,
+              "unique": false,
+              "env_separator": ",",
+              "choices_float": [
+                {
+                  "value": 1.5
+                },
+                {
+                  "value": 2.5
+                },
+                {
+                  "value": 3.5
+                }
+              ]
+            },
+            {
+              "name": "part31",
+              "help": "co-occurrence partner 31",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair31",
+              "members": [
+                {
+                  "name": "flag31"
+                },
+                {
+                  "name": "part31"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag31={flag31} part31={part31}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd",
+      "--part31",
+      "together"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag31=1.5,2.5 part31=together"
+    },
+    "env": {
+      "MYAPP_FLAG31": "1.5,2.5"
+    }
+  },
+  {
+    "name": "pairwise: type=list, presence=defaulted, short, env, all_or_none",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag32",
+              "type": "list[str]",
+              "help": "test flag 32",
+              "presence": "default",
+              "default": [
+                "dflt"
+              ],
+              "short": "l",
+              "env": "MYAPP_FLAG32",
+              "unique": false,
+              "env_separator": ","
+            },
+            {
+              "name": "part32",
+              "help": "co-occurrence partner 32",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair32",
+              "members": [
+                {
+                  "name": "flag32"
+                },
+                {
+                  "name": "part32"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag32={flag32} part32={part32}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd",
+      "--part32",
+      "together"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag32=alpha,beta part32=together"
+    },
+    "env": {
+      "MYAPP_FLAG32": "alpha,beta"
+    }
+  },
+  {
+    "name": "pairwise: type=list, presence=defaulted, short, env, at_least_one",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag33",
+              "type": "list[str]",
+              "help": "test flag 33",
+              "presence": "default",
+              "default": [
+                "dflt"
+              ],
+              "short": "l",
+              "env": "MYAPP_FLAG33",
+              "unique": false,
+              "env_separator": ","
+            },
+            {
+              "name": "part33",
+              "help": "co-occurrence partner 33",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pair33",
+              "members": [
+                {
+                  "name": "flag33"
+                },
+                {
+                  "name": "part33"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag33={flag33} part33={part33}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag33=alpha,beta part33=None"
+    },
+    "env": {
+      "MYAPP_FLAG33": "alpha,beta"
+    }
+  },
+  {
+    "name": "pairwise: type=dict, presence=defaulted, short, env, all_or_none",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "flag34",
+              "type": "dict[str,str]",
+              "help": "test flag 34",
+              "presence": "default",
+              "default": {
+                "d": "1"
+              },
+              "short": "d",
+              "env": "MYAPP_FLAG34"
+            },
+            {
+              "name": "part34",
+              "help": "co-occurrence partner 34",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "pair34",
+              "members": [
+                {
+                  "name": "flag34"
+                },
+                {
+                  "name": "part34"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "flag34={flag34} part34={part34}"
+        }
+      ],
+      "env_prefix": "MYAPP"
+    },
+    "argv": [
+      "cmd",
+      "--part34",
+      "together"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "flag34=k=v part34=together"
+    },
+    "env": {
+      "MYAPP_FLAG34": "{\"k\": \"v\"}"
     }
   }
 ]

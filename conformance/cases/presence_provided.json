@@ -124,9 +124,10 @@
               "presence": "optional"
             }
           ],
-          "dependencies": [
+          "constraints": [
             {
               "type": "implies",
+              "name": "trigger-target",
               "flag": "trigger",
               "implies": "target",
               "value": true

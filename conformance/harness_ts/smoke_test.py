@@ -43,9 +43,9 @@ SMOKE_CASES = [
     # registration errors: "error: <msg>" stderr contract
     ("registration_errors.json", "registration: duplicate flag names"),
     ("registration_errors.json", "registration: empty app help"),
-    # compound types, dependencies, nesting, providers: full-vocabulary spread
+    # compound types, constraints, nesting, providers: full-vocabulary spread
     ("compound_types.json", None),
-    ("dependencies.json", None),
+    ("constraints.json", None),
     ("nesting.json", None),
     ("providers.json", None),
     ("repeatable.json", None),
