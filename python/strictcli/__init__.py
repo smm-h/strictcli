@@ -10154,6 +10154,38 @@ class App:
                 return None
             return result
 
+        # Build reverse mapping: param_name (underscore) -> flag.name (dashes)
+        param_to_flag: dict[str, str] = {}
+        for f in cmd.flags:
+            param_to_flag[_flag_param_name(f.name)] = f.name
+
+        # Also map global flags
+        global_flag_names: set[str] = set()
+        for gf in self._global_flags:
+            param_to_flag[_flag_param_name(gf.name)] = gf.name
+            global_flag_names.add(gf.name)
+
+        # Collect arg names for this command
+        arg_names: set[str] = {a.name for a in cmd.args}
+
+        # A key naming nothing this command declares is a fact about the
+        # object's SHAPE, and shape is decided before anything else -- exactly
+        # as an unknown flag outranks every election, scope, value and presence
+        # problem on the command line, wherever it sits in argv (§24.3, and
+        # item 224's reason: the phase order is a property of the parser, not
+        # of the input). The selector's own key and every scoped name at every
+        # depth are properties of the flat schema, so supplying one is a scope
+        # question and never a shape one.
+        declared_params = set(param_to_flag) | arg_names | (
+            _flat_selector_params(cmd) if flat
+            else {_flag_param_name(s.name) for s in cmd.selectors}
+        )
+        for key in kwargs:
+            if key not in declared_params:
+                raise _ParseError(
+                    f"unknown parameter '{key}' for command '{cmd.name}'"
+                )
+
         # A selector's value is the same record a handler receives: a choice
         # instance, pre-typed (§24.11). The flat machine form is converted into
         # one at the protocol boundary instead, through the SAME election,
@@ -10176,20 +10208,6 @@ class App:
                     if k not in selector_result.values
                 }
 
-        # Build reverse mapping: param_name (underscore) -> flag.name (dashes)
-        param_to_flag: dict[str, str] = {}
-        for f in cmd.flags:
-            param_to_flag[_flag_param_name(f.name)] = f.name
-
-        # Also map global flags
-        global_flag_names: set[str] = set()
-        for gf in self._global_flags:
-            param_to_flag[_flag_param_name(gf.name)] = gf.name
-            global_flag_names.add(gf.name)
-
-        # Collect arg names for this command
-        arg_names: set[str] = {a.name for a in cmd.args}
-
         # Populate sourced store from kwargs. Provided kwargs are marked
         # _Source.CLI; absent flags will get _Source.DEFAULT when
         # _validate_and_build_kwargs applies defaults.
@@ -10201,14 +10219,6 @@ class App:
                 # It's a flag -- store under flag.name (with dashes)
                 flag_name = param_to_flag[key]
                 store.set(flag_name, value, _Source.CLI)
-            elif key in arg_names:
-                # It's a positional arg -- collect into positionals in order
-                # (handled below after iterating all kwargs)
-                pass
-            else:
-                raise _ParseError(
-                    f"unknown parameter '{key}' for command '{cmd.name}'"
-                )
 
         # Build positionals list in declared arg order from kwargs
         for a in cmd.args:
