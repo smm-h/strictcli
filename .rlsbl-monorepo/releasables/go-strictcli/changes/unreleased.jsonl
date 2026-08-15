@@ -27,3 +27,4 @@
 {"format_version":1,"id":"18cbce080b8f98648f8e89c6dfd044e9b837cb073fccc8e2","commits":["9490382be8cbb8aeeef0109bc1099af4ad005fc2","d3bfe79eca92fee22b104d2993bba9c7f676c1f7"],"user_facing":false,"packages":["go-strictcli"]}
 {"format_version":1,"id":"18cbce28e0d4a69e2137fda19d304a7985658e7b3e199ea1","commits":["8a805ee87f0652fc63c7f7ceb03dcc1f0588157a"],"user_facing":false,"packages":["go-strictcli"]}
 {"format_version":1,"id":"18cbce3e613183d8509c201fcdd746a5b39e4b84e51dd7cd","commits":["254363c34eb2413d38d8ab32b0327e598749afe4"],"user_facing":false,"packages":["go-strictcli"]}
+{"format_version":1,"id":"18cbdb8e8fedfa055f82d1374aa8479297e25b7a00fec808","commits":["1c95d690db08b02fea12ad2198c90b2124cbdaa5"],"user_facing":false,"packages":["go-strictcli"]}
