@@ -126,6 +126,18 @@ def check_schema_parity(ctx, reporter):
     return _run_script(reporter, "check_schema_parity.py")
 
 
+@app.error_check("schema-fragments")
+def check_schema_fragments(ctx, reporter):
+    """Every value_schema in every dump is a valid closed-subset fragment.
+
+    Effects contract §25.12: the check is Python-side and SINGULAR -- one check
+    reading all three targets' dumps, not three implementations each asserting
+    about themselves. It also asserts the absence a selector entry declares: an
+    agreed-upon absence must never read as agreement.
+    """
+    return _run_script(reporter, "check_schema_fragments.py")
+
+
 @app.error_check("float-fuzz")
 def check_float_fuzz(ctx, reporter):
     return _run_script(reporter, "check_float_fuzz.py")

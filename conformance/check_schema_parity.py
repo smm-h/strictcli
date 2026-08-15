@@ -3,8 +3,17 @@
 
 Defines a rich app (covering all feature combinations), runs --dump-schema on
 every registered target (Python, Go, TypeScript), and compares the resulting
-JSON schemas structurally N-way. All targets must produce identical schemas;
-any difference is a parity gap, reported with the odd one(s) out.
+JSON schemas N-way. After schema v2 the comparison is BYTE equality (effects
+contract §25.8): key order, escaping, number form, two-space indentation and
+the single trailing newline are all part of the contract, so a serialization
+change can no longer hide inside a structural comparison. All targets must
+produce identical bytes; any difference is a parity gap, reported with the odd
+one(s) out and the first differing line.
+
+The one thing removed before comparing is the `project_id` LINE, which depends
+on the project marker file each target writes. §25.9 places `project_id`
+immediately after `defaults` precisely so that removing it leaves the CWD-free
+core document byte-identical.
 
 Exit 0 if all schemas are identical, exit 1 with a diff report otherwise.
 """
@@ -38,10 +47,11 @@ TARGET_NAMES = ["python", "go", "typescript"]
 # ---------------------------------------------------------------------------
 
 # A rich app definition covering: all flag types, args, groups, nested groups,
-# deprecated commands, mutex groups, dependencies (CoRequired, Requires, Implies),
-# choices, repeatable flags, unique, env, env_separator, passthrough commands,
-# config, tags, flag_sets, optional args, variadic args, negatable, prefixed,
-# and short flags.
+# deprecated commands, scoped selectors in both spellings and nested,
+# record-shaped choices on flags AND args, compound (list/dict) flags,
+# dependencies (CoRequired, Requires, Implies), repeatable flags, unique, env,
+# env_separator, passthrough commands, config, tags, flag_sets, optional args,
+# variadic args, negatable, prefixed, and short flags.
 #
 # Effects contract §14.5: every non-deprecated command entry carries `effect`
 # (classification is mandatory, so the fixture cannot even be built without it),
@@ -75,7 +85,12 @@ RICH_APP = {
             "presence": "default",
             "default": "info",
             "env": "RICH_LOG_LEVEL",
-            "choices_str": ["debug", "info", "warn", "error"],
+            "choices_str": [
+                {"value": "debug", "help": "Everything, including internals"},
+                {"value": "info"},
+                {"value": "warn"},
+                {"value": "error"},
+            ],
         },
         # Global flag with a RelativeToRoot marker default. Locks in that markers
         # serialize identically (machine-stable) across both implementations.
@@ -175,33 +190,136 @@ RICH_APP = {
                 },
             ],
         },
-        # 3. Command with mutex groups
+        # 3. Command with the scoped-selector construct in both spellings,
+        #    nested one level, and with compound flags inside a scope. The
+        #    selector encoding (§25.6) is the one shape v1 had no way to
+        #    publish, so it is compared at every depth: choice objects, their
+        #    scopes, `elect_by`, the flat-map default, and the member payload
+        #    that sits first in its choice's `flags` array.
         {
             "name": "output",
-            "help": "Test mutex flags",
+            "help": "Test the selector construct",
             "effect": "read_only",
             "handler_prints": "output",
-            "mutex": [
+            "flags": [
                 {
-                    "flags": [
+                    "name": "sink",
+                    "help": "Where the output goes",
+                    "short": "k",
+                    "presence": "default",
+                    "default": {"choice": "stdout"},
+                    "elect_by": "selector-token",
+                    "choices": [
+                        {"name": "stdout", "help": "Write to standard output"},
                         {
-                            "name": "as-json",
-                            "type": "bool",
-                            "help": "JSON output",
-                            "presence": "optional",
+                            "name": "file",
+                            "help": "Write to a file on disk",
+                            "flags": [
+                                {
+                                    "name": "path",
+                                    "type": "str",
+                                    "help": "Where to write",
+                                    "presence": "required",
+                                },
+                                {
+                                    "name": "rotate",
+                                    "type": "int",
+                                    "help": "How many files to keep",
+                                    "presence": "default",
+                                    "default": 5,
+                                },
+                                {
+                                    "name": "headers",
+                                    "type": "dict[str,str]",
+                                    "help": "Extra headers to write",
+                                    "presence": "default",
+                                    "default": {},
+                                },
+                                {
+                                    "name": "encoding",
+                                    "help": "How the file is encoded",
+                                    "presence": "required",
+                                    "elect_by": "selector-token",
+                                    "choices": [
+                                        {"name": "utf8", "help": "UTF-8 text"},
+                                        {
+                                            "name": "binary",
+                                            "help": "Raw bytes",
+                                            "flags": [
+                                                {
+                                                    "name": "chunk",
+                                                    "type": "int",
+                                                    "help": "Bytes per write",
+                                                    "presence": "default",
+                                                    "default": 4096,
+                                                },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            ],
                         },
+                    ],
+                },
+                {
+                    "name": "audience",
+                    "help": "Who the output is for",
+                    "presence": "required",
+                    "elect_by": "member-flags",
+                    "choices": [
                         {
-                            "name": "yaml",
-                            "type": "bool",
-                            "help": "YAML output",
-                            "presence": "optional",
+                            "name": "operator",
+                            "help": "One named operator",
+                            # The payload's help deliberately REPEATS the
+                            # choice's. TypeScript's choice({help, value,
+                            # flags}) has no slot for a payload help and
+                            # publishes the choice's, which is a live
+                            # divergence recorded on its own by
+                            # cases/schema_v2.json's member-payload case.
+                            # Repeating it here keeps that one known
+                            # difference from sitting ahead of every byte this
+                            # fixture exists to compare, while the payload
+                            # entry's name, position, fragment and presence are
+                            # still compared in full.
+                            "value": {"type": "str", "help": "One named operator"},
+                            "flags": [
+                                {
+                                    "name": "notify",
+                                    "type": "bool",
+                                    "help": "Send a notification too",
+                                    "presence": "default",
+                                    "default": False,
+                                },
+                            ],
                         },
-                        {
-                            "name": "text",
-                            "type": "bool",
-                            "help": "Text output",
-                            "presence": "optional",
-                        },
+                        {"name": "everyone", "help": "Every subscriber"},
+                    ],
+                },
+                {
+                    "name": "labels",
+                    "type": "list[str]",
+                    "help": "Labels to attach",
+                    "presence": "default",
+                    "unique": False,
+                    "default": [],
+                },
+                {
+                    "name": "limits",
+                    "type": "dict[str,int]",
+                    "help": "Per-stream limits",
+                    "presence": "optional",
+                },
+            ],
+            "args": [
+                {
+                    "name": "level",
+                    "type": "str",
+                    "help": "How loud to be",
+                    "presence": "default",
+                    "default": "normal",
+                    "choices_str": [
+                        {"value": "quiet", "help": "Say as little as possible"},
+                        {"value": "normal"},
                     ],
                 },
             ],
@@ -396,7 +514,13 @@ RICH_APP = {
                     "type": "int",
                     "help": "Priority level",
                     "presence": "default",
-                    "choices_int": [1, 2, 3, 4, 5],
+                    "choices_int": [
+                        {"value": 1, "help": "The lowest level"},
+                        {"value": 2},
+                        {"value": 3},
+                        {"value": 4},
+                        {"value": 5},
+                    ],
                     "default": 3,
                 },
                 {
@@ -404,7 +528,11 @@ RICH_APP = {
                     "type": "float",
                     "help": "Threshold value",
                     "presence": "default",
-                    "choices_float": [0.1, 0.5, 0.9],
+                    "choices_float": [
+                        {"value": 0.1},
+                        {"value": 0.5},
+                        {"value": 0.9, "help": "Almost everything"},
+                    ],
                     "default": 0.5,
                 },
             ],
@@ -632,8 +760,11 @@ def _run_dump_schema(
     target: str,
     harness_binary: str | None = None,
     ts_entry: str | None = None,
-) -> dict:
-    """Run --dump-schema for a given target and return the parsed schema JSON.
+) -> str:
+    """Run --dump-schema for a given target and return the emitted file's TEXT.
+
+    The text, not the parsed document: after v2 the comparison is byte equality
+    (§25.8), so parsing first would discard exactly what is being asserted.
 
     Raises RuntimeError on failure.
     """
@@ -728,8 +859,8 @@ def _run_dump_schema(
                     f"stderr: {result.stderr}"
                 )
 
-        with open(schema_path) as f:
-            return json.load(f)
+        with open(schema_path, encoding="utf-8") as f:
+            return f.read()
 
     finally:
         shutil.rmtree(proj_dir, ignore_errors=True)
@@ -807,58 +938,49 @@ def _diff_schemas(
     return diffs
 
 
-_SCALAR_LIST_CARRIERS = {"str", "int", "float"}
+def _strip_project_id(text: str) -> str:
+    """Drop the `project_id` LINE, which is the one CWD-dependent fact.
 
-
-def _canonicalize_repeatable(node: object) -> None:
-    """Rewrite repeatable-scalar flags to their list-carrier spelling, in place.
-
-    Documented TS model constant (typescript/src/schema.ts doc block;
-    docs/history/_ts-port-spec.md task 6.1 vocabulary note (a)): in TS, list carriers ARE the
-    repeatable flags, so a scalar flag with repeatable=true is declared as
-    list[T] and the schema emits {type: "list[T]"} with no "repeatable" key and
-    no empty-list default. Python and Go emit {type: "T", repeatable: true,
-    default: []}. Both spellings describe the identical flag; canonicalize every
-    target to the list-carrier form so the N-way comparison sees one shape.
+    §25.9 places `project_id` immediately after `defaults` precisely so that
+    removing it leaves the CWD-free core document byte-identical -- so the
+    normalization is one whole line and nothing else. The v1 layer that
+    rewrote repeatable-scalar flags into their list-carrier spelling
+    (`_canonicalize_repeatable`) is DELETED with the `repeatable` key itself
+    (§25.3): every rule in a normalization layer is a place where a real
+    divergence can be absorbed as serialization noise, and this round removes
+    the machinery that could hide the next one.
     """
-    if isinstance(node, dict):
-        if (
-            node.get("repeatable") is True
-            and node.get("type") in _SCALAR_LIST_CARRIERS
-        ):
-            node["type"] = f"list[{node['type']}]"
-            del node["repeatable"]
-            if node.get("default") == []:
-                del node["default"]
-        for v in node.values():
-            _canonicalize_repeatable(v)
-    elif isinstance(node, list):
-        for v in node:
-            _canonicalize_repeatable(v)
+    return "\n".join(
+        line for line in text.split("\n")
+        if not line.lstrip().startswith('"project_id":')
+    )
 
 
-def _normalize_schema(schema: dict) -> dict:
-    """Normalize a schema for comparison.
+def _first_line_diff(a: str, b: str, label_a: str, label_b: str) -> list[str]:
+    """The first line at which two emitted documents differ (§25.8)."""
+    la, lb = a.split("\n"), b.split("\n")
+    for i in range(max(len(la), len(lb))):
+        x = la[i] if i < len(la) else "<missing>"
+        y = lb[i] if i < len(lb) else "<missing>"
+        if x != y:
+            return [
+                f"first byte difference at line {i + 1}",
+                f"  {label_a}: {x!r}",
+                f"  {label_b}: {y!r}",
+            ]
+    return ["documents differ but no line differs (trailing bytes)"]
 
-    - Remove project_id (depends on project file, always different between targets).
-    - Canonicalize repeatable-scalar flags to the list-carrier spelling.
+
+def _compare_schemas_nway(schemas: dict[str, str]) -> list[str]:
+    """All-identical BYTE assertion across N emitted schema documents (§25.8).
+
+    Returns [] when every target's document is byte-identical. Otherwise groups
+    the targets by identical bytes; when a unique largest group exists it is the
+    majority and every other target is reported as the odd one out, with the
+    first line at which it diverges. With no unique majority (an even split),
+    every other target is compared against the first registered target.
     """
-    schema = json.loads(json.dumps(schema))  # deep copy
-    schema.pop("project_id", None)
-    _canonicalize_repeatable(schema)
-    return schema
-
-
-def _compare_schemas_nway(schemas: dict[str, dict]) -> list[str]:
-    """All-identical assertion across N normalized schemas.
-
-    Returns [] when every target's schema is identical. Otherwise groups the
-    targets by identical schema content; when a unique largest group exists it
-    is the majority and every other target is reported as the odd one out,
-    diffed against the majority. With no unique majority (e.g. an even split),
-    every other target is diffed against the first registered target.
-    """
-    keys = {t: json.dumps(s, sort_keys=True) for t, s in schemas.items()}
+    keys = dict(schemas)
     groups: dict[str, list[str]] = {}
     for t in schemas:  # preserves registration order within groups
         groups.setdefault(keys[t], []).append(t)
@@ -888,7 +1010,7 @@ def _compare_schemas_nway(schemas: dict[str, dict]) -> list[str]:
         )
 
     for t in odd:
-        diffs.extend(_diff_schemas(base, schemas[t], base_label, t))
+        diffs.extend(_first_line_diff(base, schemas[t], base_label, t))
     return diffs
 
 
@@ -990,7 +1112,7 @@ def main() -> int:
     for label, app_def in app_defs:
         print(f"Testing {label}...", flush=True)
 
-        schemas: dict[str, dict] = {}
+        schemas: dict[str, str] = {}
         failed = False
         for target in TARGET_NAMES:
             try:
@@ -1002,21 +1124,22 @@ def main() -> int:
                 all_diffs.append((label, [f"{target} failed: {e}"]))
                 failed = True
                 break
-            schemas[target] = _normalize_schema(raw)
+            schemas[target] = _strip_project_id(raw)
         if failed:
             continue
 
         diffs: list[str] = []
-        for target, schema in schemas.items():
+        for target, text in schemas.items():
+            parsed = json.loads(text)
             diffs.extend(
-                f"{target}: {problem}" for problem in _presence_violations(schema)
+                f"{target}: {problem}" for problem in _presence_violations(parsed)
             )
         diffs.extend(_compare_schemas_nway(schemas))
         if diffs:
             all_diffs.append((label, diffs))
             print(f"  {len(diffs)} difference(s) found")
         else:
-            print(f"  PASS (schemas identical across {', '.join(TARGET_NAMES)})")
+            print(f"  PASS (byte-identical across {', '.join(TARGET_NAMES)})")
 
     # Cleanup harness
     harness_path = HARNESS_DIR / "harness"
