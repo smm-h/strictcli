@@ -231,10 +231,6 @@ export function errArgTypeBad(t: number): string {
 	return `Arg.type must be str, bool, int, or float, got ${t}`;
 }
 
-export function errArgChoicesIncompatibleListType(name: string): string {
-	return `Arg ${q(name)}: choices is incompatible with list type`;
-}
-
 export function errArgChoicesIncompatibleBool(name: string): string {
 	return `Arg ${q(name)}: choices is incompatible with type=bool`;
 }
