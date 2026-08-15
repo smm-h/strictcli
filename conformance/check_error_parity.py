@@ -444,7 +444,13 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "python": "excluded:Go type-specific Arg choice validation (Python uses generic pattern)",
     },
     'Arg *: choices is incompatible with list type': {
-        "python": "excluded:Go Arg-specific compound type restriction; Python validates differently",
+        # §25.4 unified the two variadic-arg spellings onto one published shape,
+        # so a ban that fires on one of them and not the other is two rules for
+        # one fact. Go deleted its template; TypeScript's survives with no
+        # caller.
+        "typescript": "dead_code:§25.4 unified the two variadic-arg spellings, so the ban has no caller left; Go deleted its twin outright",
+        "python": "excluded:Python's list-typed arg already required variadic=True and never carried this ban",
+        "go": "excluded:§25.4 deletes errArgChoicesIncompatibleListType outright: one declaration, one published shape, one rule",
     },
     'Arg *: default * is not in choices [*]': {
         "python": "excluded:Go fmt.Sprintf with brackets; Python counterpart normalizes without brackets",
@@ -925,6 +931,325 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "go": 'excluded:Python-only (§12.12, item 147): Go and TypeScript handlers receive one kwargs map / one args object, so there is no per-parameter default to re-sentinelize with. An absent site, not a skipped check',
         "typescript": 'excluded:Python-only (§12.12, item 147): Go and TypeScript handlers receive one kwargs map / one args object, so there is no per-parameter default to re-sentinelize with. An absent site, not a skipped check',
     },
+
+    # =======================================================================
+    # The scoped-selector construct (contract §12.13, §24, §18.19 item 220)
+    #
+    # Three shapes of divergence live in this block, and each is expected
+    # rather than tolerated:
+    #
+    #   1. ONE SENTENCE, THREE SPELLINGS. A template naming a spelling carries
+    #      a per-language noun phrase (§12.12's mechanism), so each
+    #      implementation's variant is a signature its siblings genuinely do
+    #      not carry. The parity assertion is per target, in
+    #      cases/selector_registration.json and cases/choice_records.json.
+    #
+    #   2. ONE TEMPLATE, ONE PARAMETERIZED PREFIX. Python parameterizes the
+    #      Flag/Arg surface and TypeScript parameterizes the
+    #      `Choice "c" of "sel": ` prefix, where the siblings inline both.
+    #      Same sentence, different signature.
+    #
+    #   3. A LANGUAGE-SPECIFIC FAMILY. Go authored two (its twin constructors
+    #      and its identity values), Python authored ten (keyword strings,
+    #      dataclass fields and annotations), and TypeScript authored none.
+    #      §18.19 item 220 ratifies all three sets.
+    # =======================================================================
+
+    ' by default': {
+        'python': 'excluded:the clause is composed into the sentence at the call site in this implementation rather than carried as a template of its own; cases/selector_scope.json asserts the composed sentence on all three targets',
+    },
+    ' from config key *': {
+        'python': 'excluded:the clause is composed into the sentence at the call site in this implementation rather than carried as a template of its own; cases/selector_scope.json asserts the composed sentence on all three targets',
+    },
+    ' from config key **': {
+        'go': 'excluded:the clause is composed into the sentence at the call site in this implementation rather than carried as a template of its own; cases/selector_scope.json asserts the composed sentence on all three targets',
+        'typescript': 'excluded:the clause is composed into the sentence at the call site in this implementation rather than carried as a template of its own; cases/selector_scope.json asserts the composed sentence on all three targets',
+    },
+    '* *: choice *: *': {
+        'go': 'excluded:Python parameterizes the Flag/Arg prefix into one template where the siblings twin it (contract §12.13, §18.19 item 219); the twinned signatures carry the assertion',
+        'typescript': 'excluded:Python parameterizes the Flag/Arg prefix into one template where the siblings twin it (contract §12.13, §18.19 item 219); the twinned signatures carry the assertion',
+    },
+    'Flag *: choice *: *': {
+        'python': 'excluded:Python parameterizes the Flag/Arg prefix into one template where the siblings twin it (contract §12.13, §18.19 item 219); the twinned signatures carry the assertion',
+    },
+    'Arg *: choice *: *': {
+        'python': 'excluded:Python parameterizes the Flag/Arg prefix into one template where the siblings twin it (contract §12.13, §18.19 item 219); the twinned signatures carry the assertion',
+    },
+    '* *: choices must be a non-empty list': {
+        'go': 'excluded:Python parameterizes the Flag/Arg prefix into one template where the siblings twin it (contract §12.13, §18.19 item 219); the twinned signatures carry the assertion',
+        'typescript': 'excluded:Python parameterizes the Flag/Arg prefix into one template where the siblings twin it (contract §12.13, §18.19 item 219); the twinned signatures carry the assertion',
+    },
+    'Flag *: choices must be a non-empty list': {
+        'python': 'excluded:Python parameterizes the Flag/Arg prefix into one template where the siblings twin it (contract §12.13, §18.19 item 219); the twinned signatures carry the assertion',
+    },
+    'Arg *: choices must be a non-empty list': {
+        'python': 'excluded:Python parameterizes the Flag/Arg prefix into one template where the siblings twin it (contract §12.13, §18.19 item 219); the twinned signatures carry the assertion',
+    },
+    '* *: choices entry * is a bare value: declare it as *': {
+        'go': 'excluded:Python parameterizes the Flag/Arg prefix into one template where the siblings twin it (contract §12.13, §18.19 item 219); the twinned signatures carry the assertion',
+        'typescript': 'excluded:Python parameterizes the Flag/Arg prefix into one template where the siblings twin it (contract §12.13, §18.19 item 219); the twinned signatures carry the assertion',
+    },
+    '* *: choices entry * is the choice class *, which declares a scope: a choice with a scope belongs to a choice flag, declared with *': {
+        'go': "excluded:Python-only (contract §12.13, §18.19 item 220): errChoicesEntryIsChoiceClass names the @choice class twin; Go's Ch and TypeScript's record literal are distinct types, so the sibling mis-declaration is a compile error",
+        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): errChoicesEntryIsChoiceClass names the @choice class twin; Go's Ch and TypeScript's record literal are distinct types, so the sibling mis-declaration is a compile error",
+    },
+    'Flag *: choices entry * is a bare value: declare it as *': {
+        'go': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'python': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Flag *: choices entry * is a bare value: declare it as Ch(<value>, "<help>")': {
+        'python': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'typescript': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Arg *: choices entry * is a bare value: declare it as *': {
+        'go': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'python': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Arg *: choices entry * is a bare value: declare it as Ch(<value>, "<help>")': {
+        'python': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'typescript': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Choice * of *: ': {
+        'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    '*a member flag must declare *, read as required once this member is elected': {
+        'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    '*a token-spelled choice cannot carry a payload: the token names the choice, and a choice that carries its own value belongs to a member-spelled choice flag, declared with *': {
+        'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    "*flag '--*' collides with a command-level flag of the same name: the scoped one could never be reached": {
+        'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    "*flag '--*' collides with the choice flag's own name": {
+        'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    "*flag name 'choice' is reserved by the framework: it tags the delivered record": {
+        'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    "*flag name 'value' is reserved by the framework: it carries a member-spelled choice's own payload": {
+        'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    '*help text is required': {
+        'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    "*positional args cannot be declared inside a choice scope: a positional's meaning would depend on an election that may be typed after it": {
+        'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    "Choice * of *: flag '--*' collides with a command-level flag of the same name: the scoped one could never be reached": {
+        'typescript': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    "Choice * of *: flag '--*' collides with the choice flag's own name": {
+        'typescript': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    "Choice * of *: flag name 'choice' is reserved by the framework: it tags the delivered record": {
+        'typescript': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    "Choice * of *: flag name 'value' is reserved by the framework: it carries a member-spelled choice's own payload": {
+        'typescript': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    "Choice * of *: positional args cannot be declared inside a choice scope: a positional's meaning would depend on an election that may be typed after it": {
+        # §12.13 pins this row "All three", and the implementations disagree
+        # with the document in the way §18.19 exists to record: Go's
+        # Choice(name, help, flags ...Flag) is variadic over Flag, and an Arg
+        # is a different type, so a positional inside a scope is
+        # UNCONSTRUCTABLE in Go rather than merely unraised -- the same class
+        # errSelectorDefaultIncomplete and errMemberFlagPresence are in.
+        # Python reaches it through an Arg in the choice class's body and
+        # TypeScript through a widened flags map; cases/selector_registration.json
+        # asserts it on those two targets.
+        'go': 'excluded:Choice(name, help, flags ...Flag) is variadic over Flag and an Arg is a different type, so a scoped positional is unconstructable in Go rather than refused (the class §18.19 item 213 records)',
+        'typescript': "excluded:TypeScript parameterizes the `Choice \"c\" of \"sel\": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signature carries the same sentence",
+    },
+    'Choice * of *: help text is required': {
+        'typescript': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    'Choice * of *: a token-spelled choice cannot carry a payload: the token names the choice, and a choice that carries its own value belongs to a member-spelled choice flag, declared with *': {
+        'go': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'typescript': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Choice * of *: a token-spelled choice cannot carry a payload: the token names the choice, and a choice that carries its own value belongs to a member-spelled choice flag, declared with MemberChoiceFlag(...)': {
+        'python': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'typescript': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Flag *: a choice flag cannot declare *: an absent selection is a choice nobody named, so name it as a choice of its own': {
+        'go': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Flag *: a choice flag cannot declare Optional(): an absent selection is a choice nobody named, so name it as a choice of its own': {
+        'python': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'typescript': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Flag *: * names no declared choice: must be one of: *': {
+        'go': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Flag *: Default(*) names no declared choice: must be one of: *': {
+        'python': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'typescript': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Flag *: * elects choice *, whose flag carries a value nothing supplies: only a payload-less member can be a default': {
+        'go': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    'Flag *: Default(*) elects choice *, whose flag carries a value nothing supplies: only a payload-less member can be a default': {
+        'python': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'typescript': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+    },
+    "Flag *: * elects choice *, whose scope declares the required flag '--*': a defaulted selection must be complete with nothing typed": {
+        'go': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'python': "excluded:Python's default IS a choice instance (contract §24.5), so an incomplete defaulted selection is unconstructable rather than refused -- there is nothing to check and no error to raise",
+    },
+    "Flag *: Default(*) elects choice *, whose scope declares the required flag '--*': a defaulted selection must be complete with nothing typed": {
+        'typescript': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'python': "excluded:Python's default IS a choice instance (contract §24.5), so an incomplete defaulted selection is unconstructable rather than refused -- there is nothing to check and no error to raise",
+    },
+    'Choice * of *: a member flag must declare Required(), read as required once this member is elected': {
+        'typescript': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_registration.json and cases/choice_records.json assert all three, per target',
+        'python': "excluded:member_value(help=...) takes no presence keyword and a frozen dataclass's field is required by construction, so the refused state is unconstructable in Python (contract §18.19 item 213)",
+    },
+    'Choice * of *: a member-spelled choice flag declares its choices with MemberChoice(...), which names the flag that elects the choice': {
+        'python': 'excluded:Go-only (contract §12.13, §18.19 item 220): ChoiceFlag and MemberChoiceFlag are twins over one FlagOption interface, so a plain Choice(...) can reach the member-spelled constructor; Python spells member election with a keyword on the selector and has no such input',
+        'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220): ChoiceFlag and MemberChoiceFlag are twins over one FlagOption interface, so a plain Choice(...) can reach the member-spelled constructor; TypeScript's factory takes its own choice shape and has no such input",
+    },
+    'Choice * of *: a choice value belongs to exactly one choice flag; it is already declared by *': {
+        'python': "excluded:Go-only (contract §12.13, §18.19 item 220): a Go choice is a VALUE WITH IDENTITY, so the same *ChoiceDecl can be written into two selectors; Python's choice classes have no aliasing site",
+        'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220): a Go choice is a VALUE WITH IDENTITY, so the same *ChoiceDecl can be written into two selectors; TypeScript's keyed map has no aliasing site",
+    },
+    'strictcli.GetElected: no such key *': {
+        'python': "excluded:Go-only (contract §12.13, §18.19 item 220): GetElected is Go's typed accessor over the kwargs map; Python and TypeScript deliver the record as a named handler value",
+        'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220): GetElected is Go's typed accessor over the kwargs map; Python and TypeScript deliver the record as a named handler value",
+    },
+    'strictcli.GetElected: key * has dynamic type *, want *strictcli.Elected': {
+        'python': "excluded:Go-only (contract §12.13, §18.19 item 220): GetElected is Go's typed accessor over the kwargs map",
+        'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220): GetElected is Go's typed accessor over the kwargs map",
+    },
+    'strictcli.Match: case * is not a choice of choice flag *': {
+        'python': "excluded:Go-only (contract §12.13, §18.19 item 220): Match is exhaustive AT DISPATCH because Go has no sealed union (contract §24.12); Python's match and TypeScript's switch are checked by their type systems",
+        'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220): Match is exhaustive AT DISPATCH because Go has no sealed union (contract §24.12); Python's match and TypeScript's switch are checked by their type systems",
+    },
+    'strictcli.Match: choice * of choice flag * has two cases': {
+        'python': 'excluded:Go-only (contract §12.13, §18.19 item 220): Match is exhaustive at dispatch; the sibling languages have no MatchCase list to duplicate',
+        'typescript': 'excluded:Go-only (contract §12.13, §18.19 item 220): Match is exhaustive at dispatch; the sibling languages have no MatchCase list to duplicate',
+    },
+    'strictcli.Match: choice flag * has no case for *': {
+        'python': 'excluded:Go-only (contract §12.13, §18.19 item 220): Match is exhaustive at dispatch; the sibling languages have no MatchCase list to leave incomplete',
+        'typescript': 'excluded:Go-only (contract §12.13, §18.19 item 220): Match is exhaustive at dispatch; the sibling languages have no MatchCase list to leave incomplete',
+    },
+    "--*: a choice flag's value must be strictcli.Elect(<choice>, ...) or a choice name, got *": {
+        'python': "excluded:Go-only (contract §12.13, §18.19 item 220): Call() takes an Elect(choice, Fields) value in Go; Python's twin refusal names a choice INSTANCE and is its own Python-only template",
+        'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220): Call() takes an Elect(choice, Fields) value in Go; TypeScript's call takes the union member object, which the type system checks",
+    },
+    '--*: elected value names choice *, which is not declared by this choice flag': {
+        'python': "excluded:Go-only (contract §12.13, §18.19 item 220): the name-carrying Call() form is Go's; Python's call() takes an instance of a declared choice class",
+        'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220): the name-carrying Call() form is Go's; TypeScript's call takes the union member object",
+    },
+    'schema value of unserializable type: *': {
+        'python': "excluded:Go-only (contract §12.13, §18.19 item 220): v2's ordered writer is hand-written in Go and must reject a value its type switch does not know; Python's json.dumps and TypeScript's writer have their own paths",
+        'typescript': "excluded:Go-only (contract §12.13, §18.19 item 220): v2's ordered writer is hand-written in Go and must reject a value its type switch does not know; TypeScript's writer is hand-written but typed",
+    },
+    'Flag *: elect_by is undeclared: declare elect_by=* or elect_by=*': {
+        'go': 'excluded:Python-only (contract §12.13, §18.19 item 220): elect_by is a keyword string in Python; Go and TypeScript spell the two elections as twin constructors, so the undeclared state is unrepresentable',
+        'typescript': 'excluded:Python-only (contract §12.13, §18.19 item 220): elect_by is a keyword string in Python; Go and TypeScript spell the two elections as twin constructors, so the undeclared state is unrepresentable',
+    },
+    'Flag *: elect_by must be * or *, got *': {
+        'go': 'excluded:Python-only (contract §12.13, §18.19 item 220): only a keyword taking a string can carry a mis-spelled value',
+        'typescript': 'excluded:Python-only (contract §12.13, §18.19 item 220): only a keyword taking a string can carry a mis-spelled value',
+    },
+    'Flag *: choices entry * is *, not a choice class: declare it with @choice(...)': {
+        'go': "excluded:Python-only (contract §12.13, §18.19 item 220): Python's choices= takes decorated classes; Go's variadic takes *ChoiceDecl and TypeScript's map takes ChoiceDef, both compile-checked",
+        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): Python's choices= takes decorated classes; Go's variadic takes *ChoiceDecl and TypeScript's map takes ChoiceDef, both compile-checked",
+    },
+    'Flag *: choice name * must match [a-z][a-z0-9-]*': {
+        'go': "excluded:Python-only (contract §12.13, §18.19 item 220): a Python choice name is the @choice decorator's own string argument; Go validates it through the flag-name bans and TypeScript through its keyed map",
+        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): a Python choice name is the @choice decorator's own string argument; Go validates it through the flag-name bans and TypeScript through its keyed map",
+    },
+    'Choice * of *: field * declares no flag: declare it with sub_flag(...), sub_choice_flag(...) or member_value(...)': {
+        'go': "excluded:Python-only (contract §12.13, §18.19 item 220): a scope is a dataclass body in Python, so a field can exist without a declaration; Go's and TypeScript's scopes are flag lists",
+        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): a scope is a dataclass body in Python, so a field can exist without a declaration; Go's and TypeScript's scopes are flag lists",
+    },
+    "Choice * of *: member_value(...) declares the payload on field *: a member-spelled choice's payload is delivered under the reserved name 'value'": {
+        'go': "excluded:Python-only (contract §12.13, §18.19 item 220): Python's payload is a NAMED dataclass field, so it can be misplaced; Go's is the member flag itself and TypeScript's is the choice record's `value` key",
+        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): Python's payload is a NAMED dataclass field, so it can be misplaced; Go's is the member flag itself and TypeScript's is the choice record's `value` key",
+    },
+    'Choice * of *: the annotation of field * cannot be resolved at registration: a choice class must be importable at run time, not only under TYPE_CHECKING': {
+        'go': 'excluded:Python-only (contract §12.13, §18.19 item 220): only Python resolves annotations at registration',
+        'typescript': 'excluded:Python-only (contract §12.13, §18.19 item 220): only Python resolves annotations at registration',
+    },
+    "Choice * of *: field * is bound to choice flag '--*' and must be annotated *, got *": {
+        'go': 'excluded:Python-only (contract §12.13, §18.19 item 220): only Python has a per-field annotation to check',
+        'typescript': 'excluded:Python-only (contract §12.13, §18.19 item 220): only Python has a per-field annotation to check',
+    },
+    'Flag *: * must be an instance of a declared choice class, got *': {
+        'go': "excluded:Python-only (contract §12.13, §18.19 item 220): Python's default IS a choice instance (contract §24.5); Go's and TypeScript's default NAMES a choice",
+        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): Python's default IS a choice instance (contract §24.5); Go's and TypeScript's default NAMES a choice",
+    },
+    'command *: a command declaring a choice flag cannot use a **kwargs handler: the elected value must reach a named, annotated parameter': {
+        'go': "excluded:Python-only (contract §12.13, §18.19 item 220): Go's handler receives one map[string]interface{} and TypeScript's one inferred args object, so neither has a per-parameter annotation to check",
+        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): Go's handler receives one map[string]interface{} and TypeScript's one inferred args object, so neither has a per-parameter annotation to check",
+    },
+    'command *: handler parameter * annotation * cannot be resolved at registration: a choice class must be importable at run time, not only under TYPE_CHECKING': {
+        'go': 'excluded:Python-only (contract §12.13, §18.19 item 220): only Python resolves handler annotations at registration',
+        'typescript': 'excluded:Python-only (contract §12.13, §18.19 item 220): only Python resolves handler annotations at registration',
+    },
+    "command *: handler parameter * is bound to choice flag '--*' and must be annotated *, got *": {
+        'go': 'excluded:Python-only (contract §12.13, §18.19 item 220): only Python has a per-parameter annotation to check, which is what makes assert_never sound',
+        'typescript': 'excluded:Python-only (contract §12.13, §18.19 item 220): only Python has a per-parameter annotation to check, which is what makes assert_never sound',
+    },
+    "parameter * for command * must be an instance of a declared choice of '--*' (*), got *": {
+        'go': "excluded:Python-only (contract §12.13, §18.19 item 220): call()'s refusal of a non-record value names Python's choice classes; Go's twin names Elect(...) and TypeScript's is a compile error",
+        'typescript': "excluded:Python-only (contract §12.13, §18.19 item 220): call()'s refusal of a non-record value names Python's choice classes; Go's twin names Elect(...) and TypeScript's is a compile error",
+        'python': 'coverage_deferred:call() is the programmatic front door; the conformance runner drives argv only',
+    },
+    '--*: config value error: expected str, got *': {
+        'go': 'excluded:Python-only (contract §12.13, §18.19 item 220): Python coerces a config-sourced election through its own typed reader; Go and TypeScript reuse the ordinary config-value error',
+        'typescript': 'excluded:Python-only (contract §12.13, §18.19 item 220): Python coerces a config-sourced election through its own typed reader; Go and TypeScript reuse the ordinary config-value error',
+        'python': "coverage_deferred:needs a config file whose selector key holds a non-string, which the case schema's config_content spells but no case asserts yet",
+    },
+    "flag '--*' is required**": {
+        'go': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+        'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+    },
+    'one of * is required**': {
+        'go': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+        'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+    },
+    'one of * is required*': {
+        'python': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+    },
+    'one of * is required': {
+        'go': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+        'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+    },
+    "flag '--*' requires a value": {
+        'go': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+        'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+    },
+    "flag '--*' is a boolean flag and does not take a value": {
+        'go': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+        'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+    },
+    "flag '--*' is a boolean negation and does not take a value": {
+        'go': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+        'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
+    },
+    'command *: mutex group must have at least 2 flags, got *': {
+        'go': 'dead_code:MutexGroup is deleted (contract §24.14); the template survives in errors.go with no caller left',
+        'python': 'excluded:MutexGroup is deleted (contract §24.14); Python retained no template',
+        'typescript': 'excluded:MutexGroup is deleted (contract §24.14); TypeScript retained no template',
+    },
+    'command *: flag * appears in multiple mutex groups': {
+        'go': 'dead_code:MutexGroup is deleted (contract §24.14); the template survives in errors.go with no caller left',
+        'python': 'excluded:MutexGroup is deleted (contract §24.14); Python retained no template',
+        'typescript': 'excluded:MutexGroup is deleted (contract §24.14); TypeScript retained no template',
+    },
+
 }
 
 
@@ -1251,6 +1576,16 @@ def extract_typescript_errors(errors_src: str) -> list[tuple[str, str]]:
     ret_backtick = re.compile(r'return\s+`((?:[^`\\]|\\.)*)`')
     ret_dq = re.compile(r'return\s+"((?:[^"\\]|\\.)*)"')
     ret_sq = re.compile(r"return\s+'((?:[^'\\]|\\.)*)'")
+    # A CLAUSE template is empty in its degenerate case and carries text
+    # otherwise, which TypeScript spells as a ternary whose false branch is the
+    # literal -- `return path === "" ? "" : ` under '${path}'`;`. The scope
+    # suffix and the origin wrapper are both that shape (contract §12.13), and
+    # a reader that only sees `return <literal>` would report them as missing
+    # in TypeScript alone.
+    ret_ternary = re.compile(r':\s*`((?:[^`\\]|\\.)*)`\s*;')
+    # A parameterless clause is a module constant rather than a function --
+    # §12.13's `errElectionOriginDefault` is pinned as exactly that in Go too.
+    const_dq = re.compile(r'export const err\w+\s*=\s*"((?:[^"\\]|\\.)*)"')
     segments: list[tuple[str, str]] = []
     prev_end: int | None = None
     prev_category = "registration"
@@ -1264,7 +1599,7 @@ def extract_typescript_errors(errors_src: str) -> list[tuple[str, str]]:
         segments.append((prev_category, errors_src[prev_end:]))
 
     for category, body in segments:
-        for pat in (ret_backtick, ret_dq, ret_sq):
+        for pat in (ret_backtick, ret_dq, ret_sq, ret_ternary, const_dq):
             for m in pat.finditer(body):
                 results.append((category, m.group(1)))
 
