@@ -1,0 +1,629 @@
+[
+  {
+    "name": "selector default: a defaulted selection delivers the complete elected value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "default",
+              "default": {
+                "choice": "webhook"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "https://example.invalid"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    },
+                    {
+                      "name": "insecure",
+                      "help": "skip certificate verification",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=webhook(url=https://example.invalid, retries=3, insecure=false)"
+    }
+  },
+  {
+    "name": "selector default: ctx.provided is false when the declaration elected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "default",
+              "default": {
+                "choice": "webhook"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "https://example.invalid"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    },
+                    {
+                      "name": "insecure",
+                      "help": "skip certificate verification",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "provided={provided:via} source={source:via}"
+        }
+      ]
+    },
+    "argv": [
+      "send"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "provided=false source=default"
+    }
+  },
+  {
+    "name": "selector default: ctx.provided is true when the invocation elected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "default",
+              "default": {
+                "choice": "webhook"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "https://example.invalid"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    },
+                    {
+                      "name": "insecure",
+                      "help": "skip certificate verification",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "provided={provided:via} source={source:via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--subject",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "provided=true source=cli"
+    }
+  },
+  {
+    "name": "selector default: electing on the command line never borrows the default's values",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "default",
+              "default": {
+                "choice": "webhook"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "https://example.invalid"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    },
+                    {
+                      "name": "insecure",
+                      "help": "skip certificate verification",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "webhook",
+      "--retries",
+      "7"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=webhook(url=https://example.invalid, retries=7, insecure=false)"
+    }
+  },
+  {
+    "name": "selector default: an empty scope renders no parenthesized part at all",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "how to run",
+              "presence": "default",
+              "default": {
+                "choice": "simple"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "simple",
+                  "help": "the simple way"
+                },
+                {
+                  "name": "advanced",
+                  "help": "the advanced way",
+                  "flags": [
+                    {
+                      "name": "depth",
+                      "help": "how deep to go",
+                      "type": "int",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "mode={mode}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp run -- run it\n\nFlags:\n  --mode <choice>      how to run [default: simple]\n    simple             the simple way\n    advanced           the advanced way\n      --depth <int>    how deep to go [required]"
+    }
+  },
+  {
+    "name": "selector default: the presence part renders the complete elected value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "default",
+              "default": {
+                "choice": "webhook"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "https://example.invalid"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    },
+                    {
+                      "name": "insecure",
+                      "help": "skip certificate verification",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": "[default: webhook (url=https://example.invalid, retries=3, insecure=false)]"
+    }
+  },
+  {
+    "name": "selector default: the dump publishes the defaulted selection as a flat map",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "default",
+              "default": {
+                "choice": "webhook"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "https://example.invalid"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    },
+                    {
+                      "name": "insecure",
+                      "help": "skip certificate verification",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_command_keys": {
+        "send": {
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "default",
+              "default": {
+                "choice": "webhook",
+                "url": "https://example.invalid",
+                "retries": 3,
+                "insecure": false
+              },
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "value_schema": {
+                        "type": "string"
+                      },
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "value_schema": {
+                        "type": "string"
+                      },
+                      "presence": "default",
+                      "default": "https://example.invalid"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "value_schema": {
+                        "type": "integer"
+                      },
+                      "presence": "default",
+                      "default": 3
+                    },
+                    {
+                      "name": "insecure",
+                      "help": "skip certificate verification",
+                      "value_schema": {
+                        "type": "boolean"
+                      },
+                      "presence": "default",
+                      "default": false,
+                      "negatable": true
+                    }
+                  ]
+                }
+              ],
+              "elect_by": "selector-token"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "selector default: a defaulted member-spelled selector defaults to a payload-less member",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "handler_prints": "target={target}",
+          "flags": [
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "default",
+              "default": {
+                "choice": "all-profiles"
+              },
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "the profile"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "target=all-profiles"
+    }
+  }
+]

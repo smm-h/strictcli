@@ -318,6 +318,33 @@ function selWalk(v, def, parts) {
 	return [cur, d];
 }
 
+/**
+ * The `{<prefix><name>}` references a template makes, in first-appearance
+ * order. A dotted name is a scoped reference and belongs to the record walk,
+ * not to the context's store.
+ */
+function templateRefs(template, prefix) {
+	const out = [];
+	const needle = `{${prefix}`;
+	let rest = template;
+	for (;;) {
+		const i = rest.indexOf(needle);
+		if (i < 0) {
+			return out;
+		}
+		rest = rest.slice(i + needle.length);
+		const j = rest.indexOf("}");
+		if (j < 0) {
+			return out;
+		}
+		const name = rest.slice(0, j);
+		if (!name.includes(".")) {
+			out.push(name);
+		}
+		rest = rest.slice(j);
+	}
+}
+
 /** The dotted references a template makes into one selector's record. */
 function scopedRefs(template, prefix, sel) {
 	const out = [];
@@ -777,22 +804,16 @@ function makeHandler(cmdDef, globalFlags) {
 			out = subst(out, `{${fd.name}}`, renderElected(rec, fd));
 		}
 
-		// {source:name} provenance references resolve via ctx.source().
-		for (const fd of allFlags) {
-			const sourceKey = `{source:${fd.name}}`;
-			if (out.includes(sourceKey)) {
-				out = subst(out, sourceKey, ctx.source(fd.name));
-			}
+		// {source:name} and {provided:name} resolve through the context's
+		// per-parse store. The names come from the TEMPLATE rather than from
+		// the declaration list, so a case can ask the store about a name it
+		// does not hold -- which is how §24.9's "a scoped flag is not in the
+		// store at all" is asserted rather than assumed.
+		for (const name of templateRefs(out, "source:")) {
+			out = subst(out, `{source:${name}}`, ctx.source(name));
 		}
-
-		// {provided:name} references resolve via ctx.provided() -- true when
-		// the invocation caused the value, false when the declaration did
-		// (contract §23.6).
-		for (const fd of allFlags) {
-			const providedKey = `{provided:${fd.name}}`;
-			if (out.includes(providedKey)) {
-				out = subst(out, providedKey, ctx.provided(fd.name) ? "true" : "false");
-			}
+		for (const name of templateRefs(out, "provided:")) {
+			out = subst(out, `{provided:${name}}`, ctx.provided(name) ? "true" : "false");
 		}
 
 		// Flags: values arrive under the underscore key (globals included).

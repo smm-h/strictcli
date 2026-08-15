@@ -1,0 +1,604 @@
+[
+  {
+    "name": "selector bindings: an env var bound to an elected scope's flag IS consulted",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_SUBJECT"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_PHONE"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email"
+    ],
+    "env": {
+      "NOTIFY_SUBJECT": "from-env"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=email(subject=from-env)"
+    }
+  },
+  {
+    "name": "selector bindings: a binding in an unelected scope is not an error and not a value",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_SUBJECT"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_PHONE"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email"
+    ],
+    "env": {
+      "NOTIFY_PHONE": "+15550100"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=email(subject=(none))"
+    }
+  },
+  {
+    "name": "selector bindings: --verbose names every skipped binding, one line per binding",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_SUBJECT"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_PHONE"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--verbose"
+    ],
+    "env": {
+      "NOTIFY_PHONE": "+15550100"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "not consulted: env var 'NOTIFY_PHONE' binds flag '--phone-number' under '--via sms', which was not elected\nvia=email(subject=(none))"
+    }
+  },
+  {
+    "name": "selector bindings: the diagnostic is hidden without --verbose",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_SUBJECT"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_PHONE"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email"
+    ],
+    "env": {
+      "NOTIFY_PHONE": "+15550100"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=email(subject=(none))"
+    }
+  },
+  {
+    "name": "selector bindings: --quiet dominates --verbose and suppresses the diagnostic",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_SUBJECT"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_PHONE"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--verbose",
+      "--quiet"
+    ],
+    "env": {
+      "NOTIFY_PHONE": "+15550100"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=email(subject=(none))"
+    }
+  },
+  {
+    "name": "selector bindings: a skipped config key names the key rather than a var",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"phone_number\": \"+15550100\"}",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_SUBJECT"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_PHONE"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "not consulted: config key 'phone_number' binds flag '--phone-number' under '--via sms', which was not elected\nvia=email(subject=(none))"
+    }
+  },
+  {
+    "name": "selector bindings: --hermetic consults no ambient source, so nothing is skipped",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_SUBJECT"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_PHONE"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "--hermetic",
+      "send",
+      "--via",
+      "email",
+      "--verbose"
+    ],
+    "env": {
+      "NOTIFY_PHONE": "+15550100"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=email(subject=(none))"
+    }
+  },
+  {
+    "name": "selector bindings: the skipped-binding lines ride machine mode's diagnostics at level debug",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_SUBJECT"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_PHONE"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--json",
+      "--verbose"
+    ],
+    "env": {
+      "NOTIFY_PHONE": "+15550100"
+    },
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "\"level\":\"debug\"",
+        "not consulted: env var 'NOTIFY_PHONE' binds flag '--phone-number' under '--via sms', which was not elected"
+      ]
+    }
+  },
+  {
+    "name": "selector bindings: an unset env var in an unelected scope names nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_SUBJECT"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "default",
+                      "default": "(none)",
+                      "env": "NOTIFY_PHONE"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--verbose"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "via=email(subject=(none))"
+    }
+  }
+]

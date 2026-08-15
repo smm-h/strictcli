@@ -1391,6 +1391,30 @@ func selProvided(root *strictcli.Elected, def map[string]interface{}, parts []st
 	return e.Provided(parts[len(parts)-1])
 }
 
+// templateRefs extracts the `{<prefix><name>}` references a template makes,
+// in first-appearance order. Dotted names are scoped references and belong to
+// the record walk, not to the context's store.
+func templateRefs(template, prefix string) []string {
+	var out []string
+	needle := "{" + prefix
+	rest := template
+	for {
+		i := strings.Index(rest, needle)
+		if i < 0 {
+			return out
+		}
+		rest = rest[i+len(needle):]
+		j := strings.Index(rest, "}")
+		if j < 0 {
+			return out
+		}
+		if name := rest[:j]; !strings.Contains(name, ".") {
+			out = append(out, name)
+		}
+		rest = rest[j:]
+	}
+}
+
 // scopedRefs extracts the dotted references a template makes into a selector's
 // delivered record, in first-appearance order.
 func scopedRefs(template, prefix, sel string) []string {
@@ -1582,24 +1606,17 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 			out = strings.ReplaceAll(out, "{"+name+"}", renderElected(e, fd))
 		}
 
-		// Substitute {source:name} provenance references via ctx.Source().
-		for _, fd := range allFlags {
-			name := fd["name"].(string)
-			sourceKey := "{source:" + name + "}"
-			if strings.Contains(out, sourceKey) {
-				out = strings.ReplaceAll(out, sourceKey, ctx.Source(name))
-			}
+		// Substitute {source:name} and {provided:name} through the context's
+		// per-parse store. The names come from the TEMPLATE rather than from
+		// the declaration list, so a case can ask the store about a name it
+		// does not hold -- which is how §24.9's "a scoped flag is not in the
+		// store at all" is asserted rather than assumed.
+		for _, name := range templateRefs(out, "source:") {
+			out = strings.ReplaceAll(out, "{source:"+name+"}", ctx.Source(name))
 		}
-
-		// Substitute {provided:name} references via ctx.Provided(): true when
-		// the invocation caused the value, false when the declaration did
-		// (contract §23.6).
-		for _, fd := range allFlags {
-			name := fd["name"].(string)
-			providedKey := "{provided:" + name + "}"
-			if strings.Contains(out, providedKey) {
-				out = strings.ReplaceAll(out, providedKey, strconv.FormatBool(ctx.Provided(name)))
-			}
+		for _, name := range templateRefs(out, "provided:") {
+			out = strings.ReplaceAll(
+				out, "{provided:"+name+"}", strconv.FormatBool(ctx.Provided(name)))
 		}
 
 		// Substitute flags.

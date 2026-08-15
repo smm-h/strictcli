@@ -1,0 +1,1029 @@
+[
+  {
+    "name": "selector scope: a flag of an unelected sibling scope names both sides",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "recipient",
+                      "help": "destination email address",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "sms",
+      "--subject",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--subject' is only valid under '--via email', but '--via sms' was elected\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector scope: a scope violation is reported before the missing required flag it causes",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "recipient",
+                      "help": "destination email address",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "sms",
+      "--subject",
+      "hi",
+      "--recipient",
+      "a@b"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--subject' is only valid under '--via email', but '--via sms' was elected\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector scope: a required selector that elected nothing blames the token the reader typed",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "recipient",
+                      "help": "destination email address",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--subject",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--subject' is only valid under '--via email', but '--via' was not provided\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector scope: a name reused by sibling scopes lists both owners, joined by or",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "how to run",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "a",
+                  "help": "the first way",
+                  "flags": [
+                    {
+                      "name": "depth",
+                      "help": "how deep",
+                      "type": "int",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "b",
+                  "help": "the second way",
+                  "flags": [
+                    {
+                      "name": "depth",
+                      "help": "how deep",
+                      "type": "int",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "c",
+                  "help": "the third way"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "mode={mode}"
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--mode",
+      "c",
+      "--depth",
+      "2"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--depth' is only valid under '--mode a' or '--mode b', but '--mode c' was elected\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "selector scope: a required flag inside an elected scope carries the scope suffix",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "recipient",
+                      "help": "destination email address",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "sms"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--phone-number' is required under '--via sms'\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector scope: a member-spelled selector one level down carries the scope suffix",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "handler_prints": "mode={mode}",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "how to run",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "simple",
+                  "help": "the simple way"
+                },
+                {
+                  "name": "advanced",
+                  "help": "the advanced way",
+                  "flags": [
+                    {
+                      "name": "target",
+                      "help": "which profiles to operate on",
+                      "presence": "required",
+                      "elect_by": "member-flags",
+                      "choices": [
+                        {
+                          "name": "profile",
+                          "help": "one named profile",
+                          "value": {
+                            "type": "str",
+                            "help": "the profile"
+                          }
+                        },
+                        {
+                          "name": "all-profiles",
+                          "help": "every profile"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--mode",
+      "advanced"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: one of --profile, --all-profiles is required under '--mode advanced'\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "selector scope: a flag two levels down blames the OUTERMOST unsatisfied election",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "publish",
+          "help": "publish one entry",
+          "effect": "read_only",
+          "handler_prints": "visibility={visibility}",
+          "flags": [
+            {
+              "name": "visibility",
+              "help": "who the entry is for",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "internal",
+                  "help": "not published to users"
+                },
+                {
+                  "name": "user-facing",
+                  "help": "published to users",
+                  "flags": [
+                    {
+                      "name": "type",
+                      "help": "the kind of change",
+                      "presence": "required",
+                      "elect_by": "selector-token",
+                      "choices": [
+                        {
+                          "name": "feature",
+                          "help": "a new capability",
+                          "flags": [
+                            {
+                              "name": "description",
+                              "help": "what it does for users",
+                              "type": "str",
+                              "presence": "required"
+                            }
+                          ]
+                        },
+                        {
+                          "name": "fix",
+                          "help": "a corrected defect",
+                          "flags": [
+                            {
+                              "name": "symptom",
+                              "help": "the user-visible symptom",
+                              "type": "str",
+                              "presence": "required"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "publish",
+      "--visibility",
+      "internal",
+      "--description",
+      "x"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--description' is only valid under '--visibility user-facing --type feature', but '--visibility internal' was elected\ntry 'myapp publish --help'"
+    }
+  },
+  {
+    "name": "selector scope: a nested required flag names the whole path in its suffix",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "publish",
+          "help": "publish one entry",
+          "effect": "read_only",
+          "handler_prints": "visibility={visibility}",
+          "flags": [
+            {
+              "name": "visibility",
+              "help": "who the entry is for",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "internal",
+                  "help": "not published to users"
+                },
+                {
+                  "name": "user-facing",
+                  "help": "published to users",
+                  "flags": [
+                    {
+                      "name": "type",
+                      "help": "the kind of change",
+                      "presence": "required",
+                      "elect_by": "selector-token",
+                      "choices": [
+                        {
+                          "name": "feature",
+                          "help": "a new capability",
+                          "flags": [
+                            {
+                              "name": "description",
+                              "help": "what it does for users",
+                              "type": "str",
+                              "presence": "required"
+                            }
+                          ]
+                        },
+                        {
+                          "name": "fix",
+                          "help": "a corrected defect",
+                          "flags": [
+                            {
+                              "name": "symptom",
+                              "help": "the user-visible symptom",
+                              "type": "str",
+                              "presence": "required"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "publish",
+      "--visibility",
+      "user-facing",
+      "--type",
+      "fix"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--symptom' is required under '--visibility user-facing --type fix'\ntry 'myapp publish --help'"
+    }
+  },
+  {
+    "name": "selector scope: no member elected is the third why-clause",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run it",
+          "effect": "read_only",
+          "handler_prints": "target={target}",
+          "flags": [
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "the profile"
+                  },
+                  "flags": [
+                    {
+                      "name": "create-missing",
+                      "help": "create the profile when absent",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    }
+                  ]
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--create-missing"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--create-missing' is only valid under '--profile', but none of --profile, --all-profiles was elected\ntry 'myapp run --help'"
+    }
+  },
+  {
+    "name": "selector scope: an env election names itself in the why-clause",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "recipient",
+                      "help": "destination email address",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                }
+              ],
+              "env": "NOTIFY_VIA"
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--subject",
+      "hi"
+    ],
+    "env": {
+      "NOTIFY_VIA": "sms"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--subject' is only valid under '--via email', but '--via sms' was elected from env var 'NOTIFY_VIA'\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector scope: an env election names itself in the origin suffix of a presence message",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "recipient",
+                      "help": "destination email address",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                }
+              ],
+              "env": "NOTIFY_VIA"
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send"
+    ],
+    "env": {
+      "NOTIFY_VIA": "sms"
+    },
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--phone-number' is required under '--via sms' (elected from env var 'NOTIFY_VIA')\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector scope: a config election names its key in the origin suffix",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{\"via\": \"sms\"}",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "recipient",
+                      "help": "destination email address",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--phone-number' is required under '--via sms' (elected from config key 'via')\ntry 'myapp send --help'"
+    }
+  },
+  {
+    "name": "selector scope: a command-line election produces no origin suffix at all",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "recipient",
+                      "help": "destination email address",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "webhook",
+                  "help": "post the notification to a URL",
+                  "flags": [
+                    {
+                      "name": "url",
+                      "help": "where to post",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "handler_prints": "via={via}"
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "sms"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: flag '--phone-number' is required under '--via sms'\ntry 'myapp send --help'"
+    }
+  }
+]
