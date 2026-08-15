@@ -6936,13 +6936,21 @@ composition paragraph added to the scope-suffix block).
      hand-written presence refusal at the scope, rather than the root path's own answer with a
      suffix on it.
 
-**Re-probed and unchanged: item 238's Go residual stands as recorded.** §18.23 item 238 named one
+~~**Re-probed and unchanged: item 238's Go residual stands as recorded.** §18.23 item 238 named one
 residual as Go's own -- a selector property naming no declared choice refused inside the declaration
 walk, ahead of an unknown key beside it -- and this round re-probed it rather than assuming it.
 `{"target": "nope", "bogus": 1}` still prints `--target: invalid value 'nope', must be one of:
 profile, all-profiles` in Go, where Python and TypeScript both print the unknown-parameter refusal,
 and where Go itself prints the unknown-parameter refusal when the same key sits beside a double
-election. The record needs no extension; it needs the fix item 238 already assigned.
+election. The record needs no extension; it needs the fix item 238 already assigned.~~
+
+> **Correction (2026-08-15, record-door round, §18.26): the residual no longer reproduces, and the
+> assignment is struck.** The struck note was true when it was written and is false now, and not
+> because item 238's rule moved: Go's `invoke` runs the flat **shape** sweep over the whole kwargs
+> object before `collectInvokeElections` is entered, so the unknown key outranks the declaration
+> walk's own refusal and `{"target": "nope", "bogus": 1}` prints `unknown parameter "bogus" for
+> command "run"` -- item 238's assigned answer, and the one Python and TypeScript already gave. The
+> boundary rounds closed it; no residual is outstanding against Go here.
 
 ### 18.25 Pins forced by the record door's own states (2026-08-15)
 
@@ -7142,6 +7150,172 @@ item 244's for the step the positional check runs in).
      -- every implementation refuses the call -- and stops asserting byte-identity across a sentence
      whose subject differs per language. A stale acknowledgment is reported by the suite, so the day
      the three doors carry the same thing, the block says so itself.
+
+### 18.26 The record door's remaining five, and one correction (2026-08-15)
+
+§18.25 walked `call()`'s elected record down to the states its own shape produces, and left five
+questions open at the door itself: what an explicit absence means where a record has no way to omit
+a key, what **source** a field that door delivers earns, which halves of a declaration it consults,
+how it spells a refusal one level down, and what a **defaulted selection** carries when the
+declaration wrote an infrastructure marker into it. Five items, plus one correction to §18.24's
+re-probe note. Numbering continues §18.25's, for the reason §18.14 gave: the same campaign's ledger.
+
+**What each item is.** Item 252 is a **narrowing** of item 240 -- at one door, for one presence, and
+for a reason that exists in one language. Item 253 is a **ratification with an acknowledged
+limitation**, in item 241's class. Item 254 is a **deferral, recorded**, which is the one thing a
+deferral has to be if it is not to become a silent hole. Item 255 **extends item 251's
+acknowledgment to depth**. Item 256 is a **reading of §24.5** that one implementation contradicts.
+
+**Every claim below was checked against the three implementations' own code**, at the paths the
+claim is about rather than by running each door: Python's `_record_field_value`,
+`_record_from_caller`, `_declared_default_record`, `_check_pre_typed_value`, `_apply_scoped_presence`
+and `_raise_invoke_selector_not_record`; Go's `checkPreTypedValue`, `coerceConfigScalarLong`,
+`bindScopeValues`, `resolveScopedValue`, `resolveElected` and `applyFlagDefault`; TypeScript's
+`buildElectedRecord`, `electDefaultRecord`, `preTypedValueRefusal`, `coerceConfigValueForFlag` and
+`applyFlagDefault`. **Three of the premises the round was filed with are false, and the reading wins
+in all three**: item 253's *undecidable at that door* is true of **Python's** door and of no other,
+because a `Fields` map and a record object both make key presence decidable and both label a supplied
+field `cli` today; item 254 was filed as "all three run the type check only", and Go's record door
+also runs the `choices` check and the custom `validate` callback; item 256 was filed as all three
+delivering the raw marker, and only Python does -- a Go or TypeScript default **names a choice**, so
+its scope is rebuilt from declarations and each field takes the ordinary default path.
+
+**Origin tags**, per §18.14's preamble. Every item here is **untagged**: none is a `(D)` directive
+and none is a `[%%]` adopted recommendation. They are pins forced by states the record door opened,
+in the §18.3 class.
+
+**Sites amended in place**: §24.11 -- item 240's record-door sentence narrowed, and two new blocks
+after item 246's; §24.5 -- one new block on what "complete" delivers; §18.24 -- its closing re-probe
+note struck, per the correction below.
+
+252. **An explicit null on an OPTIONAL scoped field is the absence a record has no other way to
+     spell (§24.11 item 240, §23.4, §24.12).** Item 240 pinned `null` as legal for nothing, and that
+     reading is right wherever absence has a spelling of its own: at the flat door a caller omits the
+     key, so a null would be a **second** spelling of one fact and is refused. **The record door is
+     the one place where absence has no such spelling.** A Python scope is a frozen keyword-only
+     dataclass and an optional `sub_flag` declares no dataclass default (`_scope_field` returns a
+     bare `field(metadata=...)` when no default was written), so the class **cannot be constructed**
+     without naming that field, and `None` is the only thing a caller can name it with. So an
+     explicit `None`/`null` on an optional field at the record door **is** the absence the flat door
+     spells by key omission: it is legal, and it delivers absence -- a present key holding nothing,
+     which is §23.4's own delivery for an optional declaration. Item 240's line narrows accordingly:
+     **`null` is legal for nothing at the flat door, and for nothing but an optional declaration at
+     the record door**. Required and defaulted fields are unchanged, and so is every value at the
+     flat boundary. **The sentinel redesign was considered and rejected**: giving every optional
+     `sub_flag` a framework `ABSENT` default would restore key-omission-by-another-name and let the
+     null stay refused everywhere, at the cost of a second absence vocabulary that only one language
+     would ever write, in a place where the value delivered is `None` either way -- disproportionate
+     for one sentence's uniformity. **Python already reads it this way**: `_record_field_value`
+     returns `(None, "default")` for an optional field handed `None`. **Go and TypeScript both refuse
+     it today** -- `checkPreTypedValue` sends the `nil` to `coerceConfigScalarLong`, which answers
+     `--subject: expected string, got null`, and `preTypedValueRefusal` sends the `null` or
+     `undefined` to `coerceConfigValueForFlag` for the same answer. TypeScript's is the sharper of
+     the two, because `{subject: undefined}` is exactly how a caller writes an optional property that
+     is not set. Both change, at the record door only.
+
+253. **Every field a caller's record supplies reports source `default`, and the limitation is
+     acknowledged rather than closed with a heuristic (§24.9, §23.6, §24.11).** The record door
+     labels every field it delivers `default`, so `provided()` over a caller-supplied record answers
+     **false** for all of them -- with one pinned exception, already built: a `RelativeToRoot` default
+     resolved at that door reports **`infra`** (§18.23 item 237's label, `_record_field_value`'s first
+     branch). The reason is that the supplied-versus-declared distinction is **not decidable at
+     Python's record door**: a `@choice` dataclass fills a declared default at construction, so a
+     field holding its declared default is indistinguishable from one the caller wrote by hand, and
+     `provided` means "did the invocation cause this value" (§23.6) rather than "does this value
+     differ from the declaration". **The `cli` heuristic is refused by name**: labelling a field `cli`
+     when its value differs from the declared default answers a value comparison instead of the
+     question, and answers `false` for a caller who deliberately supplied exactly the default. A
+     wrong answer that looks right at three sites out of four is worse than one uniform answer whose
+     limitation is written down. **Where the round's reason is narrower than its rule**:
+     undecidability is Python's alone. Go's `Fields` map and TypeScript's record object both make key
+     presence decidable, and both report `cli` today -- Go because the values `bindScopeValues`
+     collects re-enter the shared pipeline through `cliByFlag`, where `resolveScopedValue`'s first
+     branch returns `SourceCLI`, and TypeScript because `buildElectedRecord` adds every supplied key
+     to its `provided` set. So the pin costs those two an answer they can give, and that cost is
+     stated rather than hidden: one accessor answering three ways for one call is the divergence
+     parity forbids, and the door that can answer least decides what the shared answer is. Go and
+     TypeScript change; the `infra` exception holds in all three.
+
+254. **The record door checks the TYPE, and the closed-set and custom-validation halves are deferred
+     behind the distinction item 253 just recorded it lacks (§24.11 item 240, §23.4, §24.9).** What
+     the door is contracted to run is item 240's check and nothing more: every field, at every depth,
+     against the type its declaration names. Aligning the other two halves of a declaration -- the
+     closed set (`choices`) and the custom `validate` callback -- is **deliberately deferred**, and
+     the reason is structural rather than scheduling: §23.4 pins that a `validate` callback **never
+     runs on a declared default**, and item 253 records that this door cannot tell a supplied field
+     from a declared one, so a door that ran `validate` would run it on values the declaration
+     decided, which the rule forbids. The deferral is written here rather than left to be inferred
+     from silence, because a door that quietly consults half a declaration is exactly the shape
+     §18.25 kept finding. **The premise the round was filed with is false.** Python and TypeScript do
+     run the type check only -- `_record_field_value` calls `_check_pre_typed_value`, which is
+     `_coerce_config_value` and no more, and `buildElectedRecord`'s `take` calls
+     `preTypedValueRefusal`, which is `coerceInvokeValue` and no more. **Go's record door runs both
+     extra checks**, as a consequence of the routing rather than a decision: its collected values
+     re-enter the shared pipeline as CLI-sourced, so `resolveElected` runs `validateChoices` over
+     every field unconditionally and `f.Validate` over every field it labels provided. A record field
+     holding a value outside its `choices` list is therefore refused in Go and delivered in Python and
+     TypeScript today. That is the state the deferred round starts from, and it is recorded here so
+     that round begins with it rather than rediscovering it.
+
+255. **The nested not-a-record refusal is a per-language spelling too, and it is acknowledged with
+     item 251's (§24.11, §18.25 item 251, §12.13).** Item 251 acknowledged three sentences for a
+     selector value that names no declared choice at the **top** of a call. The same state one level
+     down -- a record field bound to a **nested** selector, holding something that is not one of that
+     selector's choices -- is the same split for the same reason, and it is acknowledged with it
+     rather than unified: Go answers `errElectNotAChoice` (or `errSelectorValueNotElected` for a
+     non-record), TypeScript answers its own record-shape sentence or `errFlagInvalidChoice` on the
+     tag, and Python answers `_raise_invoke_selector_not_record`. **Python's carries one extra frame
+     and it is acknowledged explicitly**: that sentence is framed as `parameter '<name>' for command
+     '<cmd>' must be an instance of a declared choice of '--<sel>' (...), got <type>`, so a field of a
+     record three levels down is named as a **parameter of the command** -- which is what Python's
+     door is actually holding at every depth, a keyword argument's value walked into. **None of the
+     three carries §12.13's scope suffix at depth**, so none of them says *where* the bad record sat;
+     the acknowledgment covers that too, because a suffix on two of the three sentences would make
+     the divergence longer rather than smaller. Forcing one spelling would still make two of the
+     three name something their runtime is not holding (item 251's reason, one frame in), so this
+     joins the same `acknowledged_divergence` block with a mandatory reason, per language, at depth as
+     at the top -- the guarantee that every implementation refuses the call keeps being asserted
+     everywhere, and a stale acknowledgment is still reported by the suite.
+
+256. **A defaulted selection's `RelativeToRoot` field RESOLVES at delivery, exactly as every other
+     declared default does (§24.5, §23.5, §18.23 item 237).** §24.5 says a defaulted selection is
+     **complete** and is delivered as declared. That means the **declaration's semantics**, never the
+     declaration's raw objects: item 237 already pinned that a scoped `RelativeToRoot` default is
+     delivered as the **resolved path** through the declared root, labelled `infra`, with `provided`
+     false, and a marker sitting inside the selection a selector's own `default` names is that same
+     declared default one frame further in. So it resolves at delivery, with the same label, at every
+     door and at every depth. Handing the marker object over instead would deliver a handler
+     something no command line can produce, and something the **same declaration** one presence away
+     already resolves. **The schema is the other direction and stays there**: §25.10 publishes the
+     declaration and never the resolution, a marker riding in §13's machine-stable marker shape,
+     because a dump is a property of the declaration where a delivery is a property of the run.
+     **The round filed all three as delivering the raw marker; that is true of Python alone.** A Go or
+     TypeScript selector default **names a choice**, so nothing holds a pre-built instance: the scope
+     is rebuilt from its declarations and each field runs the ordinary default path -- Go's
+     `applyFlagDefault`, which resolves the marker and returns `SourceInfra`, and TypeScript's, reached
+     from `electDefaultRecord` at the programmatic doors and from `scopedDefaultApplier` on the argv
+     path. **Python holds the constructed instance in the declaration and hands it over untouched**:
+     `_declared_default_record` attaches a source map of `default` for every field and resolves
+     nothing, from `_build_scope_values` on the argv path and from `_selector_result_from_records`'s
+     presence phase at the record door alike. So a `cfg` field declared
+     `RelativeToRoot("MYAPP_HOME", "cfg", "x.toml")` inside a defaulted selection reaches a handler as
+     the marker object labelled `default`, where the identical declaration under an **elected** choice
+     reaches it as `/opt/myhome/cfg/x.toml` labelled `infra` -- one implementation disagreeing with
+     itself one presence apart, which is item 231's class: the rule stands and the implementation
+     changes. The delivered record is a **new instance**, never the declaration's own object rewritten
+     in place -- that object is the declaration, shared by every run of the process.
+
+**Correction to §18.24's closing note: item 238's Go residual no longer reproduces.** §18.24 ended by
+re-probing item 238's one Go-assigned residual -- a selector property naming no declared choice
+refused inside the declaration walk, ahead of an unknown key beside it -- and recorded it as
+standing. It does not stand any more, and nothing about item 238's rule changed: the **boundary
+rounds closed it**. Go's `invoke` now runs the flat **shape** sweep over the whole kwargs object
+before `collectInvokeElections` is called at all, so `{"target": "nope", "bogus": 1}` reports
+`unknown parameter "bogus" for command "run"` -- the same answer Python and TypeScript give, and the
+answer item 238 assigned. The declaration walk still refuses an unelectable selector value where no
+unknown key sits beside it, which is the phase fact it is. The note is struck at its site with a
+dated pointer here rather than rewritten, because it was true when it was written and the record of
+a re-probe is worth as much as the re-probe.
 
 ---
 
@@ -8714,6 +8888,18 @@ and the divergence is the point**:
 The Go/TypeScript template is therefore **Python-excluded** in `check_error_parity.py`, for
 §12.12's reason and with the same rationale recorded: Python has no input that could produce it.
 
+**"Delivered as declared" means the declaration's SEMANTICS, never its raw objects** *(added
+2026-08-15, contract-pin round, §18.26 item 256)*. Completeness says every field of a defaulted
+selection is decided by the declaration; it does not say the declaration's own values are handed
+over untouched. Each field resolves at delivery exactly as the same declaration resolves anywhere
+else: a compound default is copied so a handler cannot mutate the declaration, and a
+`RelativeToRoot` marker is **resolved** through the declared infrastructure root and labelled `infra`
+with `provided` false (§23.5, §23.6, §18.23 item 237). Delivering the marker object itself would hand
+a handler something no command line can produce, and something the identical declaration under an
+*elected* choice already resolves. The **schema** runs the other way and stays there: §25.10
+publishes the declaration and never the resolution, because a dump is a property of the declaration
+where a delivery is a property of the run.
+
 **Electing a choice on the command line never borrows the default's values.** A default is one
 complete selection; an election is another. A choice elected by a token satisfies its scope from
 that invocation, and a required sub-flag of it is required.
@@ -9090,8 +9276,14 @@ one declaration cannot mean two different things about what a value may be. *(am
 contract-pin round, §18.25 item 250)* **That reaches the record door to its full DEPTH, which is
 where that door's whole content sits: a record's fields ARE these same declarations under another
 spelling, so every field of every record, at every level of nesting, is checked against the
-declaration it was supplied against, and `null` is legal for none of them. The record spelling is a
-container the check descends into, never one it stops at.**
+declaration it was supplied against, ~~and `null` is legal for none of them~~** *(amended
+2026-08-15, contract-pin round, §18.26 item 252)* **and `null` is legal for none of them EXCEPT an
+OPTIONAL one, where it is the absence a record has no other way to spell: a scope class cannot omit
+a field the way a flat object omits a key, so an explicit null on an optional field IS that
+omission, and it delivers absence exactly as the omitted key does. The carve-out is this door's
+alone and it stops at optionality -- at the flat boundary absence has its own spelling, so a null
+there remains legal for nothing, and a required or defaulted field is unchanged at both doors. The
+record spelling is a container the check descends into, never one it stops at.**
 
 **A positional's declaration binds a supplied value exactly as a flag's does** *(added 2026-08-15,
 contract-pin round, §18.24 item 244)*. §23.3 gives a positional the same three presence spellings
@@ -9174,6 +9366,28 @@ each language's own quoting inside the first half. The **out-of-scope** template
 state: §12.13 built `flag '--<x>' is only valid under <owners>, but <why>` for a flag the command
 **declares** and this scope does not own, and a key naming nothing anywhere has no other side to
 name -- rendering it `--bogus` would claim a declaration that does not exist.
+
+**Every field a caller's record supplies reports source `default`** *(added 2026-08-15, contract-pin
+round, §18.26 item 253)*. The record door labels every field it delivers `default`, so `provided()`
+over a caller-supplied record (§24.9) answers **false** for all of them. The one exception is pinned:
+a `RelativeToRoot` default resolved at this door reports **`infra`**, the label §18.23 item 237 gives
+it everywhere else. This is an **acknowledged limitation**, not a derivation -- a scope class fills a
+declared default at construction, so a field holding its declared default is indistinguishable from
+one the caller wrote, and `provided` answers "did the invocation cause this value" (§23.6) rather
+than "does this value differ from the declaration". The heuristic that would close it -- label a
+field `cli` when its value differs from the declared default -- is refused by name: it answers a
+value comparison instead of the question, and answers `false` for a caller who supplied exactly the
+default. One uniform answer with its limitation written down beats a right-looking answer that is
+wrong wherever the two coincide.
+
+**The record door checks the TYPE; the closed set and the custom validation are deferred** *(added
+2026-08-15, contract-pin round, §18.26 item 254)*. What this door is contracted to run is the block
+above and nothing more: each field, at each depth, against the type its declaration names. The other
+two halves of a declaration -- `choices` and a `validate` callback -- are **deliberately deferred**,
+behind the distinction the block before this one records the door cannot make: §23.4 pins that
+`validate` never runs on a declared default, and a door that cannot tell a supplied field from a
+declared one would run it on values the declaration decided. The deferral is stated here rather than
+left to be inferred from a silence, so a later round finds a decision instead of a hole.
 
 **An integral number satisfies an `int` declaration at this boundary** *(added 2026-08-15,
 contract-pin round, §18.25 item 247)*. JSON has one number type, and two of the three decoders lose
