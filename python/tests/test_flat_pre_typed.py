@@ -650,3 +650,84 @@ def test_the_dashed_spelling_is_the_command_lines_own():
          "--phone-number", "555"],
     )
     assert r.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# The RECORD door stages command-wide too (§18.24 item 243)
+#
+# The phase order is a property of the parser, not of the input, so it governs
+# every programmatic door: a door converts every selector's record first and
+# only then reports, with the stage deciding which refusal is heard -- shape,
+# election, scope, value, presence -- and declaration order inside one stage.
+# ---------------------------------------------------------------------------
+
+
+def _two_selector_app():
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @strictcli.flag("count", type=int, help="a count", presence="optional")
+    @choice_flag(
+        "via", help="delivery channel", presence="required",
+        elect_by="selector-token", choices=[NoDelivery, Email],
+    )
+    @choice_flag(
+        "mode", help="which profiles", presence="required",
+        elect_by="member-flags", choices=[Profile, AllProfiles],
+    )
+    def run(ctx, count, via: NoDelivery | Email, mode: Profile | AllProfiles):
+        pass
+
+    return app
+
+
+def _record_refusal(**kwargs):
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _two_selector_app().call("run", **kwargs)
+    return str(exc.value)
+
+
+def test_a_record_naming_no_declared_choice_is_an_election_refusal():
+    assert _record_refusal(via="email", mode=AllProfiles()) == (
+        "parameter 'via' for command 'run' must be an instance of a declared "
+        "choice of '--via' (NoDelivery | Email), got str"
+    )
+
+
+def test_a_record_of_a_foreign_choice_takes_the_same_refusal():
+    assert _record_refusal(via=Profile(value="work"), mode=AllProfiles()) == (
+        "parameter 'via' for command 'run' must be an instance of a declared "
+        "choice of '--via' (NoDelivery | Email), got Profile"
+    )
+
+
+def test_declaration_order_decides_inside_the_election_stage():
+    """Two election refusals in one call: the earlier declaration is heard,
+    never whichever the walk happened to reach first."""
+    assert _record_refusal(mode="all-profiles") == (
+        "flag '--via' is required"
+    )
+
+
+def test_a_missing_election_is_heard_before_a_later_records_refusal():
+    assert _record_refusal(mode=42) == "flag '--via' is required"
+
+
+def test_an_unknown_key_still_outranks_every_election_refusal():
+    assert _record_refusal(via="email", nope=1) == (
+        "unknown parameter 'nope' for command 'run'"
+    )
+
+
+def test_a_root_value_problem_never_precedes_a_missing_election():
+    """Value is stage four and election is stage two, so the call that gets
+    both wrong reports the election."""
+    assert _record_refusal(mode=AllProfiles(), count="7") == (
+        "flag '--via' is required"
+    )
+
+
+def test_the_root_value_problem_is_reported_once_every_election_is_settled():
+    assert _record_refusal(
+        via=NoDelivery(), mode=AllProfiles(), count="7",
+    ) == "--count: expected integer, got str"
