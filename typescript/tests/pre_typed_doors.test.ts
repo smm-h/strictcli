@@ -1435,6 +1435,9 @@ test("flat: a sibling key beside a defaulted election is delivered, election unc
 	// are separate facts -- the ELECTION is the declaration's (§18.28 item 264)
 	// and the FIELD is the caller's, because this door read the key the caller
 	// wrote (§18.29 item 268).
+	// The field's VALUE below ("yo", not the declaration's "hi") is TypeScript's own
+	// row of item 264's RECORDED RESIDUAL, not a ruling: the three disagree there and
+	// the contract left it open, so these two assertions pin current behaviour only.
 	const flat: Record<string, unknown> = {};
 	assert.equal(
 		await toolFor(defaultedSelectionApp(flat), "send").execute({

@@ -7708,9 +7708,18 @@ payload renders a marker as.
      per-language sentences rather than anything new. **Nothing is pinned here.** Ruling it means
      deciding whether a record's nested election is one vocabulary or two, which is a question about
      the record door's declaration surface rather than about this state, and the three probes above
-     were run against each implementation's own API rather than through the conformance runner -- the
-     corpus cannot declare a nested selector at the record door in all three targets today, so there
-     is no cross-language row to rule from. The reading is recorded so the round that takes it starts
+     were run against each implementation's own API rather than through the conformance runner.
+     ~~the corpus cannot declare a nested selector at the record door in all three targets today, so
+     there is no cross-language row to rule from~~ *(reason corrected 2026-08-15, phase-closing audit:
+     the first half was already false when it was written and is false now -- the corpus **does**
+     declare a nested selector at the record door across all three targets, with
+     `cases/selector_record_door.json` and `cases/record_door_divergences.json` both carrying a
+     `pre_call` whose elected record holds a nested elected record. What is missing is narrower and
+     is what the residual actually rests on: **no cross-language row has been ruled for the MIXED
+     spelling** -- an outer election spelled as an elected object with the inner one spelled as a bare
+     name -- because two of the three have no way to express it, so a corpus case for it would have
+     to assert two different refusals against one declaration. The residual stands unchanged; only
+     its reason moves.)* The reading is recorded so the round that takes it starts
      from three known behaviours instead of rediscovering them.
 
 ### 18.29 The flat door reads the whole declaration, and answers supplied-ness itself (2026-08-15)
@@ -9574,6 +9583,25 @@ the invocation caused its value (`cli`, `env`, `config`, `implied`) and not when
 (`default`, `infra`). TypeScript additionally answers part of the question at the type level -- an
 optional sub-flag's key is optional in the derived union -- which does not replace the accessor,
 because a *defaulted* field is present in both cases and only the accessor separates them.
+
+> **Amendment (2026-08-15, §18.26 item 253 and §18.29 item 268, both of which name this section as a
+> site): the answer depends on the DOOR the value came through.** The semantic above is one
+> semantic, but the three doors do not carry the same information about their own input, so the
+> accessor answers differently at each and each answer is the one its input supports:
+>
+> | door | `provided()` on a caller-supplied scoped field | source |
+> |---|---|---|
+> | the command line | **true** | `cli` |
+> | the flat machine door (`--mcp` `tools/call`, a flat kwargs map) | **true** | `cli` |
+> | the record door (a constructed scope handed to `call()`) | **false** | `default` |
+>
+> The record door's `false` is item 253's **acknowledged limitation**, not a derivation: a scope class
+> fills its declared defaults at construction, so a field holding its declared default cannot be told
+> from one the caller wrote, and the value-comparison heuristic that would close it is refused by
+> name. The flat door does not share that limitation -- it reads the caller's own keys, so a key it
+> read is a value the caller wrote -- which is item 268's ruling. The one exception holds everywhere:
+> a `RelativeToRoot` default resolved at any door reports `infra` (§18.23 item 237). The normative
+> statements of both rules live at §24.11.
 
 ### 24.10 Help rendering
 
