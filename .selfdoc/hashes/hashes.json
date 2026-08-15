@@ -5,11 +5,11 @@
     "description": "8fd0ce42eacd07543fe287f3dffd393efafa0ecfb931a0e8c8243fdb2db7acad"
   },
   "en/conformance.md": {
-    "content": "b3fffce35abce6a3f7a41e07b70890637d2c685b3a49d720f6abd82979f0e568",
+    "content": "55b7da5c77f4f1eb41c58b9236cb6094c5338f742b23cd0d85dce0b912d09be8",
     "description": "ecf387ce65cac3d1dff0229fe0906c1552e0cc47c57287e02d86941743535556"
   },
   "en/flag-system.md": {
-    "content": "b6e197a23db6363536ab64fb9c57133777ec331b4f0d3ec2f56dc5d1463da90c",
+    "content": "9b0b5dbbc495c9bfc85017af3380b40ac3950d474d11cde640ae706affeaf6e9",
     "description": "7f0daba0627af3e683356ccef01577450fdc7d2a9cfd69ff2cc950ca914bede2"
   },
   "en/gen-index.md": {
@@ -17,7 +17,7 @@
     "description": "de421ec712350fd2336eb5ecdb2b218864da7af30526828f1b7c7f55293aa31b"
   },
   "en/go-quickstart.md": {
-    "content": "658e648ad432ee028cbe6871e145f07339abe3e6c741b37ea5f498df82c4e3f1",
+    "content": "4f5b05bee4223298cb93c9e72ceecd2ed1d3b943a7df95ce1c323b2d6b788348",
     "description": "ed8ed714948d4d90daab1a2eca606040c2749975815a61cd53596df016192bd8"
   },
   "en/go-strictcli-testdata-noncomparable.md": {
@@ -48,7 +48,7 @@
     "description": "70bfdba9b524dd0d01ed386281d43243f71b63b87c54551fe0ee9f7109ce3e73"
   },
   "en/python-quickstart.md": {
-    "content": "6a5deafa375dd0c4ca0428b382174d667d59dfaa3a526d5b2778046704ad6541",
+    "content": "218dd69c4cd76778c8eead5e51edddd170f4a5d61dd7d60c1b45483fd08ee65c",
     "description": "06e16afe175f83b5eb902fa669a72e004aa5c798851215fccf3a56fc0c96e294"
   },
   "en/python-strictcli.md": {
@@ -57,7 +57,7 @@
     "source_docstring": "869d760f17632ede6f9b09aa15d41ddd3e3626fd1471d84ece919e2402507969"
   },
   "en/typescript-quickstart.md": {
-    "content": "02f88865af1e44fb889ea714bad7ccec24e981976e8e6bd386078e7737e1d483",
+    "content": "bd5959aa4b1b411e6d90dfe4f09f53debabaa8b59a25bc0b212f67b7b5487d94",
     "description": "662808499e25b2600ca7b583885c0e9abc09c34bca9d858907ef398978342d98"
   },
   "en/typescript-src-app.md": {
