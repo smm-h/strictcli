@@ -205,12 +205,20 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	sup := newSuppliedElections()
 	cliByFlag := make(map[*Flag]interface{})
 	scopedNames := make(map[string]*Flag)
+	var scopedBinds []pendingBind
 	if cmd.index != nil && cmd.index.hasSelectors {
-		if errStr := collectInvokeElections(cmd, kwargs, sup, cliByFlag, scopedNames); errStr != "" {
+		binds, errStr := collectInvokeElections(cmd, kwargs, sup, scopedNames)
+		if errStr != "" {
 			return invokeResult{exitCode: 1, err: errStr}
 		}
+		scopedBinds = binds
 	}
 
+	// Every value this call supplied, held until the election phase has run
+	// command-wide. Coercing where the value is read would let an earlier
+	// scope's value problem outrank a later selector's election refusal, which
+	// inverts the pinned phase order (§24.3, §24.11).
+	rootValues := make(map[*Flag]interface{})
 	for paramName, value := range kwargs {
 		flagName := paramToFlagName(paramName)
 
@@ -219,11 +227,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 			if f.Type == TypeChoice {
 				continue // already folded into the election input
 			}
-			coerced, errStr := coerceInvokeValue(f, value)
-			if errStr != "" {
-				return invokeResult{exitCode: 1, err: errStr}
-			}
-			store.set(flagName, coerced, SourceCLI)
+			rootValues[f] = value
 			continue
 		}
 
@@ -263,6 +267,31 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	sort.Strings(suppliedOrder)
 	if errStr := est.checkScope(suppliedOrder); errStr != "" {
 		return invokeResult{exitCode: 1, err: errStr}
+	}
+
+	// Phase 4 begins here: election and scope are settled command-wide, so a
+	// value may now be refused. A flat object has no order of its own, so the
+	// sweep is DECLARATION order -- scoped values as the walk collected them,
+	// then the command's own flags -- which is what §21.4 already uses wherever
+	// an order-free object has to be reported in some order.
+	for _, b := range scopedBinds {
+		coerced, errStr := coerceInvokeValue(b.flag, b.raw)
+		if errStr != "" {
+			return invokeResult{exitCode: 1, err: errStr}
+		}
+		cliByFlag[b.flag] = coerced
+	}
+	for i := range cmd.flags {
+		f := &cmd.flags[i]
+		raw, ok := rootValues[f]
+		if !ok {
+			continue
+		}
+		coerced, errStr := coerceInvokeValue(f, raw)
+		if errStr != "" {
+			return invokeResult{exitCode: 1, err: errStr}
+		}
+		store.set(f.Name, coerced, SourceCLI)
 	}
 
 	// Build positionals list from kwargs in arg declaration order
@@ -476,6 +505,14 @@ func (a *App) Call(commandPath string, kwargs map[string]interface{}, opts ...Ca
 	return ir.exitCode, nil
 }
 
+// pendingBind is one value an elected scope was given, held until the election
+// phase has run command-wide. Collecting rather than coercing is what keeps a
+// value refusal behind every selector's election refusal (§24.3, §24.11).
+type pendingBind struct {
+	flag *Flag
+	raw  interface{}
+}
+
 // collectInvokeElections converts a programmatic call's selector arguments into
 // the same election-and-value input the argv path produces (contract §24.11).
 //
@@ -484,7 +521,11 @@ func (a *App) Call(commandPath string, kwargs map[string]interface{}, opts ...Ca
 // (Elect(<choice>, Fields{...})), while the machine boundary's flat object
 // carries the choice name under the selector's own key and every scoped
 // parameter as a top-level key.
-func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *suppliedElections, cliByFlag map[*Flag]interface{}, scopedNames map[string]*Flag) string {
+//
+// It returns the values the elected scopes were given, in declaration order,
+// for the caller to coerce once every election is settled. Nothing here refuses
+// a value: a walk over declarations is not a licence to refuse mid-walk.
+func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *suppliedElections, scopedNames map[string]*Flag) ([]pendingBind, string) {
 	// Every scoped name, so a top-level scoped parameter is recognized rather
 	// than refused as unknown -- and so a parameter belonging to a scope that
 	// was NOT elected reaches scope validation and is refused with the CLI's own
@@ -502,6 +543,7 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 		}
 	}
 
+	var binds []pendingBind
 	var walk func(flags []Flag, args map[string]interface{}) string
 	walk = func(flags []Flag, args map[string]interface{}) string {
 		for i := range flags {
@@ -519,16 +561,14 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 				}
 				sup.suppliedNames[f.Name] = true
 				sup.preElected[f] = ch
-				if errStr := bindElectedFields(f, ch, rec.Fields, sup, cliByFlag); errStr != "" {
-					return errStr
-				}
+				bindElectedFields(ch, rec.Fields, sup, &binds)
 				if errStr := walk(ch.Flags, rec.Fields); errStr != "" {
 					return errStr
 				}
 				continue
 			}
 			if f.memberSpelled {
-				if errStr := collectFlatMemberElections(f, args, named, raw, sup, cliByFlag, walk); errStr != "" {
+				if errStr := collectFlatMemberElections(f, args, named, raw, sup, &binds, walk); errStr != "" {
 					return errStr
 				}
 				continue
@@ -548,16 +588,17 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 			sup.preElected[f] = ch
 			// The flat form's scoped parameters sit beside the selector, so
 			// the same top-level object supplies the next level too.
-			if errStr := bindElectedFields(f, ch, Fields(args), sup, cliByFlag); errStr != "" {
-				return errStr
-			}
+			bindElectedFields(ch, Fields(args), sup, &binds)
 			if errStr := walk(ch.Flags, args); errStr != "" {
 				return errStr
 			}
 		}
 		return ""
 	}
-	return walk(cmd.flags, kwargs)
+	if errStr := walk(cmd.flags, kwargs); errStr != "" {
+		return nil, errStr
+	}
+	return binds, ""
 }
 
 // collectFlatMemberElections reads a member-spelled selector's elections out of
@@ -576,7 +617,7 @@ func collectFlatMemberElections(
 	named bool,
 	raw interface{},
 	sup *suppliedElections,
-	cliByFlag map[*Flag]interface{},
+	binds *[]pendingBind,
 	walk func([]Flag, map[string]interface{}) string,
 ) string {
 	elected := map[string]bool{}
@@ -623,16 +664,15 @@ func collectFlatMemberElections(
 			only = ch
 		}
 	}
-	if errStr := bindElectedFields(sel, only, Fields(args), sup, cliByFlag); errStr != "" {
-		return errStr
-	}
+	bindElectedFields(only, Fields(args), sup, binds)
 	return walk(only.Flags, args)
 }
 
 // bindElectedFields records the values a scope's flags were given, keyed by the
-// declaration, and marks every named flag as supplied so scope validation sees
-// it.
-func bindElectedFields(sel *Flag, ch *ChoiceDecl, fields Fields, sup *suppliedElections, cliByFlag map[*Flag]interface{}) string {
+// declaration and in declaration order, and marks every named flag as supplied
+// so scope validation sees it. It refuses nothing: the values it collects are
+// coerced once every election is settled (§24.3's phase order).
+func bindElectedFields(ch *ChoiceDecl, fields Fields, sup *suppliedElections, binds *[]pendingBind) {
 	for i := range ch.Flags {
 		sub := &ch.Flags[i]
 		key := flagParamName(sub.Name)
@@ -645,7 +685,7 @@ func bindElectedFields(sel *Flag, ch *ChoiceDecl, fields Fields, sup *suppliedEl
 			// "value" in a record, and under the member's OWN flag name in the
 			// flat machine form -- which is the property name §24.11 publishes.
 			if v, ok := fields["value"]; ok {
-				cliByFlag[sub] = v
+				*binds = append(*binds, pendingBind{flag: sub, raw: v})
 				sup.suppliedNames[sub.Name] = true
 				continue
 			}
@@ -654,13 +694,8 @@ func bindElectedFields(sel *Flag, ch *ChoiceDecl, fields Fields, sup *suppliedEl
 			if sub.Type == TypeChoice {
 				continue // handled by the recursive walk
 			}
-			coerced, errStr := coerceInvokeValue(sub, v)
-			if errStr != "" {
-				return errStr
-			}
-			cliByFlag[sub] = coerced
+			*binds = append(*binds, pendingBind{flag: sub, raw: v})
 			sup.suppliedNames[sub.Name] = true
 		}
 	}
-	return ""
 }
