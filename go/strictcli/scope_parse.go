@@ -312,7 +312,11 @@ func (st *electionState) collectSkippedBindings(idx *flagIndex, amb ambientSourc
 				continue
 			}
 			path := renderScopePath(site.path)
-			if site.flag.Env != "" && !amb.hermetic {
+			// The enumeration is over bindings that CARRIED A VALUE: amb.env is
+			// the same lookup an elected scope would have made, so an unset var
+			// (or one suppressed by hermetic) names nothing, exactly as the
+			// config branch below requires the key to be present.
+			if _, ok := amb.env(site.flag.Env); ok {
 				st.skipped = append(st.skipped, errAmbientBindingSkippedEnv(site.flag.Env, name, path))
 			}
 			param := flagParamName(name)

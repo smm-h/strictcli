@@ -327,6 +327,23 @@ func TestSkippedBindingIsNamedUnderVerbose(t *testing.T) {
 	}
 }
 
+// The enumeration is over bindings that CARRIED A VALUE. An env var that is not
+// set carried nothing, so it is named nowhere -- naming it would report a
+// binding the run could not have consulted even with its scope elected (§24.6).
+func TestUnsetEnvBindingIsNamedNowhere(t *testing.T) {
+	// t.Setenv registers the restore of the pre-test state; the unset that
+	// follows is what the test actually needs.
+	t.Setenv("NOTIFY_SUBJECT", "placeholder")
+	os.Unsetenv("NOTIFY_SUBJECT")
+	r := conditionalBindingApp().Test([]string{"send", "--verbose", "--via", "sms", "--phone-number", "+1"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if strings.Contains(r.Stdout, "not consulted") {
+		t.Fatalf("an unset env var was named as a skipped binding: %q", r.Stdout)
+	}
+}
+
 func TestSelectorSourceFollowsElection(t *testing.T) {
 	var gotSource, gotProvided string
 	app := NewApp("myapp", "1.0.0", "test app")
