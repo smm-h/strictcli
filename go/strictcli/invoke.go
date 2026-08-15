@@ -249,9 +249,10 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	// Phase 4 begins here: election and scope are settled command-wide, so a
 	// value may now be refused. A flat object has no order of its own, so the
 	// sweep is DECLARATION order -- scoped values as the walk collected them,
-	// then the command's own flags, its positionals, and the app's globals --
-	// which is what §21.4 already uses wherever an order-free object has to be
-	// reported in some order.
+	// then the command's own flags, then the app's globals -- which is what
+	// §21.4 already uses wherever an order-free object has to be reported in
+	// some order. The positionals are checked where every positional is
+	// resolved, in the shared pipeline's own positional phase.
 	for _, b := range scopedBinds {
 		checked, errStr := checkPreTypedValue(b.flag, b.raw)
 		if errStr != "" {
@@ -272,17 +273,6 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 		store.set(f.Name, checked, SourceCLI)
 	}
 
-	// Collect the positionals this call supplied, under the arg names it
-	// supplied them under. The values are handed on as supplied; the
-	// declaration checks them where every other positional is resolved, and
-	// binds each to the arg its key names (§24.11 item 244).
-	for i := range cmd.args {
-		arg := &cmd.args[i]
-		if val, ok := kwargs[arg.Name]; ok {
-			positionals[arg.Name] = val
-		}
-	}
-
 	for i := range a.globalFlags {
 		gf := &a.globalFlags[i]
 		raw, ok := globalValues[gf]
@@ -294,6 +284,17 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 			return invokeResult{exitCode: 1, err: errStr}
 		}
 		store.set(gf.Name, checked, SourceCLI)
+	}
+
+	// The positionals this call supplied, under the arg names it supplied them
+	// under. The values are handed on as supplied; the declaration checks them
+	// where every positional is resolved, and binds each to the arg its key
+	// names (§24.11 item 244).
+	for i := range cmd.args {
+		arg := &cmd.args[i]
+		if val, ok := kwargs[arg.Name]; ok {
+			positionals[arg.Name] = val
+		}
 	}
 
 	// Run validation and build final kwargs
