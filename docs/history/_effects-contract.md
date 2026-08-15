@@ -6944,6 +6944,205 @@ profile, all-profiles` in Go, where Python and TypeScript both print the unknown
 and where Go itself prints the unknown-parameter refusal when the same key sits beside a double
 election. The record needs no extension; it needs the fix item 238 already assigned.
 
+### 18.25 Pins forced by the record door's own states (2026-08-15)
+
+§18.22, §18.23 and §18.24 walked the flat machine form down to its edges. This section walks the
+**other** programmatic door -- `call()`'s elected record -- and the one thing the flat door carries
+that no command line ever can: a JSON number. Six items, all of them the same kind of hole the three
+sections before them found: a **namespace**, a **stage**, an **order** or a **sentence** that no
+document stated, so each implementation delivered whatever its shortest path produced. Numbering
+continues §18.24's, for the reason §18.14 gave: the same campaign's ledger.
+
+**Nothing below changes a guarantee.** Item 246 is a **new pin**, with a sentence composed from two
+templates this document already owns. Item 247 is a **pinned accommodation** -- a fact about JSON
+decoders that the boundary has to absorb -- plus the divergence it leaves behind. Items 249 and 250
+**clarify** two lines that items 243 and 240 left one step short of the states probed here. Item 248
+is a **ratification** of a stage all three already run, with one binding divergence found beside it.
+Item 251 is an **acknowledgment** in item 241's class.
+
+**Every claim below was checked against the three implementations' own code**, at the paths the
+claim is about rather than by running each door: Python's `_selector_result_from_records`,
+`_check_pre_typed_value`, `_coerce_config_scalar` and `_validate_and_build_kwargs`; Go's
+`collectInvokeElections`, `bindElectedFields`, `checkPreTypedValue`, `coerceConfigScalarLong` and
+`resolvePreTypedArgs`; TypeScript's `electFromRecord`, `buildElectedRecord`, `widenJsonIntegers`,
+`coercePositional` and `invokeApp`'s two passes. **Three claims the round was filed with are false,
+and the reading wins in all three**: item 246 was filed as a Go-only state, and TypeScript's record
+door both receives the key and answers it today, at a different stage and in a different sentence;
+item 247 was filed with Python's refusal as native-only, and a JSON document may write an integer as
+`7.0`, which Python's decoder hands over as a float, so the divergence is live at the machine
+boundary; item 248 was filed as a Go stage divergence, and all three already check where the argv
+path checks -- the divergence the reading did find is TypeScript's **binding**.
+
+**Origin tags**, per §18.14's preamble. Every item here is **untagged**: none is a `(D)` directive
+and none is a `[%%]` adopted recommendation. They are implementation-forced pins in the §18.3 class.
+
+**Sites amended in place**: §24.11 -- two new blocks after item 243's, and three existing blocks
+extended (item 240's for the record door's depth, item 243's for the value stage's single sweep, and
+item 244's for the step the positional check runs in).
+
+246. **A key inside an elected record names nothing the elected scope declares, and is refused at the
+     shape stage (§24.11, §24.3, §18.23 item 238, §18.24 item 242).** The record door's key namespace
+     is the **elected choice's own scope**: the tag key, the payload key (`value`) where the choice
+     carries a payload, and the parameters that scope declares at that level -- exactly the set
+     §24.7 reserves names inside and §24.11's description-map block publishes. A key outside that set
+     names nothing, and item 238 decides it without amendment: a fact about the object's **shape**,
+     refused ahead of every election, scope, value and presence problem the same call also contains.
+     **The sentence is the flat door's own with §12.13's scope suffix on it**, because the fact is
+     the same fact one level down and the suffix is the clause that says where:
+
+     ```
+     unknown parameter "bogus" for command "send" under '--via email'
+     ```
+
+     `errUnknownParameterForCommand(<key>, <command>) + errScopeSuffix(<scope path>)`, with §12.13's
+     own path rendering at any depth, and each language's own quoting inside the first half -- the
+     per-language difference the conformance corpus already records for that template (Python
+     single-quotes; Go and TypeScript quote Go-style). **The out-of-scope template is refused for
+     this state**: §12.13 built `flag '--<x>' is only valid under <owners>, but <why>` for a flag the
+     command **declares** and this scope does not own -- "the flag is declared, it is simply not in
+     the elected scope, and the sentence names both sides" -- and a key naming nothing anywhere has
+     no other side to name, so rendering it as `--bogus` would claim a declaration that does not
+     exist. **Go drops the key in silence.** `bindElectedFields` walks the scope's **declarations**
+     and lifts the key each one names out of `Fields`, so a key no declaration names is never looked
+     at, and the shape sweep in `invoke` runs over the top-level kwargs only -- a selector's value
+     there is an `*Elected`, not a set of keys. `Elect(email, Fields{"subject": "hi", "bogus": 1})`
+     runs the handler. **The round filed this as Go-only, and that is false of TypeScript.** An
+     excess property fails a typed program at compile time, but the runtime door can receive one --
+     a value typed more widely than an object literal reaches `call()` unchecked by the compiler --
+     and `electFromRecord` deliberately answers it: it records a **scope**-stage problem spelled
+     `flag '--bogus' is only valid under '--via email', but that scope does not declare it`. So
+     TypeScript changes too, twice over: the stage moves from scope to shape, and the sentence from
+     the out-of-scope template to the one above. **Python is the one implementation the state is
+     genuinely unreachable in**: a choice is a dataclass, so an undeclared keyword fails in
+     `__init__` before `call()` is entered at all.
+
+247. **An integral number satisfies an `int` declaration wherever a JSON decoder produced it, and
+     each language's own numeric model governs where one did not (§24.11 item 240, §23.3).** JSON has
+     one number type. Go's `encoding/json` decodes every number into `float64` and TypeScript's
+     `JSON.parse` into `number`; neither can tell `7` from `7.0`, so refusing an integral float at
+     the machine boundary would refuse **every integer that door can carry**. Both already
+     accommodate it, and the accommodation is the older half of each implementation's config reader
+     rather than anything invented for this boundary: Go's `coerceConfigScalarLong` accepts a
+     `float64` whose `int` conversion round-trips equal, and TypeScript's `widenJsonIntegers` turns
+     an integral `number` into the `bigint` every other layer of that implementation carries, before
+     the declaration is consulted at all. A **fractional** number is refused in both, and the
+     sentence is the one Python prints for a float: `--retries: expected integer, got float`. **This
+     is forced, not chosen**: the alternative is a boundary that cannot carry an integer.
+     **Python's decoder is the one that keeps the distinction**, and its **native** door keeps the
+     refusal with it: `json.loads` yields a real `int` for `7`, and `call(retries=7.0)` is
+     `--retries: expected integer, got float` because nothing in Python's own numeric model makes a
+     float an integer, and §23.3's four types mean what each language means by them. **Where the
+     round was filed wrong**: the state is not native-only for Python. A JSON document may write an
+     integer as `7.0`, and `json.loads` hands that over as a float, so `{"retries": 7.0}` at the
+     machine boundary is refused in Python and accepted as `7` in Go and TypeScript **today** -- a
+     live cross-language divergence at the one door parity binds hardest. So the accommodation is the
+     **door's**, not the decoder's: **at the flat machine boundary an integral number satisfies an
+     `int` declaration in all three**, for flags and positionals alike, which Python spells by
+     widening an integral float where that door's values are checked and nowhere else. What remains
+     divergent is the **native pre-typed door**, and it is acknowledged rather than fixed: Go's
+     `App.Call` and TypeScript's `call()` accept `7.0` for an `int` because their runtimes cannot see
+     that it was written with a point, and Python's `call()` refuses it because its runtime can.
+     **The same split shows in the type NAME a refusal quotes** and is acknowledged with it: handed
+     `7.0` for a `str`-declared flag, Go's `typeName` renders an integral `float64` as `int` and
+     TypeScript's `configTypename` renders the widened value as `int`, while Python renders it
+     `float` -- one value, three readings of what it IS, because that is what the three runtimes
+     hold. This belongs in the conformance suite's `acknowledged_divergence` block for the native
+     door's cases, exactly as item 241's does, with the machine boundary's cases asserting the
+     accommodation byte-identically everywhere.
+
+248. **A pre-typed positional is checked in the pipeline's own positional step, and bound to the arg
+     its key names (§24.11 item 244, §23.3).** The stage is the argv path's: a positional's value is
+     read where **every** positional is read, after implies and dependency resolution, after flag
+     presence and defaults, after the choices and custom-validation sweeps -- so a missing required
+     **flag** outranks a bad positional at the programmatic doors exactly as it does on the command
+     line, and one door never reorders the other's refusals. **The round filed this as a Go
+     divergence, and all three already comply**: Go's `resolvePreTypedArgs` is called from
+     `validateAndBuildKwargs` at the same site `resolveArgTokens` is called from, Python's
+     `pre_typed_args` branch is step 6 of `_validate_and_build_kwargs` beside the token branch, and
+     TypeScript's `validateAndBuildKwargs` takes a `{kind: "pre-typed"}` positional input and coerces
+     it at the positional step. The item is therefore a **ratification**, and it is worth writing
+     down for the reason item 236 was: three independent arrivals at one answer are the record's
+     content, not a reason to skip it. **One divergence the reading did find belongs here, and it is
+     binding rather than staging.** A kwargs object has no order (§21.4's reason), so a positional's
+     key **names an arg** -- Go walks `cmd.args` and reads `byName[a.Name]`, and Python walks
+     `cmd.args` and reads `pre_typed_args[a.name]`, each binding a supplied value to the arg its key
+     names and answering presence from the key's absence. **TypeScript binds by position**: `invokeApp`
+     walks the declared args, skips every one whose key is absent, and pushes the rest into a dense
+     array that the pipeline then binds **by index**. So on a command declaring `label` (`str`,
+     optional) then `count` (`int`, required), `call("run", {count: 2})` binds `2` to `label` and
+     prints `argument 'label': expected string, got int` -- a sentence about a key the caller never
+     supplied, for a value they supplied correctly under another name. Go and Python are the
+     reference.
+
+249. **Within the value stage there is ONE declaration-ordered sweep, and a scope is a position in it
+     rather than a group before it (§24.11, §24.3, §18.24 item 243).** Item 243 closed its stage
+     table with "declaration order within one stage", which does not say **whose** declaration order
+     decides when one stage holds a root flag's value and a scoped one at the same time. It is the
+     **command's own**, walked once: each declaration in the order it was written, a selector taking
+     its position in that walk, and the values of its elected record read at that position, at every
+     depth -- root flags and selectors **interleaved**, never partitioned into scoped-first and
+     root-second. The reason is the one item 243 gave for the stage table itself: the order is a
+     property of the parser, and the parser's order is the order the command was declared in, which
+     is the only order both doors and the command line share. **TypeScript complies**: `invokeApp`'s
+     second pass walks `def.allDecls` and builds each elected record where its selector stands.
+     **Go sweeps the scoped binds first** -- `collectInvokeElections` returns them in walk order and
+     `invoke` runs `checkPreTypedValue` over all of them before it touches `cmd.flags` -- so a scoped
+     value refusal outranks the refusal of a root flag **declared before the selector**, which is not
+     the command line's answer for the same two problems. **Python's flat door is further out than
+     Go's**: `_resolve_selectors` runs the whole selector resolution -- election, scope, scoped
+     values **and scoped presence** -- before any root flag's value is checked, so a scoped
+     **presence** refusal outranks a root **value** refusal, which inverts the stage table itself
+     rather than the order inside one stage; and the root sweep that follows walks `kwargs` in the
+     caller's own key order, the one order §21.4 says decides nothing. Go and Python both realign;
+     TypeScript is the reference.
+
+250. **Item 240's rule reaches a record's own fields, to their full depth (§24.11 item 240, §24.11's
+     record-door block).** The §24.11 block closes with "the same rule governs the record front door
+     below", which names the door and says nothing about how deep it goes -- and the door's whole
+     content is depth. The line is **amended explicit** rather than left to a reader: a record's
+     fields **are** the declarations the flat form spells as top-level keys, so every field of every
+     record, at every level of nesting, is checked against the declaration it was supplied against,
+     and `null` is legal for none of them. Two spellings of one declaration cannot mean two different
+     things about what a value may be, and the record spelling is not a container the check stops at.
+     **Go checks them**: `collectInvokeElections` collects each field as a pending bind and the value
+     phase runs `checkPreTypedValue` over every one. **TypeScript checks them**: `buildElectedRecord`'s
+     `take` runs `preTypedValueRefusal` on each field and recurses into a nested record's own.
+     **Python's record door checks nothing.** `_selector_result_from_records` verifies that the
+     value's **class** is a declared choice of that selector and hands the instance to
+     `_declared_default_record`, which only attaches a source map -- so `call("send",
+     via=Email(retries="3"))` delivers a record whose `int`-declared field holds the string `"3"`,
+     and a nested record is delivered the same way, unread. Python's **flat** door checks the same
+     values correctly in the same run (`_resolve_scoped_value` calls `_check_pre_typed_value` under
+     `pre_typed`), so this is one door of one implementation disagreeing with the other -- item 242's
+     last sentence, in the other direction. Python is the divergent one.
+
+251. **The record door's wrong-choice refusal is a per-language spelling, and it is acknowledged
+     rather than unified (§12.13, §24.11, §18.23 item 241's class).** Handed a selector value that
+     names no choice the selector declares, the three record doors print three sentences:
+
+     ```
+     --target: elected value names choice "other", which is not declared by this choice flag
+     --target: invalid value 'other', must be one of: profile, all-profiles
+     parameter 'target' for command 'send' must be an instance of a declared choice of '--target' (Profile | AllProfiles), got Other
+     ```
+
+     Go's `errElectNotAChoice`, TypeScript's reuse of `errFlagInvalidChoice`, and Python's
+     `_raise_invoke_selector_not_record` -- the third already quoted by item 243. **The round named
+     two; there are three**, and the reason they cannot be one is that the three doors are not
+     carrying the same thing. A Go record holds a `*ChoiceDecl` -- a **declared choice of some
+     selector**, which is why its sentence can say the choice is real and belongs elsewhere. A
+     TypeScript record holds a **string tag**, which is a value that names a choice or does not, so
+     the closed-set sentence the CLI already prints for a bad `--target` value fits it exactly. A
+     Python record is an **instance of a class**, so the refusal names the type it got against the
+     union it declared. The states partition differently too: TypeScript answers a non-object with a
+     separate shape sentence and Go answers a non-record with `errSelectorValueNotElected`, where
+     Python's one sentence covers both. Forcing one spelling would make two of the three name
+     something their runtime is not holding. **So this goes to `acknowledged_divergence`** with a
+     mandatory reason, exactly as item 241's does: the case keeps asserting the guarantee that holds
+     -- every implementation refuses the call -- and stops asserting byte-identity across a sentence
+     whose subject differs per language. A stale acknowledgment is reported by the suite, so the day
+     the three doors carry the same thing, the block says so itself.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -8887,7 +9086,12 @@ flag handed `"nope"` is refused rather than passed through. The check is the **v
 after every election and every scope decision, in declaration order (§24.3, §18.22 item 232) -- so
 it never outranks an election refusal, and it sits beside the `choices` check this path already
 performs on pre-typed values. The same rule governs the record front door below: two spellings of
-one declaration cannot mean two different things about what a value may be.
+one declaration cannot mean two different things about what a value may be. *(amended 2026-08-15,
+contract-pin round, §18.25 item 250)* **That reaches the record door to its full DEPTH, which is
+where that door's whole content sits: a record's fields ARE these same declarations under another
+spelling, so every field of every record, at every level of nesting, is checked against the
+declaration it was supplied against, and `null` is legal for none of them. The record spelling is a
+container the check descends into, never one it stops at.**
 
 **A positional's declaration binds a supplied value exactly as a flag's does** *(added 2026-08-15,
 contract-pin round, §18.24 item 244)*. §23.3 gives a positional the same three presence spellings
@@ -8902,7 +9106,14 @@ for nothing here either: an arg that may be absent declares `optional` and is de
 the key is omitted, and a required arg with no key is `missing required argument '<name>'`, the
 argv path's own sentence for a token that was never typed. **The wrapper is the arg side's own** --
 `argument '<name>': expected integer, got str`, never `--<name>` -- because that is the prefix
-every arg-side value refusal already uses. No template is authored.
+every arg-side value refusal already uses. No template is authored. *(amended 2026-08-15,
+contract-pin round, §18.25 item 248)* **Two things this block left unsaid, both of them the argv
+path's own answer read onto a keyed input. The check runs in the pipeline's own POSITIONAL step --
+where every positional is read, after presence and defaults have resolved the flags -- so a missing
+required flag outranks a bad positional here exactly as it does on the command line. And a supplied
+value binds to the arg its KEY NAMES, never to whatever position the supplied subset happens to
+leave it in: a kwargs object has no order of its own (§21.4's reason), so the key is the binding,
+and an omitted key is the absence presence answers.**
 
 **A dash-spelled key names nothing** *(added 2026-08-15, contract-pin round, §18.24 item 242)*. The
 key namespace at this boundary is the **underscored delivery-name space**: the parameter name a
@@ -8935,7 +9146,46 @@ things about the same call, which the sentence above ("the same election, scope 
 machinery the argv path uses") already forbids. So a call whose first selector's record carries an
 uncoercible value and whose second names no declared choice reports the **second selector's
 election refusal**, and a call whose first record omits a required scoped flag and whose second
-names no declared choice reports that election refusal too.
+names no declared choice reports that election refusal too. *(amended 2026-08-15, contract-pin
+round, §18.25 item 249)* **"Declaration order within one stage" is the COMMAND's declaration order,
+walked ONCE: each declaration in the order it was written, a selector taking its own position in
+that walk, and the values of its elected record read at that position, at every depth. Root flags
+and selectors are interleaved by that one order and never partitioned into a scoped sweep before a
+root one -- a scope is a POSITION in the sweep, not a group ahead of it. The reason is the one this
+block already gives for the stage table: the order belongs to the parser, and the parser's order is
+the order the command was declared in, which is the only order both doors and the command line
+share. The caller's key order decides nothing, in either door.**
+
+**A key inside an elected record names nothing the elected scope declares** *(added 2026-08-15,
+contract-pin round, §18.25 item 246)*. The record door's key namespace is the **elected choice's own
+scope**: the tag key, the payload key (`value`) where the choice carries one, and the parameters
+that scope declares at that level. A key outside that set names nothing the command declares, so the
+unknown-property block above decides it unchanged -- a fact about the object's **shape**, reported
+ahead of every election, scope, value and presence problem the same call contains -- and the
+sentence is that block's own with §12.13's scope suffix on it, because the fact is the same fact one
+level down and the suffix is the clause that says where:
+
+```
+unknown parameter "bogus" for command "send" under '--via email'
+```
+
+`errUnknownParameterForCommand(<key>, <command>) + errScopeSuffix(<scope path>)`, at any depth, with
+each language's own quoting inside the first half. The **out-of-scope** template is refused for this
+state: §12.13 built `flag '--<x>' is only valid under <owners>, but <why>` for a flag the command
+**declares** and this scope does not own, and a key naming nothing anywhere has no other side to
+name -- rendering it `--bogus` would claim a declaration that does not exist.
+
+**An integral number satisfies an `int` declaration at this boundary** *(added 2026-08-15,
+contract-pin round, §18.25 item 247)*. JSON has one number type, and two of the three decoders lose
+integer-ness in it: a JSON `7` arrives as a `float64` in Go and as a `number` in TypeScript, neither
+distinguishable from `7.0`. Refusing an integral float here would therefore refuse **every integer
+this door can carry**, so it is accepted for an `int` declaration -- flags and positionals alike --
+and converted to the integer it names. A **fractional** number is still refused, with the sentence
+the config reader already prints: `--retries: expected integer, got float`. The accommodation
+belongs to **this door**, not to a language: a native pre-typed call is governed by its own
+runtime's numeric model, where Python refuses `7.0` for an `int` and Go and TypeScript cannot see
+that anything was written with a point. That native split, and the type NAME each runtime reports
+for such a value, are acknowledged divergences rather than defects (§18.25 item 247).
 
 **Choice names ride the description map exactly as declared** *(added 2026-08-15, implementation
 round, §18.19 item 222)*. The block's key is `<selector>=<choice>` where the **selector** is the
