@@ -809,6 +809,32 @@ func buildSelectorFlag(fd map[string]interface{}) strictcli.Flag {
 	return strictcli.ChoiceFlag(name, help, opts...)
 }
 
+// buildConstraintMembers reads a co-occurrence constraint's member array. Go's
+// constructors take two named members before the variadic tail, so a case
+// declaring fewer than two members cannot be expressed here at all -- the
+// two-member floor is a COMPILE-time rule in this implementation (§26.6), which
+// is why errConstraintMinMembers has no Go covering case.
+func buildConstraintMembers(cd map[string]interface{}) (strictcli.ConstraintMember, strictcli.ConstraintMember, []strictcli.ConstraintMember) {
+	raw := cd["members"].([]interface{})
+	built := make([]strictcli.ConstraintMember, 0, len(raw))
+	for _, m := range raw {
+		md := m.(map[string]interface{})
+		var opts []strictcli.MemberOption
+		if w, ok := md["when"]; ok {
+			switch w.(string) {
+			case "present":
+				opts = append(opts, strictcli.WhenPresent())
+			case "true":
+				opts = append(opts, strictcli.WhenTrue())
+			case "non_empty":
+				opts = append(opts, strictcli.WhenNonEmpty())
+			}
+		}
+		built = append(built, strictcli.Member(md["name"].(string), opts...))
+	}
+	return built[0], built[1], built[2:]
+}
+
 // buildFlag constructs a strictcli.Flag from a JSON flag definition.
 func buildFlag(fd map[string]interface{}) strictcli.Flag {
 	if isSelector(fd) {
@@ -1044,32 +1070,28 @@ func buildCmdOptions(cmdDef map[string]interface{}) []strictcli.CmdOption {
 		}
 	}
 
-	// Dependencies.
-	if deps, ok := cmdDef["dependencies"]; ok {
-		var depList []strictcli.Dependency
-		for _, d := range deps.([]interface{}) {
-			dd := d.(map[string]interface{})
-			switch dd["type"].(string) {
-			case "co_required":
-				var flags []string
-				for _, f := range dd["flags"].([]interface{}) {
-					flags = append(flags, f.(string))
-				}
-				depList = append(depList, strictcli.CoRequired{Flags: flags})
+	// Constraints (contract §26). The case-schema key is `constraints`, and each
+	// entry carries the mandatory name plus, for the two co-occurrence
+	// families, a member array of `{name, when?}` records.
+	if cs, ok := cmdDef["constraints"]; ok {
+		var list []strictcli.Constraint
+		for _, c := range cs.([]interface{}) {
+			cd := c.(map[string]interface{})
+			name := cd["name"].(string)
+			switch cd["type"].(string) {
+			case "at_least_one":
+				a, b, rest := buildConstraintMembers(cd)
+				list = append(list, strictcli.AtLeastOne(name, a, b, rest...))
+			case "all_or_none":
+				a, b, rest := buildConstraintMembers(cd)
+				list = append(list, strictcli.AllOrNone(name, a, b, rest...))
 			case "requires":
-				depList = append(depList, strictcli.Requires{
-					Flag:      dd["flag"].(string),
-					DependsOn: dd["depends_on"].(string),
-				})
+				list = append(list, strictcli.Requires(name, cd["flag"].(string), cd["depends_on"].(string)))
 			case "implies":
-				depList = append(depList, strictcli.Implies{
-					Flag:    dd["flag"].(string),
-					Implies: dd["implies"].(string),
-					Value:   dd["value"].(bool),
-				})
+				list = append(list, strictcli.Implies(name, cd["flag"].(string), cd["implies"].(string), cd["value"].(bool)))
 			}
 		}
-		opts = append(opts, strictcli.WithDependencies(depList...))
+		opts = append(opts, strictcli.WithConstraints(list...))
 	}
 
 	// Tags.
