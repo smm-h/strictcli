@@ -1,0 +1,290 @@
+[
+  {
+    "name": "list carrier args: a list-typed variadic arg delivers the list it collected",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "paths={paths}",
+          "args": [
+            {
+              "name": "paths",
+              "help": "the files to process",
+              "type": "list[str]",
+              "presence": "optional",
+              "variadic": true
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "a",
+      "b",
+      "c"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "paths=a,b,c\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "list carrier args: the published fragment is the array row",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "paths={paths}",
+          "args": [
+            {
+              "name": "paths",
+              "help": "the files to process",
+              "type": "list[str]",
+              "presence": "optional",
+              "variadic": true
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_command_keys": {
+        "run": {
+          "args": [
+            {
+              "name": "paths",
+              "help": "the files to process",
+              "value_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "presence": "optional",
+              "variadic": true
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "list carrier args: choices on a list carrier put the enum inside items",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "kinds={kinds}",
+          "args": [
+            {
+              "name": "kinds",
+              "help": "which kinds to include",
+              "type": "list[str]",
+              "presence": "optional",
+              "variadic": true,
+              "choices_str": [
+                {
+                  "value": "head",
+                  "help": "the current commit only"
+                },
+                {
+                  "value": "branches"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_command_keys": {
+        "run": {
+          "args": [
+            {
+              "name": "kinds",
+              "help": "which kinds to include",
+              "value_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "head",
+                    "branches"
+                  ]
+                }
+              },
+              "presence": "optional",
+              "choices": [
+                {
+                  "value": "head",
+                  "help": "the current commit only"
+                },
+                {
+                  "value": "branches"
+                }
+              ],
+              "variadic": true
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "list carrier args: a value outside the closed set is refused",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "kinds={kinds}",
+          "args": [
+            {
+              "name": "kinds",
+              "help": "which kinds to include",
+              "type": "list[str]",
+              "presence": "optional",
+              "variadic": true,
+              "choices_str": [
+                {
+                  "value": "head",
+                  "help": "the current commit only"
+                },
+                {
+                  "value": "branches"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "head",
+      "tags"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "invalid value 'tags', must be one of: head, branches"
+    }
+  },
+  {
+    "name": "list carrier flags: a list-typed flag may carry choices",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "kinds={kinds}",
+          "flags": [
+            {
+              "name": "kinds",
+              "help": "which kinds to include",
+              "type": "list[str]",
+              "presence": "optional",
+              "unique": false,
+              "choices_str": [
+                {
+                  "value": "head",
+                  "help": "the current commit only"
+                },
+                {
+                  "value": "branches"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--kinds",
+      "head",
+      "--kinds",
+      "branches"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "kinds=head,branches\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "list carrier flags: a dict-typed flag may not",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "labels={labels}",
+          "flags": [
+            {
+              "name": "labels",
+              "help": "labels to attach",
+              "type": "dict[str,str]",
+              "presence": "optional",
+              "choices_str": [
+                {
+                  "value": "head",
+                  "help": "the current commit only"
+                },
+                {
+                  "value": "branches"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: Flag \"labels\": dict type cannot be combined with choices"
+    }
+  }
+]

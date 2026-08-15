@@ -1,0 +1,131 @@
+[
+  {
+    "name": "config show marker: a run delivers the resolved path, labelled infra",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "infra_root": {
+        "MYAPP_HOME": "/opt/myhome"
+      },
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "db={db} source={source:db}",
+          "flags": [
+            {
+              "name": "db",
+              "help": "where the local database lives",
+              "type": "str",
+              "presence": "default",
+              "default_relative_to_root": {
+                "env_var": "MYAPP_HOME",
+                "parts": [
+                  "db.sqlite"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "db=/opt/myhome/db.sqlite source=infra\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "config show marker: the human form renders the declaration as written",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "infra_root": {
+        "MYAPP_HOME": "/opt/myhome"
+      },
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "db={db} source={source:db}",
+          "flags": [
+            {
+              "name": "db",
+              "help": "where the local database lives",
+              "type": "str",
+              "presence": "default",
+              "default_relative_to_root": {
+                "env_var": "MYAPP_HOME",
+                "parts": [
+                  "db.sqlite"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "config",
+      "show"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "db = RelativeToRoot('MYAPP_HOME', 'db.sqlite')  (source: default)\n\nInfrastructure:\n  MYAPP_HOME (root) = /opt/myhome  (source: default)\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "config show marker: the machine form publishes the pinned marker shape",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "infra_root": {
+        "MYAPP_HOME": "/opt/myhome"
+      },
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "db={db} source={source:db}",
+          "flags": [
+            {
+              "name": "db",
+              "help": "where the local database lives",
+              "type": "str",
+              "presence": "default",
+              "default_relative_to_root": {
+                "env_var": "MYAPP_HOME",
+                "parts": [
+                  "db.sqlite"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "config",
+      "show",
+      "--json"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"config.show\",\"exit_code\":0,\"payload\":{\"__infrastructure__\":{\"MYAPP_HOME\":{\"kind\":\"root\",\"resolved\":\"/opt/myhome\",\"source\":\"default\"}},\"db\":{\"source\":\"default\",\"value\":{\"relative_to_root\":{\"env_var\":\"MYAPP_HOME\",\"parts\":[\"db.sqlite\"]}}}},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[{\"level\":\"info\",\"message\":\"db = RelativeToRoot('MYAPP_HOME', 'db.sqlite')  (source: default)\"},{\"level\":\"info\",\"message\":\"\"},{\"level\":\"info\",\"message\":\"Infrastructure:\"},{\"level\":\"info\",\"message\":\"  MYAPP_HOME (root) = /opt/myhome  (source: default)\"}]}\n",
+      "stderr_equals": ""
+    }
+  }
+]
