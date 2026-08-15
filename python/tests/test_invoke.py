@@ -505,7 +505,16 @@ class TestInvokeSelectors:
         ):
             app._invoke("fmt", {"format": True})
 
-    def test_the_record_reaches_the_handler_unchanged(self):
+    def test_the_record_reaches_the_handler_as_the_declaration_describes_it(self):
+        """The delivered record carries the caller's values, checked against
+        the declarations they were supplied against (§24.11 item 240).
+
+        It is the framework's record rather than the caller's own object: a
+        checked value can differ from the supplied one (an integer widens to
+        the float its declaration names, a `RelativeToRoot` default resolves to
+        a path), so the door builds the record it delivers and leaves the
+        object the caller built alone.
+        """
         captured = {}
         app = _build_app()
 
@@ -527,7 +536,9 @@ class TestInvokeSelectors:
 
         value = AsJson(indent=4)
         app._invoke("fmt", {"format": value})
-        assert captured["format"] is value
+        assert captured["format"] == value
+        assert type(captured["format"]) is AsJson
+        assert captured["format"].indent == 4
 
 
 class TestInvokeDependencies:

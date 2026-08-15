@@ -710,16 +710,23 @@ def test_a_record_of_a_foreign_choice_takes_the_same_refusal():
     )
 
 
-def test_declaration_order_decides_inside_the_election_stage():
-    """Two election refusals in one call: the earlier declaration is heard,
-    never whichever the walk happened to reach first."""
-    assert _record_refusal(mode="all-profiles") == (
-        "flag '--via' is required"
+def test_declaration_order_decides_inside_one_stage():
+    """Two records naming no declared choice in one call: the earlier
+    declaration is heard, never whichever the walk happened to reach first."""
+    assert _record_refusal(via="email", mode="all-profiles") == (
+        "parameter 'via' for command 'run' must be an instance of a declared "
+        "choice of '--via' (NoDelivery | Email), got str"
     )
 
 
-def test_a_missing_election_is_heard_before_a_later_records_refusal():
-    assert _record_refusal(mode=42) == "flag '--via' is required"
+def test_a_later_records_refusal_is_heard_before_a_missing_election():
+    """A missing selector is the PRESENCE stage (§18.22 item 232), which is
+    the last one: a later selector's record naming no declared choice is a
+    fact about the object's shape and outranks it."""
+    assert _record_refusal(mode=42) == (
+        "parameter 'mode' for command 'run' must be an instance of a declared "
+        "choice of '--mode' (Profile | AllProfiles), got int"
+    )
 
 
 def test_an_unknown_key_still_outranks_every_election_refusal():

@@ -10202,7 +10202,9 @@ class App:
                     if k not in _flat_selector_params(cmd)
                 }
             else:
-                selector_result = _selector_result_from_records(cmd, kwargs)
+                selector_result = _selector_result_from_records(
+                    cmd, kwargs, infra_roots=self._infra_roots,
+                )
                 kwargs = {
                     k: v for k, v in kwargs.items()
                     if k not in selector_result.values
@@ -12054,27 +12056,198 @@ def _flat_occurrences(cmd: Command, arguments: dict) -> list[_Occ]:
 
 def _selector_result_from_records(
     cmd: Command, kwargs: dict[str, object],
+    *, infra_roots: dict[str, str] | None = None,
 ) -> _SelectorResult:
-    """`call()` takes the elected record, pre-typed (§24.11)."""
+    """`call()` takes the elected record, pre-typed (§24.11).
+
+    The phase order is the PARSER's, so it governs this door too (§24.3,
+    §18.24 item 243): every record's shape is decided over the whole command
+    before any value is read, the value sweep then runs in DECLARATION order at
+    every depth, and presence is last. A record IS its election here -- the
+    class is the tag -- and `@choice`'s frozen dataclass refuses a missing
+    field and an unknown field at construction, so the scope and presence
+    problems a flat object can spell inside a record cannot be reached at all.
+
+    *Pre-typed* means ALREADY OF THE DECLARED TYPE, never exempt from the
+    declaration (§24.11 item 240): a record's fields ARE the scope's flags, so
+    every value one carries is checked against the declaration it was supplied
+    against, exactly as the flat door checks the same value under the same
+    declaration.
+    """
     result = _SelectorResult()
+    member_spelled = _member_spelling_map(cmd.selectors)
+    # Phase 1 -- SHAPE, over the whole command and to unlimited depth, before
+    # any value is read anywhere.
+    supplied: list[tuple[str, _Selector, _ChoiceSpec, object]] = []
     for sel in cmd.selectors:
         param = _flag_param_name(sel.name)
         if param not in kwargs:
-            if sel.presence == _PRESENCE_DEFAULT:
-                result.values[param] = _declared_default_record(sel.default)
-                result.sources[param] = "default"
-                continue
-            if sel.is_member_spelled:
-                names = ", ".join(f"--{c.name}" for c in sel.choices)
-                raise _ParseError(f"one of {names} is required")
-            raise _ParseError(f"flag '--{sel.name}' is required")
-        value = kwargs[param]
-        spec = sel.choice_by_class(type(value))
-        if spec is None:
-            _raise_invoke_selector_not_record(cmd.name, sel, value)
-        result.values[param] = _declared_default_record(value)
-        result.sources[param] = "cli"
+            continue
+        record = kwargs[param]
+        spec = _record_choice_spec(cmd.name, sel, record)
+        _walk_record_shape(cmd.name, spec, record)
+        supplied.append((param, sel, spec, record))
+    # Phase 2 -- VALUE, in declaration order, at every depth.
+    built: dict[str, object] = {}
+    for param, sel, spec, record in supplied:
+        built[param] = _record_from_caller(
+            cmd.name, sel, spec, record, ((sel.name, spec.name),),
+            member_spelled=member_spelled, infra_roots=infra_roots,
+        )
+    # Phase 3 -- PRESENCE, which is what is left once nothing above refused.
+    for sel in cmd.selectors:
+        param = _flag_param_name(sel.name)
+        if param in built:
+            result.values[param] = built[param]
+            result.sources[param] = "cli"
+            continue
+        if sel.presence == _PRESENCE_DEFAULT:
+            result.values[param] = _declared_default_record(sel.default)
+            result.sources[param] = "default"
+            continue
+        if sel.is_member_spelled:
+            names = ", ".join(f"--{c.name}" for c in sel.choices)
+            raise _ParseError(f"one of {names} is required")
+        raise _ParseError(f"flag '--{sel.name}' is required")
     return result
+
+
+def _record_choice_spec(
+    cmd_name: str, sel: _Selector, value: object,
+) -> _ChoiceSpec:
+    """The choice a supplied record elects, or the shape refusal (§24.11).
+
+    A record is its own election at this door, so a value that is not an
+    instance of a declared choice carries no election to read: it is a fact
+    about the record's SHAPE, and the same fact wherever it sits -- a
+    selector's own parameter or a field bound to a nested selector.
+    """
+    spec = sel.choice_by_class(type(value))
+    if spec is None:
+        _raise_invoke_selector_not_record(cmd_name, sel, value)
+    return spec
+
+
+def _is_declared_selection_default(sel: _Selector, value: object) -> bool:
+    """Is this field holding the very selection its declaration wrote?
+
+    A defaulted selection is COMPLETE by registration (§24.5) and is delivered
+    as declared, so the walk stops at it: the caller supplied no election here,
+    exactly as a command line that never typed the selector's token.
+    """
+    return sel.presence == _PRESENCE_DEFAULT and value is sel.default
+
+
+def _walk_record_shape(
+    cmd_name: str, spec: _ChoiceSpec, record: object,
+) -> None:
+    """Phase 1 over one supplied record: every nested selection it carries.
+
+    Declaration order, depth-first, and nothing else is looked at -- a value
+    problem beside a nested field that holds no record is a later phase's, and
+    the phases decide over the whole command rather than per selector.
+    """
+    for m in spec.members:
+        if isinstance(m, Flag):
+            continue
+        value = getattr(record, _flag_param_name(m.name))
+        if _is_declared_selection_default(m, value):
+            continue
+        _walk_record_shape(
+            cmd_name, _record_choice_spec(cmd_name, m, value), value,
+        )
+
+
+def _record_field_value(
+    f: Flag,
+    raw: object,
+    path: tuple,
+    *,
+    member_spelled: dict[str, bool],
+    infra_roots: dict[str, str] | None,
+) -> tuple[object, str]:
+    """One field of a supplied record, against the flag it declares (§24.11).
+
+    A scope is not a second declaration language (§24.3), so the two spellings
+    a complete record uses for "the declaration decides this one" resolve the
+    way every other door resolves them: a `RelativeToRoot` default reaches the
+    handler as the resolved path labelled `infra` (§18.23 item 237), and an
+    optional field -- which has no dataclass default, so the caller writes the
+    `None` an absent key says at the flat door -- delivers absence.
+
+    Everything else is a value the caller supplied, and is checked against the
+    type its declaration names by the machinery every pre-typed value goes
+    through.
+    """
+    if f.presence == _PRESENCE_DEFAULT and isinstance(raw, RelativeToRoot):
+        try:
+            return _resolve_infra_root_path(raw, infra_roots or {}), "infra"
+        except ValueError as e:
+            # The marker's own sentence plus §12.13's scope suffix, exactly as
+            # the scoped presence path raises it: registration never sees
+            # inside a scope, so an undeclared root is reported here.
+            suffix = _msg_scope_suffix(_render_scope_path(path, member_spelled))
+            raise _ParseError(str(e) + suffix) from None
+    if f.presence == _PRESENCE_OPTIONAL and raw is None:
+        return None, "default"
+    return _check_pre_typed_value(f, raw), "default"
+
+
+def _record_from_caller(
+    cmd_name: str,
+    sel: _Selector,
+    spec: _ChoiceSpec,
+    record: object,
+    path: tuple,
+    *,
+    member_spelled: dict[str, bool],
+    infra_roots: dict[str, str] | None,
+) -> object:
+    """Phase 2 over one supplied record: its values, in declaration order.
+
+    The payload first and then the scope's flags as they are declared, which is
+    the order :func:`_instantiate_choice` builds the same record in from argv --
+    a keyword-argument list has no order of its own, so the order the caller
+    happened to write it in decides nothing.
+
+    A new record is built rather than the caller's own object rewritten: a
+    checked value can differ from the one supplied (an integer widens to the
+    float its declaration names), and the object the caller built is theirs.
+    """
+    values: dict[str, object] = {}
+    sources: dict[str, str] = {}
+    if spec.payload is not None:
+        values[_SCOPE_RESERVED_VALUE] = _check_pre_typed_value(
+            spec.payload, getattr(record, _SCOPE_RESERVED_VALUE),
+        )
+        # Which label a supplied field earns is not this round's question: the
+        # record door has reported `default` for every field it delivers since
+        # the door existed, and it still does.
+        sources[_SCOPE_RESERVED_VALUE] = "default"
+    for m in spec.members:
+        key = _flag_param_name(m.name)
+        raw = getattr(record, key)
+        if isinstance(m, Flag):
+            values[key], sources[key] = _record_field_value(
+                m, raw, path,
+                member_spelled=member_spelled, infra_roots=infra_roots,
+            )
+            continue
+        if _is_declared_selection_default(m, raw):
+            values[key] = _declared_default_record(raw)
+            sources[key] = "default"
+            continue
+        # Phase 1 already proved this field holds a declared choice.
+        sub = m.choice_by_class(type(raw))
+        assert sub is not None
+        values[key] = _record_from_caller(
+            cmd_name, m, sub, raw, path + ((m.name, sub.name),),
+            member_spelled=member_spelled, infra_roots=infra_roots,
+        )
+        sources[key] = "default"
+    built = spec.cls(**values)
+    object.__setattr__(built, _RECORD_SOURCES_ATTR, sources)
+    return built
 
 
 def _raise_invoke_selector_not_record(
