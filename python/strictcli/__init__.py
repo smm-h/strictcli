@@ -6516,20 +6516,27 @@ def _validate_constraint_set(
     co_occurrence = [c for c in constraints if isinstance(c, _CO_OCCURRENCE_FAMILIES)]
     by_name = {c.name: c for c in constraints}
 
+    # Member record shape -- a SET-WIDE step between steps 1 and 2. A bare name
+    # is a fault in how a member is WRITTEN rather than in what it names, so it
+    # is refused across the whole set before any constraint's members are
+    # counted or resolved: a spelling that lets one member carry an election and
+    # another not carry the word for it is two spellings for one fact.
+    for c in co_occurrence:
+        for i, m in enumerate(c.members):
+            if not isinstance(m, Member):
+                _raise_constraint_member_not_record(name, c.name, i)
+
     # 2. Member arity -- at least two members.
     for c in co_occurrence:
         if len(c.members) < 2:
             _raise_constraint_min_members(name, c.name, len(c.members))
 
     # 3. Member resolution -- each name resolves to exactly one flag, arg or
-    #    constraint. A bare name is refused before it is resolved: a spelling
-    #    that lets one member carry an election and another not carry the word
-    #    for it is two spellings for one fact.
+    #    constraint. Every member is a record by now: the shape step above ran
+    #    over the whole set.
     for c in co_occurrence:
         seen_members: set[str] = set()
-        for i, m in enumerate(c.members):
-            if not isinstance(m, Member):
-                _raise_constraint_member_not_record(name, c.name, i)
+        for m in c.members:
             is_flag = m.name in flags_by_name
             is_arg = m.name in args_by_name
             if is_flag and is_arg:
@@ -6661,6 +6668,7 @@ def _check_constraint_cycles(name: str, co_occurrence: list, by_name: dict) -> N
     WHITE, GREY, BLACK = 0, 1, 2
     colour: dict[str, int] = {}
     stack: list[str] = []
+    order = {cname: i for i, cname in enumerate(by_name)}
 
     def walk(c) -> None:
         colour[c.name] = GREY
@@ -6671,8 +6679,13 @@ def _check_constraint_cycles(name: str, co_occurrence: list, by_name: dict) -> N
                 continue
             state = colour.get(child.name, WHITE)
             if state == GREY:
-                start = stack.index(child.name)
-                path = " -> ".join(stack[start:] + [child.name])
+                # The participant the walk ENTERED the cycle through is not
+                # necessarily the one declared first, so the cycle is rotated
+                # onto the earliest-declared one before it renders.
+                cycle = stack[stack.index(child.name):]
+                open_at = min(range(len(cycle)), key=lambda i: order[cycle[i]])
+                rotated = cycle[open_at:] + cycle[:open_at]
+                path = " -> ".join(rotated + [rotated[0]])
                 _raise_constraint_cycle(name, path)
             if state == WHITE:
                 walk(child)
@@ -14521,9 +14534,16 @@ def _build_and_validate_command(
     if site_list:
         _member_spelled = _member_spelling_map(tuple(selectors))
         for _site in site_list:
-            if _site.path and _site.name not in _scoped_paths:
+            # A member-spelled choice's own token is declared BY the election it
+            # carries rather than beside it, so the scope it belongs to is its
+            # own segment: a constraint naming `file` is told it is declared
+            # under '--file', which is the token the reader would type.
+            _path = _site.path
+            if _site.kind == "member":
+                _path = _path + ((_site.decl.name, _site.choice.name),)
+            if _path and _site.name not in _scoped_paths:
                 _scoped_paths[_site.name] = _render_scope_path(
-                    _site.path, _member_spelled,
+                    _path, _member_spelled,
                 )
     _validate_constraint_set(
         name, resolved_constraints, all_flags, all_args, _scoped_paths,

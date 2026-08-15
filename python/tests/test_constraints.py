@@ -588,6 +588,35 @@ def test_a_bare_string_member_is_refused():
     )
 
 
+def test_the_bare_string_refusal_is_a_set_wide_step():
+    """The member-record shape is checked across the WHOLE set between steps 1
+    and 2, so a bare name in a LATER constraint is refused ahead of an unknown
+    member in an earlier one: the fault is in a declaration's shape rather than
+    in what it names."""
+    with pytest.raises(ValueError) as exc:
+        _register([
+            AllOrNone("one", [Member("a"), Member("nope")]),
+            AllOrNone("two", [Member("a"), "b"]),
+        ])()
+    assert str(exc.value) == (
+        'command "cmd": constraint "two" member 1 is a bare name: declare it '
+        'as Member("<x>")'
+    )
+
+
+def test_the_bare_string_refusal_precedes_the_arity_step():
+    """Between steps 1 and 2 means before arity too, wherever it is declared."""
+    with pytest.raises(ValueError) as exc:
+        _register([
+            AllOrNone("one", [Member("a")]),
+            AllOrNone("two", [Member("a"), "b"]),
+        ])()
+    assert str(exc.value) == (
+        'command "cmd": constraint "two" member 1 is a bare name: declare it '
+        'as Member("<x>")'
+    )
+
+
 def test_unknown_member():
     with pytest.raises(ValueError) as exc:
         _register([AllOrNone("pair", [Member("a"), Member("nope")])])()
@@ -710,6 +739,41 @@ def test_a_co_occurrence_member_cannot_be_a_scoped_flag():
     )
 
 
+def test_a_member_naming_a_member_flag_is_the_scope_refusal():
+    """A member-spelled choice's own token is declared BY the election it
+    carries, so it lives in that choice's scope: naming it is the scoped-operand
+    refusal, whose path renders as the member token itself (§12.13)."""
+
+    @strictcli.choice("file", help="read from a file")
+    class FromFile:
+        value: str = strictcli.member_value(help="the path")
+
+    @strictcli.choice("url", help="read from a URL")
+    class FromUrl:
+        value: str = strictcli.member_value(help="the URL")
+
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    with pytest.raises(ValueError) as exc:
+
+        @app.command(
+            "cmd", effect="read_only", help="a command",
+            constraints=[AtLeastOne("pick", [Member("file"), Member("host")])],
+        )
+        @strictcli.choice_flag(
+            "src", help="where to read from", presence="required",
+            elect_by="member-flags", choices=[FromFile, FromUrl],
+        )
+        @strictcli.flag("host", type=str, help="the host", presence="optional")
+        def cmd(ctx, host, src: FromFile | FromUrl):
+            pass
+
+    assert str(exc.value) == (
+        'command "cmd": constraint "pick" references \'file\', which is '
+        "declared under '--file': constraints operate at root scope only"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Registration: nesting legality (§26.8 step 5)
 # ---------------------------------------------------------------------------
@@ -749,6 +813,20 @@ def test_a_constraint_cycle_is_refused():
         ])()
     assert str(exc.value) == (
         'command "cmd": constraints form a cycle: outer -> inner -> outer'
+    )
+
+
+def test_the_cycle_path_opens_on_the_earliest_declared_participant():
+    """The walk starts at "x", enters the cycle at "c" and closes it at "b" --
+    and the path still opens on "b", which is declared first (§12.15)."""
+    with pytest.raises(ValueError) as exc:
+        _register([
+            AtLeastOne("x", [Member("c"), Member("a")]),
+            AtLeastOne("b", [Member("c"), Member("a")]),
+            AtLeastOne("c", [Member("b"), Member("a")]),
+        ], flags=(("a", str),))()
+    assert str(exc.value) == (
+        'command "cmd": constraints form a cycle: b -> c -> b'
     )
 
 
