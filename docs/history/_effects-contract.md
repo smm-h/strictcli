@@ -8496,7 +8496,9 @@ sentences); §13 (the case schema's constraint surface).
 
 ### 18.32 The constraint round's audit, closed (2026-08-15)
 
-Six items closing the audit of §26 and §12.15 against the three shipped implementations. §18.31
+Six items closing the audit of §26 and §12.15 against the three shipped implementations,
+*(extended 2026-08-15, verification round)* **plus one later correction of item 293's own text
+(item 299)**. §18.31
 reconciled what the implementations answered differently; the audit then asked the complementary
 question -- what the contract **left unsaid**, claimed falsely, or illustrated against its own rule
 -- producing four findings the text absorbs and two coverage holes it records. Every item below
@@ -8520,10 +8522,13 @@ column); §12.15 (three Python-only guards added to the exclusion list).
      each implementation placed both by derivation and the placements diverged. Both are pinned.
      **The member-record-shape checks run as a set-wide step between steps 1 and 2** -- TypeScript's
      placement, shape before name resolution, because a member that is not a record has no name to
-     resolve and no arity question worth asking. **The four legacy dependency-family guards run as a
-     trailing phase after step 7** -- Python's placement, and Go's own comment states the reason:
-     they are about the declarations a rule names rather than about the rule. **Inside that phase,
-     unknown-name resolution precedes the same-flag check**, so `Requires("r", "nope", "nope")`
+     resolve and no arity question worth asking. **The ~~four~~ legacy dependency-family guards run
+     as a trailing phase after step 7** *(corrected 2026-08-15, item 299: the phase holds the
+     same-flag and non-bool trigger/target refusals only)* -- Python's placement, and Go's own
+     comment states the reason: they are about the declarations a rule names rather than about the
+     rule. ~~**Inside that phase, unknown-name resolution precedes the same-flag check**~~
+     *(corrected 2026-08-15, item 299)* **A dependency-family operand that names nothing is refused
+     at step 3, with every other name resolution**, so `Requires("r", "nope", "nope")`
      reports the unknown flag rather than the coincidence that both operands spell it. The audit's
      three probes each move exactly one implementation: a bare-string member in a later constraint
      now refuses ahead of an earlier constraint's member fault (**Python**, whose shape check sits
@@ -8587,6 +8592,27 @@ column); §12.15 (three Python-only guards added to the exclusion list).
      implementations on those shapes directly and they came out **byte-identical**, so this is a
      coverage hole rather than a divergence, and it is recorded as one: an untested agreement is
      agreement until someone edits one of the three. The corpus wave adds the cases.
+
+299. **Item 293's trailing phase never held the unknown-operand refusals (§26.8, item 293).** As
+     authored, the phase was said to contain "the two operand refusals that name an unknown flag and
+     an unknown target", with unknown-name resolution running ahead of the same-flag check *inside*
+     it. Read literally that is a different rule from the one item 293's own probe table asserts: a
+     refusal that runs inside the phase runs **after** step 7, so a `Requires` naming an undeclared
+     flag, declared beside a co-occurrence constraint whose member declares requiredness, would
+     report the **required member** -- and the second probe would move all three implementations
+     rather than the one the table names. All three resolve those operands at **step 3**, with every
+     other name resolution, verified directly against the shipped code: Python in step 3's second
+     loop (the `Requires` / `Implies` operand loop), TypeScript in step 3's non-co-occurrence branch,
+     Go in pass 3's `resolveConstraintFlag` calls -- and all three answer that pair-state with
+     `constraint "rr" references unknown flag "zzz"`, never the required member. **The trailing phase
+     holds the `Requires` and `Implies` same-flag refusals and the `Implies` non-bool trigger and
+     target refusals, and nothing else**; the unknown-operand refusal is the dependency families'
+     spelling of member resolution, not one of their own guards, and it stays at step 3. §26.8's box
+     and item 293's sentence are corrected in place. Nothing moves in code -- this is the text
+     catching up to the placement all three already have -- and the boundary the correction makes
+     observable is now pinned in Go's suite: a member declaring `Required()` outranks a same-flag
+     `Requires` over operands that both resolve, and outranks a non-bool `Implies` trigger, because
+     step 7 precedes the phase.
 
 ---
 
@@ -12079,15 +12105,23 @@ never blames a member for a fault in the constraint that names it.
 >   to resolve and no arity question worth asking: shape comes before name resolution, and before the
 >   arity count that would otherwise report a number over entries the framework has not yet agreed to
 >   read.
-> - **the four legacy dependency-family guards run as a TRAILING phase, after step 7.** Those are the
->   `Requires` / `Implies` same-flag refusal, the `Implies` non-bool trigger refusal (its target twin
->   travels with it in all three), and the two operand refusals that name an unknown flag and an
->   unknown target. Python's placement, taken for the reason Go states in its own comment: they are
+> - **the ~~four~~ legacy dependency-family guards run as a TRAILING phase, after step 7.** Those are
+>   the `Requires` / `Implies` same-flag refusal and the `Implies` non-bool trigger refusal (its
+>   target twin travels with it in all three) ~~, and the two operand refusals that name an unknown
+>   flag and an unknown target~~ *(corrected 2026-08-15, verification round, §18.32 item 299: the
+>   unknown-operand refusal is not one of these guards)*. Python's placement, taken for the reason Go
+>   states in its own comment: they are
 >   about the **declarations a rule names** rather than about the rule, so they follow every step
->   that reads the constraint's own identity. **Inside that phase, unknown-name resolution precedes
->   the same-flag check** -- `Requires("r", "nope", "nope")` reports the unknown flag, not the
->   coincidence that both operands spell it. A name that names nothing is refused before it is
->   compared with its twin, which is the same outward direction the seven steps already run in.
+>   that reads the constraint's own identity. ~~**Inside that phase, unknown-name resolution precedes
+>   the same-flag check**~~ *(corrected 2026-08-15, verification round, §18.32 item 299)* **A
+>   `Requires` or `Implies` operand that names nothing is refused at STEP 3**, with every other name
+>   resolution and four steps before this phase opens -- so `Requires("r", "nope", "nope")` reports
+>   the unknown flag, not the coincidence that both operands spell it, and the same-flag guard never
+>   reads a name that resolves to nothing. A name that names nothing is refused before it is
+>   compared with its twin, which is the same outward direction the seven steps already run in. The
+>   phase's own position is what puts every one of its guards **after** step 7: a member declaring
+>   requiredness outranks a same-flag `Requires` whose operands both resolve, and outranks a non-bool
+>   `Implies` trigger.
 >
 > Three probes the audit ran against all three implementations resolve under this order, and each
 > changes exactly one of them:
