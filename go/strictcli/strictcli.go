@@ -1619,9 +1619,12 @@ func validateFlagConfig(f *Flag) {
 	if f.Repeatable && f.Type == TypeBool {
 		panic(errFlagRepeatableIncompatibleBool(f.Name))
 	}
-	// Compound types: choices not supported
-	if IsCompoundType(f.Type) && f.Choices != nil {
-		panic(errFlagChoicesIncompatibleCompound(f.Name))
+	// A dict is the one carrier choices cannot describe: its keys are
+	// structurally strings and its values are not a closed set. A LIST carrier
+	// takes choices and constrains each element, which is what the published
+	// fragment's `items` enum says (contract §25.5).
+	if IsDictType(f.Type) && f.Choices != nil {
+		panic(errFlagDictCannotCombineChoices(f.Name))
 	}
 	// Unique requires repeatable; repeatable requires explicit unique
 	if f.Repeatable && !f.hasUnique {

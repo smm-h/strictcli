@@ -176,8 +176,12 @@ func errFlagRepeatableIncompatibleBool(name string) string {
 	return fmt.Sprintf("Flag %q: repeatable is incompatible with type=bool", name)
 }
 
-func errFlagChoicesIncompatibleCompound(name string) string {
-	return fmt.Sprintf("Flag %q: choices is incompatible with compound types (list/dict)", name)
+// errFlagDictCannotCombineChoices is the compound refusal narrowed to the one
+// carrier it is true of (§25.5): a list carrier's choices constrain its
+// elements and publish as an enum inside `items`, but a dict's keys are
+// structurally strings and its values are not a closed set.
+func errFlagDictCannotCombineChoices(name string) string {
+	return fmt.Sprintf("Flag %q: dict type cannot be combined with choices", name)
 }
 
 func errFlagRepeatableRequiresExplicitUnique(name string) string {

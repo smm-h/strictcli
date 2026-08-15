@@ -1262,3 +1262,148 @@ func TestFormatDictForDisplaySortedKeys(t *testing.T) {
 		t.Fatalf("formatValueForError map case: want %q, got %q", want, fv)
 	}
 }
+
+// --- Choices on a LIST carrier (contract §25.5) ---
+//
+// A list carrier's choices constrain each ELEMENT, which is exactly what the
+// published fragment says: an array whose `items` carries the enum. The blanket
+// compound refusal was one rule too wide -- a dict's keys are structurally
+// strings and its values are not a closed set, so the ban survives there and
+// only there.
+
+func listChoicesApp() *App {
+	return simpleApp("run", "run it", "tags={tags}", WithFlags(
+		ListFlag(TypeStr, "tags", "tags to apply", Optional(), Unique(false),
+			Choices(Ch("a", "the a tag"), Ch("b", "the b tag"))),
+	))
+}
+
+func TestListCarrierAcceptsChoicesPerElement(t *testing.T) {
+	r := listChoicesApp().Test([]string{"run", "--tags", "a", "--tags", "b"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "tags=a,b") {
+		t.Fatalf("stdout = %q", r.Stdout)
+	}
+}
+
+func TestListCarrierChoicesRefuseTheOffendingElement(t *testing.T) {
+	r := listChoicesApp().Test([]string{"run", "--tags", "a", "--tags", "zz"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: --tags: invalid value 'zz', must be one of: a, b\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// An element is one occurrence: a list carrier never splits a token, so a
+// comma-carrying token is one (invalid) element rather than two valid ones.
+func TestListCarrierChoicesDoNotSplitAToken(t *testing.T) {
+	r := listChoicesApp().Test([]string{"run", "--tags", "a,b"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: --tags: invalid value 'a,b', must be one of: a, b\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// The env path resolves the same list and validates the same elements.
+func TestListCarrierChoicesValidateEnvElements(t *testing.T) {
+	app := simpleApp("run", "run it", "tags={tags}", WithFlags(
+		ListFlag(TypeStr, "tags", "tags to apply", Optional(), Unique(false),
+			Env("APP_TAGS"), EnvSeparator(","),
+			Choices(Ch("a", "the a tag"), Ch("b", "the b tag"))),
+	))
+	t.Setenv("APP_TAGS", "a,zz")
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: --tags: invalid value 'zz', must be one of: a, b\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// A declared default is a declaration, not an invocation: an element outside
+// the choices is refused where every other value is, at parse time.
+func TestListCarrierChoicesValidateADeclaredDefault(t *testing.T) {
+	app := simpleApp("run", "run it", "tags={tags}", WithFlags(
+		ListFlag(TypeStr, "tags", "tags to apply", Default([]interface{}{"zz"}), Unique(false),
+			Choices(Ch("a", "the a tag"), Ch("b", "the b tag"))),
+	))
+	r := app.Test([]string{"run"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
+	}
+	want := "error: --tags: invalid value 'zz', must be one of: a, b\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// The ban survives for a dict, in the siblings' own words.
+func TestDictCarrierStillRefusesChoices(t *testing.T) {
+	expectPanic(t, `Flag "header": dict type cannot be combined with choices`, func() {
+		DictFlag(TypeStr, "header", "HTTP headers", Optional(),
+			Choices(Ch("a", "the a header"), Ch("b", "the b header")))
+	})
+}
+
+// §25.5's fragment: the enum lives inside `items`, where the elements are.
+func TestListCarrierChoicesSchemaFragment(t *testing.T) {
+	chdirTemp(t)
+	schema, err := dumpSchema(listChoicesApp())
+	if err != nil {
+		t.Fatalf("schema error: %v", err)
+	}
+	commands := schema["commands"].(map[string]interface{})
+	run := commands["run"].(map[string]interface{})
+	flags := run["flags"].([]interface{})
+	frag := flags[0].(map[string]interface{})["value_schema"].(map[string]interface{})
+	if frag["type"] != "array" {
+		t.Fatalf("expected an array fragment, got %v", frag)
+	}
+	if _, atTop := frag["enum"]; atTop {
+		t.Fatalf("the enum belongs inside items, got %v", frag)
+	}
+	items := frag["items"].(map[string]interface{})
+	if items["type"] != "string" {
+		t.Fatalf("expected string items, got %v", items)
+	}
+	if !reflect.DeepEqual(items["enum"], []interface{}{"a", "b"}) {
+		t.Fatalf("items enum = %#v", items["enum"])
+	}
+}
+
+// The tool schema publishes the same fragment, because it IS the same fragment.
+func TestListCarrierChoicesToolSchema(t *testing.T) {
+	props := listChoicesApp().JsonSchema("run")["properties"].(map[string]interface{})
+	tags := props["tags"].(map[string]interface{})
+	if tags["type"] != "array" {
+		t.Fatalf("expected an array property, got %v", tags)
+	}
+	items := tags["items"].(map[string]interface{})
+	if !reflect.DeepEqual(items["enum"], []interface{}{"a", "b"}) {
+		t.Fatalf("items enum = %#v", items["enum"])
+	}
+}
+
+// The help block renders like any other choices block: one line per entry.
+func TestListCarrierChoicesHelpBlock(t *testing.T) {
+	r := listChoicesApp().Test([]string{"run", "--help"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	want := "  --tags <str>    tags to apply [list] [optional]\n" +
+		"    a             the a tag\n" +
+		"    b             the b tag\n"
+	if !strings.Contains(r.Stdout, want) {
+		t.Fatalf("stdout = %q, want it to contain %q", r.Stdout, want)
+	}
+}
