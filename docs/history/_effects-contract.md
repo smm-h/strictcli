@@ -1493,6 +1493,17 @@ ruling: two flags cannot share a spelling.
 > schemas are framework-owned literals and are byte-compared across the three implementations by
 > conformance (§19.5).
 >
+> **Amendment (2026-08-15, ruling round, §18.28 item 265): `config show`'s payload renders a
+> `RelativeToRoot` default in §13's machine-stable marker shape** -- `{"relative_to_root":
+> {"env_var": ..., "parts": [...]}}`, the same shape the dumped schema publishes for the same
+> declaration (§25.10) -- never the marker object and never the resolved path. The framework-owned
+> payload declaration (`{"type": "object"}`) is unchanged and was never the problem: it admits the
+> marker shape the moment a handler emits one. What must change is the handler, in the two
+> implementations that hand the envelope something else -- one a marker object the envelope refuses
+> as unrepresentable, which fails a `read_only` command against its own declared schema on a run
+> whose human form succeeds, and one a raw object in its own casing.
+>
+
 > **Two consequences to implement, not to decide.** `--json` is delivered on the Context like the
 > quartet (§7.2), so neither handler receives it as a kwarg -- and neither needs to read it: the
 > payload call is mode-independent (§19.4), so both handlers call it unconditionally and the
@@ -2970,6 +2981,15 @@ the outermost is named for §24.3's reason: it is the one the reader would have 
 naming the inner one would send them to a scope that only exists because of the outer election.
 Python and Go arrived at this rule independently while implementing the round, which is why it is
 pinned here rather than left to each parser's walk order.
+
+**The suffix is not confined to presence and requirement messages** *(added 2026-08-15, ruling
+round, §18.28 item 263)*: it composes onto **every** message raised where a scoped declaration is
+applied, the undeclared-infra-root refusal included. A `RelativeToRoot` default naming a root the app
+never declared is refused where the default is applied rather than at registration (§24.6), and
+inside a selection the *declaration* elected, the sentence carries both suffixes in §18.23 item 239's
+order: `RelativeToRoot references undeclared infra root "NOPE"; declare it as an infra root under
+'--via email' (elected by default)`. The rule choosing the named election is the one above, unchanged
+-- a default election is not a command-line one, so it is an ambient cause and the suffix names it.
 
 **A selector elected more than once** -- last-wins is right for a plain flag and wrong for an
 election, because discarding a value would discard a whole scope with it:
@@ -7465,6 +7485,228 @@ scope the pin actually has; §18.25 item 249's own text -- the same clause struc
      payloads is a defect whatever the display question turns out to be, and the round that pins the
      display should fix the machine form first.
 
+### 18.28 The argv order ruled, the flat door's default election, and the marker family (2026-08-15)
+
+§18.27 left two states recorded and unruled, and assigned three fixes. This round **rules** the
+first of the two, and rules three more states the same probes turned up; the fifth item is a record
+in item 261's class. Five items. Numbering continues §18.27's, for the reason §18.14 gave: the same
+campaign's ledger.
+
+**What each item is.** Item 262 is a **ruling** on the state item 257 recorded open, and it decides
+between two defensible argv orders in favour of the one the document already states. Item 263 is a
+**composition pin** in §12.13's class, widening where the origin suffix applies. Item 264 is a
+**one-implementation divergence at one door**, ruled and closed, with one residual recorded. Item
+265 **pins the machine half** of the family item 261 left unruled, because a crash and two
+disagreeing payloads are a defect whatever the display question turns out to be. Item 266 is a
+**record with no rule attached**, deliberately left unpinned.
+
+**Every claim below was probed by running all three**, at each implementation's own API: Python
+through `app.test`, `app.call` and `as_tools()`, Go through `App.Test`, `App.Call` and `AsTools()`,
+TypeScript through `test`, `call` and `asTools()`, each on one purpose-built app declaring the state
+the claim is about. Where a probe contradicts the round's filing, the probe wins and the filing is
+recorded as false. Two filings were false, and both are named at their items.
+
+**Origin tags**, per §18.14's preamble. Every item here is **untagged**: none is a `(D)` directive
+and none is a `[%%]` adopted recommendation.
+
+**Sites amended in place**: §24.3 -- one amendment box after item 226's correction, saying what
+"command-line order" spans; §12.13 -- one paragraph after the outermost-election pin, widening where
+the origin suffix composes; §24.5 -- one paragraph after the `ctx.provided("via")` line, saying it
+holds at every door; §18.9's `config show --json` subsumption box -- one amendment box on what that
+payload renders a marker as.
+
+262. **The argv value phase reports in command-line order, root and scoped occurrences alike, and Go
+     is the reference (§24.3, §18.27 item 257, §18.25 item 249).** Item 257 probed §24.3's pinned
+     words against the three parsers, found two implementations following a rule §24.3 does not
+     state, and recorded the divergence rather than deciding it. It is decided here, and **the
+     document does not move**: §24.3's sentence -- *command-line order in every phase but the value
+     phase, which reports every coercion failure before any `validate` refusal* -- is the contract,
+     and the value phase's command-line order spans **every occurrence the command line carried**, a
+     scoped one exactly as a root one. Go's `parse.go` phase 4a is one sweep over `occs` through
+     `liveFlagFor` and is already that. **Python's and TypeScript's root-before-scoped partition is
+     the divergence**: Python's value pass over `root_occs` runs before `_resolve_selectors` is
+     called at all, TypeScript's runs over `rootOccs` before `parseScopes`, and TypeScript's comment
+     at that site reads §24.3 as *requiring* the partition ("so root values are reported ahead of
+     scoped ones") -- a reading of a sentence that says the opposite. Both align to the one sweep.
+
+     **The probes.** One command declaring `--before` (`int`) before the selector, `--after` (`int`)
+     after it, a required token-spelled `--via` whose `email` scope declares `--retries` (`int`), and
+     an app **global** `--jobs` (`int`), which no command declaration positions at all. Every cell
+     names the flag the printed sentence (`--<flag>: expected integer, got 'nope'`) blames:
+
+     | argv after `run` | Python | Go | TypeScript |
+     |---|---|---|---|
+     | `--via email --retries nope --before nope` | `--before` | `--retries` | `--before` |
+     | `--via email --before nope --retries nope` | `--before` | `--before` | `--before` |
+     | `--via email --retries nope --after nope` | `--after` | `--retries` | `--after` |
+     | `--via email --after nope --retries nope` | `--after` | `--after` | `--after` |
+     | `--via email --retries nope --jobs nope` | `--jobs` | `--retries` | `--jobs` |
+     | `--via email --jobs nope --retries nope` | `--jobs` | `--jobs` | `--jobs` |
+
+     Under the ruling every row's answer is the Go column. The declaration position is visibly inert
+     in Python and TypeScript -- `--before` and `--after` answer the same way, and so does a global
+     the command does not declare -- which is what makes the partition a partition rather than a
+     declaration-ordered sweep: it is scope membership alone that decides, and scope membership is
+     not something the reader of a command line is looking at.
+
+     **Why the document's order wins over the majority of two.** Go's is the order §24.3 states; it
+     is the order a reader can reconstruct from the argv they typed; and the partition makes which of
+     two true refusals is printed depend on a declaration the user cannot see, which is exactly the
+     outcome the phase order exists to prevent (§24.3's own paragraph, made normative for
+     selector-free commands by §18.19 item 224). The alternative -- pin the partition, rewrite §24.3,
+     let two implementations beat the document -- is refused because the two agree by accident rather
+     than by a reading anyone defended: one of them cites, in a comment, the sentence it contradicts.
+
+     **The `validate` exception is untouched and composes across the scope boundary today**, probed
+     separately in all three: a root `validate` refusal beside a scoped coercion failure reports the
+     **coercion** failure in both argv orders; a scoped `validate` refusal beside a root coercion
+     failure reports the **coercion** failure in both argv orders; and a root `validate` refusal
+     beside a scoped one reports the **scoped** one in both argv orders, in all three. So aligning
+     the coercion sweep reaches nothing the exception governs, and the sub-order inside the
+     `validate` pass is already agreed and is not disturbed here.
+
+     **This changes bytes on existing command lines**, in the class §24.3 already names for item
+     226's own change, and each implementation names it in its own changelog. Nothing about which
+     *sentence* is produced changes -- only which of two true refusals is the one printed.
+
+263. **The origin clause composes onto every message a scoped declaration's application raises, so a
+     defaulted selection's undeclared-root refusal reads `under '<scope>' (elected by default)`
+     (§12.13, §24.6, §18.27 item 259, §18.26 item 256).** §12.13 pins the origin suffix, pins its
+     order after the scope suffix, and pins that it names the outermost non-command-line election on
+     the path -- all of it stated "on a presence or requirement message inside a scope". The
+     undeclared-infra-root refusal is neither of those. It is raised where a scoped `RelativeToRoot`
+     default is **applied**, because registration never sees inside a scope (§24.6), and item 259
+     already ruled that it carries the scope suffix saying where. **It carries the origin clause
+     too**, for §12.13's own reason: a selection nobody typed is precisely the ambient cause a reader
+     cannot see in their own argv, and the clause exists to name it. The composition is the one
+     already written, in item 239's order -- scope suffix, then origin suffix.
+
+     **Go and TypeScript compose both** and are the reference:
+
+     ```
+     RelativeToRoot references undeclared infra root "NOPE"; declare it as an infra root under '--via email' (elected by default)
+     ```
+
+     **Python appends the scope suffix and stops.** `_resolve_declared_marker` composes
+     `_msg_scope_suffix` and nothing else, so the same declaration prints one sentence whether the
+     reader elected the choice or the declaration did -- probed at both elections on one app, and
+     byte-identical:
+
+     ```
+     RelativeToRoot references undeclared infra root "NOPE_HOME"; declare it as an infra root under '--via email'
+     ```
+
+     Python changes, and the clause it needs is the one `_msg_election_origin_suffix` already builds
+     for its own presence path. **The state is reachable in Python only because item 256 made it
+     reachable**: before that ruling `_declared_default_record` resolved nothing inside a defaulted
+     selection, so this sentence had no site to be raised from at all -- which is why the omission
+     survived item 259's sweep of the same sentence at the other three doors.
+
+264. **A record the caller contributed nothing to is not caller-supplied: the flat door reports
+     source `default` and `provided()` false for a default-elected selection (§24.5, §23.6, §24.11,
+     §18.26 item 253).** §24.5's closing line pins `ctx.provided("via")` true when the invocation
+     elected and false when the declaration's default did, and says nothing about doors because it
+     does not need to: the predicate is "did the invocation cause this value" (§23.6), and a caller
+     who named neither the selector nor anything under it caused nothing. **The flat machine boundary
+     is the one door where that is lost**, in one implementation. TypeScript's conversion
+     **materializes** the record the declaration's default names before `call()` sees anything, so by
+     the time the record door reads it the election is the object's, and the door labels it `cli`
+     with `provided()` true. Probed on one command with one default-elected token-spelled selector:
+
+     | door | Python | Go | TypeScript |
+     |---|---|---|---|
+     | argv, `send` | `default` / false | `default` / false | `default` / false |
+     | record, `call("send", {})` | `default` / false | `default` / false | `default` / false |
+     | flat, `tool.execute({})` | `default` / false | `default` / false | **`cli` / true** |
+
+     TypeScript changes. Its own suite already records the state as deliberate -- an assertion that
+     the flat door's copy of item 263's sentence carries the scope suffix and **no** origin clause,
+     with a comment reading "the election is the object's" -- so the alignment closes both halves at
+     once: the same materialization is what drops the clause, and once the election is the
+     declaration's again the clause composes as item 263 pins it.
+
+     **The residual, recorded rather than ruled.** A caller may supply a *sibling* key inside a
+     default-elected scope without naming the selector. The **election** is still the declaration's
+     -- the caller named no choice -- so it stays `default`-sourced under this ruling, and the field
+     itself follows item 253's record rule. What the three do with that field's **value** is a second
+     divergence this item does not reach, and the probe found it does not even partition the way the
+     doors do. Supplying `subject` with `via` unnamed:
+
+     | | argv | flat |
+     |---|---|---|
+     | Python | the declaration's `hi`; the key is discarded | the declaration's `hi`; the key is discarded |
+     | Go | the supplied `typed` | the declaration's `hi`; the key is discarded |
+     | TypeScript | the supplied `typed` | the supplied `typed` |
+
+     Go therefore disagrees with itself across its own two doors on one fact. §24.5's "a default is
+     never rebuilt from the invocation" reads as the discard and §24.6's conditional-binding rule
+     reads the other way, and choosing between them reaches every scoped value under every defaulted
+     selection rather than this one key -- so it is left to the round that takes it with the rows in
+     hand, exactly as item 257 left the order it opened.
+
+265. **`config show`'s machine form publishes §13's marker shape; its human form displays the
+     declaration (§13, §19.4, §19.5, §18.27 item 261).** Item 261 recorded the display question
+     unruled and said the round that pins the display should fix the machine form first. **The
+     machine form is pinned here and does not wait on the display question**, because a payload is
+     not a display: it is a document with a shape this contract has pinned exactly once.
+
+     - **Machine form.** `config show --json` renders a `RelativeToRoot`-defaulted flag's `value` as
+       `{"relative_to_root": {"env_var": ..., "parts": [...]}}` -- §13's machine-stable shape
+       verbatim, the same one the dumped schema publishes for the same declaration (§25.10). The
+       resolved path is never emitted, for §25.10's reason: this surface prints what the
+       configuration says, and a resolution is a property of the machine that ran.
+     - **Human form.** `db = RelativeToRoot('MYAPP_HOME', 'db.sqlite')  (source: default)` -- the
+       declaration as written. That is item 261's own "defensible as it stands", and pinning the
+       bytes two implementations already agree on leaves item 261's display question exactly where it
+       was: whether a display surface is a dump or a run is still unruled, and this pin does not
+       answer it for any other row `config show` prints.
+
+     **The round was filed with Go emitting `{}`, and that is false today.** Go routes `config show`'s
+     payload value through `serializeDefault` -- the same helper its schema writer uses -- and already
+     emits the pinned shape byte-for-byte. Go is the reference at both ends and changes nothing. The
+     probed state:
+
+     | | human form | machine form |
+     |---|---|---|
+     | Python | `db = RelativeToRoot('MYAPP_HOME', 'db.sqlite')  (source: default)` | **hard error**: `command "show": payload does not satisfy the declared schema at payload["db"]["value"]: the value is not representable in JSON` |
+     | Go | byte-identical to Python's | `{"relative_to_root":{"env_var":"MYAPP_HOME","parts":["db.sqlite"]}}` |
+     | TypeScript | the marker object dumped, `toString` **method source included** | `{"envVar":"MYAPP_HOME","parts":["db.sqlite"]}` |
+
+     **Python's is a live defect, not a v-next consequence**: a `read_only` command failing its own
+     declared payload schema on a run whose human form succeeds. The **declaration is not the
+     problem** and does not change -- `_CONFIG_SHOW_PAYLOAD_SCHEMA` is `{"type": "object"}`, which
+     admits the marker shape once something emits one; the refusal comes from the envelope's
+     representability check meeting the marker object itself. The handler is what changes, and the
+     shape it must put there is the one `_serialize_marker` already builds for the dumped schema.
+     **TypeScript changes at both ends**: the machine form to §13's shape and its snake_case, and the
+     human form to the two-word rendering its siblings print -- which also stops a function body
+     leaking into a user-facing line and, through the diagnostics array, into the envelope with it.
+
+266. **The mixed-spelling nested selector inside a record is read per level, and it is recorded
+     unpinned (§24.11, §24.1's recursion, §18.25 item 251, §18.26 item 255).** A record's field bound
+     to a **nested** selector carries that selector's own election, and all three read it from
+     **that level's own object**: Go's `collectInvokeElections` walk recurses with `rec.Fields` when
+     the level is a record's, TypeScript's `electFromRecord` recurses with `raw[key]`, and Python's
+     record door reads the nested choice instance held by the field. That much they agree on. **What
+     each level will accept as a spelling, they do not:**
+
+     | | outer level | nested level inside a record |
+     |---|---|---|
+     | Go | `Elect(<choice>, Fields{...})` | a `*Elected` **or** a bare choice-name string -- both accepted, both probed to the same delivered record |
+     | Python | a choice instance | a choice instance only; a name string is refused `parameter 'format' for command 'send' must be an instance of a declared choice of '--format' (Plain \| Rich), got str` |
+     | TypeScript | `{choice: "email", ...}` | a tagged object only; a name string is refused `flag '--format': the elected value must be a record carrying its 'choice' tag` |
+
+     So a **mixed** record -- the outer election spelled as an elected object, the inner as a bare
+     name -- is a state Go accepts and the other two have no way to express: each of them offers one
+     spelling per level, and the refusals they print are item 251's and item 255's already-acknowledged
+     per-language sentences rather than anything new. **Nothing is pinned here.** Ruling it means
+     deciding whether a record's nested election is one vocabulary or two, which is a question about
+     the record door's declaration surface rather than about this state, and the three probes above
+     were run against each implementation's own API rather than through the conformance runner -- the
+     corpus cannot declare a nested selector at the record door in all three targets today, so there
+     is no cross-language row to rule from. The reading is recorded so the round that takes it starts
+     from three known behaviours instead of rediscovering them.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -8955,6 +9197,16 @@ it. It is user-visible, so each implementation names it in its own changelog; no
 > **phase** order (§24.3's pinned `election -> scope -> value -> presence`) changes, no sentence
 > changes, and every other phase orders exactly as the struck words said.
 
+> **Amendment (2026-08-15, ruling round, §18.28 item 262): "command-line order" spans root and
+> scoped occurrences alike.** The value phase is **one sweep over every occurrence the command line
+> carried**, in the order it carried them, whichever scope each occurrence belongs to. A scoped
+> flag's coercion failure outranks a root flag's when its token came first, and does not when it did
+> not. Partitioning that sweep into root-first and scoped-second is refused: it makes which of two
+> true refusals is printed depend on scope membership the reader of a command line is not looking
+> at, which is the outcome the phase order above exists to prevent (§18.19 item 224's paragraph,
+> one level in). The `validate` exception is unchanged and composes across the same boundary:
+> **every** coercion failure, root or scoped, is reported before **any** `validate` refusal.
+
 **Tokenization cannot wait for an election.** Whether `--target` consumes the next argv element is
 decided before any choice is elected, which is why sibling scopes may reuse a name only with an
 identical type and arity (§24.7). The alternative -- deferring value binding until after election -- would
@@ -9058,6 +9310,14 @@ value-carrying member's value is supplied by the token that elects it and a defa
 
 The selector's own key follows §23.6 unchanged: `ctx.provided("via")` is true when the invocation
 elected, false when the declaration's default did, and `ctx.source("via")` reports which.
+
+**That answer is the same at every door** *(added 2026-08-15, ruling round, §18.28 item 264)*. The
+command line, the record door and the **flat machine boundary** all report `default` with `provided`
+false for a selection nobody named: the predicate asks whether the invocation caused the value
+(§23.6), and a caller who named neither the selector nor anything under it caused nothing. A door
+that **materializes** the declaration's default into a record before reading it must not let that
+conversion turn the declaration's election into the caller's -- the record the door then holds is one
+the caller contributed nothing to, and a record nobody supplied is not a supplied record.
 
 ### 24.6 Sources, and conditional bindings
 
