@@ -511,8 +511,9 @@ app = strictcli.App(
     help="A useful tool",
     flags=[
         strictcli.Flag(name="color", type=bool, default=True, help="Colorize output"),
-        strictcli.Flag(name="log-level", type=str, default="info",
-                       choices=["debug", "info", "warn", "error"], help="Log level"),
+        strictcli.Flag(name="log-level", type=str, default="info", help="Log level",
+                       choices=[strictcli.Choice("debug"), strictcli.Choice("info"),
+                                strictcli.Choice("warn"), strictcli.Choice("error")]),
     ],
 )
 

@@ -979,6 +979,48 @@ scope already **is** the constraint. A choice's scope says "these flags exist
 together, exactly when this choice is elected", which is a co-requirement plus
 an exclusivity plus a conditional requirement in one declaration.
 
+### On the machine boundaries: schema, MCP and `call()`
+
+**The dumped schema** carries the construct natively. A choice flag has no
+`value_schema` -- a variant is inexpressible in the closed JSON Schema subset,
+and its absence *is* the declaration -- and it publishes nested `choices` plus
+`elect_by` instead, each scoped entry a full flag entry with its own
+`value_schema`, `presence` and `default`. See
+[the schema format](architecture.md#the-choice-flag-encoding).
+
+**The MCP tool schema is flatten plus a description block.** One object schema
+per command: the choice flag contributes one property named after itself,
+`{"type": "string", "enum": [<choice names>]}`, in `required` iff it declares
+`required`; every scoped flag contributes a top-level property and **never**
+appears in `required`, because its requiredness is conditional and the schema
+has no vocabulary for that. A member-spelled choice flag projects identically to
+a token-spelled one -- tokenization is a command-line fact and there are no
+tokens at this boundary.
+
+The scope structure survives in the tool **description**, appended as a
+deterministic block so an agent can read the constraint the schema cannot carry:
+
+```
+Scoped parameters (enforced at call time):
+  via=email: subject (required), recipient (required)
+  via=sms: phone_number (required)
+  via=webhook: url (required), retries (default: 3)
+```
+
+One line per scope, at every depth, in declaration order; the key is the scope's
+path rendered as `<property>=<choice>` segments joined by a single space, and an
+empty scope renders `(no parameters)`. Wrong combinations are refused at call
+time with **the same sentence the CLI parser gives**, carried on the framework's
+ordinary tool-result error channel. The cost is stated rather than hidden: an
+agent cannot see the scope rule before it calls, and learns by being refused.
+
+**`call()` takes the elected record, pre-typed.** The programmatic front door's
+contract is unchanged -- pre-typed values, no parsing -- so a choice flag's value
+is the same record a handler receives: a choice instance (Python), an
+`Elect(<choice>, Fields{...})` value (Go), the union member object (TypeScript).
+The flat machine form is converted into that record at the protocol boundary,
+through the same election, scope and presence machinery the argv path uses.
+
 ### Choosing between a choice flag and a `choices` flag
 
 The boundary is structural, not a matter of taste:
@@ -1001,6 +1043,7 @@ through a choice flag would make every simple flag pay it -- and it is why the
 boundary is drawn at what the choices *carry* rather than at how many there are.
 
 (`json` is not usable as a flag name anywhere: it is reserved for machine mode.)
+
 ## Dependencies
 
 Three dependency types control relationships between flags. `CoRequired` ensures
