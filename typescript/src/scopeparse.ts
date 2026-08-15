@@ -794,16 +794,31 @@ function recordSkipped(
 	}
 }
 
-/** Throws the first problem in stage order, or returns when there are none. */
-export function throwFirstProblem(problems: readonly ParseProblem[]): void {
-	if (problems.length === 0) {
-		return;
-	}
-	let best = problems[0] as ParseProblem;
+/**
+ * The problem to report: the lowest stage, and among equals the one recorded
+ * first. Undefined when the run had none.
+ *
+ * Both front doors select their refusal through this one function, which is
+ * what makes §24.3's precedence a property of the phases rather than of each
+ * caller's walk order.
+ */
+export function firstProblem(
+	problems: readonly ParseProblem[],
+): ParseProblem | undefined {
+	let best: ParseProblem | undefined;
 	for (const p of problems) {
-		if (p.stage < best.stage) {
+		if (best === undefined || p.stage < best.stage) {
 			best = p;
 		}
+	}
+	return best;
+}
+
+/** Throws the first problem in stage order, or returns when there are none. */
+export function throwFirstProblem(problems: readonly ParseProblem[]): void {
+	const best = firstProblem(problems);
+	if (best === undefined) {
+		return;
 	}
 	throw new ParseError(best.message);
 }

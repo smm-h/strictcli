@@ -2203,6 +2203,191 @@ test("mcp: a defaulted election is blamed with the CLI's origin clause", async (
 	});
 });
 
+/**
+ * Two selectors side by side, so the phase order can be observed ACROSS them:
+ * the first is required and elects nothing, the second is handed a double
+ * election.
+ */
+function twoSelectorApp(): App {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run",
+			flags: {
+				first: choiceFlag(
+					"first",
+					{
+						alpha: choice({ help: "the alpha way" }),
+						beta: choice({ help: "the beta way" }),
+					},
+					{ help: "the first selector", presence: "required" },
+				),
+				second: memberChoiceFlag(
+					"second",
+					{
+						gamma: choice({
+							help: "the gamma way",
+							value: { carrier: t.str, help: "gamma's value" },
+						}),
+						delta: choice({
+							help: "the delta way",
+							value: { carrier: t.str, help: "delta's value" },
+						}),
+					},
+					{ help: "the second selector", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("mcp: the election phase runs over EVERY selector before any refusal", async () => {
+	// §24.3's phases are COMMAND-WIDE, not per selector: every election is
+	// resolved before the first refusal is chosen, so a later selector's
+	// election-stage problem beats an earlier one's presence-stage problem --
+	// the same answer the CLI gives for the same combination.
+	const run = twoSelectorApp()
+		.asTools()
+		.find((t2) => t2.name === "run");
+	assert.ok(run);
+	await assert.rejects(run.execute({ gamma: "g", second: "delta" }), {
+		message: "--gamma and --delta are mutually exclusive",
+	});
+	// The CLI's own bytes for the same double election, with `--first` equally
+	// absent: the election stage outranks the presence stage there too.
+	assert.equal(
+		(await twoSelectorApp().test(["run", "--gamma", "g", "--delta", "d"]))
+			.stderr,
+		errOut("--gamma and --delta are mutually exclusive", "myapp run"),
+	);
+	// With the second selector settled, the first one's presence refusal is the
+	// only problem left and it is the one reported.
+	await assert.rejects(run.execute({ gamma: "g" }), {
+		message: "flag '--first' is required",
+	});
+	assert.equal(
+		(await twoSelectorApp().test(["run", "--gamma", "g"])).stderr,
+		errOut("flag '--first' is required", "myapp run"),
+	);
+});
+
+test("mcp: an elected member whose payload is absent requires a value", async () => {
+	// Electing a payload-carrying member through the selector's own property
+	// while omitting the property that carries its payload is the flat form of
+	// typing the member's token with nothing after it, and takes that same
+	// sentence -- never a scope refusal naming the member as its own owner.
+	const launch = memberBoundaryApp()
+		.asTools()
+		.find((t2) => t2.name === "launch");
+	assert.ok(launch);
+	await assert.rejects(launch.execute({ target: "profile" }), {
+		message: "flag '--profile' requires a value",
+	});
+	assert.equal(
+		(await memberBoundaryApp().test(["launch", "--profile"])).stderr,
+		errOut("flag '--profile' requires a value", "myapp launch"),
+	);
+});
+
+test("mcp: a payload-less member's own property elects, and false declines", async () => {
+	// A payload-less member has no payload to carry, so its own property carries
+	// the election itself: true is its token, and false is the `--no-<name>`
+	// that DECLINES rather than choosing (§21.2, §24.11).
+	const launch = memberBoundaryApp()
+		.asTools()
+		.find((t2) => t2.name === "launch");
+	assert.ok(launch);
+	assert.equal(await launch.execute({ all_profiles: true }), 0);
+	await assert.rejects(launch.execute({ all_profiles: false }), {
+		message:
+			"one of --profile, --all-profiles is required (--no-all-profiles declines an option; it does not choose one)",
+	});
+	await assert.rejects(
+		launch.execute({ all_profiles: false, profile: "work" }),
+		{
+			message:
+				"--no-all-profiles cannot be combined with --profile (--no-all-profiles declines an option; it does not choose one)",
+		},
+	);
+	// The CLI's own bytes for both declines.
+	assert.equal(
+		(await memberBoundaryApp().test(["launch", "--no-all-profiles"])).stderr,
+		errOut(
+			"one of --profile, --all-profiles is required (--no-all-profiles declines an option; it does not choose one)",
+			"myapp launch",
+		),
+	);
+	assert.equal(
+		(
+			await memberBoundaryApp().test([
+				"launch",
+				"--no-all-profiles",
+				"--profile",
+				"work",
+			])
+		).stderr,
+		errOut(
+			"--no-all-profiles cannot be combined with --profile (--no-all-profiles declines an option; it does not choose one)",
+			"myapp launch",
+		),
+	);
+});
+
+test("mcp: a nested selector's own refusal names the scope it sits in", async () => {
+	// The refusal a selector one level down produces is the CLI's, suffix
+	// included: the scope it sits in is part of the sentence.
+	const build = (): App => {
+		const app = makeApp();
+		app.command(
+			defineReadOnlyCommand("send", {
+				help: "send",
+				flags: {
+					via: choiceFlag(
+						"via",
+						{
+							email: choice({
+								help: "email",
+								flags: {
+									mode: memberChoiceFlag(
+										"mode",
+										{
+											quick: choice({ help: "quick" }),
+											slow: choice({ help: "slow" }),
+										},
+										{ help: "how fast", presence: "required" },
+									),
+								},
+							}),
+							sms: choice({ help: "sms" }),
+						},
+						{ help: "delivery channel", presence: "required" },
+					),
+				},
+				handler: () => 0,
+			}),
+		);
+		return app;
+	};
+	const send = build()
+		.asTools()
+		.find((t2) => t2.name === "send");
+	assert.ok(send);
+	await assert.rejects(send.execute({ via: "email" }), {
+		message: "one of --quick, --slow is required under '--via email'",
+	});
+	assert.equal(
+		(await build().test(["send", "--via", "email"])).stderr,
+		errOut(
+			"one of --quick, --slow is required under '--via email'",
+			"myapp send",
+		),
+	);
+	// The member's own property elects it one level down, exactly as at root.
+	assert.equal(await send.execute({ via: "email", quick: true }), 0);
+});
+
 // =========================================================================
 // The catalogue's own bytes
 // =========================================================================

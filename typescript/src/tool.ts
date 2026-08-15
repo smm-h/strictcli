@@ -16,11 +16,15 @@ import type { Effect } from "./effects.js";
 import {
 	errElectionOriginDefault,
 	errFlagInvalidChoice,
+	errFlagRequiresValue,
 	errJsonSchemaIsGroup,
 	errJsonSchemaRouteError,
+	errMutexDeclineClause,
+	errMutexRedundantNegation,
 	errMutuallyExclusive,
 	errOneOfRequired,
 	errRouterCommandMustBeString,
+	errScopeSuffix,
 	InvokeError,
 } from "./errors.js";
 import {
@@ -32,12 +36,19 @@ import {
 	memberList,
 	type ScopeStep,
 	scalarFragment,
+	scopePath,
 	valueSchemaFragment,
 } from "./factories.js";
 import { type CallOptions, commandClassification } from "./invoke.js";
 import { flagParamName } from "./parse.js";
 import { resolveCommand } from "./routing.js";
-import { type Election, outOfScopeMessage } from "./scopeparse.js";
+import {
+	type Election,
+	firstProblem,
+	outOfScopeMessage,
+	type ParseProblem,
+	STAGE,
+} from "./scopeparse.js";
 import { formatChoices, formatValueForError } from "./values.js";
 
 /**
@@ -314,6 +325,14 @@ function presenceClause(d: AnyDecl): string {
  * A wrong combination is refused here, at call time, with the SAME SENTENCE
  * the CLI parser gives. A command that declares no selector returns its
  * arguments unchanged, so this costs nothing where nothing is scoped.
+ *
+ * The passes are the parser's own, and they are COMMAND-WIDE rather than
+ * per-selector (§24.3): every selector's election is resolved first, then
+ * scope membership, then the records are built -- and each pass RECORDS its
+ * problems instead of throwing, so the one reported is the lowest stage over
+ * the whole command. Walking one selector to its end before starting the next
+ * would report an earlier selector's missing election ahead of a later one's
+ * double election, which is an answer no command line can produce.
  */
 export function flatToCallKwargs(
 	cmd: RegisteredCommand,
@@ -324,8 +343,12 @@ export function flatToCallKwargs(
 	if (!decls.some((d) => d.kind === "choice-flag")) {
 		return { ...kwargs };
 	}
-	const out: Record<string, unknown> = {};
-	const consumed = new Set<string>();
+	const problems: ParseProblem[] = [];
+	const elections = new Map<AnyChoiceFlag, Election>();
+	// Every property name a LIVE scope claims -- the flat counterpart of the
+	// parser's liveNames. A live name is consumed by the build pass; anything
+	// else is either out of scope or none of this function's business.
+	const live = new Set<string>();
 	// Every property name a scope owns, against the DECLARED name behind it and
 	// the scope PATHS that own it -- the same ScopeStep paths the argv parser
 	// carries. The refusal below is the CLI's sentence, so it names the flag the
@@ -351,13 +374,13 @@ export function flatToCallKwargs(
 			}
 			for (const [choiceName, c] of Object.entries(d.choices)) {
 				const next: ScopeStep[] = [...path, { selector: d, choiceName }];
-				// A member's payload flattens under the member's own flag name, and
-				// supplying that property IS electing the member -- exactly as typing
-				// the member's token is on the command line. So the property belongs
-				// to the scope the SELECTOR sits in, never to the member's own scope:
+				// A member's own property flattens under the member's flag name, and
+				// supplying it IS electing the member -- exactly as typing the
+				// member's token is on the command line. So the property belongs to
+				// the scope the SELECTOR sits in, never to the member's own scope:
 				// naming the member's own election as its owner would say the flag is
 				// only valid under itself (§24.11, §21.4).
-				if (c.value !== undefined) {
+				if (d.electBy === "member-flags") {
 					ownedBy(choiceName, path);
 				}
 				collectScoped(Object.values(c.flags), next);
@@ -371,87 +394,216 @@ export function flatToCallKwargs(
 		[],
 	);
 
-	const elections = new Map<AnyChoiceFlag, Election>();
+	// --- Pass 1: elections, over EVERY selector, outermost first ---
+
 	/**
-	 * Every member a caller elected, in DECLARATION order. A member-spelled
-	 * selector is elected two ways at this boundary and they are one fact: the
-	 * selector's own property naming the member, and the member's payload
-	 * property carrying its value. Supplying the payload IS electing the member
-	 * (§24.11's projection of §21.4), so supplying two of them -- or one beside a
-	 * selector property naming a different member -- is a DOUBLE election, which
-	 * takes §21.4's mutual-exclusion sentence rather than a scope refusal.
+	 * A member-spelled selector's election, read out of the flat object. It is
+	 * elected two ways at this boundary and they are one fact: the selector's
+	 * own property naming the member, and the member's own property. Supplying
+	 * the member's property IS electing it (§24.11's projection of §21.4), so
+	 * two of them -- or one beside a selector property naming a different member
+	 * -- is a DOUBLE election, which takes §21.4's mutual-exclusion sentence
+	 * rather than a scope refusal.
+	 *
+	 * A payload-less member has no payload for its property to carry, so the
+	 * property carries the election itself: `false` is the `--no-<name>` token,
+	 * which DECLINES rather than choosing, and anything else elects.
 	 */
-	const electedMembers = (sel: AnyChoiceFlag, named: unknown): string[] =>
-		Object.entries(sel.choices)
-			.filter(
-				([choiceName, c]) =>
-					named === choiceName ||
-					(c.value !== undefined &&
-						Object.hasOwn(kwargs, flagParamName(choiceName))),
-			)
-			.map(([choiceName]) => choiceName);
-	const buildRecord = (sel: AnyChoiceFlag): unknown => {
-		const key = flagParamName(sel.name);
-		const named = kwargs[key];
-		consumed.add(key);
-		const byMembers =
-			sel.electBy === "member-flags" ? electedMembers(sel, named) : [];
-		if (byMembers.length > 1) {
-			throw new InvokeError(
-				errMutuallyExclusive(byMembers.map((c) => `--${c}`).join(" and ")),
-			);
+	const electMembers = (
+		sel: AnyChoiceFlag,
+		named: unknown,
+		suffix: string,
+	): Election => {
+		const elected: string[] = [];
+		const declined: string[] = [];
+		for (const [choiceName, c] of Object.entries(sel.choices)) {
+			if (named === choiceName) {
+				elected.push(choiceName);
+				continue;
+			}
+			const param = flagParamName(choiceName);
+			if (!Object.hasOwn(kwargs, param)) {
+				continue;
+			}
+			if (c.value === undefined && kwargs[param] === false) {
+				declined.push(choiceName);
+				continue;
+			}
+			elected.push(choiceName);
 		}
-		const elected = byMembers[0];
-		const tag =
-			elected !== undefined
-				? elected
-				: typeof named === "string"
-					? named
-					: sel.opts.presence === "default"
-						? sel.opts.default
-						: undefined;
-		if (tag === undefined) {
-			throw new InvokeError(
-				sel.electBy === "member-flags"
-					? errOneOfRequired(memberList(sel), "")
-					: `flag '--${sel.name}' is required`,
-			);
+		const firstDeclined = declined[0];
+		const clause =
+			firstDeclined !== undefined ? errMutexDeclineClause(firstDeclined) : "";
+		if (elected.length > 1) {
+			problems.push({
+				stage: STAGE.election,
+				message: errMutuallyExclusive(
+					elected.map((c) => `--${c}`).join(" and "),
+				),
+			});
+			return { elected: undefined, origin: "" };
 		}
-		const chosen = sel.choices[tag];
-		if (chosen === undefined) {
-			throw new InvokeError(
-				errFlagInvalidChoice(
+		const sole = elected[0];
+		if (sole !== undefined) {
+			if (declined.length > 0) {
+				problems.push({
+					stage: STAGE.election,
+					message: errMutexRedundantNegation(
+						declined.map((c) => `--no-${c}`).join(" and "),
+						sole,
+						clause,
+					),
+				});
+				return { elected: undefined, origin: "" };
+			}
+			return { elected: sole, origin: "" };
+		}
+		const o = sel.opts;
+		if (o.presence === "default" && o.default !== undefined) {
+			return { elected: o.default, origin: errElectionOriginDefault };
+		}
+		problems.push({
+			stage: STAGE.presence,
+			message: `${errOneOfRequired(memberList(sel), clause)}${suffix}`,
+		});
+		return { elected: undefined, origin: "" };
+	};
+
+	/** A token-spelled selector's election: its own property names the choice. */
+	const electToken = (
+		sel: AnyChoiceFlag,
+		named: unknown,
+		suffix: string,
+	): Election => {
+		if (typeof named === "string") {
+			return { elected: named, origin: "" };
+		}
+		const o = sel.opts;
+		if (o.presence === "default" && o.default !== undefined) {
+			return { elected: o.default, origin: errElectionOriginDefault };
+		}
+		problems.push({
+			stage: STAGE.presence,
+			message: `flag '--${sel.name}' is required${suffix}`,
+		});
+		return { elected: undefined, origin: "" };
+	};
+
+	const electOne = (
+		sel: AnyChoiceFlag,
+		path: readonly ScopeStep[],
+	): Election => {
+		const named = kwargs[flagParamName(sel.name)];
+		if (typeof named === "string" && !Object.hasOwn(sel.choices, named)) {
+			problems.push({
+				stage: STAGE.election,
+				message: errFlagInvalidChoice(
 					sel.name,
-					String(tag),
+					formatValueForError(named),
 					formatChoices(Object.keys(sel.choices)),
 				),
-			);
+			});
+			return { elected: undefined, origin: "" };
 		}
-		// The origin clause the CLI would give for the same election: empty when
-		// the caller elected -- by naming the choice or by supplying a member's
-		// payload -- and `by default` when the declaration did.
-		elections.set(sel, {
-			elected: tag,
-			origin:
-				elected !== undefined || typeof named === "string"
-					? ""
-					: errElectionOriginDefault,
+		const suffix = errScopeSuffix(scopePath(path));
+		return sel.electBy === "member-flags"
+			? electMembers(sel, named, suffix)
+			: electToken(sel, named, suffix);
+	};
+
+	/**
+	 * One scope's elections, then the elected choice's own scope one level
+	 * down. Every name the scope declares goes live whether it was supplied or
+	 * not, exactly as the parser records them, so scope validation can tell an
+	 * out-of-scope property from an undeclared one.
+	 */
+	const electScope = (
+		list: readonly AnyDecl[],
+		path: readonly ScopeStep[],
+	): void => {
+		for (const d of list) {
+			live.add(flagParamName(d.name));
+			if (d.kind !== "choice-flag") {
+				continue;
+			}
+			if (d.electBy === "member-flags") {
+				for (const choiceName of Object.keys(d.choices)) {
+					live.add(flagParamName(choiceName));
+				}
+			}
+			const election = electOne(d, path);
+			elections.set(d, election);
+			const chosen =
+				election.elected === undefined
+					? undefined
+					: d.choices[election.elected];
+			if (chosen === undefined) {
+				continue;
+			}
+			electScope(Object.values(chosen.flags), [
+				...path,
+				{ selector: d, choiceName: election.elected as string },
+			]);
+		}
+	};
+	electScope(decls, []);
+
+	// --- Pass 2: scope membership ---
+
+	for (const key of Object.keys(kwargs)) {
+		if (live.has(key)) {
+			continue;
+		}
+		const scoped = scopedParams.get(key);
+		if (scoped === undefined) {
+			continue;
+		}
+		// The refusal is the CLI parser's own sentence, rendered by the CLI's own
+		// renderer: one channel, one wording, whichever front door was used
+		// (§24.11, §18.19 item 222).
+		problems.push({
+			stage: STAGE.scope,
+			message: outOfScopeMessage(
+				scoped.name,
+				scoped.owners,
+				scoped.owners[0] as ScopeStep[],
+				(sel) => elections.get(sel),
+			),
 		});
+	}
+
+	// --- Pass 3: the records ---
+
+	const buildRecord = (sel: AnyChoiceFlag, tag: string): unknown => {
+		const chosen = sel.choices[tag];
 		const record: Record<string, unknown> = { choice: tag };
+		if (chosen === undefined) {
+			return record;
+		}
 		if (chosen.value !== undefined) {
 			const payloadKey = flagParamName(tag);
-			consumed.add(payloadKey);
 			if (Object.hasOwn(kwargs, payloadKey)) {
 				record.value = kwargs[payloadKey];
+			} else {
+				// Electing a payload-carrying member while omitting the property that
+				// carries its payload is the flat form of typing the member's token
+				// with nothing after it, and takes that same sentence -- a fact about
+				// the object's shape, which is why it outranks every election.
+				problems.push({
+					stage: STAGE.shape,
+					message: errFlagRequiresValue(`--${tag}`),
+				});
 			}
 		}
 		for (const [subKey, sub] of Object.entries(chosen.flags)) {
 			if (sub.kind === "choice-flag") {
-				record[subKey] = buildRecord(sub);
+				const subTag = elections.get(sub)?.elected;
+				if (subTag !== undefined) {
+					record[subKey] = buildRecord(sub, subTag);
+				}
 				continue;
 			}
 			const param = flagParamName(sub.name);
-			consumed.add(param);
 			if (Object.hasOwn(kwargs, param)) {
 				record[subKey] = kwargs[param];
 			}
@@ -459,37 +611,31 @@ export function flatToCallKwargs(
 		return record;
 	};
 
+	const out: Record<string, unknown> = {};
 	for (const d of decls) {
+		const param = flagParamName(d.name);
 		if (d.kind === "choice-flag") {
-			out[flagParamName(d.name)] = buildRecord(d);
+			const tag = elections.get(d)?.elected;
+			if (tag !== undefined) {
+				out[param] = buildRecord(d, tag);
+			}
 			continue;
 		}
-		const param = flagParamName(d.name);
-		consumed.add(param);
 		if (Object.hasOwn(kwargs, param)) {
 			out[param] = kwargs[param];
 		}
 	}
+	// Everything no scope claims passes through untouched: positional args,
+	// global flags, and the undeclared names call() itself refuses.
 	for (const [key, value] of Object.entries(kwargs)) {
-		if (consumed.has(key)) {
+		if (live.has(key) || scopedParams.has(key)) {
 			continue;
 		}
-		const scoped = scopedParams.get(key);
-		if (scoped === undefined) {
-			out[key] = value;
-			continue;
-		}
-		// The refusal is the CLI parser's own sentence, rendered by the CLI's own
-		// renderer: one channel, one wording, whichever front door was used
-		// (§24.11, §18.19 item 222).
-		throw new InvokeError(
-			outOfScopeMessage(
-				scoped.name,
-				scoped.owners,
-				scoped.owners[0] as ScopeStep[],
-				(sel) => elections.get(sel),
-			),
-		);
+		out[key] = value;
+	}
+	const first = firstProblem(problems);
+	if (first !== undefined) {
+		throw new InvokeError(first.message);
 	}
 	return out;
 }
