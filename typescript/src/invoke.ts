@@ -196,6 +196,43 @@ function coerceInvokeDict(f: AnyFlag, value: unknown): Map<string, unknown> {
 	);
 }
 
+/**
+ * Marks a record the flat door built for an election the DECLARATION made
+ * (§24.5's defaulted selection), so `call()` labels the selector's own value
+ * `default` rather than `cli`.
+ *
+ * The flat door converts its object into the records `call()` takes, and a
+ * defaulted selection has to be materialized there whenever the caller supplied
+ * a field of the elected scope beside it -- the value must reach the handler
+ * exactly as the command line delivers it under the same election. Without this
+ * mark the materialization would itself answer §23.6's question ("did the
+ * invocation cause this value") with `cli` for a record the caller contributed
+ * no election to, which is the answer neither the command line nor the record
+ * door gives.
+ *
+ * It is a symbol, so it is invisible to `Object.keys` (the unknown-key sweep),
+ * to JSON, and to every handler: it says something about how the record was
+ * produced, never something the record contains.
+ */
+const DECLARATION_ELECTED = Symbol("strictcli.declarationElected");
+
+/** Marks one record as the declaration's election (flat door only). */
+export function markDeclarationElected(record: Record<string, unknown>): void {
+	Object.defineProperty(record, DECLARATION_ELECTED, {
+		value: true,
+		enumerable: false,
+	});
+}
+
+/** Whether a supplied selector value carries the mark above. */
+function isDeclarationElected(value: unknown): boolean {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		(value as Record<symbol, unknown>)[DECLARATION_ELECTED] === true
+	);
+}
+
 /** Wraps applyFlagDefault, converting its ParseError into an InvokeError. */
 function applyFlagDefaultForInvoke(
 	f: AnyFlag,
@@ -408,19 +445,25 @@ export async function invokeApp(
 			if (tag === undefined) {
 				continue;
 			}
+			// The source answers §23.6's question about the ELECTION: a record the
+			// caller wrote is the call's, and a record the declaration elected is
+			// the declaration's however it reached this door -- including the flat
+			// door's materialization of a defaulted selection, which is marked as
+			// such precisely so the answer does not depend on which door was used.
+			const value = suppliedByFlagName.get(d.name);
 			store.set(
 				d.name,
 				supplied
 					? buildElectedRecord(
 							d,
-							suppliedByFlagName.get(d.name) as Record<string, unknown>,
+							value as Record<string, unknown>,
 							elections,
 							app.infraRoots,
 							problems,
 							[],
 						)
 					: electDefaultRecord(d, tag, app.infraRoots, []),
-				supplied ? "cli" : "default",
+				supplied && !isDeclarationElected(value) ? "cli" : "default",
 			);
 			continue;
 		}

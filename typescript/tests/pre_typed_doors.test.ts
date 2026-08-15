@@ -1344,3 +1344,117 @@ test("call: the command line still answers provided() with what it caused", asyn
 	assert.equal(provided(rec, "recipient"), true);
 	assert.equal(provided(rec, "store"), false);
 });
+
+// =========================================================================
+// A selection the caller elected NOTHING of is the declaration's (§23.6,
+// §24.5, §18.26 item 253)
+// =========================================================================
+
+/**
+ * A selector carrying a default selection, so every door can be asked the same
+ * question: who caused this record? `captured` takes the selector's own source
+ * and the record, so the answer is read at the accessor rather than inferred.
+ */
+function defaultedSelectionApp(captured: Record<string, unknown>): App {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send it",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "an email message",
+							flags: {
+								subject: flag("subject", t.str, {
+									help: "the subject",
+									presence: "default",
+									default: "hi",
+								}),
+							},
+						}),
+						sms: choice({
+							help: "a text message",
+							flags: {
+								phone_number: flag("phone-number", t.str, {
+									help: "the destination",
+									presence: "optional",
+								}),
+							},
+						}),
+					},
+					{ help: "delivery channel", presence: "default", default: "email" },
+				),
+			},
+			handler: (args, ctx) => {
+				Object.assign(captured, {
+					via: args.via,
+					source: ctx.source("via"),
+					provided: ctx.provided("via"),
+				});
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+test("flat: a selection the caller contributed nothing to is the declaration's", async () => {
+	// The election came from the declaration, so the selector's source is
+	// `default` and `provided()` is false -- the same answer the command line
+	// and the record door give for the same declaration (§23.6, §24.5).
+	const flat: Record<string, unknown> = {};
+	assert.equal(
+		await toolFor(defaultedSelectionApp(flat), "send").execute({}),
+		0,
+	);
+	assert.equal(flat.source, "default");
+	assert.equal(flat.provided, false);
+	assert.deepEqual(flat.via, { choice: "email", subject: "hi" });
+
+	const argv: Record<string, unknown> = {};
+	await defaultedSelectionApp(argv).test(["send"]);
+	assert.equal(argv.source, "default");
+	assert.equal(argv.provided, false);
+
+	const record: Record<string, unknown> = {};
+	await defaultedSelectionApp(record).call("send", {});
+	assert.equal(record.source, "default");
+	assert.equal(record.provided, false);
+});
+
+test("flat: a sibling key beside a defaulted election is delivered, election unchanged", async () => {
+	// The caller supplied a field of the elected scope and elected nothing: the
+	// election stays the declaration's, and the field is delivered exactly as
+	// the command line delivers it under a defaulted election. The field itself
+	// follows the record door's rule -- every field that door delivers reports
+	// the declaration (§18.26 item 253).
+	const flat: Record<string, unknown> = {};
+	assert.equal(
+		await toolFor(defaultedSelectionApp(flat), "send").execute({
+			subject: "yo",
+		}),
+		0,
+	);
+	assert.equal(flat.source, "default");
+	assert.equal(flat.provided, false);
+	assert.deepEqual(flat.via, { choice: "email", subject: "yo" });
+	assert.equal(provided(flat.via as Record<string, unknown>, "subject"), false);
+
+	// The command line answers the same about the election, and delivers the
+	// same value for the flag the invocation did name.
+	const argv: Record<string, unknown> = {};
+	await defaultedSelectionApp(argv).test(["send", "--subject", "yo"]);
+	assert.equal(argv.source, "default");
+	assert.deepEqual(argv.via, { choice: "email", subject: "yo" });
+});
+
+test("flat: an election the caller DID make still reports the call", async () => {
+	// The pin is about a record nothing was contributed to; a caller who named
+	// the choice caused the value, and `provided()` says so.
+	const flat: Record<string, unknown> = {};
+	await toolFor(defaultedSelectionApp(flat), "send").execute({ via: "email" });
+	assert.equal(flat.source, "cli");
+	assert.equal(flat.provided, true);
+});
