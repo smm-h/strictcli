@@ -206,8 +206,8 @@ Flag "tag": default: null does not declare optionality: use presence: "optional"
 
 The type-level consequence is part of the promise. `FlagKeyIsOptional` reads
 `presence`, so the inferred handler-args type follows the declaration by
-construction -- which is what fixed the mutex-member key that used to be typed
-as always-present while the parser handed it `undefined`.
+construction, so the type a handler sees and the value the parser hands it can
+no longer disagree.
 
 Every flag and arg renders exactly one presence part in help output:
 `[required]`, `[optional]`, or `[default: <value>]`. A declared empty collection
@@ -328,21 +328,41 @@ Restrict a flag's values to a set of valid choices. Values not in the choices
 list produce a parse error listing all allowed values. All choice values must
 match the flag's declared type, and bool flags cannot have choices.
 
+**Every entry is a record: a `value`, and an optional `help`.** A bare value is
+refused at registration -- an entry that may carry help and an entry that
+carries none would be two spellings of one fact:
+
 ```typescript
 flags: {
   format: flag("format", t.str, {
     help: "Output format",
     presence: "required",
-    choices: ["text", "json", "csv"],
+    choices: [
+      { value: "text", help: "human-readable lines" },
+      { value: "json" },
+      { value: "csv" },
+    ],
   }),
   level: flag("level", t.int, {
     help: "Log level",
     presence: "default",
     default: 0n,
-    choices: [0n, 1n, 2n],
+    choices: [{ value: 0n }, { value: 1n }, { value: 2n }],
   }),
 }
 ```
+
+```
+Flag "format": choices entry 0 is a bare value: declare it as { value: <value>, help: "..." }
+```
+
+Help on an entry decides how the flag renders. Until one entry carries help the
+flag keeps its one-line `[choices: ...]` form; from the first entry that has
+help, the whole flag renders as an indented block.
+
+A `choices` flag restricts one **value**. When one of the alternatives needs
+flags of its own, or needs to be spelled as its own flag, the declaration is a
+[choice flag](#choice-flags) instead.
 
 A declared `default` value must be in the choices list, checked at registration.
 `presence: "optional"` declares no value, so nothing is checked at registration
@@ -513,43 +533,267 @@ app.command(
 );
 ```
 
-## Mutex Groups
+## Choice Flags
 
-`mutexGroup` declares flags where at most one may have a value from an explicit
-source (CLI, env, or config). If no flag in the group is elected, a "one of ...
-is required" error is produced.
+A **choice flag** elects exactly one of its declared choices per invocation, and
+each choice declares a **scope**: the flags that exist only while that choice is
+elected. It is the framework's one construct for "exactly one of these", and
+there is no at-most-one construct anywhere -- an absent selection is a choice
+nobody named, so the answer is to name it.
 
-Each member declares its own presence: `presence: "optional"` is the ordinary
-declaration and makes the handler key `undefined` when the member is not
-elected, a `default` is legal (an unelected member delivers it), and
-`presence: "required"` throws at registration -- the group's own requirement is
-what makes the choice mandatory. The inferred handler-args type follows that
-declaration, so an optional member's key is typed `| undefined` exactly as the
-parser delivers it.
+The choice map sits **where a carrier sits**: `flag(name, t.str, opts)` says
+"this flag's type is `t.str`", and `choiceFlag(name, choices, opts)` says "this
+flag's type is this set of choices". For a choice flag, the choices **are** the
+type -- object-literal keys are literal types, so the delivered value is an
+exact discriminated union with no annotation anywhere.
 
 ```typescript
-import { mutexGroup } from "strictcli";
+import { assertNever, choice, choiceFlag, flag, t } from "strictcli";
 
 app.command(
-  defineReadOnlyCommand("fetch", {
-    help: "Fetch data from a source",
-    mutex: [
-      mutexGroup({
-        file: flag("file", t.str, { help: "Read from file", presence: "optional" }),
-        url: flag("url", t.str, { help: "Read from URL", presence: "optional" }),
-      }),
-    ],
+  defineMutatingCommand("send", {
+    help: "Send one notification through exactly one channel",
+    flags: {
+      via: choiceFlag(
+        "via",
+        {
+          email: choice({
+            help: "deliver the notification as an email message",
+            flags: {
+              subject: flag("subject", t.str, {
+                help: "subject line of the message",
+                presence: "required",
+              }),
+              recipient: flag("recipient", t.str, {
+                help: "destination email address",
+                presence: "required",
+              }),
+            },
+          }),
+          sms: choice({
+            help: "deliver the notification as a text message",
+            flags: {
+              phone_number: flag("phone-number", t.str, {
+                help: "destination number in E.164 form",
+                presence: "required",
+              }),
+            },
+          }),
+          webhook: choice({
+            help: "post the notification to a URL",
+            flags: {
+              url: flag("url", t.str, {
+                help: "endpoint to post to",
+                presence: "required",
+              }),
+              retries: flag("retries", t.int, {
+                help: "delivery attempts before giving up",
+                presence: "default",
+                default: 3n,
+              }),
+            },
+          }),
+        },
+        { help: "Delivery channel", short: "v", presence: "required" },
+      ),
+    },
     handler: (args, ctx) => {
-      if (args.file !== undefined) {
-        ctx.info(`Reading from file: ${args.file}`);
-      } else {
-        ctx.info(`Fetching from URL: ${args.url}`);
+      switch (args.via.choice) {
+        case "email":
+          ctx.info(`emailing ${args.via.recipient}: ${args.via.subject}`);
+          break;
+        case "sms":
+          ctx.info(`texting ${args.via.phone_number}`);
+          break;
+        case "webhook":
+          ctx.info(`posting to ${args.via.url} (${args.via.retries} retries)`);
+          break;
+        default:
+          assertNever(args.via);
       }
     },
   }),
 );
 ```
 
+A scope's key is the handler key the flag delivers -- `phone_number` for
+`--phone-number` -- exactly as a command-level flag map's key is.
+
+The command's help renders the scope tree, and every line -- scoped or not --
+ends with exactly one presence part:
+
+```
+$ notify send --help
+notify send -- Send one notification through exactly one channel
+
+Flags:
+  --via, -v <choice>          Delivery channel [required]
+    email                     deliver the notification as an email message
+      --subject <str>         subject line of the message [required]
+      --recipient <str>       destination email address [required]
+    sms                       deliver the notification as a text message
+      --phone-number <str>    destination number in E.164 form [required]
+    webhook                   post the notification to a URL
+      --url <str>             endpoint to post to [required]
+      --retries <int>         delivery attempts before giving up [default: 3]
+```
+
+A flag supplied outside its elected scope is a distinct parse error naming both
+sides -- never "unknown flag":
+
+```
+$ notify send --via sms --subject hi
+error: flag '--subject' is only valid under '--via email', but '--via sms' was elected
+try 'notify send --help'
+
+$ notify send --subject hi
+error: flag '--subject' is only valid under '--via email', but '--via' was not provided
+try 'notify send --help'
+
+$ notify send --via email
+error: flag '--subject' is required under '--via email'
+try 'notify send --help'
+```
+
+Order is irrelevant -- nothing is interpreted until every token is collected --
+and errors are reported in a fixed order: **election, then scope, then value,
+then presence**. `--via sms --subject hi` reports the spelling mistake, never
+its consequence.
+
+### The derived union
+
+`switch (args.via.choice)` narrows, and `assertNever` in the `default` branch is
+checked by the compiler -- a missing case makes the argument something other
+than `never` and the branch fails to compile. A **computed** choice key would
+silently degrade the tag to `string` and make `assertNever` accept anything, so
+the choice map is constrained to literal keys and a computed one is a compile
+error naming itself.
+
+This is the structural fix for the remaining unsoundness in handler-args
+inference: a scope's flags are unreachable except through the tag that proves
+the scope was elected, so the handler-args type cannot lie about them. Scoped
+flags are **never** top-level `args` keys, at any depth -- the only key a choice
+flag adds is its own -- and an optional sub-flag's key is optional in the
+derived union.
+
+Inside the record, `provided(args.via, "subject")` answers whether the
+invocation caused a field's value. It is a function over the record, not a
+method, because the record's fields are user-named and a method would occupy a
+name a scope might want. `ctx.provided` deliberately does not see scope
+interiors: a scoped name is not unique command-wide.
+
+### Member spelling
+
+`memberChoiceFlag(...)` is the member-spelled twin factory -- the same
+`defineReadOnlyCommand` / `defineMutatingCommand` morphology, so the spelling is
+the factory's name and there is no option to forget. Each choice is its own
+flag, and the choice flag's own name is never typed: it is the `args` key and
+the noun help and errors use. `choice({ help, value, flags })` declares a
+member's payload, delivered under the reserved name `value`.
+
+```typescript
+import { memberChoiceFlag } from "strictcli";
+
+app.command(
+  defineMutatingCommand("sync", {
+    help: "Synchronize profiles",
+    flags: {
+      scope: memberChoiceFlag(
+        "scope",
+        {
+          profile: choice({
+            help: "use the named profile",
+            value: { carrier: t.str, help: "profile name" },
+            flags: {
+              create_missing: flag("create-missing", t.bool, {
+                help: "create the profile if it does not exist",
+                presence: "default",
+                default: false,
+              }),
+            },
+          }),
+          "all-profiles": choice({ help: "apply to every profile" }),
+        },
+        { help: "What to synchronize", presence: "required" },
+      ),
+    },
+    handler: (args, ctx) => {
+      switch (args.scope.choice) {
+        case "profile":
+          ctx.info(`syncing ${args.scope.value} (create=${args.scope.create_missing})`);
+          break;
+        case "all-profiles":
+          ctx.info("syncing every profile");
+          break;
+        default:
+          assertNever(args.scope);
+      }
+    },
+  }),
+);
+```
+
+```
+$ myapp sync --help
+myapp sync -- Synchronize profiles
+
+Flags:
+  scope                                        What to synchronize (exactly one of the following) [required]
+    --profile <str>                            use the named profile [required]
+      --create-missing, --no-create-missing    create the profile if it does not exist [default: false]
+    --all-profiles                             apply to every profile [required]
+
+$ myapp sync --profile work --create-missing
+syncing work (create=true)
+
+$ myapp sync --all-profiles --create-missing
+error: flag '--create-missing' is only valid under '--profile', but '--all-profiles' was elected
+
+$ myapp sync --profile work --all-profiles
+error: --profile and --all-profiles are mutually exclusive
+
+$ myapp sync
+error: one of --profile, --all-profiles is required
+```
+
+A bool member is elected by `--<name>` and only when it resolves to **true**;
+`--no-<name>` *declines* -- it says "not this one" and elects nothing, and
+combining a decline with a real election is a parse error. Member election is
+**command-line only**: env and config are not consulted for a member at all. A
+member-spelled choice flag cannot carry a short, since it is never typed.
+
+### Presence, defaults, and recursion
+
+A choice flag's presence union has **no `optional` member at all**: it is
+`{ presence: "required" }` or `{ presence: "default", default: <choice name> }`,
+and the `default` is typed `keyof C & string`, so a default naming a choice that
+does not exist is a **compile** error before it is a registration error. A
+widened caller that reaches the factory with `optional` anyway is refused at
+registration:
+
+```
+Flag "via": a choice flag cannot declare presence: "optional": an absent selection is a choice nobody named, so name it as a choice of its own
+```
+
+A member flag **must** declare `presence: "required"`, read as *required once
+this member is elected* -- the inverse of the rule the retired mutex group
+carried:
+
+```
+Choice "profile" of "scope": a member flag must declare presence: "required", read as required once this member is elected
+```
+
+A default names a choice, and a registration check refuses one whose scope
+declares a required sub-flag, because a defaulted selection is a **complete**
+elected value. A defaulted choice flag renders its complete elected value:
+
+```
+  --via <choice>              Delivery channel [default: sms (phone-number=+15550100)]
+```
+
+Electing a choice on the command line never borrows the default's values. A
+choice flag is a flag, so a choice flag may be declared inside a choice's scope,
+to unlimited depth.
 ## Flag Dependencies
 
 Declare relationships between flags using dependency descriptors. Three
@@ -702,7 +946,7 @@ Global flag values are merged into each command handler's `args`.
 Passthrough commands bypass all flag and argument parsing and forward raw args
 directly to the handler. They are useful for wrapping external tools where the
 argument format is not known in advance. Passthrough commands cannot have flags,
-args, flag sets, or mutex groups.
+args, or flag sets, and declare nothing a choice flag could scope.
 
 Passthroughs use the same twin morphology as commands -- there is no bare
 `passthrough` factory:
@@ -758,8 +1002,8 @@ flags: {
 ## The Reserved Flag Quartet
 
 Four flag names are owned by the framework and cannot be declared at any level --
-not as app global flags, not as command flags, not inside a flag set, not inside
-a mutex group:
+not as app global flags, not as command flags, not inside a flag set, and not
+inside a choice's scope at any depth:
 
 | Flag | Delivered as | Meaning |
 |------|-------------|---------|
@@ -997,8 +1241,9 @@ The type system infers the exact shape of the handler's `args` parameter from
 flag and arg declarations, so no manual type annotations are needed. The type
 carriers (`t.str`, `t.int`, etc.) carry phantom types that flow through the
 generic machinery in the twin factories, producing correct output types without
-casts. Flags from `flagSets` and `mutexGroup` entries are also merged into the
-handler args type.
+casts. Flags from `flagSets` entries are also merged into the handler args type,
+and a `choiceFlag` contributes exactly one key -- its own -- carrying the
+derived discriminated union.
 
 ```typescript
 app.command(
@@ -1027,7 +1272,7 @@ app.command(
 );
 ```
 
-The type carriers (`t.str`, `t.int`, etc.) carry phantom types that flow through the generic machinery in the twin factories and `flag`/`arg`, so the output types are correct without casts. Flags from `flagSets` and `mutexGroup` entries are also merged into the handler args type.
+The type carriers (`t.str`, `t.int`, etc.) carry phantom types that flow through the generic machinery in the twin factories and `flag`/`arg`, so the output types are correct without casts. Flags from `flagSets` entries are also merged into the handler args type, and a `choiceFlag` contributes exactly one key -- its own -- carrying the derived discriminated union.
 
 Optionality in that type comes from the `presence` discriminant and nothing
 else, so the type a handler sees and the value the parser hands it can no longer
@@ -1050,14 +1295,16 @@ defineReadOnlyCommand("status", {
 
 ```typescript validate
 import {
+  arg,
+  assertNever,
+  choice,
   createApp,
   defineMutatingCommand,
   defineReadOnlyCommand,
   deprecated,
   flag,
   flagSet,
-  mutexGroup,
-  arg,
+  memberChoiceFlag,
   mutatingPassthrough,
   outcome,
   t,
@@ -1082,7 +1329,11 @@ const common = flagSet("common", {
     help: "Cloud region",
     env: "DEPLOY_REGION",
     presence: "required",
-    choices: ["us-east-1", "eu-west-1", "ap-south-1"],
+    choices: [
+      { value: "us-east-1" },
+      { value: "eu-west-1" },
+      { value: "ap-south-1" },
+    ],
   }),
 });
 
@@ -1131,20 +1382,32 @@ infra.command(
 infra.command(
   defineReadOnlyCommand("logs", {
     help: "View infrastructure logs",
-    mutex: [
-      mutexGroup({
-        service: flag("service", t.str, {
-          help: "Filter by service",
-          presence: "optional",
-        }),
-        node: flag("node", t.str, { help: "Filter by node", presence: "optional" }),
-      }),
-    ],
+    flags: {
+      filter: memberChoiceFlag(
+        "filter",
+        {
+          service: choice({
+            help: "filter by service",
+            value: { carrier: t.str, help: "service name" },
+          }),
+          node: choice({
+            help: "filter by node",
+            value: { carrier: t.str, help: "node name" },
+          }),
+        },
+        { help: "What to filter the logs by", presence: "required" },
+      ),
+    },
     handler: (args, ctx) => {
-      if (args.service !== undefined) {
-        ctx.info(`Logs for service: ${args.service}`);
-      } else {
-        ctx.info(`Logs for node: ${args.node}`);
+      switch (args.filter.choice) {
+        case "service":
+          ctx.info(`Logs for service: ${args.filter.value}`);
+          break;
+        case "node":
+          ctx.info(`Logs for node: ${args.filter.value}`);
+          break;
+        default:
+          assertNever(args.filter);
       }
     },
   }),
