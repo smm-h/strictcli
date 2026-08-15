@@ -992,3 +992,42 @@ func TestFlatFormTokenSpelledSelectorIsUnchanged(t *testing.T) {
 		t.Fatalf("subject = %q, want \"hi\"", got)
 	}
 }
+
+// The flattening is at every depth, so a member-spelled selector one level down
+// is elected by a payload key sitting in the same flat object.
+func TestFlatFormNestedMemberElection(t *testing.T) {
+	var captured map[string]interface{}
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("run", "run it", captureHandler(&captured),
+		WithFlags(ChoiceFlag("mode", "the mode", Required(),
+			Choice("advanced", "the advanced mode",
+				MemberChoiceFlag("profile-set", "which profiles", Required(),
+					MemberChoice(StringFlag("profile", "a profile", Required()), "one named profile"),
+					MemberChoice(BoolFlag("all-profiles", "every profile", Required()), "every profile"),
+				)),
+			Choice("simple", "the simple mode"),
+		)), WithEffect(EffectReadOnly))
+
+	ir := app.invoke("run", map[string]interface{}{"mode": "advanced", "profile": "work"})
+	if ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+	inner := Get[*Elected](GetElected(captured, "mode").Fields, "profile_set")
+	if inner.Name() != "profile" {
+		t.Fatalf("elected = %q, want \"profile\"", inner.Name())
+	}
+	if got := Get[string](inner.Fields, "value"); got != "work" {
+		t.Fatalf("payload = %q, want \"work\"", got)
+	}
+
+	// And the double election is refused at that depth too.
+	ir = app.invoke("run", map[string]interface{}{
+		"mode": "advanced", "profile": "work", "all_profiles": true,
+	})
+	if ir.err == "" {
+		t.Fatal("expected a refusal for a double election one level down")
+	}
+	if !strings.Contains(ir.err, "--profile and --all-profiles are mutually exclusive") {
+		t.Fatalf("error = %q", ir.err)
+	}
+}
