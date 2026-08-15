@@ -103,6 +103,26 @@ func TestRequiresUnknownFlagKeepsTheFlagNoun(t *testing.T) {
 	})
 }
 
+// The dependency families' own guards are a TRAILING phase after the seven
+// pinned steps, so an operand naming nothing is refused as unknown before the
+// same-flag guard ever reads it (§26.8). Both operands are the same undeclared
+// name here, which is the state where the two guards compete.
+func TestRequiresUnknownFlagIsRefusedBeforeTheSameFlagGuard(t *testing.T) {
+	expectPanic(t, `command "cmd": constraint "rr" references unknown flag "zzz"`, func() {
+		simpleApp("cmd", "a command", "ok",
+			WithFlags(StringFlag("a", "the a", Optional())),
+			WithConstraints(Requires("rr", "zzz", "zzz")))
+	})
+}
+
+func TestImpliesUnknownFlagIsRefusedBeforeTheSameFlagGuard(t *testing.T) {
+	expectPanic(t, `command "cmd": constraint "ii" references unknown flag "zzz"`, func() {
+		simpleApp("cmd", "a command", "ok",
+			WithFlags(BoolFlag("a", "the a", Default(false))),
+			WithConstraints(Implies("ii", "zzz", "zzz", true)))
+	})
+}
+
 // --- Registration: scope (§26.8 pass 4, §24.8) ---
 
 func TestConstraintMemberInsideAScopeIsRefused(t *testing.T) {
@@ -115,6 +135,23 @@ func TestConstraintMemberInsideAScopeIsRefused(t *testing.T) {
 					Choice("b", "choice b")),
 			),
 			WithConstraints(AllOrNone("pair", Member("host"), Member("target"))))
+	})
+}
+
+// A member-spelled choice's own flag is declared INSIDE that choice's scope, so
+// naming it is the scope refusal too -- the path renders as the member token
+// itself (§12.13's member-spelled segment).
+func TestConstraintMemberNamingAMemberFlagIsRefused(t *testing.T) {
+	expectPanic(t, `command "cmd": constraint "pick" references 'file', which is declared under '--file': constraints operate at root scope only`, func() {
+		simpleApp("cmd", "a command", "ok",
+			WithFlags(
+				StringFlag("host", "the host", Optional()),
+				MemberChoiceFlag("src", "where to read from", Required(),
+					MemberChoice(StringFlag("file", "read from file", Required()), "read from a file"),
+					MemberChoice(StringFlag("url", "read from a URL", Required()), "read from a URL"),
+				),
+			),
+			WithConstraints(AtLeastOne("pick", Member("file"), Member("host"))))
 	})
 }
 
@@ -158,6 +195,21 @@ func TestConstraintCycleIsRefused(t *testing.T) {
 			WithConstraints(
 				AtLeastOne("outer", Member("inner"), Member("a")),
 				AllOrNone("inner", Member("outer"), Member("b")),
+			))
+	})
+}
+
+// The path opens on the participant declared FIRST, not on the one the walk
+// entered the cycle through (§12.15). Here the walk starts at "x", enters the
+// cycle at "c" and closes it at "b", but "b" is declared before "c".
+func TestConstraintCyclePathOpensOnTheEarliestDeclaredParticipant(t *testing.T) {
+	expectPanic(t, `command "cmd": constraints form a cycle: b -> c -> b`, func() {
+		simpleApp("cmd", "a command", "ok",
+			WithFlags(StringFlag("a", "the a", Optional())),
+			WithConstraints(
+				AtLeastOne("x", Member("c"), Member("a")),
+				AtLeastOne("b", Member("c"), Member("a")),
+				AtLeastOne("c", Member("b"), Member("a")),
 			))
 	})
 }

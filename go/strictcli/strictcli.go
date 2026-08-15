@@ -3949,33 +3949,9 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	// passes below resolve member names against it and against cmd.args.
 	cmd.flags = allFlags
 
-	// Validate the constraint set, in §26.8's pinned pass order.
+	// Validate the constraint set, in §26.8's pinned pass order -- including the
+	// trailing phase carrying the two dependency families' own guards.
 	validateConstraints(name, cmd)
-
-	// `Implies` operands are bools on both sides. The rule is the family's own
-	// and predates this round; it runs after the shared passes because it is
-	// about the declaration the constraint names, not about the constraint.
-	for i := range cmd.constraints {
-		c := &cmd.constraints[i]
-		if c.family != familyImplies {
-			continue
-		}
-		var triggerType, targetType FlagType
-		for _, f := range allFlags {
-			if f.Name == c.flag {
-				triggerType = f.Type
-			}
-			if f.Name == c.implies {
-				targetType = f.Type
-			}
-		}
-		if triggerType != TypeBool {
-			panic(errCommandImpliesTriggerNotBool(name, c.flag))
-		}
-		if targetType != TypeBool {
-			panic(errCommandImpliesTargetNotBool(name, c.implies))
-		}
-	}
 
 	cmd.tags = mergeTags(inheritedTags, cmd.tags)
 

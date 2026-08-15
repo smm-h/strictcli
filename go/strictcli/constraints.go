@@ -255,18 +255,14 @@ func validateConstraints(cmdName string, cmd *Command) {
 	for i := range cmd.constraints {
 		c := &cmd.constraints[i]
 		if !c.family.coOccurrence() {
-			// Requires / Implies: flags only, by name.
+			// Requires / Implies: flags only, by name. Their own guards --
+			// same-flag operands and the two bool-operand rules -- are the
+			// TRAILING phase below, so an operand naming nothing is refused as
+			// unknown here first.
+			cmd.resolveConstraintFlag(cmdName, c.name, c.flag)
 			if c.family == familyRequires {
-				if c.flag == c.dependsOn {
-					panic(errCommandRequiresSameFlag(cmdName, c.flag))
-				}
-				cmd.resolveConstraintFlag(cmdName, c.name, c.flag)
 				cmd.resolveConstraintFlag(cmdName, c.name, c.dependsOn)
 			} else {
-				if c.flag == c.implies {
-					panic(errCommandImpliesSameFlag(cmdName, c.flag))
-				}
-				cmd.resolveConstraintFlag(cmdName, c.name, c.flag)
 				cmd.resolveConstraintFlag(cmdName, c.name, c.implies)
 			}
 			continue
@@ -382,6 +378,31 @@ func validateConstraints(cmdName string, cmd *Command) {
 			}
 		}
 	}
+
+	// Trailing phase: the two dependency families' own guards, which predate
+	// this round and are about the declarations a rule names rather than about
+	// the constraint system. They run AFTER every shared pass, so an operand
+	// that names nothing is refused as unknown before a guard reads the name it
+	// carries; pass 3 resolved every operand, so each one is a root flag here.
+	for i := range cmd.constraints {
+		c := &cmd.constraints[i]
+		switch c.family {
+		case familyRequires:
+			if c.flag == c.dependsOn {
+				panic(errCommandRequiresSameFlag(cmdName, c.flag))
+			}
+		case familyImplies:
+			if c.flag == c.implies {
+				panic(errCommandImpliesSameFlag(cmdName, c.flag))
+			}
+			if cmd.flags[cmd.rootFlagIndex(c.flag)].Type != TypeBool {
+				panic(errCommandImpliesTriggerNotBool(cmdName, c.flag))
+			}
+			if cmd.flags[cmd.rootFlagIndex(c.implies)].Type != TypeBool {
+				panic(errCommandImpliesTargetNotBool(cmdName, c.implies))
+			}
+		}
+	}
 }
 
 func (c *Command) rootFlagIndex(name string) int {
@@ -483,19 +504,28 @@ func (c *Command) checkConstraintCycles(cmdName string) {
 			}
 			if color[r.idx] == grey {
 				// The path starts and ends at the same name, beginning at the
-				// participant the walk entered the cycle through.
-				start := 0
+				// FIRST participant in declaration order -- which is not
+				// necessarily the one the walk entered the cycle through, so
+				// the cycle is rotated onto it (§12.15).
+				entry := 0
 				for si, node := range stack {
 					if node == r.idx {
-						start = si
+						entry = si
 						break
 					}
 				}
-				names := make([]string, 0, len(stack)-start+1)
-				for _, node := range stack[start:] {
+				cycle := stack[entry:]
+				open := 0
+				for ci, node := range cycle {
+					if node < cycle[open] {
+						open = ci
+					}
+				}
+				names := make([]string, 0, len(cycle)+1)
+				for _, node := range append(append([]int{}, cycle[open:]...), cycle[:open]...) {
 					names = append(names, c.constraints[node].name)
 				}
-				names = append(names, c.constraints[r.idx].name)
+				names = append(names, names[0])
 				panic(errConstraintCycle(cmdName, strings.Join(names, " -> ")))
 			}
 			if color[r.idx] == white {
