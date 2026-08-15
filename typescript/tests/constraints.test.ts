@@ -549,6 +549,52 @@ test("mcp: requires projects dependentRequired, implies projects nothing and say
 	);
 });
 
+test("mcp: a FALSE implied value is a value, not a name", async () => {
+	// §26.12's pin: `= false`, never `no_ssl`. A `no_`-prefixed property names
+	// a key the schema does not carry and the caller can never send, and it
+	// hides the one fact the line exists to publish. The CLI's `--no-`
+	// negation stays where a reader types tokens (§26.10).
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("deploy", {
+			help: "deploy",
+			flags: {
+				ssl: flag("ssl", t.bool, {
+					help: "h",
+					presence: "default",
+					default: true,
+				}),
+				insecure: flag("insecure", t.bool, {
+					help: "h",
+					presence: "default",
+					default: false,
+				}),
+			},
+			constraints: [
+				implies({
+					name: "drop-ssl",
+					flag: "insecure",
+					implies: "ssl",
+					value: false,
+				}),
+			],
+			handler: ok,
+		}),
+	);
+	assert.ok(
+		toolFor(app, "deploy").description.endsWith(
+			"  insecure implies ssl = false -- not expressed in the schema: the injection",
+		),
+		toolFor(app, "deploy").description,
+	);
+	// The help block keeps the token spelling, which is the surface where a
+	// reader types tokens.
+	assert.match(
+		(await app.test(["deploy", "--help"])).stdout,
+		/--insecure implies --no-ssl/,
+	);
+});
+
 test("mcp: two at-least-one rules are conjoined rather than merged or dropped", () => {
 	const app = makeApp();
 	app.command(
@@ -609,5 +655,191 @@ test("mcp: an all-or-none over a nested group emits no keyword and names the nes
 				"  all or none of: (a or b), c -- not expressed in the schema: the nested grouping",
 		),
 		toolFor(app, "grouped").description,
+	);
+});
+
+/**
+ * An at-least-one over a nested pair whose selector sits `depth` levels below
+ * the parent: depth 1 puts it on the nested pair's own member, depth 2 puts
+ * it one level further down again.
+ */
+function nestedSelectorApp(depth: 1 | 2): App {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("cmd", {
+			help: "h",
+			flags: {
+				a: flag("a", t.str, { help: "h", presence: "optional" }),
+				b: flag("b", t.bool, {
+					help: "h",
+					presence: "default",
+					default: false,
+				}),
+				c: flag("c", t.str, { help: "h", presence: "optional" }),
+			},
+			constraints:
+				depth === 1
+					? [
+							allOrNone({
+								name: "inner",
+								members: [{ name: "a" }, { name: "b", when: "true" }],
+							}),
+							atLeastOne({
+								name: "outer",
+								members: [{ name: "inner" }, { name: "c" }],
+							}),
+						]
+					: [
+							allOrNone({
+								name: "deep",
+								members: [{ name: "a" }, { name: "b", when: "true" }],
+							}),
+							allOrNone({
+								name: "inner",
+								members: [{ name: "deep" }, { name: "c" }],
+							}),
+							atLeastOne({
+								name: "outer",
+								members: [{ name: "inner" }, { name: "a" }],
+							}),
+						],
+			handler: ok,
+		}),
+	);
+	return app;
+}
+
+test("mcp: at-least-one fidelity is RECURSIVE -- a nested selector makes it partial", () => {
+	// §26.12's amendment: an at-least-one is exact when no election selector
+	// appears at ANY depth beneath it. A nested member's leaves are what the
+	// parent's branch publishes in `required`, so a `when: "true"` two levels
+	// down is a rule the parent's own `anyOf` states falsely.
+	for (const depth of [1, 2] as const) {
+		const desc = toolFor(nestedSelectorApp(depth), "cmd").description;
+		const line = desc
+			.split("\n")
+			.find((l) => l.startsWith("  at least one of:"));
+		assert.ok(line !== undefined, desc);
+		assert.ok(
+			line.endsWith(
+				' -- not expressed in the schema: the "true" and "non_empty" selectors',
+			),
+			`depth ${depth}: ${line}`,
+		);
+	}
+});
+
+test("mcp: safegit's nesting stays exact -- the property is the absent selector", () => {
+	// §26.7's site declares four flags and no selector at any depth, which is
+	// what made it the no-loss example rather than the nesting itself.
+	const desc = toolFor(authorApp(), "rewrite").description;
+	assert.ok(
+		desc.endsWith(
+			"  at least one of: (old_name with new_name), (old_email with new_email)",
+		),
+		desc,
+	);
+});
+
+test("mcp: the rule keywords sit after `required` and before `additionalProperties`", () => {
+	// §26.12's pin: the rule-carrying keywords sit beside the two keys they
+	// qualify, ahead of the key that closes the object.
+	const rewrite = (
+		authorApp() as never as { commands: Map<string, unknown> }
+	).commands.get("rewrite");
+	assert.deepEqual(Object.keys(buildJSONSchema(rewrite as never)), [
+		"type",
+		"properties",
+		"required",
+		"anyOf",
+		"dependentRequired",
+		"additionalProperties",
+	]);
+	// Two at-least-one rules put `allOf` in the same position.
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("pick", {
+			help: "pick",
+			flags: {
+				a: flag("a", t.str, { help: "h", presence: "optional" }),
+				b: flag("b", t.str, { help: "h", presence: "optional" }),
+				c: flag("c", t.str, { help: "h", presence: "optional" }),
+				d: flag("d", t.str, { help: "h", presence: "optional" }),
+			},
+			constraints: [
+				atLeastOne({ name: "first", members: [{ name: "a" }, { name: "b" }] }),
+				atLeastOne({ name: "second", members: [{ name: "c" }, { name: "d" }] }),
+			],
+			handler: ok,
+		}),
+	);
+	const pick = (
+		app as never as { commands: Map<string, unknown> }
+	).commands.get("pick");
+	assert.deepEqual(Object.keys(buildJSONSchema(pick as never)), [
+		"type",
+		"properties",
+		"required",
+		"allOf",
+		"additionalProperties",
+	]);
+	// A command with no constraints keeps the plain four-key shape.
+	const plain = makeApp();
+	plain.command(
+		defineReadOnlyCommand("bare", {
+			help: "bare",
+			flags: { a: flag("a", t.str, { help: "h", presence: "optional" }) },
+			handler: ok,
+		}),
+	);
+	const bare = (
+		plain as never as { commands: Map<string, unknown> }
+	).commands.get("bare");
+	assert.deepEqual(Object.keys(buildJSONSchema(bare as never)), [
+		"type",
+		"properties",
+		"required",
+		"additionalProperties",
+	]);
+});
+
+test("violation: the decline clause searches DIRECT members only", async () => {
+	// §12.15's pin: the clause teaches about the sentence it is appended to,
+	// and that sentence lists the PARENT's operands. A `--no-b` one level down
+	// names a token the reader is not looking at, and the nested group is left
+	// vacuous rather than violated.
+	const r = await nestedSelectorApp(1).test(["cmd", "--no-b"]);
+	assert.equal(
+		r.stderr,
+		'error: constraint "outer": at least one of (--a with --b), --c is required\n' +
+			"try 'myapp cmd --help'\n",
+	);
+	// The same decline on a DIRECT member does append the clause.
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("direct", {
+			help: "h",
+			flags: {
+				b: flag("b", t.bool, {
+					help: "h",
+					presence: "default",
+					default: false,
+				}),
+				c: flag("c", t.str, { help: "h", presence: "optional" }),
+			},
+			constraints: [
+				atLeastOne({
+					name: "outer",
+					members: [{ name: "b", when: "true" }, { name: "c" }],
+				}),
+			],
+			handler: ok,
+		}),
+	);
+	assert.equal(
+		(await app.test(["direct", "--no-b"])).stderr,
+		'error: constraint "outer": at least one of --b, --c is required ' +
+			"(--no-b declines an option; it does not choose one)\n" +
+			"try 'myapp direct --help'\n",
 	);
 });

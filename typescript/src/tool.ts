@@ -192,14 +192,16 @@ export function buildJSONSchema(
 		}
 	}
 
-	const schema: Record<string, unknown> = {
+	// The rule-carrying keywords sit AFTER `required` and BEFORE
+	// `additionalProperties` (§26.12): beside the two keys they qualify, ahead
+	// of the key that closes the object.
+	return {
 		type: "object",
 		properties,
 		required,
+		...constraintKeywords(cmd),
 		additionalProperties: false,
 	};
-	applyConstraintKeywords(cmd, schema);
-	return schema;
 }
 
 /**
@@ -212,12 +214,9 @@ export function buildJSONSchema(
  *
  * The runtime refusal is the authority; the schema is advisory.
  */
-function applyConstraintKeywords(
-	cmd: RegisteredCommand,
-	schema: Record<string, unknown>,
-): void {
+function constraintKeywords(cmd: RegisteredCommand): Record<string, unknown> {
 	if (cmd.def.kind !== "command" || cmd.def.constraints.length === 0) {
-		return;
+		return {};
 	}
 	const resolved = resolveConstraints(cmd.def);
 	const index = constraintIndex(resolved);
@@ -257,18 +256,20 @@ function applyConstraintKeywords(
 		}
 	}
 
+	const keywords: Record<string, unknown> = {};
 	if (anyOfs.length === 1) {
-		schema.anyOf = anyOfs[0];
+		keywords.anyOf = anyOfs[0];
 	} else if (anyOfs.length > 1) {
 		// One object schema carries one `anyOf`. Two at-least-one constraints
 		// are two independent rules, so they are conjoined rather than merged
 		// -- merging their branches would say "satisfy either rule", and
 		// dropping one would be the silent omission §26.12 forbids.
-		schema.allOf = anyOfs.map((branches) => ({ anyOf: branches }));
+		keywords.allOf = anyOfs.map((branches) => ({ anyOf: branches }));
 	}
 	if (Object.keys(dependentRequired).length > 0) {
-		schema.dependentRequired = dependentRequired;
+		keywords.dependentRequired = dependentRequired;
 	}
+	return keywords;
 }
 
 /** A member's PROPERTY name: flags underscore, args are already handler keys. */
@@ -366,7 +367,7 @@ export function constraintDescriptionBlock(cmd: RegisteredCommand): string {
 	const resolved = resolveConstraints(cmd.def);
 	const index = constraintIndex(resolved);
 	const lines = resolved.map((c) => {
-		const reason = lossReason(c);
+		const reason = lossReason(c, index);
 		return `  ${mcpSentence(c, index)}${reason === "" ? "" : ` -- not expressed in the schema: ${reason}`}`;
 	});
 	return `\n\nConstraints (enforced at call time):\n${lines.join("\n")}`;
@@ -377,29 +378,54 @@ export function constraintDescriptionBlock(cmd: RegisteredCommand): string {
  * appends no clause at all, so the presence of a clause tells a reader
  * exactly where the schema is weaker than the rule.
  */
-function lossReason(c: ResolvedConstraint): string {
+function lossReason(
+	c: ResolvedConstraint,
+	index: ReadonlyMap<string, ResolvedConstraint>,
+): string {
 	if (c.kind === "implies") {
 		return "the injection";
 	}
 	if (c.kind === "requires") {
 		return "";
 	}
-	const nested = c.members.some((m) => m.kind === "constraint");
 	if (c.kind === "at-least-one") {
-		// The nesting is carried exactly: an all-or-none member becomes one
-		// branch and a nested at-least-one's branches are inlined. Only the
+		// The nesting itself is carried exactly: an all-or-none member becomes
+		// one branch and a nested at-least-one's branches are inlined. Only the
 		// selectors are lost, `required` saying a key is present rather than
-		// true or non-empty.
-		return c.members.some(
-			(m) => m.kind !== "constraint" && m.when !== "present",
-		)
+		// true or non-empty -- and that verdict is RECURSIVE (§26.12), a
+		// nested member's leaves being what the parent's branch publishes.
+		return hasSelectorAtAnyDepth(c, index)
 			? 'the "true" and "non_empty" selectors'
 			: "";
 	}
-	if (nested) {
+	if (c.members.some((m) => m.kind === "constraint")) {
 		return "the nested grouping";
 	}
 	return projectsExactly(c) ? "" : 'the "true" and "non_empty" selectors';
+}
+
+/**
+ * Whether an election selector appears ANYWHERE beneath a constraint -- its
+ * own members' or a nested constraint's, at unlimited depth (§26.12). This is
+ * the engagement predicate's own walk (§26.4) asked a different question: a
+ * `when: "true"` two levels down is a rule the parent's `anyOf` states
+ * falsely, because the branch claims the key's presence is enough.
+ */
+function hasSelectorAtAnyDepth(
+	c: ResolvedCoOccurrence,
+	index: ReadonlyMap<string, ResolvedConstraint>,
+): boolean {
+	return c.members.some((m) => {
+		if (m.kind !== "constraint") {
+			return m.when !== "present";
+		}
+		const nested = index.get(m.name);
+		return (
+			nested !== undefined &&
+			isCoOccurrenceResolved(nested) &&
+			hasSelectorAtAnyDepth(nested, index)
+		);
+	});
 }
 
 /**
