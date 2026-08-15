@@ -271,16 +271,45 @@ Usage: `-o myfile.txt`, `-r`.
 
 Restrict a flag to specific values using the `choices` parameter. Values not in
 the choices list produce a parse error listing all allowed values. All choice
-values must match the declared flag type, and bool flags cannot have choices:
+values must match the declared flag type, and bool flags cannot have choices.
+
+**Every entry is a `strictcli.Choice` record: a value, and optional help.** A
+bare value is refused at registration -- an entry that may carry help and an
+entry that carries none would be two spellings of one fact:
 
 ```python
-@strictcli.flag("format", type=str, default="json", choices=["json", "yaml", "csv"], help="Output format")
-@strictcli.flag("level", type=int, presence="required", choices=[1, 2, 3], help="Compression level")
+@strictcli.flag("format", type=str, default="json", help="Output format",
+                choices=[strictcli.Choice("json", help="one JSON document"),
+                         strictcli.Choice("yaml"),
+                         strictcli.Choice("csv")])
+@strictcli.flag("level", type=int, presence="required", help="Compression level",
+                choices=[strictcli.Choice(1), strictcli.Choice(2), strictcli.Choice(3)])
+```
+
+```
+Flag "format": choices entry 0 is a bare value: declare it as Choice(<value>, help=...)
+```
+
+Help on an entry decides how the flag renders. Until one entry carries help the
+flag keeps its one-line `[choices: ...]` form; from the first entry that has
+help, the whole flag renders as an indented block:
+
+```
+  --format <str>    Output format [default: json]
+    json            one JSON document
+    yaml
+    csv
+  --level <int>     Compression level [choices: 1, 2, 3] [required]
 ```
 
 A declared `default` value must be in the choices list, checked at registration.
 `presence="optional"` declares no value, so nothing is checked at registration
 and absence is never matched against `choices` at parse time.
+
+`strictcli.Choice` and the `@strictcli.choice` decorator are case twins naming
+**different** constructs: `Choice` is one entry of a `choices=` value flag, and
+`@choice` declares one choice of a [choice flag](#choice-flags). A choice class
+that reaches `choices=` is refused by name rather than misread.
 
 ### Environment Variables
 
@@ -582,8 +611,8 @@ strictcli.flag("cache", type=bool, default=True, help="Enable caching")
 ### The reserved flag quartet
 
 Four flag names are owned by the framework and cannot be declared at any level --
-not as app global flags, not as command flags, not inside a flag set, not inside
-a mutex group:
+not as app global flags, not as command flags, not inside a flag set, and not
+inside a choice's scope at any depth:
 
 | Flag | Delivered as | Meaning |
 |------|-------------|---------|
@@ -744,32 +773,221 @@ or empty help raises `ValueError` at registration time with no opt-out. This
 ensures that every strictcli application is self-documenting and users always
 have access to meaningful help for every flag and command.
 
-## Mutex Groups
+## Choice Flags
 
-Declare mutually exclusive flags using `MutexGroup` via the `mutex` parameter.
-At most one flag in the group may have a value from an explicit source (CLI, env,
-or config). A mutex group must contain at least 2 flags, and each member
-declares its own presence -- `presence="optional"` is the ordinary declaration,
-a `default` is legal, and `presence="required"` is a registration error because
-the group's own requirement is what makes the choice mandatory:
+A **choice flag** elects exactly one of its declared choices per invocation, and
+each choice declares a **scope**: the flags that exist only while that choice is
+elected. It is the framework's one construct for "exactly one of these", and
+there is no at-most-one construct anywhere -- an absent selection is a choice
+nobody named, so the answer is to name it.
+
+A choice is a frozen, keyword-only dataclass declared with `@strictcli.choice`,
+and its fields are the scope's flags. `sub_flag(...)` takes no `name=`: the
+field name **is** the flag name (`phone_number` becomes `--phone-number`), which
+is the mapping the framework already uses in the other direction for handler
+parameters.
 
 ```python
-@app.command("output", help="Produce output", effect="read_only", mutex=[
-    strictcli.MutexGroup(flags=[
-        strictcli.Flag(name="file", type=str, presence="optional", help="Write to file"),
-        strictcli.Flag(name="stdout-only", type=bool, default=False, help="Write to stdout"),
-    ]),
-])
-def output(ctx, file, stdout_only):
-    if file is not None:
-        ctx.info(f"Writing to {file}")
+from typing import assert_never
+
+@strictcli.choice("email", help="deliver the notification as an email message")
+class Email:
+    subject: str = strictcli.sub_flag(help="subject line of the message", presence="required")
+    recipient: str = strictcli.sub_flag(help="destination email address", presence="required")
+
+
+@strictcli.choice("sms", help="deliver the notification as a text message")
+class Sms:
+    phone_number: str = strictcli.sub_flag(help="destination number in E.164 form", presence="required")
+
+
+@strictcli.choice("webhook", help="post the notification to a URL")
+class Webhook:
+    url: str = strictcli.sub_flag(help="endpoint to post to", presence="required")
+    retries: int = strictcli.sub_flag(help="delivery attempts before giving up", default=3)
+
+
+@app.command("send", help="Send one notification through exactly one channel", effect="mutating")
+@strictcli.choice_flag("via", help="Delivery channel", short="v", presence="required",
+                       elect_by="selector-token", choices=[Email, Sms, Webhook])
+def send(ctx, via: Email | Sms | Webhook) -> int:
+    match via:
+        case Email(subject=subject, recipient=recipient):
+            ctx.info(f"emailing {recipient}: {subject}")
+        case Sms(phone_number=number):
+            ctx.info(f"texting {number}")
+        case Webhook(url=url, retries=retries):
+            ctx.info(f"posting to {url} ({retries} retries)")
+        case _:
+            assert_never(via)
+    return 0
 ```
+
+The command's help renders the scope tree, and every line -- scoped or not --
+ends with exactly one presence part:
+
+```
+$ notify send --help
+notify send -- Send one notification through exactly one channel
+
+Flags:
+  --via, -v <choice>          Delivery channel [required]
+    email                     deliver the notification as an email message
+      --subject <str>         subject line of the message [required]
+      --recipient <str>       destination email address [required]
+    sms                       deliver the notification as a text message
+      --phone-number <str>    destination number in E.164 form [required]
+    webhook                   post the notification to a URL
+      --url <str>             endpoint to post to [required]
+      --retries <int>         delivery attempts before giving up [default: 3]
+```
+
+A flag supplied outside its elected scope is a distinct parse error naming both
+sides -- never "unknown flag":
+
+```
+$ notify send --via sms --subject hi
+error: flag '--subject' is only valid under '--via email', but '--via sms' was elected
+try 'notify send --help'
+
+$ notify send --subject hi
+error: flag '--subject' is only valid under '--via email', but '--via' was not provided
+try 'notify send --help'
+
+$ notify send --via email
+error: flag '--subject' is required under '--via email'
+try 'notify send --help'
+```
+
+Order is irrelevant -- nothing is interpreted until every token is collected --
+and errors are reported in a fixed order: **election, then scope, then value,
+then presence**. `--via sms --subject hi` reports the spelling mistake, never
+its consequence.
+
+### The handler annotation is mandatory
+
+The parameter bound to a choice flag must be annotated with exactly the declared
+union, and `**kwargs` handlers are banned on a command that declares one:
+
+```
+command "send": handler parameter 'via' is bound to choice flag '--via' and must be annotated Email | Sms | Webhook, got nothing
+```
+
+That check is what makes `assert_never` sound: without it a handler could
+annotate `via: Email` and silently skip two branches with the type checker's
+blessing. Annotations are resolved at registration through
+`typing.get_type_hints`, so a name importable only under `TYPE_CHECKING` is a
+registration error naming it rather than a `NameError` at import time.
+
+### Member spelling
+
+`elect_by` is mandatory and has no default. `elect_by="member-flags"` spells
+each choice as its own flag instead, and the choice flag's own name is never
+typed -- it is the handler key and the noun help and errors use. A member
+carries its own payload in a field named `value`, declared with
+`member_value(help=...)`, which takes no presence keyword because electing the
+member supplies it.
+
+```python
+@strictcli.choice("profile", help="use the named profile")
+class NamedProfile:
+    value: str = strictcli.member_value(help="profile name")
+    create_missing: bool = strictcli.sub_flag(help="create the profile if it does not exist",
+                                              default=False)
+
+
+@strictcli.choice("all-profiles", help="apply to every profile")
+class AllProfiles:
+    pass
+
+
+@app.command("sync", help="Synchronize profiles", effect="mutating")
+@strictcli.choice_flag("scope", help="What to synchronize", presence="required",
+                       elect_by="member-flags", choices=[NamedProfile, AllProfiles])
+def sync(ctx, scope: NamedProfile | AllProfiles) -> int:
+    match scope:
+        case NamedProfile(value=name, create_missing=create):
+            ctx.info(f"syncing {name} (create={create})")
+        case AllProfiles():
+            ctx.info("syncing every profile")
+        case _:
+            assert_never(scope)
+    return 0
+```
+
+```
+$ myapp sync --help
+myapp sync -- Synchronize profiles
+
+Flags:
+  scope                                        What to synchronize (exactly one of the following) [required]
+    --profile <str>                            use the named profile [required]
+      --create-missing, --no-create-missing    create the profile if it does not exist [default: false]
+    --all-profiles                             apply to every profile [required]
+
+$ myapp sync --profile work --create-missing
+syncing work (create=True)
+
+$ myapp sync --all-profiles --create-missing
+error: flag '--create-missing' is only valid under '--profile', but '--all-profiles' was elected
+
+$ myapp sync --profile work --all-profiles
+error: --profile and --all-profiles are mutually exclusive
+
+$ myapp sync
+error: one of --profile, --all-profiles is required
+```
+
+A bool member is elected by `--<name>` and only when it resolves to **true**;
+`--no-<name>` *declines* -- it says "not this one" and elects nothing, and
+combining a decline with a real election is a parse error. Member election is
+**command-line only**: the spelling exists to make the operator choose in the
+invocation, so env and config are not consulted for a member at all. A
+member-spelled choice flag cannot carry a short, since it is never typed.
+
+### Presence, defaults, and recursion
+
+A choice flag declares `presence="required"` or a `default`; `presence="optional"`
+is a registration error:
+
+```
+Flag "via": a choice flag cannot declare presence="optional": an absent selection is a choice nobody named, so name it as a choice of its own
+```
+
+A default **is a choice instance**, so a defaulted selection is complete by
+construction -- a frozen dataclass cannot be built without its required fields,
+and the incomplete state is unconstructable rather than merely refused:
+
+```python
+@strictcli.choice_flag("via", help="Delivery channel", elect_by="selector-token",
+                       choices=[Email, Sms], default=Sms(phone_number="+15550100"))
+```
+
+```
+  --via <choice>              Delivery channel [default: sms (phone-number=+15550100)]
+```
+
+Electing a choice on the command line never borrows the default's values.
+`ctx.provided("via")` is true when the invocation elected and false when the
+declaration's default did, and `ctx.source("via")` reports which.
+
+A choice flag is a flag, so `strictcli.sub_choice_flag(...)` declares a nested
+one inside a choice's scope, to unlimited depth. "Required exactly when
+user-facing" stops being a rule a handler enforces and becomes where the
+declaration sits.
+
+### What the handler sees
+
+Scoped flags are **never** top-level handler arguments, at any depth: the only
+key a choice flag adds is its own, so every declared top-level key is still
+always present. Inside the record, `strictcli.provided(via, "subject")` answers
+whether the invocation caused a field's value; `ctx.provided` deliberately does
+not see scope interiors, because a scoped name is not unique command-wide.
 
 Name every parameter explicitly. A handler that accepts `**kwargs` without the
 command declaring `forwarding=strictcli.Forwarding(reason=...)` is a
 registration-time error -- an unnamed parameter bag hides which flags a handler
-actually consumes.
-
+actually consumes, and on a choice-flag command it is banned outright.
 ## Dependencies
 
 Declare relationships between flags using the `dependencies` parameter. Three
@@ -1002,7 +1220,7 @@ Deprecated commands appear in help under a `Deprecated:` section.
 Passthrough commands bypass all flag and argument parsing and forward raw args
 directly to the handler. They are useful for wrapping external tools where the
 argument format is not known in advance. Passthrough commands cannot have flags,
-args, flag sets, or mutex groups:
+args, or flag sets, and declare nothing a choice flag could scope:
 
 ```python
 @app.command("exec", help="Execute a command", effect="mutating",
@@ -1030,7 +1248,7 @@ parse-time errors are user input mistakes caught during command-line parsing.
 Both produce specific, actionable messages:
 
 - **Registration-time errors** (`ValueError`): raised when declaring apps, commands, flags, or args with invalid configuration (missing help text, banned flag names, type mismatches). These are programmer errors caught at startup.
-- **Parse-time errors**: printed to stderr and exit 1. Include unknown flags, missing required values, type coercion failures, mutex violations, and dependency errors.
+- **Parse-time errors**: printed to stderr and exit 1. Include unknown flags, missing required values, type coercion failures, election and scope violations on a choice flag, and dependency errors.
 
 ```
 $ mytool deploy --unknown-flag
@@ -1061,7 +1279,9 @@ app = strictcli.App(
 @app.command("status", help="Show deployment status", effect="read_only",
              payload_schema={"type": "object"})
 @strictcli.flag("environment", short="e", type=str, default="production",
-                choices=["production", "staging", "dev"], help="Target environment")
+                choices=[strictcli.Choice("production"), strictcli.Choice("staging"),
+                         strictcli.Choice("dev")],
+                help="Target environment")
 def status(ctx, color, environment):
     ctx.debug(f"Checking status for environment: {environment}")
     ctx.payload({
