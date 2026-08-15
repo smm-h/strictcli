@@ -599,8 +599,18 @@ func (st *electionState) resolveElected(ls *liveSel, cliByFlag map[*Flag]interfa
 		if errMsg != "" {
 			return nil, errMsg
 		}
-		if errMsg := validateChoices(f.Name, val, f.Repeatable, f.Choices, false); errMsg != "" {
-			return nil, errMsg
+		// The RECORD door runs the TYPE check and nothing else: the closed set
+		// and the custom validation are deferred behind the distinction that
+		// door cannot make (§18.26 item 254). The custom callback needs no
+		// suppression of its own -- a record field is labelled `default`, and
+		// §23.4 already says validate never runs on one -- but the closed-set
+		// check runs on every resolved value, so this door's fields are
+		// exempted here. The argv and flat doors are untouched.
+		_, fromRecord := cliByFlag[f].(recordSupplied)
+		if !fromRecord {
+			if errMsg := validateChoices(f.Name, val, f.Repeatable, f.Choices, false); errMsg != "" {
+				return nil, errMsg
+			}
 		}
 		isProvided := src == SourceCLI || src == SourceEnv || src == SourceConfig
 		if f.Validate != nil && isProvided && val != nil {

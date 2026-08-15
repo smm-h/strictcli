@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// The RECORD door's own reading of an explicit nil, and its own label on every
-// field it delivers (contract §24.11, §18.26 items 252, 253).
+// The RECORD door's three aligned answers (contract §24.11, §18.26 items 252,
+// 253, 254).
 //
 // A record has no way to omit a key the way a flat object does -- a scope class
 // cannot be constructed without naming every field -- so an explicit nil on an
@@ -24,6 +24,12 @@ import (
 // pinned -- a RelativeToRoot default resolved at this door still reports
 // `infra` and still resolves to the path through the declared root. The pin is
 // the record door's: the flat door and the command line are untouched.
+//
+// And this door runs the TYPE check and nothing else. The closed set (Choices)
+// and the custom validation (ValidateFn) are deferred, because a door that
+// cannot tell a supplied field from a declared one would run validate on values
+// the declaration decided, which §23.4 forbids. The argv and flat doors keep
+// both checks exactly as they were.
 
 const recordDoorRoot = "RECORDDOOR_ROOT"
 
@@ -328,5 +334,81 @@ func TestCommandLineScopedValueStaysProvided(t *testing.T) {
 	e := GetElected(captured, "via")
 	if !e.Provided("retries") {
 		t.Fatal("a typed token is the invocation causing the value")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Item 254: the type check, and only the type check
+// ---------------------------------------------------------------------------
+
+func TestRecordDoorDeliversAValueOutsideTheClosedSet(t *testing.T) {
+	e := recordDoorDelivered(t, recordDoorEmail(Fields{"fmt": "xml"}))
+	if e.Fields["fmt"] != "xml" {
+		t.Fatalf("fmt = %#v, want the value the record supplied", e.Fields["fmt"])
+	}
+}
+
+func TestRecordDoorNeverRunsTheCustomValidation(t *testing.T) {
+	e := recordDoorDelivered(t, recordDoorEmail(Fields{"checked": "anything"}))
+	if e.Fields["checked"] != "anything" {
+		t.Fatalf("checked = %#v, want the value the record supplied", e.Fields["checked"])
+	}
+}
+
+func TestRecordDoorNestedClosedSetIsDeferredToo(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDoorApp(&captured)
+	kwargs := map[string]interface{}{
+		"via": Elect(recordDoorChoice(app, "via", "email"), recordDoorEmail(Fields{
+			"fmt":   "xml",
+			"speed": Elect(recordDoorChoice(app, "speed", "slow"), Fields{"patience": 9}),
+		})),
+		"mode": Elect(recordDoorChoice(app, "mode", "all-profiles"), Fields{}),
+	}
+	if ir := app.invoke("run", kwargs); ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+}
+
+func TestRecordDoorStillChecksTheType(t *testing.T) {
+	got := recordDoorRefusal(t, recordDoorEmail(Fields{"retries": "3"}))
+	wantRefusal(t, got, "--retries: expected integer, got str")
+}
+
+func TestFlatDoorKeepsTheClosedSetCheck(t *testing.T) {
+	_, errStr := flatDoorCall(t, map[string]interface{}{"fmt": "xml"})
+	wantRefusal(t, errStr, "--fmt: invalid value 'xml', must be one of: text, json")
+}
+
+func TestFlatDoorKeepsTheCustomValidation(t *testing.T) {
+	_, errStr := flatDoorCall(t, map[string]interface{}{"checked": "anything"})
+	wantRefusal(t, errStr, "--checked: nope: anything")
+}
+
+func TestCommandLineKeepsTheClosedSetCheck(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDoorApp(&captured)
+	r := app.Test([]string{"run", "--via", "email", "--retries", "1", "--fmt", "xml",
+		"--checked", "x", "--all-profiles"})
+	if r.ExitCode == 0 {
+		t.Fatal("the command line keeps the closed-set check")
+	}
+	want := "error: --fmt: invalid value 'xml', must be one of: text, json\ntry 'myapp run --help'\n"
+	if got := r.Stderr; got != want {
+		t.Fatalf("stderr = %q", got)
+	}
+}
+
+func TestCommandLineKeepsTheCustomValidation(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDoorApp(&captured)
+	r := app.Test([]string{"run", "--via", "email", "--retries", "1", "--fmt", "text",
+		"--checked", "anything", "--all-profiles"})
+	if r.ExitCode == 0 {
+		t.Fatal("the command line keeps the custom validation")
+	}
+	want := "error: --checked: nope: anything\ntry 'myapp run --help'\n"
+	if got := r.Stderr; got != want {
+		t.Fatalf("stderr = %q", got)
 	}
 }

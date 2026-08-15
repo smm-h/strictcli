@@ -643,6 +643,12 @@ func checkPreTypedValue(f *Flag, value interface{}) (interface{}, string) {
 // field's declaration says a value, not absence. At the flat door, where
 // absence has its own spelling, a nil stays legal for nothing.
 //
+// The check itself is the TYPE half of the declaration and no other half: the
+// closed set and the custom validation are deferred at this door, because it
+// cannot tell a field the caller supplied from one the declaration filled in
+// (§18.26 items 253, 254), and §23.4 forbids running validate on a value the
+// declaration decided. Those two halves are skipped where the shared pipeline
+// would run them, which is what the recordSupplied marker carries.
 func checkRecordFieldValue(f *Flag, value interface{}) (interface{}, bool, string) {
 	if value == nil && f.presence == presenceOptional {
 		return nil, true, ""
@@ -832,12 +838,13 @@ type pendingBind struct {
 
 // recordSupplied wraps a value the RECORD door supplied, so the shared
 // resolution path can tell it from a value the flat door or the command line
-// supplied (contract §18.26 item 253).
+// supplied (contract §18.26 items 253, 254).
 //
-// Every field a caller's record delivers reports source `default`, which is a
-// property of the door rather than of the value -- and the values a record
-// collects re-enter the same pipeline the argv path uses, so the door has to
-// travel with the value.
+// Every field a caller's record delivers reports source `default`, and this
+// door consults the TYPE half of a declaration and no other half. Both facts
+// are properties of the door rather than of the value -- and the values a
+// record collects re-enter the same pipeline the argv path uses, so the door
+// has to travel with the value.
 type recordSupplied struct {
 	value interface{}
 }
