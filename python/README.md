@@ -410,7 +410,9 @@ without either flag is a hard error rather than a hang. Declaring
 
 ### Schema dump
 
-`--dump-schema` is auto-injected on every app. Writes `.strictcli/schema.json` describing the full CLI structure (commands, flags, args, groups, checks). Every command entry carries its `effect`; `consequential`, `dry_run_supported` and `dry_run_unsupported_reason` are emitted only when declared.
+`--dump-schema` is auto-injected on every app. Writes `.strictcli/schema.json` at `schema_version: 2` describing the full CLI structure (commands, flags, args, groups, checks). Every command entry carries its `effect`; `consequential`, `dry_run_supported` and `dry_run_unsupported_reason` are emitted only when declared.
+
+Every flag and arg entry carries a `value_schema`: a real JSON Schema fragment from a closed subset of `type`, `items`, `additionalProperties` and `enum`, using JSON Schema's own type names. Arity is part of the value's shape, so a repeatable scalar flag and a `list[T]` flag publish the identical array fragment. A choice flag carries no fragment -- its value is a variant the subset cannot express -- and publishes its nested `choices` and scopes instead, each scoped entry a full flag entry, with `elect_by` marking the spelling. A value flag's `choices=` splits in two: the values as an `enum` inside the fragment, and the value-plus-help records beside it under `choices`. Keys are emitted in a declared order at every depth and the document is written in one canonical encoding, so a schema file written by this implementation and one written by the Go or TypeScript implementation for the same declaration are byte-identical.
 
 ### Check system
 
@@ -518,6 +520,10 @@ paths have no TTY contract, so a consequential command is dispatched directly.
 | `@strictcli.arg(name, help=..., presence=/default=)` | Declare a positional argument (presence is mandatory) |
 | `@strictcli.choice_flag(name, help=..., choices=, elect_by=, presence=/default=)` | Declare a choice flag (`elect_by` is mandatory) |
 | `@strictcli.choice(name, help=...)` | Declare one choice of a choice flag, and its scope |
+| `strictcli.sub_flag(help=..., presence=/default=, ...)` | Declare one flag of a choice's scope, inside the choice class body (the field name is the flag name) |
+| `strictcli.sub_choice_flag(help=..., choices=, elect_by=, ...)` | Declare a nested choice flag inside a choice's scope |
+| `strictcli.member_value(help=...)` | Declare a member-spelled choice's own payload, delivered under the reserved name `value` |
+| `strictcli.provided(record, name)` | Whether the invocation caused a scoped field's value, asked of the delivered record |
 | `@app.error_check(name)` / `@app.warn_check(name)` | Register a check handler |
 
 ### App methods

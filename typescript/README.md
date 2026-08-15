@@ -96,6 +96,35 @@ declaration is what makes a key optional in the inferred handler-args type, and
 `ctx.provided(name)` answers whether the invocation — CLI, env, config or an
 implication — supplied the value, rather than the declaration.
 
+**"Exactly one of these" is a choice flag**, not a constraint over independent
+flags. `choiceFlag(name, choices, opts)` puts the choice map where a carrier
+sits — for a choice flag, the choices *are* the type — and each choice declares
+a scope: the flags that exist only while it is elected. Object-literal keys are
+literal types, so the delivered value is an exact discriminated union with no
+annotation anywhere, `switch (args.via.choice)` narrows, and `assertNever` in
+the default branch is checked by the compiler:
+
+```ts
+via: choiceFlag("via", {
+	email: choice({ help: "deliver as an email message", flags: {
+		subject: flag("subject", t.str, { help: "subject line", presence: "required" }),
+	}}),
+	sms: choice({ help: "deliver as a text message", flags: {
+		phone_number: flag("phone-number", t.str, { help: "destination number", presence: "required" }),
+	}}),
+}, { help: "Delivery channel", short: "v", presence: "required" }),
+```
+
+`myapp send --via email --subject hi` parses; `myapp send --via sms --subject hi`
+says *`--subject` is only valid under `--via email`* — never "unknown flag".
+`memberChoiceFlag(...)` is the member-spelled twin factory, where each choice is
+its own flag (`--profile work` / `--all-profiles`) and election is command-line
+only. A choice flag declares `presence: "required"` or a `default` typed
+`keyof C & string`; `optional` has no union member at all, because an absent
+selection is a choice nobody named. Scoped flags are never top-level `args`
+keys, at any depth, and a choice flag may be declared inside a choice's scope
+without limit.
+
 Note that `--dry-run`, `--approve-consequential`, `--quiet` and `--verbose` are
 framework-owned names. You never declare them; their values arrive on the
 context as `ctx.dryRun`, `ctx.approveConsequential`, `ctx.quiet` and
@@ -142,7 +171,12 @@ context as `ctx.dryRun`, `ctx.approveConsequential`, `ctx.quiet` and
   declared order at every depth and the document is written in one canonical
   encoding, so a schema file written by this implementation and one written by
   the Python or Go implementation for the same declaration are byte-identical.
-- **Groups, passthrough commands, deprecation notices, mutex/co-required/implies
+- **Choice flags** — elect exactly one of a flag's declared choices, each choice
+  owning a scope of flags legal only while it is elected, in either spelling
+  (`choiceFlag` for `--via email`, `memberChoiceFlag` for `--profile work` /
+  `--all-profiles`). Delivery is a derived discriminated union, `provided(record,
+  name)` answers per-field provided-ness, and recursion is unlimited.
+- **Groups, passthrough commands, deprecation notices, co-required/requires/implies
   dependencies** — the complete strictcli surface.
 
 ## Sibling implementations

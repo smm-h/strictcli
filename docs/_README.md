@@ -48,6 +48,7 @@ Most CLI frameworks infer behavior from type hints, function signatures, or nami
 - **Mandatory help text.** Every flag, arg, command, and group must have help text.
 - **Mandatory effect classification.** Every command declares `read_only` or `mutating`. There is no default and no inference from names, tags or handler bodies.
 - **Mandatory presence declaration.** Every flag and every positional argument declares exactly one of required, optional, or a default value. Declaring none or two is a registration-time error, and nothing about presence is derived from the shape of another declaration.
+- **A choice is a declaration scope.** "Exactly one of these" is a choice flag, not a constraint over independent flags: each choice owns the flags that exist only while it is elected, and a flag supplied outside its elected scope is a parse error naming both sides. There is no at-most-one construct anywhere.
 - **Handler signature validation.** Parameter names must match declared flags and args exactly.
 - **Registration-time errors.** Misconfigurations fail loud and early, not at parse time.
 - **Minimal dependencies.** Each implementation uses its language's standard library plus TOML support: Python depends on [tomlkit](https://pypi.org/project/tomlkit/), Go depends on [go-toml-edit](https://github.com/smm-h/go-toml-edit), TypeScript depends on [smol-toml](https://www.npmjs.com/package/smol-toml) and [toml-eslint-parser](https://www.npmjs.com/package/toml-eslint-parser).
@@ -152,12 +153,12 @@ app.run(process.argv.slice(2));
 - `ctx.provided(name)` / `ctx.Provided(name)` -- whether the invocation caused a value, rather than the declaration
 - Environment variable binding with prefix enforcement
 - Flag tags -- reusable bundles of flags shared across commands
-- Mutually exclusive flag groups (exactly one required)
+- Choice flags -- elect exactly one of a flag's declared choices, each choice owning a scope of flags legal only while it is elected, spelled as a token (`--via email`) or as the choices' own flags (`--profile work` / `--all-profiles`); the handler receives one tagged record consumed exhaustively, and recursion is unlimited
 - Implies dependencies -- auto-set a bool flag when another flag is provided; explicit contradictions are parse errors
 - Global flags (parsed before and after the command token)
 - Passthrough commands -- delegate unparsed args to another tool
 - Repeatable flags (accumulate values into a list)
-- Choices -- restrict flag values to an allowed set
+- Choices -- restrict flag values to an allowed set, one value-plus-optional-help record per entry, rendered as a block once any entry carries help
 - Custom validation functions per flag
 - Auto-generated help at every level (app, group, command)
 - Built-in `--version` / `-v` support
@@ -174,7 +175,7 @@ app.run(process.argv.slice(2));
 - Programmatic invocation -- `app.call()` / `app.Call()` runs a command in-process with typed kwargs, bypassing CLI parsing; failures surface as `InvokeError`
 - Check system -- first-class check/validation framework with a TOML manifest, tag DSL, and DAG-ordered execution
 - MCP server mode -- expose commands as tools over the Model Context Protocol (protocol `2026-07-28`, with the handshake era retained), where a consequential tool asks for confirmation before it runs
-- `--dump-schema` -- auto-injected flag that writes `.strictcli/schema.json` describing the full CLI structure
+- `--dump-schema` -- auto-injected flag that writes `.strictcli/schema.json` at `schema_version: 2` describing the full CLI structure, with a real JSON Schema fragment on every flag and arg entry and one canonical encoding so the three implementations' dumps byte-compare
 - `--help` / `-h` recognized anywhere in argv
 - In-process testing via `app.test()` / `app.Test()`
 
@@ -182,10 +183,10 @@ app.run(process.argv.slice(2));
 
 The `conformance/` directory contains a cross-language test suite that verifies all implementations (Python, Go, TypeScript) produce identical output for identical inputs. It includes:
 
-- 71 JSON test case files (731 cases) covering every feature, run against each target via `run.py --target python` / `--target go` / `--target typescript`
+- 98 JSON test case files (1068 cases) covering every feature, run against each target via `run.py --target python` / `--target go` / `--target typescript`
 - API surface verification (`check_api_surface.py`)
 - Error message parity checks (`check_error_parity.py`)
-- Schema dump parity (`check_schema_parity.py`) and float formatting fuzzing (`check_float_fuzz.py`)
+- Byte-identical schema dump parity (`check_schema_parity.py`), fragment validity (`check_schema_fragments.py`) and float formatting fuzzing (`check_float_fuzz.py`)
 - Pairwise combination testing and fuzzing
 
 All implementations must pass all conformance tests before release.

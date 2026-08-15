@@ -217,21 +217,53 @@ app.Command("deploy", "Deploy", handler,
 )
 ```
 
-### Mutually exclusive flag groups
+### Choice flags: a choice is a declaration scope
 
-Exactly one flag from the group must be provided. A member declares `Optional()` or a default -- never `Required()`, since the group's own requirement is what makes the choice mandatory.
+A **choice flag** elects exactly one of its declared choices, and each choice
+owns the flags that exist only while it is elected. A flag supplied outside its
+elected scope is a distinct parse error naming both sides -- never "unknown
+flag". `Choice(...)` returns a value with identity, so `When(ViaEmail, ...)` is a
+compile-checked reference and a typo does not compile.
 
 ```go
-app.Command("log", "Show logs", handler,
-    strictcli.WithEffect(strictcli.EffectReadOnly),
-    strictcli.WithMutex(strictcli.MutexGroup{
-        Flags: []strictcli.Flag{
-            strictcli.StringFlag("since", "Show logs since a timestamp", strictcli.Optional()),
-            strictcli.IntFlag("tail", "Show the last N lines", strictcli.Optional()),
-        },
-    }),
+var (
+    ViaEmail = strictcli.Choice("email", "deliver the notification as an email message",
+        strictcli.StringFlag("subject", "subject line", strictcli.Required()),
+    )
+    ViaSMS = strictcli.Choice("sms", "deliver the notification as a text message",
+        strictcli.StringFlag("phone-number", "destination number", strictcli.Required()),
+    )
+)
+
+app.Command("send", "Send one notification", handler,
+    strictcli.WithEffect(strictcli.EffectMutating),
+    strictcli.WithFlags(strictcli.ChoiceFlag("via", "Delivery channel",
+        strictcli.Required(), strictcli.Short("v"), ViaEmail, ViaSMS)),
+)
+
+// in the handler:
+via := strictcli.GetElected(kwargs, "via")
+line := strictcli.Match(via,
+    strictcli.When(ViaEmail, func(f strictcli.Fields) string { return strictcli.Get[string](f, "subject") }),
+    strictcli.When(ViaSMS, func(f strictcli.Fields) string { return strictcli.Get[string](f, "phone_number") }),
 )
 ```
+
+`notify send --via email --subject hi` parses; `notify send --via sms --subject hi`
+says *`--subject` is only valid under `--via email`*. `Match` is exhaustive
+against the declaration and panics naming what is missing, and
+`e.Provided("subject")` answers whether the invocation caused a field's value.
+
+`MemberChoiceFlag(...)` with `MemberChoice(memberFlag, help, scope...)` is the
+member-spelled twin: each choice is its own flag (`--profile work` /
+`--all-profiles`), no choice-flag token is ever typed, and election is
+command-line only. A member's payload is delivered under the reserved name
+`value`, and a member flag must declare `Required()` -- read as *required once
+this member is elected*.
+
+A choice flag declares `Required()` or `Default(<choice name>)`; `Optional()` is
+refused, because an absent selection is a choice nobody named. A choice flag is
+a flag, so one may be declared inside a choice's scope, to unlimited depth.
 
 ### Flag dependencies
 
@@ -297,11 +329,23 @@ strictcli.StringFlag("tag", "Add a tag", strictcli.Repeatable(), strictcli.Uniqu
 
 ### Choices
 
-Restrict flag values to an allowed set.
+Restrict flag values to an allowed set. Every entry is a `Ch(<value>, "<help>")`
+record, and its help is optional -- Go spells "no help" as `""`, for lack of
+optional parameters. A bare value is refused at registration.
 
 ```go
-strictcli.StringFlag("format", "Output format", strictcli.Choices("json", "csv", "xml"), strictcli.Required()),
+strictcli.StringFlag("format", "Output format", strictcli.Required(),
+    strictcli.Choices(
+        strictcli.Ch("json", "one JSON document"),
+        strictcli.Ch("csv", ""),
+        strictcli.Ch("xml", ""),
+    )),
 ```
+
+Help renders on one line (`[choices: json, csv, xml]`) until an entry carries
+help, at which point the whole flag renders as an indented block. The boundary
+against a choice flag is structural, not a matter of taste: **need a scope or
+member spelling -> choice flag; a plain constrained value -> choices.**
 
 ### Custom validation
 
@@ -370,8 +414,8 @@ where the eight recorded operations (`Run`, `Spawn`, `Write`, `Mkdir`, `Remove`,
 would-do log.
 
 Four flag names are owned by the framework and cannot be declared at any level
-(global flags, command flags, flag sets, mutex groups). They arrive on the
-context, never in `kwargs`:
+(global flags, command flags, flag sets, and a choice's scope at any depth).
+They arrive on the context, never in `kwargs`:
 
 | Flag | Context accessor |
 |------|-----------------|
@@ -543,8 +587,18 @@ flag := strictcli.IntFlag(name, help, opts ...FlagOption)
 flag := strictcli.FloatFlag(name, help, opts ...FlagOption)
 flag := strictcli.ListFlag(itemType, name, help, opts ...FlagOption)
 flag := strictcli.DictFlag(valueType, name, help, opts ...FlagOption)
+flag := strictcli.ChoiceFlag(name, help, opts ...FlagOption)
+flag := strictcli.MemberChoiceFlag(name, help, opts ...FlagOption)
+ch   := strictcli.Choice(name, help, flags ...Flag)
+ch   := strictcli.MemberChoice(memberFlag Flag, help string, scope ...Flag)
+cv   := strictcli.Ch(value interface{}, help string)
 arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 ```
+
+`Choice` and `MemberChoice` produce `*ChoiceDecl` values, which are passed to
+`ChoiceFlag` / `MemberChoiceFlag` as `FlagOption`s. In a handler,
+`GetElected(kwargs, name)` returns the `*Elected` record, and
+`Match(e, When(ch, fn)...)` dispatches on it exhaustively.
 
 ### Flag options
 
@@ -556,7 +610,7 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | `Default(v)` | The value the framework supplies when nothing else does |
 | `Env(varName)` | Environment variable name |
 | `Prefixed(b)` | Control env prefix validation |
-| `Choices(vals...)` | Restrict to allowed values |
+| `Choices(vals...)` | Restrict to allowed values, one `Ch(<value>, "<help>")` record each |
 | `Repeatable()` | Accept multiple occurrences |
 | `Unique(b)` | Deduplicate repeatable values |
 | `ValidateFn(fn)` | Custom validation function |
@@ -578,7 +632,6 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | `WithFlags(flags...)` | Add flags to a command |
 | `WithArgs(args...)` | Add positional arguments |
 | `WithFlagSets(flagSets...)` | Attach flag set bundles |
-| `WithMutex(groups...)` | Add mutex groups |
 | `WithDependencies(deps...)` | Add CoRequired/Requires/Implies constraints |
 | `WithPassthrough(handler)` | Mark as passthrough command |
 | `WithHidden()` | Hide from help output |
@@ -628,7 +681,9 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | `Flag` | Flag declaration |
 | `Arg` | Positional argument |
 | `FlagSet` | Reusable flag bundle |
-| `MutexGroup` | Mutually exclusive flags |
+| `ChoiceDecl` | One choice of a choice flag: a name, help, and a scope (minted by `Choice` / `MemberChoice`) |
+| `Elected` | The delivered tagged record: the elected `*ChoiceDecl` plus its `Fields` |
+| `ChoiceValue` | One entry of a `Choices(...)` value flag: a value with optional help (minted by `Ch`) |
 | `CoRequired` | Flags that must appear together |
 | `Requires` | One flag depends on another |
 | `Implies` | Auto-set a bool flag from another |
