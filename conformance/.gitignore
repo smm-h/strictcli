@@ -18,6 +18,10 @@ harness/harness
 tmp*.py
 .venv/
 
+# Designated probe-scratch area: throwaway probe scripts, one-off Go modules,
+# and candidate case drafts live here and are never committed.
+_scratch/
+
 .rlsbl-monorepo/lock
 
 build/
