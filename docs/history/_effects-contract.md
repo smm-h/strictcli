@@ -3505,8 +3505,42 @@ target**, as `conformance/cases/presence_registration.json` asserts §12.12's. T
 implementation-specific exclusions above are `excluded:` entries in `check_error_parity.py` with the
 rationale in their rows -- §12.12's precedent, applied for §12.12's reason. *(Corrected 2026-08-15,
 reconciliation round, §18.31 item 288: the authored sentence said "three" and named two.)* They are
-`errConstraintMinMembers` excluded in Go, `errConstraintMemberNotRecord` excluded in Go, and the
-Python-only `Member(when=...)` vocabulary guard excluded in Go **and** TypeScript.
+`errConstraintMinMembers` excluded in Go, `errConstraintMemberNotRecord` excluded in Go, the
+Python-only `Member(when=...)` vocabulary guard excluded in Go **and** TypeScript, and the three
+record-shape guards the box below adds *(extended 2026-08-15, audit round, §18.32 item 296)*.
+
+> **Recorded (2026-08-15, audit round, §18.32 item 296): three Python-only constraint guards the
+> list did not name.** All three already carry `excluded:` entries in `check_error_parity.py`, and
+> none of them appeared here -- so the list read closed while the code held more, which is exactly
+> the drift the "three, and it named two" correction above was made to stop. They are §12.12's
+> language-specific-template precedent applied where Python's `constraints=[...]` list accepts a
+> value the other two surfaces cannot express at all, and their bytes are
+> `python/strictcli/__init__.py`'s:
+>
+> - **the `Member`-name guard**, `Member name must be a non-empty string`, raised from
+>   `Member.__post_init__`. It carries no `command "<name>": ` prefix and names no constraint,
+>   because a malformed record is refused where it is written, before any command has seen it --
+>   the same site and the same reason as the `Member(when=...)` guard above. **Go- and
+>   TypeScript-excluded**: `Member(name string)` and `{ name: string }` are checked by the type
+>   system, and an empty string reaches the shared `errConstraintMemberUnknown` there instead.
+> - **the constraints-must-be-declarations guard**, `command "<name>": constraints must be
+>   AtLeastOne, AllOrNone, Requires or Implies declarations, got <t>`, raised at §26.8's step 1
+>   before the name it would otherwise read. `<t>` is `type(c).__name__` rendered with Python's own
+>   `repr`, so a bare string entry reads `... got 'str'`. **Go- and TypeScript-excluded**: Go's
+>   closed `Constraint` interface and TypeScript's `Constraint` union make a non-constraint entry a
+>   compile error.
+> - **the members-must-be-a-list guard**, `constraint "<c>": members must be a list of Member
+>   records`, raised from `_normalize_members` at construction, which is why it carries the
+>   constraint's own name and not the command's -- there is no command yet. A string or a
+>   non-iterable reaches it; a list holding a bare string does not, that being
+>   `errConstraintMemberNotRecord`'s state, which needs the command and the index. **Go- and
+>   TypeScript-excluded**: `members` is a typed variadic in Go and a `[M, M, ...M[]]` tuple in
+>   TypeScript, so a non-sequence does not compile.
+>
+> None is a candidate for a parity row: each describes a value only Python's declaration surface can
+> hold, and the sibling that cannot write it has no input that could produce the sentence. They take
+> the treatment every language-specific template takes -- asserted **per target** where they are
+> reachable, never forced into a shared spelling.
 
 ---
 
@@ -8460,6 +8494,100 @@ sentences); §13 (the case schema's constraint surface).
      notes exist to prevent; they remain open questions with their evidence attached where §18.30
      recorded them (items 271 and 280).
 
+### 18.32 The constraint round's audit, closed (2026-08-15)
+
+Six items closing the audit of §26 and §12.15 against the three shipped implementations. §18.31
+reconciled what the implementations answered differently; the audit then asked the complementary
+question -- what the contract **left unsaid**, claimed falsely, or illustrated against its own rule
+-- producing four findings the text absorbs and two coverage holes it records. Every item below
+either pins a rule the text never stated, corrects a claim the text made that no code path realizes,
+or records a gap in the conformance corpus. Numbering continues §18.31's: the same campaign's ledger.
+
+**Two of the six change behaviour.** Item 293's order moves each implementation on exactly one of
+the audit's three probes, and item 294 moves Python and TypeScript onto Go's refusal. The other four
+are text corrections and coverage records, and no family, predicate, vocabulary or evaluation order
+moves in any of the six.
+
+**Origin tags**, per §18.14's preamble. Every item is **untagged**: none is a `(D)` directive and
+none is a `[%%]` adopted recommendation.
+
+**Sites amended in place**: §26.8 (the two unplaced guard families, and the three probe rows);
+§26.2 (the false closure claim, struck and replaced); §26.10 (the help illustration's alignment
+column); §12.15 (three Python-only guards added to the exclusion list).
+
+293. **§26.8's registration order gains the two guard families it never placed (§26.8).** The seven
+     steps named neither the member-record-shape checks nor the legacy dependency-family guards, so
+     each implementation placed both by derivation and the placements diverged. Both are pinned.
+     **The member-record-shape checks run as a set-wide step between steps 1 and 2** -- TypeScript's
+     placement, shape before name resolution, because a member that is not a record has no name to
+     resolve and no arity question worth asking. **The four legacy dependency-family guards run as a
+     trailing phase after step 7** -- Python's placement, and Go's own comment states the reason:
+     they are about the declarations a rule names rather than about the rule. **Inside that phase,
+     unknown-name resolution precedes the same-flag check**, so `Requires("r", "nope", "nope")`
+     reports the unknown flag rather than the coincidence that both operands spell it. The audit's
+     three probes each move exactly one implementation: a bare-string member in a later constraint
+     now refuses ahead of an earlier constraint's member fault (**Python**, whose shape check sits
+     inside step 3's per-constraint loop); a `Requires` with two identical unknown operands now
+     reports the unknown flag (**Go**, which compares before it resolves); and a required member now
+     refuses ahead of a non-bool `Implies` trigger (**TypeScript**, which runs the dependency guards
+     inside step 6).
+
+294. **A member naming a member flag of a member-spelled selector is the scoped-operand refusal's,
+     and §26.2's closure claim was false (§26.2).** The authored text said the state "is already
+     closed by two existing rules meeting" -- a member flag must declare requiredness (§12.13's
+     `errMemberFlagPresence`), and §26.5 refuses a required member. That meeting fires nowhere: the
+     required-member refusal is §26.8's step **7**, and a member flag never reaches it, because it is
+     declared **by** the election that names it, sits at that election's path, and is therefore a
+     scoped declaration that step 4 refuses three steps earlier. Go already refuses it there, with
+     `errConstraintReferencesScopedFlag`; Python and TypeScript report it as an unknown member,
+     which is false in the plainest way -- the flag exists, under a scope, and the reader can point
+     at it. Go's sentence is pinned and the claim is struck in place. A required-member verdict would
+     have been the worse of the two anyway: it blames the declaration for the presence rule §12.13
+     forces on every member flag, the one thing the caller could not have written differently.
+
+295. **§26.10's help illustration disobeyed the rule printed directly beneath it (§26.10).** The
+     `Constraints:` block in the example aligned its sentences at column 30 -- the flag block's
+     column, copied from the four flag lines above it -- while the bullet under the example says the
+     block computes **one alignment column across the constraint block alone** and never shares the
+     flag block's. The example is corrected to column 19: the two-space indent, the longest name in
+     the block (`author-change`), and the four-space gap every aligned block in this document uses.
+     All three implementations already compute it that way, so nothing moves in code; what moves is
+     the illustration a reader would have copied.
+
+296. **Three Python-only constraint guards join §12.15's exclusion list (§12.15).** §18.31 item 288
+     fixed a closing sentence that said "three" and named two, and the corrected list of three was
+     still short of the code: three further constraint guards carry `excluded:` entries in
+     `check_error_parity.py` and appear nowhere in the contract. They are the `Member`-name guard
+     (`Member name must be a non-empty string`, from `Member.__post_init__`, carrying no command
+     prefix because a malformed record is refused where it is written), the
+     constraints-must-be-declarations guard (`command "<name>":
+     constraints must be AtLeastOne, AllOrNone, Requires or Implies declarations, got <t>`, `<t>`
+     being `type(c).__name__` under Python's own `repr`), and the members-must-be-a-list guard
+     (`constraint "<c>": members must be a list of Member records`, from `_normalize_members`,
+     naming the constraint rather than a command because there is no command yet). Each is Go- and
+     TypeScript-excluded by construction -- a closed interface, a discriminated union, a typed
+     variadic and a `[M, M, ...M[]]` tuple make all three states compile errors -- and none is a
+     candidate for a parity row. The list is now the code's list.
+
+297. **The differential fuzzer generates no constraints at all.** `conformance/fuzz.py` does not
+     contain the word: its generator emits flags, args, selectors and argv, and every constraint the
+     suite exercises comes from a hand-written case. So the whole system -- registration order,
+     engagement, the two violation sentences, the help block, the schema encoding and the MCP
+     projection -- has never been differentially fuzzed, and the class of divergence the fuzzer
+     exists to find (three implementations agreeing on every authored case and disagreeing on an
+     input nobody thought to write) is unmeasured here. This is a note directed at the corpus wave,
+     not a defect in a shipped byte: the fuzzer's generator gains constraints, and the recorded
+     baseline is that today it has none.
+
+298. **Three §26.11 schema shapes have no covering case (§26.11).** The only `--dump-schema`
+     assertion carrying a constraint is `cases/schema_v2.json`'s, and it publishes one `all_or_none`
+     whose two members are both `kind: "flag"`. That leaves `type: "at_least_one"`, `kind: "arg"` and
+     `kind: "constraint"` -- the nesting encoding §26.11 calls the difference between a complete
+     encoding and an indicative one -- asserted by no case in the corpus. The audit probed all three
+     implementations on those shapes directly and they came out **byte-identical**, so this is a
+     coverage hole rather than a divergence, and it is recorded as one: an untested agreement is
+     agreement until someone edits one of the three. The corpus wave adds the cases.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -11613,9 +11741,23 @@ refers to carries every fact about the value.
 here, elected or not, and `present` is the only election selector legal on it (its value is a record,
 so `true` and `non_empty` have nothing to test). It engages when the **invocation** elected it and
 not when a default election did, which is §18.28 item 264's answer read through §26.4's predicate.
-A **member flag** of a member-spelled selector is refused a different way and needs no new rule: a
-member flag must declare requiredness (§12.13's `errMemberFlagPresence`), and §26.5 refuses a
-required member -- so the state is already closed by two existing rules meeting.
+A **member flag** of a member-spelled selector is refused by the scoped-operand rule and needs no new
+rule: ~~a member flag must declare requiredness (§12.13's `errMemberFlagPresence`), and §26.5 refuses
+a required member -- so the state is already closed by two existing rules meeting~~ *(corrected
+2026-08-15, audit round, §18.32 item 294: those two rules never meet)*.
+
+> **Pinned (2026-08-15, audit round, §18.32 item 294): a member naming a member flag of a
+> member-spelled selector is refused at §26.8's step 4, with `errConstraintReferencesScopedFlag`.**
+> The authored closure above claimed two shipped rules meet on this state, and the meeting fires
+> nowhere: §26.5's required-member refusal is step **7**, and a member flag never survives to it. A
+> member flag is declared **by** the election that names it and sits at that election's path, so it
+> is a scoped declaration, and step 4 refuses it three steps earlier. That is also the sentence that
+> states the actual fault. "Unknown member" would be false -- the flag exists, and the reader can
+> point at it -- and a required-member verdict would blame the declaration for the presence rule
+> §12.13 **forces** on every member flag, which is the one thing the caller could not have written
+> differently. Go's reading, and the whole of what §24.8 says: the scope already is the constraint.
+> The path in the sentence renders as §12.13 pins it, so a member-spelled segment reads `--<choice>`
+> -- the member's own flag, the only token a reader ever types for it.
 
 ### 26.3 Election selectors: `when`
 
@@ -11924,6 +12066,38 @@ never blames a member for a fault in the constraint that names it.
 > collision for a declaration whose only problem is that it reaches into a scope, and would refuse
 > constraint names that collide with nothing a member can reach.
 
+> **Pinned (2026-08-15, audit round, §18.32 item 293): the two guard families the seven steps left
+> unplaced.** The order above names neither the **member-record-shape** checks nor the **legacy
+> dependency-family** guards, so each implementation placed both by derivation and the placements
+> diverged. Both are now part of the order, and both keep the property the order exists for -- each
+> step runs across the WHOLE set before the next one starts, so a message never blames a member for
+> a fault in the constraint that names it:
+>
+> - **the member-record-shape checks run as a set-wide step BETWEEN steps 1 and 2.** That is the
+>   bare-string refusal (`errConstraintMemberNotRecord`) and every other check that a member entry is
+>   a record at all. TypeScript's placement, taken because a member that is not a record has no name
+>   to resolve and no arity question worth asking: shape comes before name resolution, and before the
+>   arity count that would otherwise report a number over entries the framework has not yet agreed to
+>   read.
+> - **the four legacy dependency-family guards run as a TRAILING phase, after step 7.** Those are the
+>   `Requires` / `Implies` same-flag refusal, the `Implies` non-bool trigger refusal (its target twin
+>   travels with it in all three), and the two operand refusals that name an unknown flag and an
+>   unknown target. Python's placement, taken for the reason Go states in its own comment: they are
+>   about the **declarations a rule names** rather than about the rule, so they follow every step
+>   that reads the constraint's own identity. **Inside that phase, unknown-name resolution precedes
+>   the same-flag check** -- `Requires("r", "nope", "nope")` reports the unknown flag, not the
+>   coincidence that both operands spell it. A name that names nothing is refused before it is
+>   compared with its twin, which is the same outward direction the seven steps already run in.
+>
+> Three probes the audit ran against all three implementations resolve under this order, and each
+> changes exactly one of them:
+>
+> | Probe | First error under the pin | Changes |
+> |---|---|---|
+> | one constraint declares a member fault, a later one declares a bare-string member | the **bare name**, the shape step being set-wide and ahead of resolution | **Python**, whose shape check sits inside step 3's per-constraint loop and reports the earlier constraint's member fault |
+> | a `Requires` whose two operands are the same unknown name | the **unknown flag** | **Go**, which compares the two operands before resolving either |
+> | a required co-occurrence member and an `Implies` with a non-bool trigger | the **required member** (step 7) | **TypeScript**, which runs the dependency families' guards inside step 6 |
+
 ### 26.9 Violations at parse time
 
 The two violation sentences, their clause and their rendering are §12.15's. Two properties are pinned
@@ -11955,10 +12129,15 @@ Flags:
   --new-email <str>           new email address [optional]
 
 Constraints:
-  author-name                 all or none of --old-name, --new-name
-  author-email                all or none of --old-email, --new-email
-  author-change               at least one of (--old-name with --new-name), (--old-email with --new-email)
+  author-name      all or none of --old-name, --new-name
+  author-email     all or none of --old-email, --new-email
+  author-change    at least one of (--old-name with --new-name), (--old-email with --new-email)
 ```
+
+*(Corrected 2026-08-15, audit round, §18.32 item 295: the block above shared the flag block's column
+30, contradicting the rule stated directly beneath it. Its own column is 19 -- two-space indent plus
+the longest name in the block, `author-change`, plus the four-space gap every aligned block here
+uses.)*
 
 - **the declared name renders**, in the position a flag name occupies, so the identifier a violation
   prints is discoverable in the help the operator already read;
