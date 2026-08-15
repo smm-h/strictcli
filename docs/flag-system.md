@@ -1,6 +1,6 @@
 ---
 title: Flag System
-description: "strictcli's flags and args: the three-way presence declaration, four types, boolean tri-state, choice flags and their declaration scopes, and positionals."
+description: "strictcli's flags and args: the three-way presence declaration, four types, boolean tri-state, choice flags and their scopes, and named constraints."
 nav_group: "Guides"
 nav_order: 3
 ---

@@ -1,6 +1,6 @@
 ---
 title: Python Quickstart
-description: "Build Python CLIs with strictcli: effect classification, the required/optional/default presence declaration, choice flags consumed by match, and consent."
+description: "Build Python CLIs with strictcli: effect classification, the required/optional/default presence declaration, choice flags, consent, and named constraints."
 nav_group: "Guides"
 nav_order: 2
 ---

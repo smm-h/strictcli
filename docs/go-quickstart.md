@@ -1,6 +1,6 @@
 ---
 title: Go Quickstart
-description: "Build Go CLIs with strictcli: WithEffect classification, the Required/Optional/Default presence declaration, and choice flags with identity-checked Match."
+description: "Build Go CLIs with strictcli: WithEffect classification, the Required/Optional/Default presence declaration, choice flags with Match, and constraints."
 nav_group: "Guides"
 nav_order: 1
 ---
@@ -892,9 +892,9 @@ a **mandatory name** as its first parameter:
 
 The name is what a violation prints, what `--help` shows, and what lets one
 constraint be a member of another. The four constructors are the only things
-that mint a `Constraint`: the interface is closed over an unexported type, so a
-struct literal cannot declare a constraint and therefore cannot declare a
-half-formed one.
+that mint a `Constraint`: the interface is closed over a type the package does
+not export, so a struct literal cannot declare a constraint and therefore cannot
+declare a half-formed one.
 
 ```go
 app.Command("deploy", "Deploy the app", handler,

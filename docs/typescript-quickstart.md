@@ -1,6 +1,6 @@
 ---
 title: TypeScript Quickstart
-description: "Build TypeScript CLIs with strictcli: twin command factories, presence-discriminated options, choice flags as derived discriminated unions, and consent."
+description: "Build TypeScript CLIs with strictcli: twin command factories, presence-discriminated options, choice flags as derived unions, and typed constraints."
 nav_group: "Guides"
 nav_order: 0
 ---
