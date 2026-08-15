@@ -28,7 +28,7 @@ happen to share.
 
 ## One semantic, three surfaces
 
-The clearest case is the newest one: **the presence declaration**. Every flag
+The clearest small case is **the presence declaration**. Every flag
 and every positional argument declares exactly one of three facts about itself
 -- that a value must be supplied, that absence is legal and delivered as
 absence, or a default value the framework supplies when nothing else does.
@@ -84,6 +84,65 @@ functional options, Go has no keyword arguments, and a keyword-shaped Python
 surface expressed in TypeScript would have thrown away the discriminated union
 that makes the whole thing type-check.
 
+## The same design, one construct further: choice flags
+
+The **choice flag** is where the divergence stops being a matter of taste and
+becomes the whole point. One semantic: a flag elects exactly one of its declared
+choices, each choice owns the flags that exist only while it is elected, and the
+handler receives one tagged record it must consume exhaustively. Each language
+already had a shape for "a closed set of alternatives, each carrying different
+fields" -- and the three shapes have nothing in common.
+
+**Python** -- `@choice`-decorated frozen dataclasses. A scope is a set of named
+typed slots, and Python has exactly one spelling for that:
+
+```python
+@strictcli.choice("email", help="deliver as an email message")
+class Email:
+    subject: str = strictcli.sub_flag(help="subject line", presence="required")
+
+
+@app.command("send", help="Send one notification", effect="mutating")
+@strictcli.choice_flag("via", help="Delivery channel", presence="required",
+                       elect_by="selector-token", choices=[Email, Sms])
+def send(ctx, via: Email | Sms):
+    match via:
+        case Email(subject=subject): ...
+        case Sms(phone_number=number): ...
+        case _: assert_never(via)
+```
+
+**Go** -- choices as package-level identity values, the token idiom Go already
+uses, extended to something that carries a payload:
+
+```go
+var ViaEmail = strictcli.Choice("email", "deliver as an email message",
+    strictcli.StringFlag("subject", "subject line", strictcli.Required()),
+)
+
+via := strictcli.GetElected(kwargs, "via")
+line := strictcli.Match(via,
+    strictcli.When(ViaEmail, func(f strictcli.Fields) string { return strictcli.Get[string](f, "subject") }),
+    strictcli.When(ViaSMS, func(f strictcli.Fields) string { return strictcli.Get[string](f, "phone_number") }),
+)
+```
+
+**TypeScript** -- a keyed map where a carrier sits, producing a derived
+discriminated union:
+
+```ts
+via: choiceFlag("via", {
+    email: choice({ help: "deliver as an email message", flags: {
+        subject: flag("subject", t.str, { help: "subject line", presence: "required" }),
+    }}),
+    sms: choice({ help: "deliver as a text message", flags: { /* ... */ } }),
+}, { help: "Delivery channel", presence: "required" }),
+```
+
+Same semantic, same pinned sentences, same help bytes. Three declaration
+surfaces that are not translations of each other, and each is the shape its
+language's existing strictcli idiom already pointed at.
+
 ## What each surface bought
 
 The divergence is not merely tolerated for style. In every case the language's
@@ -111,12 +170,23 @@ exported `Default` field, and setting it on a literal left the package-private
 then **silently ignored at parse time**. After the presence round that flag does
 not register at all, so the value can no longer be quietly dropped. The
 registration-error tests for it are in `go/strictcli/presence_test.go`
-(`TestFlagStructLiteralWithDefaultFieldDoesNotRegister`, and its flag-set,
-mutex-group and arg twins).
+(`TestFlagStructLiteralWithDefaultFieldDoesNotRegister`, and its flag-set, arg
+and choice-scope twins -- the last one is why the rule holds at every depth: a
+struct literal written inside a choice's scope declares no presence and does not
+register either).
 
 Nothing in Python or TypeScript corresponds to this, because neither has a
 struct literal that can bypass a constructor. The trap only ever existed in Go,
 and only Go's idiomatic surface could close it.
+
+The same field carries the choice flag's guarantee: `choices` is **unexported**
+on `Flag`, so a struct literal cannot be a choice flag at all. And because a Go
+choice is an identity *value* rather than a string, `e.Is(ViaEmail)` and
+`When(ViaEmail, ...)` are compile-checked references -- a typo does not compile,
+and renaming a choice breaks every site that names it. `Match` is exhaustive
+against the declaration at dispatch: Go has no sealed union, so the check cannot
+be at compile time, but it cannot be defeated by a typo and it cannot go stale,
+because adding a choice breaks every `Match` that omits it on the first call.
 
 ### TypeScript: the type system carries the declaration
 
@@ -141,10 +211,28 @@ way through, and `infer.ts` reads the declaration back out of it:
 ```
 
 That single line fixed a real unsoundness. `FlagKeyIsOptional` used to test
-`opts extends { default: null }`, which typed a mutex member declared without a
-default as an always-present, non-nullable key -- while the parser handed the
-handler `undefined` through an exemption that no longer exists. The handler-args
-type now follows the declaration by construction.
+`opts extends { default: null }`, which typed a flag declared without a default
+as an always-present, non-nullable key while the parser handed the handler
+`undefined`. The handler-args type now follows the declaration by construction.
+
+The **choice flag** takes that further, from "the type follows the declaration"
+to "the wrong shape is inexpressible". A choice flag's `choices` argument is an
+object literal whose keys are literal types, so the delivered value is an exact
+discriminated union with no annotation anywhere, and a scope's flags are
+unreachable except through the tag that proves the scope was elected:
+
+```ts
+switch (args.via.choice) {
+    case "email": return send(args.via.subject);   // `subject` exists only here
+    default: return assertNever(args.via);          // a missing case fails to compile
+}
+```
+
+Because silence is the failure mode, a **computed** choice key -- which would
+degrade the tag to `string` and make `assertNever` accept anything -- is a
+compile error naming itself. And a choice flag's `default` is typed
+`keyof C & string`, so a default naming a choice that does not exist is a
+compile error before it is a registration error.
 
 The other two languages get the same guarantee at registration time, as a hard
 error. TypeScript gets it at registration time **and** in the editor, before the
@@ -176,6 +264,21 @@ Go and TypeScript have no such check, and its absence is not a gap. Their
 handlers receive one `map[string]interface{}` / one args object; there is no
 per-parameter default with which a handler author could stand a sentinel back
 up. There is no site to check -- not a check that was skipped.
+
+The choice flag adds a second Python-only check at the same boundary, and it is
+what makes `assert_never` **sound**. The parameter bound to a choice flag must be
+annotated with exactly the declared union, resolved at registration through
+`typing.get_type_hints`:
+
+```
+command "send": handler parameter 'via' is bound to choice flag '--via' and must be annotated Email | Sms | Webhook, got nothing
+```
+
+Without it a developer could annotate `via: Email` and silently skip two
+branches with the type checker's blessing. `**kwargs` handlers are banned
+outright on a command that declares a choice flag. Go and TypeScript reach the
+same exhaustiveness by other routes -- `Match` against the declaration, and a
+`switch` the compiler narrows -- so neither has a parameter annotation to check.
 
 ## What parity actually binds
 
@@ -224,10 +327,16 @@ spellings inside it:
 | TypeScript | `Flag "x": presence is undeclared: declare exactly one of presence: "required", presence: "optional", or presence: "default" with default: <value>` |
 
 Same sentence, word for word, with three spellings substituted into it. The same
-rule governs the whole family -- the declared-twice error, the mutex-member
-error, the variadic-default error, and the null-default redirect, whose
-parenthetical also substitutes its noun (`Flag` messages say "when the flag is
-absent", `Arg` messages say "when the arg is absent").
+rule governs the whole family -- the declared-twice error, the variadic-default
+error, the null-default redirect (whose parenthetical also substitutes its noun:
+`Flag` messages say "when the flag is absent", `Arg` messages say "when the arg
+is absent"), and every choice-flag guard:
+
+| Implementation | Text |
+|---|---|
+| Python | `Flag "via": a choice flag cannot declare presence="optional": an absent selection is a choice nobody named, so name it as a choice of its own` |
+| Go | `Flag "via": a choice flag cannot declare Optional(): an absent selection is a choice nobody named, so name it as a choice of its own` |
+| TypeScript | `Flag "via": a choice flag cannot declare presence: "optional": an absent selection is a choice nobody named, so name it as a choice of its own` |
 
 This has a consequence for how conformance is run. The cross-language
 error-parity check compares templates across implementations, so a template that
@@ -272,7 +381,7 @@ the conformance suite records it as such.
 
 ## The same shape, elsewhere in the framework
 
-Presence is the richest example, not the only one.
+Presence and the choice flag are the richest examples, not the only ones.
 
 **Effect classification** is mandatory on every command, and each language
 declares it its own way. Python takes a closed-enum keyword,

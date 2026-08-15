@@ -28,7 +28,8 @@ implementations:
 | `conformance-go` | All JSON test cases pass against the Go implementation |
 | `conformance-typescript` | All JSON test cases pass against the TypeScript implementation |
 | `conformance-parity` | N-way output comparison: for every case that runs on multiple targets, stdout and stderr must be byte-identical (after normalization) |
-| `schema-parity` | A rich app definition exercising all features produces identical `--dump-schema` JSON output from all three implementations |
+| `schema-parity` | A rich app definition exercising all features produces **byte-identical** `--dump-schema` output from all three implementations |
+| `schema-fragments` | Every `value_schema` in every target's dump is a valid document of the closed four-keyword subset, every entry that must carry one does, and a choice flag carries none |
 | `float-fuzz` | The strictcli canonical float format (SCF) produces byte-identical strings for a fixed set of double-precision bit patterns across all three implementations |
 | `schema-freshness` | The committed `.strictcli/schema.json` for the conformance tool itself matches its current in-memory schema |
 | `trace-sweeps` | The process trace store stays observational: a forged ancestry identifier and an unwritable store each leave stdout, stderr and the exit code byte-identical to the same run without them |
@@ -42,22 +43,22 @@ check, and any divergence in these areas blocks a release:
 - **Error messages.** Every parse-time and registration-time error produces the same text. Error templates are centralized in each implementation's `errors` module and cross-checked by `check_error_parity.py`.
 - **Help text.** App-level, group-level, and command-level help output is formatted identically, including column alignment, section ordering (`Commands:`, `Deprecated:`, `Infrastructure:`), and the `Use '<app> <command> --help'` footer.
 - **Exit codes.** Every case asserts a specific exit code, and parity mode verifies all targets agree.
-- **Flag parsing.** Type coercion (str, bool, int, float), default resolution, env var resolution (including `1|true|yes` / `0|false|no` for booleans), config file loading, mutex enforcement, dependency enforcement (CoRequired, Requires, Implies), and negatable booleans (`--no-flag`).
+- **Flag parsing.** Type coercion (str, bool, int, float), default resolution, env var resolution (including `1|true|yes` / `0|false|no` for booleans), config file loading, choice-flag election and scope enforcement, dependency enforcement (CoRequired, Requires, Implies), and negatable booleans (`--no-flag`).
 - **Float formatting.** The SCF canonical form is byte-shared: a fixed seed of double-precision bit patterns is formatted identically by all three implementations, verified by `check_float_fuzz.py` and the committed vectors in `conformance/float_vectors.json`.
-- **Schema output.** `--dump-schema` produces structurally identical JSON describing the full CLI structure.
+- **Schema output.** `--dump-schema` produces **byte-identical** JSON at `schema_version: 2` describing the full CLI structure. Since v2 the comparison is byte equality rather than a structural one -- the normalization layer that used to reconcile three serializers is deleted, and one canonical encoding (declared key order at every depth, SCF floats, JSON-mandated escaping only, exactly one trailing newline) is what makes that possible. `check_schema_fragments.py` additionally validates every `value_schema` in every dump against the closed four-keyword subset.
 - **Provenance labels.** Source labels (`cli`, `env`, `config`, `default`, `implied`, `infra`) are identical strings across implementations.
 - **Config subsystem.** `config show`, `config set`, `config path`, `config edit`, `config init` produce identical output and behavior.
 - **Check system.** Tag DSL evaluation, DAG-ordered execution, dependency pull-in, cascade skips, and result formatting all behave identically.
 - **Hermetic mode.** `--hermetic` suppresses env and config identically; mutual exclusion with `--config` and config subcommands produces identical errors.
-- **Machine mode.** The framework-owned `--json` is refused identically at every declaration level (command flag, app global, flag-set, mutex group), is recognized in the same argv positions with the same two boundaries (a bare `--`, a passthrough command's name), and prints the same payload bytes -- plain UTF-8 with no HTML escaping, and structurally exempt from `--quiet`.
+- **Machine mode.** The framework-owned `--json` is refused identically at every declaration level (command flag, app global, flag-set, and a choice's scope at any depth), is recognized in the same argv positions with the same two boundaries (a bare `--`, a passthrough command's name), and prints the same payload bytes -- plain UTF-8 with no HTML escaping, and structurally exempt from `--quiet`.
 
 ## How testing works
 
 ### JSON test cases
 
-The core of the suite is 80 JSON files in `conformance/cases/`, containing 837
-individual test cases organized by feature area (flags, config, checks, groups,
-etc.). Each case is a self-contained JSON object specifying an app definition,
+The core of the suite is 98 JSON files in `conformance/cases/`, containing over
+a thousand individual test cases organized by feature area (flags, config,
+checks, choice flags, groups, etc.). Each case is a self-contained JSON object specifying an app definition,
 argv input, optional environment variables, and expected output assertions
 including exit code, stdout content, and stderr content:
 
@@ -160,10 +161,12 @@ TypeScript's dynamic runtime):
 }
 ```
 
-Three cases carry such a restriction today: the bad-return hard error, which
-Go's `Outcome` type makes unrepresentable, and one aborted-dispatch envelope
-case written twice, once for Go and once for the other two. So of the 837
-cases Go runs 835, and Python and TypeScript run 836 each.
+Restrictions exist wherever a mis-declaration is expressible in one language and
+not another -- the bad-return hard error, which Go's `Outcome` type makes
+unrepresentable; the per-language registration guards whose sentence carries that
+language's own spelling; an aborted-dispatch envelope case written twice, once
+for Go and once for the other two. Of the 1068 cases, Go runs 1025, and Python
+and TypeScript run 1029 each.
 
 ### Differential argv fuzzing
 
@@ -183,7 +186,8 @@ consistency:
 
 - `check_api_surface.py` introspects Python classes, parses Go source via an AST dumper (`conformance/describe_go/`), and runs the TypeScript `describe` self-dump to verify every API field exists in all implementations and in the conformance schema.
 - `check_error_parity.py` extracts error message patterns from all three implementations, normalizes them to a common signature form, and verifies symmetric coverage.
-- `check_schema_parity.py` runs `--dump-schema` against all targets with a rich app definition and compares the resulting JSON structurally.
+- `check_schema_parity.py` runs `--dump-schema` against all targets with a rich app definition and byte-compares the resulting files.
+- `check_schema_fragments.py` reads all three dumps and validates every `value_schema` at every depth -- flag entries, arg entries, global flags, config fields, and every scoped entry inside a choice flag -- against the closed four-keyword subset, asserting the choice flag's absent fragment rather than tolerating it.
 - `check_float_fuzz.py` formats a fixed set of double-precision bit patterns through all three formatters and asserts byte-for-byte agreement.
 - `generate_pairwise.py` uses allpairspy to generate combinatorial test cases covering all 2-way flag feature combinations.
 
@@ -328,7 +332,7 @@ If the new case has output that is legitimately language-specific, add an `ackno
 
 ## Architecture notes
 
-- The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently. It covers 3 target implementations with 11 automated checks.
-- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 837 test cases across all 3 targets (835 on Go and 836 on each of Python and TypeScript, the difference being the three target-restricted cases).
+- The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently. It covers 3 target implementations with 12 automated checks.
+- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 1068 test cases across all 3 targets (1025 on Go and 1029 on each of Python and TypeScript, the difference being the target-restricted cases).
 - The conformance tool itself is built with strictcli (dogfooding the check system). Its checks are declared in `conformance/conformance_tool/.strictcli/checks.toml`.
-- Adding a new target to the suite is a data-entry task: register a new `Target` descriptor in `run.py` (one `_register_target(...)` call) and add corresponding entries in `check_api_surface.py`, `check_error_parity.py`, and `check_schema_parity.py`. The orchestration, comparison, and reporting logic is fully target-agnostic.
+- Adding a new target to the suite is a data-entry task: register a new `Target` descriptor in `run.py` (one `_register_target(...)` call) and add corresponding entries in `check_api_surface.py`, `check_error_parity.py`, `check_schema_parity.py`, and `check_schema_fragments.py`. The orchestration, comparison, and reporting logic is fully target-agnostic.
