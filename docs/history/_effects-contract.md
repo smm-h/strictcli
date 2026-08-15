@@ -7237,7 +7237,13 @@ note struck, per the correction below.
      is not set. Both change, at the record door only.
 
 253. **Every field a caller's record supplies reports source `default`, and the limitation is
-     acknowledged rather than closed with a heuristic (§24.9, §23.6, §24.11).** The record door
+     acknowledged rather than closed with a heuristic (§24.9, §23.6, §24.11).** *(amended 2026-08-15,
+     flat-door round, §18.29 item 268: **this item rules the RECORD door and no other**. Its reason
+     is a property of that door's input -- a constructed scope fills its declared defaults before
+     anything can look -- and the flat machine door does not share it: that door reads the caller's
+     own keys, so a key it read is a value the caller wrote, and a scoped value supplied there
+     answers `provided()` **true** with source `cli`. Every sentence below is scoped to the record
+     door accordingly.)* The record door
      labels every field it delivers `default`, so `provided()` over a caller-supplied record answers
      **false** for all of them -- with one pinned exception, already built: a `RelativeToRoot` default
      resolved at that door reports **`infra`** (§18.23 item 237's label, `_record_field_value`'s first
@@ -7706,6 +7712,104 @@ payload renders a marker as.
      corpus cannot declare a nested selector at the record door in all three targets today, so there
      is no cross-language row to rule from. The reading is recorded so the round that takes it starts
      from three known behaviours instead of rediscovering them.
+
+### 18.29 The flat door reads the whole declaration, and answers supplied-ness itself (2026-08-15)
+
+Two items, both about the **flat machine door** and both closing a place where TypeScript's
+conversion let the RECORD door's limitation travel to a door that does not have it. Numbering
+continues §18.28's, for the reason §18.14 gave: the same campaign's ledger.
+
+**What each item is.** Item 267 is a **pin plus a fix**: a scoped value the caller supplied at the
+flat door runs the whole declaration -- type, closed set, callback -- and the closed-set half was
+missing in TypeScript. Item 268 is a **one-implementation divergence at one door**, ruled and closed,
+plus an in-place amendment narrowing item 253's scope to the door it was ruled for.
+
+**Every claim below was probed by running all three**, at each implementation's own API: Python
+through `app.test`, `app.call` and `as_tools()`, Go through `App.Test`, `App.Call` and `AsTools()`,
+TypeScript through `test`, `call` and `asTools()`, on purpose-built apps declaring the states the
+claims are about. Python and Go were the reference at both items; only TypeScript changes.
+
+**Origin tags**, per §18.14's preamble. Both items are **untagged**: neither is a `(D)` directive
+and neither is a `[%%]` adopted recommendation.
+
+**Sites amended in place**: §24.11 -- one new block after the item-254 block, stating what a supplied
+scoped value is checked against at the flat door; §24.11's item-253 block -- an in-place amendment
+saying the rule is the record door's alone and what the flat door answers instead.
+
+267. **A scoped value the caller supplied at the FLAT door is checked against the WHOLE declaration
+     -- the type, the closed set and the custom callback (§24.11, §23.4, §23.5, §18.26 item 254,
+     §18.20 item 226).** Item 254 deferred the closed set and the callback at the **record** door,
+     and it gave a structural reason rather than a scheduling one: a constructed scope fills its
+     declared defaults before anything can look, so that door cannot tell a field the caller wrote
+     from one the declaration decided, and §23.4 forbids running either half on a value the
+     declaration decided. **The flat door is not in that position.** Its input is an object whose
+     keys the door itself reads, so a key it read **is** a value the caller wrote -- the distinction
+     item 254 lacks is the one this door has -- and the deferral does not travel to it. A supplied
+     scoped value therefore answers to every half of its declaration here, at every depth, per
+     element for a list, and never on a value the declaration decided.
+
+     **Probed state, one command with a scoped `--fmt` declaring `choices: text, json` and a scoped
+     `--subject` declaring a callback:**
+
+     | supplied at the flat door | Python | Go | TypeScript |
+     |---|---|---|---|
+     | `{via: "email", fmt: "xml"}` | `--fmt: invalid value 'xml', must be one of: text, json` | same | **accepted** |
+     | `{via: "email", subject: "hi"}` (callback refuses) | `--subject: hi is refused` | same | refused *(fixed in this round's first commit)* |
+
+     Python and Go already run both halves at this door and change nothing; the sentence in the first
+     row is the command line's own, byte-for-byte, at every door. **TypeScript changes twice in one
+     round**: the callback half first -- it converted the flat object into the records `call()` takes
+     and inherited the record door's type-check-only rule with them -- and the closed set here.
+
+     **The order the halves run in, which is a pin and not an accident.** The type check runs where
+     the value is read; the closed set and the callback run in a **second pass** over the values that
+     survived it, per flag, closed set first. Three consequences, each of them the answer some
+     implementation already gives: a coercion failure outranks both whatever the declaration order
+     (item 226's rule, applied at this door); an **earlier** field's callback outranks a **later**
+     field's closed-set refusal, which is what Python and Go both answer; and a value the closed set
+     refused is never handed to the callback, so one refusal is reported rather than two. **One
+     ordering divergence is recorded and not ruled**: for a **root** coercion failure posed against a
+     **scoped** validate refusal, Go and TypeScript report the coercion failure from either
+     declaration position while Python reports whichever declaration comes first, because Python's
+     flat door sweeps per declaration (coerce, match, validate) instead of coercing everything first.
+     Ruling it means deciding whether item 226's two-pass rule binds the programmatic doors as it
+     binds the argv path, which reaches every value at both doors rather than this one state -- it is
+     left to the round that takes it with the rows in hand.
+
+268. **At the FLAT door a caller-supplied scoped value answers `provided()` true and reports source
+     `cli`; item 253's `default` answer is the RECORD door's alone (§24.9, §23.6, §24.11, §18.26 item
+     253, §18.28 item 264).** Item 253 ruled that every field a caller's record supplies reports the
+     declaration, and its reason was explicitly about **Python's record door**: a `@choice` dataclass
+     fills a declared default at construction, so a field holding its declared default cannot be told
+     from one the caller wrote. That undecidability is a property of **that door's input**, not of
+     the predicate: at the flat door the input is the caller's own object, the door reads its keys,
+     and "did the invocation cause this value" (§23.6) is decidable there and decided. So the two
+     doors answer differently on purpose, and each answer is the one its own input supports.
+
+     **Probed state, a scoped `--fmt` declaring `default: "text"`:**
+
+     | door, `fmt` supplied as `"json"` | Python | Go | TypeScript |
+     |---|---|---|---|
+     | argv, `--via email --fmt json` | `cli` / true | `cli` / true | `cli` / true |
+     | flat, `{via: "email", fmt: "json"}` | `cli` / true | `cli` / true | **`default` / false** |
+     | record, `call("send", {via: <email record>})` | `default` / false | `default` / false | `default` / false |
+
+     TypeScript changes, and it is the same root cause item 264 closed at the election: its flat door
+     **converts into a record** and then lets the record door answer for what the conversion carried,
+     so a fact the flat door knew was lost on the way through. The conversion now carries the keys it
+     read forward, and the record door's own answer is untouched -- a record `call()` was handed
+     directly still reports the declaration for every field, in all three.
+
+     **The election and the field are separate facts.** Item 264 pinned that a selection nobody
+     elected reports `default` with `provided()` false at every door, and that is unchanged: a caller
+     who supplies a sibling key inside a **default-elected** scope has caused that field's value and
+     not the election, so the selector answers `default`/false while the field answers `cli`/true.
+     What each implementation does with that field's *value* under a defaulted election is item 264's
+     recorded residual and is not reached here.
+
+     **Item 253 is amended in place** rather than restated: its rule and its normative block now say
+     that they are the record door's, which is the door they were ruled for and the only door whose
+     input makes the question undecidable.
 
 ---
 
@@ -9779,7 +9883,8 @@ state: §12.13 built `flag '--<x>' is only valid under <owners>, but <why>` for 
 name -- rendering it `--bogus` would claim a declaration that does not exist.
 
 **Every field a caller's record supplies reports source `default`** *(added 2026-08-15, contract-pin
-round, §18.26 item 253)*. The record door labels every field it delivers `default`, so `provided()`
+round, §18.26 item 253; scoped to the RECORD door 2026-08-15, flat-door round, §18.29 item 268)*.
+The record door labels every field it delivers `default`, so `provided()`
 over a caller-supplied record (§24.9) answers **false** for all of them. The one exception is pinned:
 a `RelativeToRoot` default resolved at this door reports **`infra`**, the label §18.23 item 237 gives
 it everywhere else. This is an **acknowledged limitation**, not a derivation -- a scope class fills a
@@ -9799,6 +9904,28 @@ behind the distinction the block before this one records the door cannot make: �
 `validate` never runs on a declared default, and a door that cannot tell a supplied field from a
 declared one would run it on values the declaration decided. The deferral is stated here rather than
 left to be inferred from a silence, so a later round finds a decision instead of a hole.
+
+**A supplied scoped value at the FLAT door is checked against the WHOLE declaration** *(added
+2026-08-15, flat-door round, §18.29 item 267)*. The type, the closed set (`choices`) and the custom
+`validate` callback, at every depth and per element for a list -- the same three halves the command
+line runs for the same declaration, with the same sentences. The deferral in the block above belongs
+to the **record** door and rests on a distinction this door has: a value the declaration decided is
+never asked (§23.4), because the door checks exactly the keys it read. The order is pinned with it:
+the type check runs where the value is read and the other two run in a **second pass** over what
+survived it, per flag, closed set before callback -- so a coercion failure outranks both whatever the
+declaration order (§18.20 item 226), an earlier field's callback outranks a later field's closed-set
+refusal, and a value the closed set refused is never handed to the callback.
+
+**The FLAT door answers supplied-ness for itself** *(added 2026-08-15, flat-door round, §18.29 item
+268)*. The `default`-for-every-field rule two blocks above is the **record door's** and reaches no
+other door: its reason is a property of that door's input, and the flat door's input is the caller's
+own object, whose keys the door reads. A key it read is a value the caller wrote, so §23.6's
+predicate is decidable there and keeps its answer -- a scoped value supplied at the flat door reports
+source **`cli`** and `provided()` **true**, exactly as the command line reports the same value, while
+a field the door did not read reports the declaration. A door that converts its object into a record
+must carry that answer forward rather than let the conversion lose it, which is item 264's rule about
+the election applied to the fields beside it: the **election** may be the declaration's while a field
+supplied inside its scope is the caller's, and the two are answered separately.
 
 **An integral number satisfies an `int` declaration at this boundary** *(added 2026-08-15,
 contract-pin round, §18.25 item 247)*. JSON has one number type, and two of the three decoders lose
