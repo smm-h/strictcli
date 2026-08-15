@@ -12,6 +12,15 @@
  */
 
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
+import {
+	constraintIndex,
+	isCoOccurrenceResolved,
+	mcpSentence,
+	type ResolvedConstraint,
+	type ResolvedCoOccurrence,
+	type ResolvedMember,
+	resolveConstraints,
+} from "./constraints.js";
 import type { Effect } from "./effects.js";
 import {
 	errElectionOriginDefault,
@@ -183,12 +192,214 @@ export function buildJSONSchema(
 		}
 	}
 
-	return {
+	const schema: Record<string, unknown> = {
 		type: "object",
 		properties,
 		required,
 		additionalProperties: false,
 	};
+	applyConstraintKeywords(cmd, schema);
+	return schema;
+}
+
+/**
+ * The constraint keywords (§26.12). They sit BESIDE `properties` and
+ * `required` on one flat object schema, add no structure, and degrade safely:
+ * a client that ignores an unknown keyword sends a call the framework refuses
+ * at call time with the parser's own sentence. That is why `anyOf` is emitted
+ * here where §24.11 refused `oneOf` for selectors -- `oneOf` would have
+ * restructured the schema into variants.
+ *
+ * The runtime refusal is the authority; the schema is advisory.
+ */
+function applyConstraintKeywords(
+	cmd: RegisteredCommand,
+	schema: Record<string, unknown>,
+): void {
+	if (cmd.def.kind !== "command" || cmd.def.constraints.length === 0) {
+		return;
+	}
+	const resolved = resolveConstraints(cmd.def);
+	const index = constraintIndex(resolved);
+	const anyOfs: Record<string, unknown>[][] = [];
+	const dependentRequired: Record<string, string[]> = {};
+
+	for (const c of resolved) {
+		if (c.kind === "at-least-one") {
+			anyOfs.push(anyOfBranches(c, index));
+			continue;
+		}
+		if (c.kind === "requires") {
+			mergeDependent(dependentRequired, flagParamName(c.flag), [
+				flagParamName(c.dependsOn),
+			]);
+			continue;
+		}
+		if (c.kind !== "all-or-none") {
+			// `implies` injects a value rather than constraining the input, so
+			// there is nothing for a schema to say. Its description line is the
+			// whole of its projection.
+			continue;
+		}
+		if (!projectsExactly(c)) {
+			// The keyword cannot carry a group as an operand, and `required`
+			// cannot say a key is true or non-empty; the remainder is stated in
+			// the description rather than dropped.
+			continue;
+		}
+		const names = c.members.map((m) => memberProperty(m));
+		for (const n of names) {
+			mergeDependent(
+				dependentRequired,
+				n,
+				names.filter((other) => other !== n),
+			);
+		}
+	}
+
+	if (anyOfs.length === 1) {
+		schema.anyOf = anyOfs[0];
+	} else if (anyOfs.length > 1) {
+		// One object schema carries one `anyOf`. Two at-least-one constraints
+		// are two independent rules, so they are conjoined rather than merged
+		// -- merging their branches would say "satisfy either rule", and
+		// dropping one would be the silent omission §26.12 forbids.
+		schema.allOf = anyOfs.map((branches) => ({ anyOf: branches }));
+	}
+	if (Object.keys(dependentRequired).length > 0) {
+		schema.dependentRequired = dependentRequired;
+	}
+}
+
+/** A member's PROPERTY name: flags underscore, args are already handler keys. */
+function memberProperty(m: ResolvedMember): string {
+	return m.kind === "flag" ? flagParamName(m.name) : m.name;
+}
+
+function mergeDependent(
+	into: Record<string, string[]>,
+	key: string,
+	values: readonly string[],
+): void {
+	const existing = into[key] ?? [];
+	for (const v of values) {
+		if (!existing.includes(v)) {
+			existing.push(v);
+		}
+	}
+	into[key] = existing;
+}
+
+/** Every member is a flag or arg declaring `present` -- the exact-fidelity row. */
+function projectsExactly(c: ResolvedCoOccurrence): boolean {
+	return c.members.every(
+		(m) => m.kind !== "constraint" && m.when === "present",
+	);
+}
+
+/**
+ * One `anyOf` branch per member. An all-or-none member becomes ONE branch
+ * listing all of its leaves in `required`; a nested at-least-one's branches
+ * are INLINED into the parent's.
+ */
+function anyOfBranches(
+	c: ResolvedCoOccurrence,
+	index: ReadonlyMap<string, ResolvedConstraint>,
+): Record<string, unknown>[] {
+	const branches: Record<string, unknown>[] = [];
+	for (const m of c.members) {
+		if (m.kind !== "constraint") {
+			branches.push({ required: [memberProperty(m)] });
+			continue;
+		}
+		const nested = index.get(m.name);
+		if (nested === undefined || !isCoOccurrenceResolved(nested)) {
+			continue;
+		}
+		if (nested.kind === "at-least-one") {
+			branches.push(...anyOfBranches(nested, index));
+			continue;
+		}
+		branches.push({ required: allOrNoneLeaves(nested, index) });
+	}
+	return branches;
+}
+
+/** Every flag or arg property an all-or-none reaches, at any depth. */
+function allOrNoneLeaves(
+	c: ResolvedCoOccurrence,
+	index: ReadonlyMap<string, ResolvedConstraint>,
+): string[] {
+	const out: string[] = [];
+	for (const m of c.members) {
+		if (m.kind !== "constraint") {
+			out.push(memberProperty(m));
+			continue;
+		}
+		const nested = index.get(m.name);
+		if (nested !== undefined && isCoOccurrenceResolved(nested)) {
+			out.push(...allOrNoneLeaves(nested, index));
+		}
+	}
+	return out;
+}
+
+/**
+ * The declared lossiness policy in one block (§26.12): a constraint is NEVER
+ * silently dropped from a tool schema. Every kind has a fidelity verdict, and
+ * there are exactly two -- `exact`, where a keyword expresses the rule
+ * completely, and `partial`, where what can be emitted is emitted and the
+ * remainder is stated here in words. There is no third verdict in which a
+ * rule reaches the boundary unstated.
+ *
+ *   Constraints (enforced at call time):
+ *     at least one of: targets, older_than, all -- not expressed in the schema: the "true" and "non_empty" selectors
+ *     all or none of: old_name, new_name
+ *
+ * Members render in PROPERTY names, never CLI tokens: the caller writes keys,
+ * not argv.
+ */
+export function constraintDescriptionBlock(cmd: RegisteredCommand): string {
+	if (cmd.def.kind !== "command" || cmd.def.constraints.length === 0) {
+		return "";
+	}
+	const resolved = resolveConstraints(cmd.def);
+	const index = constraintIndex(resolved);
+	const lines = resolved.map((c) => {
+		const reason = lossReason(c);
+		return `  ${mcpSentence(c, index)}${reason === "" ? "" : ` -- not expressed in the schema: ${reason}`}`;
+	});
+	return `\n\nConstraints (enforced at call time):\n${lines.join("\n")}`;
+}
+
+/**
+ * The remainder clause's reason, from a CLOSED set. An `exact` projection
+ * appends no clause at all, so the presence of a clause tells a reader
+ * exactly where the schema is weaker than the rule.
+ */
+function lossReason(c: ResolvedConstraint): string {
+	if (c.kind === "implies") {
+		return "the injection";
+	}
+	if (c.kind === "requires") {
+		return "";
+	}
+	const nested = c.members.some((m) => m.kind === "constraint");
+	if (c.kind === "at-least-one") {
+		// The nesting is carried exactly: an all-or-none member becomes one
+		// branch and a nested at-least-one's branches are inlined. Only the
+		// selectors are lost, `required` saying a key is present rather than
+		// true or non-empty.
+		return c.members.some(
+			(m) => m.kind !== "constraint" && m.when !== "present",
+		)
+			? 'the "true" and "non_empty" selectors'
+			: "";
+	}
+	if (nested) {
+		return "the nested grouping";
+	}
+	return projectsExactly(c) ? "" : 'the "true" and "non_empty" selectors';
 }
 
 /**
@@ -877,7 +1088,7 @@ function makeTool(
 ): Tool {
 	return {
 		name: commandPath,
-		description: `${cmd.help}${scopeDescriptionBlock(cmd)}`,
+		description: `${cmd.help}${scopeDescriptionBlock(cmd)}${constraintDescriptionBlock(cmd)}`,
 		parameters: buildJSONSchema(cmd),
 		...commandClassification(cmd),
 		// async so a conversion refusal reaches the caller as a REJECTED

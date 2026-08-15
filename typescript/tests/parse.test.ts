@@ -11,18 +11,21 @@ import { test } from "node:test";
 import type { AppImpl, AppSpec } from "../src/app.js";
 import { Context } from "../src/context.js";
 import type {
+	AllOrNone,
 	AnyCommand,
 	AnyFlag,
+	AtLeastOne,
 	ChoiceRecord,
 	PassthroughArgs,
 	PassthroughDef,
 } from "../src/factories.js";
 import { formatFloatCanonical } from "../src/float.js";
 import {
+	allOrNone,
 	arg,
+	atLeastOne,
 	choice,
 	choiceFlag,
-	coRequired,
 	createApp,
 	defineReadOnlyCommand,
 	deprecated,
@@ -1486,7 +1489,12 @@ function coRequiredApp(out: string[]): AppImpl {
 					default: "none",
 				}),
 			},
-			dependencies: [coRequired(["output", "format"])],
+			constraints: [
+				allOrNone({
+					name: "report",
+					members: [{ name: "output" }, { name: "format" }],
+				}),
+			],
 			handler: (a) => {
 				out.push(`output=${fmt(a.output)} format=${fmt(a.format)}`);
 			},
@@ -1515,7 +1523,10 @@ test("dependencies: coRequired both/neither ok, one is exact error", async () =>
 		const r = await run(coRequiredApp([]), argv);
 		assert.equal(
 			r.stderr,
-			errOut("flags --output, --format must be used together", "myapp cmd"),
+			errOut(
+				'constraint "report": --output, --format must be used together',
+				"myapp cmd",
+			),
 		);
 	}
 });
@@ -1548,7 +1559,12 @@ function infraCoRequiredApp(out: string[]): AppImpl {
 					presence: "optional",
 				}),
 			},
-			dependencies: [coRequired(["db", "user"])],
+			constraints: [
+				allOrNone({
+					name: "database",
+					members: [{ name: "db" }, { name: "user" }],
+				}),
+			],
 			handler: (a) => {
 				out.push(`db=${fmt(a.db)} user=${fmt(a.user)}`);
 			},
@@ -1575,7 +1591,10 @@ test("dependencies: an infra default does not count as present for coRequired", 
 	const solo = await run(infraCoRequiredApp([]), ["cmd", "--user", "admin"]);
 	assert.equal(
 		solo.stderr,
-		errOut("flags --db, --user must be used together", "myapp cmd"),
+		errOut(
+			'constraint "database": --db, --user must be used together',
+			"myapp cmd",
+		),
 	);
 	// Both typed satisfies it.
 	const both: string[] = [];
@@ -1605,7 +1624,13 @@ test("dependencies: requires enforcement", async () => {
 						default: "none",
 					}),
 				},
-				dependencies: [requires({ flag: "chatter", dependsOn: "output" })],
+				constraints: [
+					requires({
+						name: "chatter-target",
+						flag: "chatter",
+						dependsOn: "output",
+					}),
+				],
 				handler: () => undefined,
 			}),
 		);
@@ -1620,7 +1645,10 @@ test("dependencies: requires enforcement", async () => {
 	const r = await run(mk([]), ["cmd", "--chatter"]);
 	assert.equal(
 		r.stderr,
-		errOut("flag '--chatter' requires '--output'", "myapp cmd"),
+		errOut(
+			"constraint \"chatter-target\": flag '--chatter' requires '--output'",
+			"myapp cmd",
+		),
 	);
 });
 
@@ -1649,8 +1677,13 @@ function impliesApp(out: string[], envPrefix?: string): AppImpl {
 					default: true,
 				}),
 			},
-			dependencies: [
-				implies({ flag: "fast", implies: "embeddings", value: false }),
+			constraints: [
+				implies({
+					name: "fast-path",
+					flag: "fast",
+					implies: "embeddings",
+					value: false,
+				}),
 			],
 			handler: (a) => {
 				out.push(`fast=${fmt(a.fast)} embeddings=${fmt(a.embeddings)}`);
@@ -1675,7 +1708,7 @@ test("dependencies: implies auto-set, default, conflict, agreement", async () =>
 	assert.equal(
 		r.stderr,
 		errOut(
-			"flag '--fast' implies '--no-embeddings', but '--embeddings' was explicitly provided",
+			"constraint \"fast-path\": flag '--fast' implies '--no-embeddings', but '--embeddings' was explicitly provided",
 			"myapp cmd",
 		),
 	);
@@ -1707,8 +1740,13 @@ function impliesDefaultedTriggerApp(out: string[]): AppImpl {
 					presence: "optional",
 				}),
 			},
-			dependencies: [
-				implies({ flag: "release", implies: "signed", value: true }),
+			constraints: [
+				implies({
+					name: "release-signing",
+					flag: "release",
+					implies: "signed",
+					value: true,
+				}),
 			],
 			handler: (a) => {
 				out.push(`release=${fmt(a.release)} signed=${fmt(a.signed)}`);
@@ -2622,8 +2660,13 @@ test("validate: never runs on an implied flag's fallback default", async () => {
 						},
 					}),
 				},
-				dependencies: [
-					implies({ flag: "fast", implies: "unsafe", value: true }),
+				constraints: [
+					implies({
+						name: "fast-unsafe",
+						flag: "fast",
+						implies: "unsafe",
+						value: true,
+					}),
 				],
 				handler: () => undefined,
 			}),
@@ -3226,13 +3269,20 @@ test("presence: requiredness is satisfied by env, not only by a CLI token", asyn
 	});
 });
 
-test("presence: a co-required group with a required member", async () => {
-	// §23.5's CoRequired row: a required member is always provided, so the
-	// group then forces every other member to be provided in every invocation.
-	// The shape is legal; these are the two errors it can reach.
-	const mk = (): AppImpl => {
-		const app = makeApp();
-		app.command(
+test("presence: a required member is refused at registration, in both families", () => {
+	// §23.5's `CoRequired`/`required` cell shipped as "legal, and stated
+	// because it is a surprising shape to write by accident". §26.5 inverts
+	// it: the surprise was the whole objection, and a member the invocation
+	// must always supply turns all-or-none into "every other member is
+	// required too" -- a declaration that already has a spelling. In
+	// at-least-one the constraint would be satisfied in every invocation and
+	// could never fire at all.
+	const build = (
+		make: (
+			members: readonly [{ name: string }, { name: string }],
+		) => AllOrNone | AtLeastOne,
+	): (() => unknown) => {
+		return () =>
 			defineReadOnlyCommand("cmd", {
 				help: "a command",
 				flags: {
@@ -3245,27 +3295,19 @@ test("presence: a co-required group with a required member", async () => {
 						presence: "optional",
 					}),
 				},
-				dependencies: [coRequired(["cert", "key"])],
+				constraints: [make([{ name: "cert" }, { name: "key" }])],
 				handler: () => 0,
-			}),
-		);
-		return app;
+			});
 	};
-	assert.deepEqual(await kwargsOf(mk(), ["cmd", "--cert", "c", "--key", "k"]), {
-		cert: "c",
-		key: "k",
-	});
-	// Only the required member: the group is violated, because a required
-	// member cannot be absent to leave the group vacuously satisfied.
-	assert.equal(
-		(await run(mk(), ["cmd", "--cert", "c"])).stderr,
-		errOut("flags --cert, --key must be used together", "myapp cmd"),
+	const expected =
+		'command "cmd": constraint "tls" member \'--cert\' declares presence: "required": a member the invocation must always supply leaves the constraint nothing to decide';
+	assert.throws(
+		build((members) => allOrNone({ name: "tls", members })),
+		{ name: "RegistrationError", message: expected },
 	);
-	// Neither: the dependency check sees an empty group and the required check
-	// is what fires.
-	assert.equal(
-		(await run(mk(), ["cmd"])).stderr,
-		errOut("flag '--cert' is required", "myapp cmd"),
+	assert.throws(
+		build((members) => atLeastOne({ name: "tls", members })),
+		{ name: "RegistrationError", message: expected },
 	);
 });
 

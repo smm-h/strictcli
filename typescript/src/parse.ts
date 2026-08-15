@@ -15,10 +15,21 @@
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import { newStdinTracker, type StdinTracker } from "./atprefix.js";
 import { coerceConfigScalarLong, widenJsonIntegers } from "./config.js";
+import {
+	constraintIndex,
+	type EngagementProbe,
+	isEngaged,
+	type ResolvedConstraint,
+	type ResolvedCoOccurrence,
+	renderMembers,
+	resolveConstraints,
+} from "./constraints.js";
 import type { ReservedFlags } from "./context.js";
 import { resolveEnvValue } from "./env.js";
 import {
+	errAllOrNoneTogether,
 	errArgumentWrapped,
+	errAtLeastOneRequired,
 	errBoolFlagNoValue,
 	errBoolNegationNoValue,
 	errConfigValueDuplicate,
@@ -29,18 +40,19 @@ import {
 	errFlagRequiresValue,
 	errFlagSetInBothAndConfig,
 	errFlagSetInBothCliAndConfig,
-	errFlagsMustBeUsedTogether,
 	errFlagValueError,
 	errHermeticConfigMutuallyExclusive,
 	errHermeticWithConfigCommands,
 	errImpliesConflict,
 	errMissingRequiredArgument,
+	errMutexDeclineClause,
 	errUnexpectedArgument,
 	errUnknownFlag,
 	ParseError,
 } from "./errors.js";
 import {
 	type AnyArg,
+	type AnyCommand,
 	type AnyDecl,
 	type AnyFlag,
 	buildScopeIndex,
@@ -965,6 +977,212 @@ function resolvePreTypedArgs(
 	}
 }
 
+// --- The constraint set at parse time (contract §26.4, §26.9) ---
+
+/** One positional arg's engagement facts, the arg-side of §26.3's predicate. */
+interface ArgEngagement {
+	/**
+	 * The invocation supplied a positional token for it, or a key for it at a
+	 * machine door -- never the declaration's default and never an optional
+	 * absence. For a VARIADIC arg, provided means at least one element, which
+	 * is why an explicitly supplied empty array is not a provision: the
+	 * implementations already read an empty array as "no tokens at all".
+	 */
+	readonly provided: boolean;
+	/** Non-empty by §26.3's sizes; equal to `provided` on a variadic arg. */
+	readonly nonEmpty: boolean;
+}
+
+/**
+ * The arg-side provided-ness the flag-side sourced store cannot answer: it
+ * holds flags only. Computed from the RAW positionals rather than from the
+ * resolved values, so it gives the same answer at the argv door and at both
+ * machine doors without moving arg coercion ahead of the constraint check --
+ * which would report a bad positional's type before the missing half of a
+ * pair (§18.29 items 267-268).
+ */
+function argEngagements(
+	args: readonly AnyArg[],
+	positionals: Positionals,
+): ReadonlyMap<string, ArgEngagement> {
+	const out = new Map<string, ArgEngagement>();
+	const sized = (v: unknown): boolean => {
+		if (typeof v === "string") {
+			return v.length > 0;
+		}
+		if (Array.isArray(v)) {
+			return v.length > 0;
+		}
+		if (v instanceof Map) {
+			return v.size > 0;
+		}
+		return v !== undefined && v !== null;
+	};
+	if (positionals.kind === "pre-typed") {
+		for (const a of args) {
+			if (!positionals.byName.has(a.name)) {
+				out.set(a.name, { provided: false, nonEmpty: false });
+				continue;
+			}
+			const raw = positionals.byName.get(a.name);
+			if (a.opts.variadic === true) {
+				const items = Array.isArray(raw) ? raw : [raw];
+				const provided = items.length > 0;
+				out.set(a.name, { provided, nonEmpty: provided });
+				continue;
+			}
+			out.set(a.name, { provided: true, nonEmpty: sized(raw) });
+		}
+		return out;
+	}
+	const tokens = positionals.values;
+	const lastArg =
+		args.length > 0 ? (args[args.length - 1] as AnyArg) : undefined;
+	const hasVariadic = lastArg?.opts.variadic === true;
+	const fixedArgs = hasVariadic ? args.slice(0, -1) : args;
+	fixedArgs.forEach((a, idx) => {
+		const supplied = idx < tokens.length;
+		out.set(a.name, {
+			provided: supplied,
+			nonEmpty: supplied && sized(tokens[idx]),
+		});
+	});
+	if (hasVariadic && lastArg !== undefined) {
+		const provided = tokens.slice(fixedArgs.length).length > 0;
+		out.set(lastArg.name, { provided, nonEmpty: provided });
+	}
+	return out;
+}
+
+/**
+ * Evaluates every constraint of a command: children before parents, siblings
+ * in declaration order (§26.4). A violated nested constraint reports its own
+ * sentence and its parent is never evaluated -- the only order that reports
+ * the fixable fact, since an operator who typed one half of a pair must be
+ * told the pair is incomplete rather than that the whole selection is
+ * missing.
+ */
+function evaluateConstraints(
+	def: AnyCommand,
+	store: SourcedStore,
+	args: readonly AnyArg[],
+	positionals: Positionals,
+): void {
+	if (def.constraints.length === 0) {
+		return;
+	}
+	const resolved = resolveConstraints(def);
+	const index = constraintIndex(resolved);
+	const argFacts = argEngagements(args, positionals);
+
+	const probe: EngagementProbe = (m) => {
+		if (m.kind === "arg") {
+			const facts = argFacts.get(m.name);
+			if (facts === undefined) {
+				return false;
+			}
+			return m.when === "non_empty" ? facts.nonEmpty : facts.provided;
+		}
+		if (!store.isPresentForDeps(m.name)) {
+			return false;
+		}
+		const v = store.get(m.name);
+		if (m.when === "true") {
+			return v === true;
+		}
+		if (m.when === "non_empty") {
+			if (typeof v === "string") {
+				return v.length > 0;
+			}
+			if (Array.isArray(v)) {
+				return v.length > 0;
+			}
+			if (v instanceof Map) {
+				return v.size > 0;
+			}
+			return v !== undefined && v !== null;
+		}
+		return true;
+	};
+
+	/**
+	 * §21.4's decline clause verbatim, appended when a bool member declaring
+	 * `when: "true"` was provided as FALSE, naming the first such member in
+	 * declaration order. Reusing it is not a claim that at-least-one is
+	 * exclusivity: the clause is about a negated bool, which is the same fact
+	 * under both constructs (§12.15).
+	 */
+	const declineClause = (c: ResolvedCoOccurrence): string => {
+		for (const m of c.members) {
+			if (m.kind !== "flag" || m.when !== "true") {
+				continue;
+			}
+			if (store.isPresentForDeps(m.name) && store.get(m.name) === false) {
+				return errMutexDeclineClause(m.name);
+			}
+		}
+		return "";
+	};
+
+	const settled = new Set<string>();
+	const check = (c: ResolvedConstraint): void => {
+		if (settled.has(c.name)) {
+			return;
+		}
+		settled.add(c.name);
+		if (c.kind === "requires") {
+			if (
+				store.isPresentForDeps(c.flag) &&
+				!store.isPresentForDeps(c.dependsOn)
+			) {
+				throw new ParseError(errFlagRequiresFlag(c.name, c.flag, c.dependsOn));
+			}
+			return;
+		}
+		if (c.kind === "implies") {
+			// The conflict fired during injection; there is nothing left to test.
+			return;
+		}
+		// Children first, in declaration order.
+		for (const m of c.members) {
+			if (m.kind !== "constraint") {
+				continue;
+			}
+			const nested = index.get(m.name);
+			if (nested !== undefined) {
+				check(nested);
+			}
+		}
+		const engaged = c.members.filter((m) => isEngaged(m, index, probe));
+		if (c.kind === "at-least-one") {
+			// A vacuous at-least-one is violated, which is the whole of what it
+			// says. A nested member counts toward its parent only when engaged,
+			// so two vacuous pairs leave the parent unsatisfied (§26.4).
+			if (engaged.length === 0) {
+				throw new ParseError(
+					errAtLeastOneRequired(
+						c.name,
+						renderMembers(c.members, index, "cli"),
+						declineClause(c),
+					),
+				);
+			}
+			return;
+		}
+		// all-or-none: every member engaged, or none. With nothing engaged it
+		// is VACUOUSLY true -- the "none" half of its own name.
+		if (engaged.length > 0 && engaged.length < c.members.length) {
+			throw new ParseError(
+				errAllOrNoneTogether(c.name, renderMembers(c.members, index, "cli")),
+			);
+		}
+	};
+
+	for (const c of resolved) {
+		check(c);
+	}
+}
+
 /**
  * Second half of command parsing: implies resolution,
  * dependency checks, defaults, choices, custom validation, positional-arg
@@ -991,9 +1209,10 @@ export function validateAndBuildKwargs(
 	// errors, evaluated by the election phase in scopeparse.ts -- where the
 	// scope tree, not a group, decides which alternative is live.
 
-	// Implies resolution (before dependency checks, so implied values
-	// participate in downstream coRequired/requires validation).
-	for (const dep of def.dependencies) {
+	// Implies resolution, before every other constraint, so an implied value
+	// can engage a member (§26.4). Its injection order is untouched by the
+	// constraint round (§26.13).
+	for (const dep of def.constraints) {
 		if (dep.kind !== "implies") {
 			continue;
 		}
@@ -1005,7 +1224,7 @@ export function validateAndBuildKwargs(
 				const neg = dep.value ? "" : "no-";
 				const explicitNeg = dep.value ? "no-" : "";
 				throw new ParseError(
-					errImpliesConflict(dep.flag, neg, dep.implies, explicitNeg),
+					errImpliesConflict(dep.name, dep.flag, neg, dep.implies, explicitNeg),
 				);
 			}
 		} else {
@@ -1013,24 +1232,10 @@ export function validateAndBuildKwargs(
 		}
 	}
 
-	// Dependency constraints: cli, env, config, implied count; default does not.
-	for (const dep of def.dependencies) {
-		if (dep.kind === "co-required") {
-			const present = dep.flags.filter((n) => store.isPresentForDeps(n));
-			if (present.length > 0 && present.length < dep.flags.length) {
-				throw new ParseError(
-					errFlagsMustBeUsedTogether(dep.flags.map((n) => `--${n}`).join(", ")),
-				);
-			}
-		} else if (dep.kind === "requires") {
-			if (
-				store.isPresentForDeps(dep.flag) &&
-				!store.isPresentForDeps(dep.dependsOn)
-			) {
-				throw new ParseError(errFlagRequiresFlag(dep.flag, dep.dependsOn));
-			}
-		}
-	}
+	// The constraint set: cli, env, config and implied engage; a declared
+	// default does not (§26.3, §23.6). Evaluated BEFORE defaults are applied,
+	// exactly where the dependency families ran.
+	evaluateConstraints(def, store, args, positionals);
 
 	// Defaults. Every flag resolves from its own declared presence: the
 	// exemption that handed a mutex member an absent value its declaration

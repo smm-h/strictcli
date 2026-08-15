@@ -22,9 +22,9 @@ export type SourceLabel =
  * are the declaration deciding -- `infra` is a RelativeToRoot default whose
  * label merely says WHICH default it was -- so neither counts.
  *
- * Both consumers read this set: the dependency predicate below
- * (CoRequired/Requires/Implies presence, plus the custom-validation step,
- * which never runs on a declared default) and `ctx.provided`.
+ * Both consumers read this set: the predicate below (the constraint system's
+ * engagement, plus the custom-validation step, which never runs on a declared
+ * default) and `ctx.provided`.
  */
 export const PROVIDED_SOURCES: ReadonlySet<string> = new Set<SourceLabel>([
 	"cli",
@@ -84,11 +84,11 @@ export class SourcedStore {
 	}
 
 	/**
-	 * "Present" for dependency checks (coRequired, requires, implies): the
-	 * invocation caused the value. This is the one shared definition
-	 * (contract §23.6) -- cli, env, config and implied count; `default` and
-	 * `infra` do not, both being the declaration deciding. `ctx.provided`
-	 * answers off the same set.
+	 * "Present" for the constraint system: §26.3's `present` selector, and the
+	 * predicate `requires` and `implies` keep. The invocation caused the value.
+	 * This is the one shared definition (contract §23.6) -- cli, env, config
+	 * and implied count; `default` and `infra` do not, both being the
+	 * declaration deciding. `ctx.provided` answers off the same set.
 	 */
 	isPresentForDeps(name: string): boolean {
 		const e = this.entries.get(name);

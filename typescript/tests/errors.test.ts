@@ -107,7 +107,7 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // argument, so root scope, inside a scope and both front doors render one
 // sentence from one place (§12.13). The three inline templates it replaces were
 // never catalogued.
-const EXPECTED_TEMPLATE_COUNT = 357;
+const EXPECTED_TEMPLATE_COUNT = 369;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,
@@ -215,17 +215,37 @@ test("parse-time templates are byte-identical to sibling output", () => {
 		"--no-quiet cannot be combined with --json " +
 			"(--no-quiet declines an option; it does not choose one)",
 	);
+	// Every constraint sentence carries the `constraint "<c>": ` prefix, in
+	// DOUBLE quotes: a declared identifier is double-quoted and a token the
+	// operator typed is single-quoted (§12.15).
 	assert.equal(
-		errors.errFlagRequiresFlag("watch", "serve"),
-		"flag '--watch' requires '--serve'",
+		errors.errFlagRequiresFlag("serve-dep", "watch", "serve"),
+		"constraint \"serve-dep\": flag '--watch' requires '--serve'",
 	);
 	assert.equal(
-		errors.errFlagsMustBeUsedTogether("--user, --pass"),
-		"flags --user, --pass must be used together",
+		errors.errAllOrNoneTogether("creds", "--user, --pass"),
+		'constraint "creds": --user, --pass must be used together',
 	);
 	assert.equal(
-		errors.errImpliesConflict("push", "", "commit", "no-"),
-		"flag '--push' implies '--commit', but '--no-commit' was explicitly provided",
+		errors.errAtLeastOneRequired(
+			"purge-selection",
+			"targets, --older-than, --all",
+			"",
+		),
+		'constraint "purge-selection": at least one of targets, --older-than, --all is required',
+	);
+	assert.equal(
+		errors.errAtLeastOneRequired(
+			"purge-selection",
+			"targets, --all",
+			errors.errMutexDeclineClause("all"),
+		),
+		'constraint "purge-selection": at least one of targets, --all is required ' +
+			"(--no-all declines an option; it does not choose one)",
+	);
+	assert.equal(
+		errors.errImpliesConflict("sync", "push", "", "commit", "no-"),
+		"constraint \"sync\": flag '--push' implies '--commit', but '--no-commit' was explicitly provided",
 	);
 	assert.equal(
 		errors.errHermeticConfigMutuallyExclusive(),

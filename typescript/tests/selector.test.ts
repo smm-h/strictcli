@@ -14,11 +14,13 @@ import { test } from "node:test";
 import type { App, AppSpec } from "../src/app.js";
 import { createApp } from "../src/app.js";
 import * as errors from "../src/errors.js";
+import type { Constraint } from "../src/factories.js";
 import {
+	allOrNone,
 	arg,
+	atLeastOne,
 	choice,
 	choiceFlag,
-	coRequired,
 	defineReadOnlyCommand,
 	flag,
 	implies,
@@ -1514,7 +1516,7 @@ test("guard: every name ban re-runs at every depth", () => {
 });
 
 test("guard: a constraint naming a scoped flag is a registration error", () => {
-	const cmd = (dependency: ReturnType<typeof requires>) =>
+	const cmd = (constraint: Constraint) =>
 		defineReadOnlyCommand("send", {
 			help: "h",
 			flags: {
@@ -1540,21 +1542,47 @@ test("guard: a constraint naming a scoped flag is a registration error", () => {
 					{ help: "h", presence: "required" },
 				),
 			},
-			dependencies: [dependency],
+			constraints: [constraint],
 			handler: () => 0,
 		});
+	// The message names the CONSTRAINT rather than its family (§12.15's
+	// amendment): one of the three family words no longer exists, and the
+	// mandatory name is a better identifier than the family word ever was.
 	rejects(
-		() => cmd(requires({ flag: "subject", dependsOn: "loud" })),
-		"command \"send\": Requires references 'subject', which is declared under '--via email': dependency constraints operate at root scope only",
-	);
-	rejects(
-		() => cmd(loose(coRequired(["subject", "loud"]))),
-		"command \"send\": CoRequired references 'subject', which is declared under '--via email': dependency constraints operate at root scope only",
+		() => cmd(requires({ name: "reach", flag: "subject", dependsOn: "loud" })),
+		"command \"send\": constraint \"reach\" references 'subject', which is declared under '--via email': constraints operate at root scope only",
 	);
 	rejects(
 		() =>
-			cmd(loose(implies({ flag: "subject", implies: "loud", value: true }))),
-		"command \"send\": Implies references 'subject', which is declared under '--via email': dependency constraints operate at root scope only",
+			cmd(
+				allOrNone({
+					name: "reach",
+					members: [{ name: "subject" }, { name: "loud", when: "true" }],
+				}),
+			),
+		"command \"send\": constraint \"reach\" references 'subject', which is declared under '--via email': constraints operate at root scope only",
+	);
+	rejects(
+		() =>
+			cmd(
+				atLeastOne({
+					name: "reach",
+					members: [{ name: "subject" }, { name: "loud", when: "true" }],
+				}),
+			),
+		"command \"send\": constraint \"reach\" references 'subject', which is declared under '--via email': constraints operate at root scope only",
+	);
+	rejects(
+		() =>
+			cmd(
+				implies({
+					name: "reach",
+					flag: "subject",
+					implies: "loud",
+					value: true,
+				}),
+			),
+		"command \"send\": constraint \"reach\" references 'subject', which is declared under '--via email': constraints operate at root scope only",
 	);
 });
 

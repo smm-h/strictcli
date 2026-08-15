@@ -8,9 +8,9 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
+	allOrNone,
 	arg,
 	choice,
-	coRequired,
 	createApp,
 	defineReadOnlyCommand,
 	flag,
@@ -463,13 +463,18 @@ test("call: dependency violations raise InvokeError", async () => {
 				user: flag("user", t.str, { help: "user", presence: "optional" }),
 				pass: flag("pass", t.str, { help: "pass", presence: "optional" }),
 			},
-			dependencies: [coRequired(["user", "pass"])],
+			constraints: [
+				allOrNone({
+					name: "creds",
+					members: [{ name: "user" }, { name: "pass" }],
+				}),
+			],
 			handler: () => 0,
 		}),
 	);
 	await assert.rejects(app.call("sync", { user: "alice" }), {
 		name: "InvokeError",
-		message: "flags --user, --pass must be used together",
+		message: 'constraint "creds": --user, --pass must be used together',
 	});
 });
 
@@ -491,8 +496,13 @@ test("call: implies dependency injects the implied value", async () => {
 					default: false,
 				}),
 			},
-			dependencies: [
-				implies({ flag: "watch", implies: "follow", value: true }),
+			constraints: [
+				implies({
+					name: "watch-follow",
+					flag: "watch",
+					implies: "follow",
+					value: true,
+				}),
 			],
 			handler: (args, ctx) => {
 				seen = { watch: args.watch, follow: args.follow };

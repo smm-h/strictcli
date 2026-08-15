@@ -1,9 +1,10 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
+	allOrNone,
 	arg,
+	atLeastOne,
 	choice,
-	coRequired,
 	defineReadOnlyCommand,
 	deprecated,
 	flag,
@@ -86,20 +87,44 @@ test("arg registration errors match sibling messages", () => {
 	);
 });
 
-test("dependency descriptors carry sibling field shapes", () => {
-	const cr = coRequired(["user", "password"]);
-	assert.deepEqual(cr, { kind: "co-required", flags: ["user", "password"] });
+test("constraint descriptors carry the mandatory name and the member records", () => {
+	const alo = atLeastOne({
+		name: "purge-selection",
+		members: [{ name: "targets", when: "non_empty" }, { name: "all" }],
+	});
+	assert.deepEqual(alo, {
+		kind: "at-least-one",
+		name: "purge-selection",
+		members: [{ name: "targets", when: "non_empty" }, { name: "all" }],
+	});
 
-	const rq = requires({ flag: "password", dependsOn: "user" });
+	const aon = allOrNone({
+		name: "author-name",
+		members: [{ name: "old-name" }, { name: "new-name" }],
+	});
+	assert.deepEqual(aon, {
+		kind: "all-or-none",
+		name: "author-name",
+		members: [{ name: "old-name" }, { name: "new-name" }],
+	});
+
+	const rq = requires({ name: "creds", flag: "password", dependsOn: "user" });
 	assert.deepEqual(rq, {
 		kind: "requires",
+		name: "creds",
 		flag: "password",
 		dependsOn: "user",
 	});
 
-	const im = implies({ flag: "debug", implies: "chatter", value: true });
+	const im = implies({
+		name: "noise",
+		flag: "debug",
+		implies: "chatter",
+		value: true,
+	});
 	assert.deepEqual(im, {
 		kind: "implies",
+		name: "noise",
 		flag: "debug",
 		implies: "chatter",
 		value: true,

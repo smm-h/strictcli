@@ -18,9 +18,15 @@
 
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import {
+	constraintIndex,
+	helpSentence,
+	resolveConstraints,
+} from "./constraints.js";
+import {
 	type AnyArg,
 	type AnyChoice,
 	type AnyChoiceFlag,
+	type AnyCommand,
 	type AnyDecl,
 	type AnyFlag,
 	anyChoiceHasHelp,
@@ -543,9 +549,41 @@ export function formatCommandHelp(
 	if (def.allDecls.length > 0) {
 		lines.push("", "Flags:", ...flagBlock(def.allDecls));
 	}
+	// The `Constraints:` section, after the last of the Arguments/Flags blocks
+	// (§26.10). This is the constraint system's FIRST rendering in any
+	// implementation: a declared rule that decides whether an invocation is
+	// accepted and that --help cannot show is the same erasure the presence
+	// round ended for requiredness.
+	if (def.constraints.length > 0) {
+		lines.push("", "Constraints:", ...constraintBlock(def));
+	}
 	if (app.globalFlags.length > 0) {
 		lines.push("", "Global flags:", ...twoColumn(flagRows(app.globalFlags)));
 	}
 
 	return lines.join("\n");
+}
+
+/**
+ * One line per constraint, INCLUDING nested ones -- a nested constraint has
+ * its own line and also appears inside its parent's line, because it is both
+ * a rule of its own and an operand.
+ *
+ * The declared NAME renders in the position a flag name occupies, so the
+ * identifier a violation prints is discoverable in the help the operator
+ * already read. The alignment column is computed across this block alone and
+ * never shares the flag block's, which is §24.10's rule for `Arguments:`
+ * applied to a third section. A member's presence part is deliberately not
+ * repeated: every flag line already carries exactly one (§23.8), and a
+ * constraint states a rule over members rather than a property of one.
+ */
+function constraintBlock(def: AnyCommand): string[] {
+	const resolved = resolveConstraints(def);
+	const index = constraintIndex(resolved);
+	return renderBlock(
+		resolved.map((c) => ({
+			left: c.name,
+			right: helpSentence(c, index),
+		})),
+	);
 }

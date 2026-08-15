@@ -30,9 +30,9 @@ import { test } from "node:test";
 import { deprecated } from "../src/factories.js";
 import {
 	type App,
+	allOrNone,
 	arg,
 	choice,
-	coRequired,
 	createApp,
 	defineReadOnlyCommand,
 	flag,
@@ -453,14 +453,24 @@ const EXPECTED_JSON = `{
       ],
       "constraints": [
         {
-          "type": "co_required",
-          "flags": [
-            "host",
-            "port-num"
+          "type": "all_or_none",
+          "name": "endpoint",
+          "members": [
+            {
+              "kind": "flag",
+              "name": "host",
+              "when": "present"
+            },
+            {
+              "kind": "flag",
+              "name": "port-num",
+              "when": "present"
+            }
           ]
         },
         {
           "type": "requires",
+          "name": "cert-ssl",
           "flag": "cert",
           "depends_on": "ssl"
         }
@@ -493,6 +503,7 @@ const EXPECTED_JSON = `{
       "constraints": [
         {
           "type": "implies",
+          "name": "email-alert",
           "flag": "email",
           "implies": "alert",
           "value": true
@@ -1153,9 +1164,12 @@ export function buildRichApp(): App {
 					presence: "optional",
 				}),
 			},
-			dependencies: [
-				coRequired(["host", "port-num"]),
-				requires({ flag: "cert", dependsOn: "ssl" }),
+			constraints: [
+				allOrNone({
+					name: "endpoint",
+					members: [{ name: "host" }, { name: "port-num" }],
+				}),
+				requires({ name: "cert-ssl", flag: "cert", dependsOn: "ssl" }),
 			],
 			handler: () => 0,
 		}),
@@ -1174,7 +1188,14 @@ export function buildRichApp(): App {
 					presence: "required",
 				}),
 			},
-			dependencies: [implies({ flag: "email", implies: "alert", value: true })],
+			constraints: [
+				implies({
+					name: "email-alert",
+					flag: "email",
+					implies: "alert",
+					value: true,
+				}),
+			],
 			handler: () => 0,
 		}),
 	);

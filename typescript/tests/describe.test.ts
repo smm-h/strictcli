@@ -117,8 +117,11 @@ export type _ValueChoiceDef = Assert<
 		Listed<"ValueChoiceDef">
 	>
 >;
-export type _CoRequired = Assert<
-	Equals<keyof api.CoRequired & string, Listed<"CoRequired">>
+export type _AtLeastOne = Assert<
+	Equals<keyof api.AtLeastOne & string, Listed<"AtLeastOne">>
+>;
+export type _AllOrNone = Assert<
+	Equals<keyof api.AllOrNone & string, Listed<"AllOrNone">>
 >;
 export type _Requires = Assert<
 	Equals<keyof api.Requires & string, Listed<"Requires">>
@@ -221,6 +224,18 @@ export type _MutatingPassthroughSpecKeys = Assert<
 		OCKeys<"mutatingPassthrough">
 	>
 >;
+export type _AtLeastOneSpecKeys = Assert<
+	Equals<
+		keyof Parameters<typeof api.atLeastOne>[0] & string,
+		OCKeys<"atLeastOne">
+	>
+>;
+export type _AllOrNoneSpecKeys = Assert<
+	Equals<
+		keyof Parameters<typeof api.allOrNone>[0] & string,
+		OCKeys<"allOrNone">
+	>
+>;
 export type _RequiresSpecKeys = Assert<
 	Equals<keyof Parameters<typeof api.requires>[0] & string, OCKeys<"requires">>
 >;
@@ -306,7 +321,8 @@ const typeWitness: Record<TypeName, unknown> = {
 	CheckProblem: witnessType<api.CheckProblem>(),
 	CheckSeverity: witnessType<api.CheckSeverity>(),
 	CheckStatus: witnessType<api.CheckStatus>(),
-	CoRequired: witnessType<api.CoRequired>(),
+	AtLeastOne: witnessType<api.AtLeastOne>(),
+	AllOrNone: witnessType<api.AllOrNone>(),
 	CommandDef:
 		witnessType<api.CommandDef<string, api.FlagMap, readonly api.AnyArg[]>>(),
 	Completed: witnessType<api.Completed>(),
@@ -327,7 +343,10 @@ const typeWitness: Record<TypeName, unknown> = {
 	ConfigFieldSpec: witnessType<api.ConfigFieldSpec>(),
 	ConflictMode: witnessType<api.ConflictMode>(),
 	ConnectionEnvReader: witnessType<api.ConnectionEnvReader>(),
-	Dependency: witnessType<api.Dependency>(),
+	Constraint: witnessType<api.Constraint>(),
+	ConstraintMember: witnessType<api.ConstraintMember>(),
+	ConstraintMembers: witnessType<api.ConstraintMembers>(),
+	When: witnessType<api.When>(),
 	DeprecatedDef: witnessType<api.DeprecatedDef<string>>(),
 	DictSchema: witnessType<api.DictSchema>(),
 	ElemSchema: witnessType<api.ElemSchema>(),
@@ -530,15 +549,25 @@ test("registry: runtime keys of factory-built carriers match declaration order",
 		runtimeMembers("ValueChoiceDef"),
 	);
 	assert.deepEqual(
-		Object.keys(api.coRequired(["a", "b"])),
-		runtimeMembers("CoRequired"),
+		Object.keys(
+			api.atLeastOne({ name: "c", members: [{ name: "a" }, { name: "b" }] }),
+		),
+		runtimeMembers("AtLeastOne"),
 	);
 	assert.deepEqual(
-		Object.keys(api.requires({ flag: "a", dependsOn: "b" })),
+		Object.keys(
+			api.allOrNone({ name: "c", members: [{ name: "a" }, { name: "b" }] }),
+		),
+		runtimeMembers("AllOrNone"),
+	);
+	assert.deepEqual(
+		Object.keys(api.requires({ name: "c", flag: "a", dependsOn: "b" })),
 		runtimeMembers("Requires"),
 	);
 	assert.deepEqual(
-		Object.keys(api.implies({ flag: "a", implies: "b", value: true })),
+		Object.keys(
+			api.implies({ name: "c", flag: "a", implies: "b", value: true }),
+		),
 		runtimeMembers("Implies"),
 	);
 	const p = api.readOnlyPassthrough("git", { help: "h", handler: () => 0 });

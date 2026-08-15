@@ -66,6 +66,7 @@ export { assertNever, provided } from "./elected.js";
 // Go panics / Python ValueError, parse failures print to stderr and exit 1).
 export { EffectFailed, InvokeError } from "./errors.js";
 export type {
+	AllOrNone,
 	AnyArg,
 	AnyChoice,
 	AnyChoiceFlag,
@@ -75,6 +76,7 @@ export type {
 	AnyFlagSet,
 	ArgDef,
 	ArgOpts,
+	AtLeastOne,
 	ChoiceDef,
 	ChoiceFlagDef,
 	ChoiceFlagOpts,
@@ -82,8 +84,9 @@ export type {
 	ChoiceRecord,
 	CommandDef,
 	ConflictMode,
-	CoRequired,
-	Dependency,
+	Constraint,
+	ConstraintMember,
+	ConstraintMembers,
 	DeprecatedDef,
 	ElectBy,
 	ElementOf,
@@ -100,12 +103,14 @@ export type {
 	ReadOnlyCommandSpec,
 	Requires,
 	ValueChoiceDef,
+	When,
 } from "./factories.js";
 export {
+	allOrNone,
 	arg,
+	atLeastOne,
 	choice,
 	choiceFlag,
-	coRequired,
 	defineMutatingCommand,
 	defineReadOnlyCommand,
 	deprecated,

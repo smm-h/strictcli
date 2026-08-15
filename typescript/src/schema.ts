@@ -31,6 +31,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { AppImpl, GroupImpl, RegisteredCommand } from "./app.js";
 import type { ConfigFieldRt } from "./config.js";
+import { resolveConstraints } from "./constraints.js";
 import type { Effect, Forwarding, Grant } from "./effects.js";
 import {
 	errCannotDetermineProjectIDNoName,
@@ -366,35 +367,65 @@ function serializeSelector(sel: AnyChoiceFlag): Record<string, unknown> {
 	return d;
 }
 
-/** Builds the constraints array from a command's dependencies. */
+/**
+ * Builds the constraint catalogue (§25.7's amendment, §26.11). Four `type`
+ * values, a mandatory `name` on every entry, and a `members` array of
+ * `{kind, name, when}` records in declaration order.
+ *
+ * The encoding is COMPLETE rather than indicative: the resolved `kind` is
+ * published so a consumer never has to search the flag and arg lists to learn
+ * what a name refers to, and the nesting is published as constraint-kind
+ * members rather than flattened into leaves -- a partially encoded constraint
+ * is not a legal intermediate state.
+ */
 function serializeConstraints(def: AnyCommand): Record<string, unknown>[] {
-	const constraints: Record<string, unknown>[] = [];
-	// The `mutex` constraint entry is DELETED with the construct (§21's box):
-	// an exactly-one shape is a selector now, and it is published as a flag
-	// entry rather than as a constraint over independent flags.
-	for (const dep of def.dependencies) {
-		switch (dep.kind) {
-			case "co-required":
-				constraints.push({ type: "co_required", flags: [...dep.flags] });
+	const out: Record<string, unknown>[] = [];
+	// The `mutex` entry is DELETED with the construct (§21's box) and
+	// `co_required` goes the same way (§26.1): an exactly-one shape is a
+	// selector now, and all-or-none absorbed co-required by rename.
+	for (const c of resolveConstraints(def)) {
+		switch (c.kind) {
+			case "at-least-one":
+			case "all-or-none":
+				out.push({
+					type: c.kind === "at-least-one" ? "at_least_one" : "all_or_none",
+					name: c.name,
+					members: c.members.map((m) => {
+						const entry: Record<string, unknown> = {
+							kind: m.kind,
+							name: m.name,
+						};
+						// Always emitted on a flag or arg member, never on a
+						// constraint member: a defaulted key that could be omitted is
+						// an erasure, and this format exists to end erasures. It
+						// therefore takes no `defaults` block entry.
+						if (m.when !== undefined) {
+							entry.when = m.when;
+						}
+						return entry;
+					}),
+				});
 				break;
 			case "requires":
-				constraints.push({
+				out.push({
 					type: "requires",
-					flag: dep.flag,
-					depends_on: dep.dependsOn,
+					name: c.name,
+					flag: c.flag,
+					depends_on: c.dependsOn,
 				});
 				break;
 			case "implies":
-				constraints.push({
+				out.push({
 					type: "implies",
-					flag: dep.flag,
-					implies: dep.implies,
-					value: dep.value,
+					name: c.name,
+					flag: c.flag,
+					implies: c.implies,
+					value: c.value,
 				});
 				break;
 		}
 	}
-	return constraints;
+	return out;
 }
 
 /** Serializes a registered command (regular or passthrough). */

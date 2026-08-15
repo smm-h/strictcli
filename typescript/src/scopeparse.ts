@@ -343,7 +343,7 @@ function whyOutOfScope(
  * election and then recurses into the elected choice.
  *
  * `out` is null for the root scope, whose ordinary flags are resolved by
- * parse.ts's existing root pipeline (env, config, implies, dependencies).
+ * parse.ts's existing root pipeline (env, config, implies, constraints).
  */
 function resolveScope(
 	decls: readonly AnyDecl[],

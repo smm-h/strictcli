@@ -44,9 +44,6 @@ import {
 	errChoicesEntryNotRecord,
 	errCoElectableNameReuse,
 	errCommandAtMostOneVariadic,
-	errCommandCoRequiredDuplicate,
-	errCommandCoRequiredMinFlags,
-	errCommandCoRequiredUnknownFlag,
 	errCommandDryRunReasonMissing,
 	errCommandDryRunReasonWithoutDeclaration,
 	errCommandDuplicateArg,
@@ -54,15 +51,29 @@ import {
 	errCommandImpliesSameFlag,
 	errCommandImpliesTargetNotBool,
 	errCommandImpliesTriggerNotBool,
-	errCommandImpliesUnknownFlag,
 	errCommandImpliesValueMustBeBool,
 	errCommandMissingHelp,
 	errCommandReadOnlyConsequential,
 	errCommandReadOnlyDryRunUnsupported,
 	errCommandRequiresSameFlag,
-	errCommandRequiresUnknownFlag,
 	errCommandVariadicMustBeLast,
+	errConstraintCycle,
+	errConstraintMemberAmbiguous,
+	errConstraintMemberBoolWhen,
+	errConstraintMemberDuplicate,
+	errConstraintMemberNotRecord,
+	errConstraintMemberRequired,
+	errConstraintMemberUnknown,
+	errConstraintMinMembers,
+	errConstraintNameCharset,
+	errConstraintNameCollides,
+	errConstraintNameDuplicate,
+	errConstraintNestedFamily,
+	errConstraintNestedWhen,
 	errConstraintReferencesScopedFlag,
+	errConstraintUnknownFlag,
+	errConstraintWhenNonEmptyNotSized,
+	errConstraintWhenTrueNotBool,
 	errDeprecatedMessageEmpty,
 	errDeprecatedNameEmpty,
 	errFlagChoiceMagnitude,
@@ -1099,36 +1110,133 @@ export function flagSet<const N extends string, const F extends FlagMap>(
 // period, and no `ExactlyOne` constructor or cardinality parameter may
 // reintroduce one.
 
-/** Constraint: the listed flags must all be provided together or all be absent. */
-export interface CoRequired {
-	readonly kind: "co-required";
-	/** Flag names (dash form), matching the sibling CoRequired shape. */
-	readonly flags: readonly string[];
+// `CoRequired` is DELETED by rename (contract §26.1): all-or-none absorbs it,
+// with no alias, no shim and no deprecation period. The declaration changed
+// shape in the same pass -- a mandatory name, member records, a widened
+// operand vocabulary -- so keeping the old noun would leave one word
+// describing two different declarations. `AllOrNone` beside `AtLeastOne` says
+// what each predicate is, where `CoRequired` beside `AtLeastOne` paired a
+// relation word with a cardinality word.
+//
+// Exactly-one is not here and cannot return: there is no `ExactlyOne`
+// constructor, no cardinality parameter, no min/max pair and no internal
+// `Group(min, max)` representation through which one could be reintroduced
+// (§26.1, §26.14).
+
+/**
+ * The closed election vocabulary (§26.3): what counts as "chosen" is a
+ * DECLARATION, never parser lore.
+ *
+ * - `present` -- the value is provided (§23.6: cli, env, config, implied;
+ *   never default or infra). Legal on every type, and the default;
+ * - `true` -- provided AND resolved to `true`. Bool only;
+ * - `non_empty` -- provided AND a non-empty string, list or map. Legal on
+ *   `str`, list and dict flags, and variadic args.
+ *
+ * There is deliberately NO source filter in this vocabulary: a constraint is
+ * not an election, so it takes the framework's one definition of "was this
+ * supplied" rather than restoring a second one under a new name.
+ */
+export type When = "present" | "true" | "non_empty";
+
+/**
+ * One member of a co-occurrence constraint: a REFERENCE by name plus its
+ * election selector, and nothing else. A member declares no presence and no
+ * help of its own -- the declaration it refers to carries every fact about
+ * the value (§26.2).
+ *
+ * The name resolves in one namespace: the command's flags, its positional
+ * args, and its other named at-least-one / all-or-none constraints.
+ */
+export interface ConstraintMember {
+	readonly name: string;
+	/** Defaults to `present`; MANDATORY on a bool member (§26.3). */
+	readonly when?: When;
 }
 
-/** Creates a co-required constraint: all listed flags must appear together. */
-export function coRequired(flags: readonly string[]): CoRequired {
-	return { kind: "co-required", flags };
+/**
+ * The two-member floor, as a TYPE: a one-member constraint is a COMPILE error
+ * (§26.6). `errConstraintMinMembers` stays reachable through a widened or
+ * JSON-shaped caller, which is exactly the covering input its conformance case
+ * asserts.
+ */
+export type ConstraintMembers = readonly [
+	ConstraintMember,
+	ConstraintMember,
+	...ConstraintMember[],
+];
+
+/** Constraint: at least one member is engaged. Members MAY co-occur (§26.1). */
+export interface AtLeastOne {
+	readonly kind: "at-least-one";
+	readonly name: string;
+	readonly members: readonly ConstraintMember[];
+}
+
+/** Constraint: either every member is engaged or none is (§26.1). */
+export interface AllOrNone {
+	readonly kind: "all-or-none";
+	readonly name: string;
+	readonly members: readonly ConstraintMember[];
+}
+
+/**
+ * Creates an at-least-one constraint. It is NOT exclusivity: it has no upper
+ * bound and never refuses a second member -- engaging two, or all, satisfies
+ * it exactly as engaging one does.
+ */
+export function atLeastOne(spec: {
+	readonly name: string;
+	readonly members: ConstraintMembers;
+}): AtLeastOne {
+	return { kind: "at-least-one", name: spec.name, members: spec.members };
+}
+
+/**
+ * Creates an all-or-none constraint. With nothing engaged it is VACUOUSLY
+ * satisfied -- that is the "none" half of its own name, not a loophole.
+ */
+export function allOrNone(spec: {
+	readonly name: string;
+	readonly members: ConstraintMembers;
+}): AllOrNone {
+	return { kind: "all-or-none", name: spec.name, members: spec.members };
 }
 
 /** Constraint: when `flag` is provided, `dependsOn` must also be provided. */
 export interface Requires {
 	readonly kind: "requires";
+	readonly name: string;
 	readonly flag: string;
 	readonly dependsOn: string;
 }
 
-/** Creates a one-way dependency: `flag` requires `dependsOn` to also be set. */
+/**
+ * Creates a one-way dependency: `flag` requires `dependsOn` to also be set.
+ *
+ * Semantics are untouched by the constraint round (§26.13): the predicate is
+ * §23.6's provided, and the operand vocabulary stays FLAGS ONLY, by name, at
+ * root scope -- no args, no nested constraints, no `when` selector. What it
+ * takes is the shared surface: the mandatory name, the container, the
+ * `constraint "<c>": ` prefix, a help line and a schema key.
+ */
 export function requires(spec: {
+	readonly name: string;
 	readonly flag: string;
 	readonly dependsOn: string;
 }): Requires {
-	return { kind: "requires", flag: spec.flag, dependsOn: spec.dependsOn };
+	return {
+		kind: "requires",
+		name: spec.name,
+		flag: spec.flag,
+		dependsOn: spec.dependsOn,
+	};
 }
 
 /** Constraint: when `flag` is provided, `implies` is automatically set to `value`. Both must be bool flags. */
 export interface Implies {
 	readonly kind: "implies";
+	readonly name: string;
 	readonly flag: string;
 	readonly implies: string;
 	readonly value: boolean;
@@ -1136,20 +1244,25 @@ export interface Implies {
 
 /** Creates an implication: when `flag` is set, auto-sets `implies` to `value`. Both must be bool flags. */
 export function implies(spec: {
+	readonly name: string;
 	readonly flag: string;
 	readonly implies: string;
 	readonly value: boolean;
 }): Implies {
 	return {
 		kind: "implies",
+		name: spec.name,
 		flag: spec.flag,
 		implies: spec.implies,
 		value: spec.value,
 	};
 }
 
-/** Union of all inter-flag dependency constraint types. */
-export type Dependency = CoRequired | Requires | Implies;
+/** Union of all four constraint kinds (§26.1). */
+export type Constraint = AtLeastOne | AllOrNone | Requires | Implies;
+
+/** The two co-occurrence families -- the only kinds that may be NESTED (§26.2). */
+export type CoOccurrence = AtLeastOne | AllOrNone;
 
 // --- Command carriers ---
 
@@ -1987,6 +2100,394 @@ function scopedFlagPathMap(
 	return out;
 }
 
+// --- Constraint-set registration (contract §26.8) ---
+
+/** `[a-z][a-z0-9-]*`, the framework's one identifier charset. */
+const CONSTRAINT_NAME_RE = /^[a-z][a-z0-9-]*$/;
+
+/** The two co-occurrence families -- the only kinds carrying members. */
+function isCoOccurrence(c: Constraint): c is CoOccurrence {
+	return c.kind === "at-least-one" || c.kind === "all-or-none";
+}
+
+/**
+ * §12.15's SINGLE-member quoting rule: a flag renders `'--<name>'` and an arg
+ * renders its bare `'<name>'`. It is one template with one substitution rather
+ * than a Flag/Arg twin pair -- §12.12's twinning rule applies to messages
+ * whose PREFIX names a surface, and a constraint message's prefix names the
+ * constraint.
+ */
+function quotedMember(kind: "flag" | "arg", name: string): string {
+	return kind === "flag" ? `'--${name}'` : `'${name}'`;
+}
+
+/**
+ * What a member's declared type lets its `when` selector test:
+ *
+ * - `bool` -- `true` is legal and `when` is MANDATORY (§26.3's refusal);
+ * - `sized` -- `non_empty` is legal: `str`, list and dict flags, and every
+ *   variadic arg (whose value is a sequence, so "at least one element" is the
+ *   same question `non_empty` asks);
+ * - `other` -- `present` only: `int`, `float`, and a selector whose value is a
+ *   record with nothing for `true` or `non_empty` to test (§26.2).
+ */
+type MemberShape = "bool" | "sized" | "other";
+
+function declShape(d: AnyDecl): MemberShape {
+	if (d.kind !== "flag") {
+		return "other";
+	}
+	if (d.schema === "bool") {
+		return "bool";
+	}
+	return d.schema === "int" || d.schema === "float" ? "other" : "sized";
+}
+
+function argShape(a: AnyArg): MemberShape {
+	// A variadic arg delivers a sequence whatever its element type is, so the
+	// bool refusal's own reason (a negated bool engaging while selecting
+	// nothing) has no referent here.
+	if (a.opts.variadic === true) {
+		return "sized";
+	}
+	const elem = elemSchemaOf(a.carrier as Carrier<unknown, Schema>);
+	if (elem === "bool") {
+		return "bool";
+	}
+	return elem === "str" ? "sized" : "other";
+}
+
+/**
+ * `<t>`: the FRAMEWORK's own type word, never a language type name. A
+ * selector has no value schema at all -- its value is a record -- so it names
+ * itself by construct.
+ */
+function declTypeWord(d: AnyDecl): string {
+	return d.kind === "flag" ? d.schema : "choice flag";
+}
+
+interface ConstraintSetInput {
+	readonly commandName: string;
+	readonly constraints: readonly Constraint[];
+	readonly decls: readonly AnyDecl[];
+	readonly args: readonly AnyArg[];
+	readonly scopedFlagPaths: ReadonlyMap<string, string>;
+}
+
+/**
+ * Resolves and validates a command's constraint set in §26.8's pinned order:
+ * name legality, member arity, member resolution, scope, nesting legality,
+ * election legality, presence legality.
+ *
+ * The order runs from the constraint's own identity outward to the
+ * declarations it names, so a message never blames a member for a fault in
+ * the constraint that names it -- which is why each step runs across the
+ * WHOLE set before the next one starts, rather than each constraint being
+ * validated end to end in turn.
+ */
+function validateConstraintSet(input: ConstraintSetInput): void {
+	const { commandName: cn, constraints, decls, args, scopedFlagPaths } = input;
+	if (constraints.length === 0) {
+		return;
+	}
+	const declByName = new Map(decls.map((d) => [d.name, d]));
+	const argByName = new Map(args.map((a) => [a.name, a]));
+
+	// 1. Name legality: charset, duplicates, collision with a flag or arg name.
+	const byName = new Map<string, Constraint>();
+	for (const c of constraints) {
+		if (!CONSTRAINT_NAME_RE.test(c.name)) {
+			throw new RegistrationError(errConstraintNameCharset(cn, c.name));
+		}
+		if (byName.has(c.name)) {
+			throw new RegistrationError(errConstraintNameDuplicate(cn, c.name));
+		}
+		if (declByName.has(c.name) || argByName.has(c.name)) {
+			throw new RegistrationError(errConstraintNameCollides(cn, c.name));
+		}
+		byName.set(c.name, c);
+	}
+
+	// 2. Member arity, and the member RECORD shape. A bare string is refused
+	// for §24.2's reason: a spelling that lets one member carry an election
+	// and another not carry the word for it is two spellings for one fact.
+	for (const c of constraints) {
+		if (!isCoOccurrence(c)) {
+			continue;
+		}
+		if (c.members.length < 2) {
+			throw new RegistrationError(
+				errConstraintMinMembers(cn, c.name, c.members.length),
+			);
+		}
+		c.members.forEach((m, i) => {
+			if (typeof m !== "object" || m === null || typeof m.name !== "string") {
+				throw new RegistrationError(
+					errConstraintMemberNotRecord(cn, c.name, i),
+				);
+			}
+		});
+	}
+
+	// 3. Member resolution. A SCOPED name resolves here and is refused at step
+	// 4: reporting it as unknown would be the wrong diagnosis (§24.8).
+	for (const c of constraints) {
+		if (isCoOccurrence(c)) {
+			const seen = new Set<string>();
+			for (const m of c.members) {
+				const isFlag = declByName.has(m.name);
+				const isArg = argByName.has(m.name);
+				if (isFlag && isArg) {
+					throw new RegistrationError(
+						errConstraintMemberAmbiguous(cn, c.name, m.name),
+					);
+				}
+				if (
+					!isFlag &&
+					!isArg &&
+					!byName.has(m.name) &&
+					!scopedFlagPaths.has(m.name)
+				) {
+					throw new RegistrationError(
+						errConstraintMemberUnknown(cn, c.name, m.name),
+					);
+				}
+				if (seen.has(m.name)) {
+					throw new RegistrationError(
+						errConstraintMemberDuplicate(cn, c.name, m.name),
+					);
+				}
+				seen.add(m.name);
+			}
+			continue;
+		}
+		// Requires and Implies keep the flags-only operand vocabulary (§26.13),
+		// so their refusal keeps the flag noun.
+		for (const operand of constraintOperands(c)) {
+			if (!declByName.has(operand) && !scopedFlagPaths.has(operand)) {
+				throw new RegistrationError(
+					errConstraintUnknownFlag(cn, c.name, operand),
+				);
+			}
+		}
+	}
+
+	// 4. Scope: the scope already IS the constraint (§24.8).
+	for (const c of constraints) {
+		const names = isCoOccurrence(c)
+			? c.members.map((m) => m.name)
+			: constraintOperands(c);
+		for (const x of names) {
+			const path = scopedFlagPaths.get(x);
+			if (path !== undefined) {
+				throw new RegistrationError(
+					errConstraintReferencesScopedFlag(cn, c.name, x, path),
+				);
+			}
+		}
+	}
+
+	// 5. Nesting legality: only the two co-occurrence families may be nested,
+	// a nested member carries no election of its own, and the reference graph
+	// is a DAG. Depth is unlimited, as §24.7's nesting is.
+	for (const c of constraints) {
+		if (!isCoOccurrence(c)) {
+			continue;
+		}
+		for (const m of c.members) {
+			const target = byName.get(m.name);
+			if (target === undefined || declByName.has(m.name)) {
+				continue;
+			}
+			if (!isCoOccurrence(target)) {
+				throw new RegistrationError(
+					errConstraintNestedFamily(cn, c.name, m.name),
+				);
+			}
+			if (m.when !== undefined) {
+				throw new RegistrationError(
+					errConstraintNestedWhen(cn, c.name, m.name),
+				);
+			}
+		}
+	}
+	refuseConstraintCycle(cn, constraints, byName, declByName, argByName);
+
+	// 6. Election legality: `when` against the member's declared type,
+	// including the bool refusal -- and the two dependency families' own
+	// operand-type guards.
+	for (const c of constraints) {
+		if (!isCoOccurrence(c)) {
+			validateDependencyFamily(cn, c, declByName);
+			continue;
+		}
+		for (const m of c.members) {
+			const decl = declByName.get(m.name);
+			const argDecl = argByName.get(m.name);
+			if (decl === undefined && argDecl === undefined) {
+				continue; // a nested constraint has no election of its own
+			}
+			const shape =
+				decl !== undefined ? declShape(decl) : argShape(argDecl as AnyArg);
+			const token = quotedMember(decl !== undefined ? "flag" : "arg", m.name);
+			const typeWord =
+				decl !== undefined
+					? declTypeWord(decl)
+					: elemSchemaOf(
+							(argDecl as AnyArg).carrier as Carrier<unknown, Schema>,
+						);
+			if (m.when === undefined) {
+				// The default is `present`, and the bool refusal closes the hole
+				// that default would otherwise re-open: `present` on a bool means
+				// `--no-all` engages a constraint while selecting nothing (§26.3).
+				if (shape === "bool") {
+					throw new RegistrationError(
+						errConstraintMemberBoolWhen(cn, c.name, token),
+					);
+				}
+				continue;
+			}
+			if (m.when === "true" && shape !== "bool") {
+				throw new RegistrationError(
+					errConstraintWhenTrueNotBool(cn, c.name, token, typeWord),
+				);
+			}
+			if (m.when === "non_empty" && shape !== "sized") {
+				throw new RegistrationError(
+					errConstraintWhenNonEmptyNotSized(cn, c.name, token, typeWord),
+				);
+			}
+		}
+	}
+
+	// 7. Presence legality: §26.5's inversion. A constraint never subtracts
+	// from a declaration -- it adds a rule on top of one -- so membership
+	// neither makes a member required nor exempts it from being required, and
+	// a member that must always be supplied leaves nothing to decide.
+	for (const c of constraints) {
+		if (!isCoOccurrence(c)) {
+			continue;
+		}
+		for (const m of c.members) {
+			const decl = declByName.get(m.name);
+			const argDecl = argByName.get(m.name);
+			const presence =
+				decl !== undefined ? decl.opts.presence : argDecl?.opts.presence;
+			if (presence !== "required") {
+				continue;
+			}
+			throw new RegistrationError(
+				errConstraintMemberRequired(
+					cn,
+					c.name,
+					quotedMember(decl !== undefined ? "flag" : "arg", m.name),
+				),
+			);
+		}
+	}
+}
+
+/** A `Requires` / `Implies` entry's flag operands, in declaration order. */
+function constraintOperands(c: Requires | Implies): string[] {
+	return c.kind === "requires" ? [c.flag, c.dependsOn] : [c.flag, c.implies];
+}
+
+/** The two dependency families' own operand guards, semantically untouched. */
+function validateDependencyFamily(
+	cn: string,
+	c: Requires | Implies,
+	declByName: ReadonlyMap<string, AnyDecl>,
+): void {
+	if (c.kind === "requires") {
+		if (c.flag === c.dependsOn) {
+			throw new RegistrationError(errCommandRequiresSameFlag(cn, c.flag));
+		}
+		return;
+	}
+	if (c.flag === c.implies) {
+		throw new RegistrationError(errCommandImpliesSameFlag(cn, c.flag));
+	}
+	const trigger = declByName.get(c.flag);
+	const target = declByName.get(c.implies);
+	if (trigger?.kind !== "flag" || trigger.schema !== "bool") {
+		throw new RegistrationError(errCommandImpliesTriggerNotBool(cn, c.flag));
+	}
+	if (target?.kind !== "flag" || target.schema !== "bool") {
+		throw new RegistrationError(errCommandImpliesTargetNotBool(cn, c.implies));
+	}
+	if (typeof c.value !== "boolean") {
+		throw new RegistrationError(
+			errCommandImpliesValueMustBeBool(cn, pyTypeName(c.value)),
+		);
+	}
+}
+
+/**
+ * The nesting graph is a DAG, cycle-checked at registration. `<path>` starts
+ * AND ends at the same name, beginning at the first participant in
+ * DECLARATION order; a constraint naming itself is the degenerate case and
+ * takes this same template rather than a second one (§12.15).
+ */
+function refuseConstraintCycle(
+	cn: string,
+	constraints: readonly Constraint[],
+	byName: ReadonlyMap<string, Constraint>,
+	declByName: ReadonlyMap<string, AnyDecl>,
+	argByName: ReadonlyMap<string, AnyArg>,
+): void {
+	const order = new Map<string, number>(
+		constraints.map((c, i) => [c.name, i] as const),
+	);
+	const done = new Set<string>();
+	const stack: string[] = [];
+	const onStack = new Set<string>();
+
+	const visit = (name: string): void => {
+		if (done.has(name)) {
+			return;
+		}
+		if (onStack.has(name)) {
+			// Rotate so the rendered path opens on the earliest-DECLARED
+			// participant, which is what the pinned rendering asks for
+			// regardless of which root the walk started from.
+			const cycle = stack.slice(stack.indexOf(name));
+			let start = 0;
+			cycle.forEach((n, i) => {
+				if ((order.get(n) ?? 0) < (order.get(cycle[start] as string) ?? 0)) {
+					start = i;
+				}
+			});
+			const rotated = [...cycle.slice(start), ...cycle.slice(0, start)];
+			throw new RegistrationError(
+				errConstraintCycle(cn, [...rotated, rotated[0] as string].join(" -> ")),
+			);
+		}
+		const c = byName.get(name);
+		if (c === undefined || !isCoOccurrence(c)) {
+			return;
+		}
+		stack.push(name);
+		onStack.add(name);
+		for (const m of c.members) {
+			// A name that resolves to a flag or an arg is a leaf, even when a
+			// constraint of that name also exists -- the collision refusal at
+			// step 1 makes that state unreachable, and reading the leaf first
+			// keeps this walk total either way.
+			if (declByName.has(m.name) || argByName.has(m.name)) {
+				continue;
+			}
+			visit(m.name);
+		}
+		stack.pop();
+		onStack.delete(name);
+		done.add(name);
+	};
+
+	for (const c of constraints) {
+		visit(c.name);
+	}
+}
+
 /** Every ordinary flag declared anywhere inside a declaration tree. */
 export function allScopedFlags(decls: readonly AnyDecl[]): AnyFlag[] {
 	const out: AnyFlag[] = [];
@@ -2071,7 +2572,12 @@ export interface CommandDef<
 	readonly flags: F;
 	readonly args: A;
 	readonly flagSets: FS;
-	readonly dependencies: readonly Dependency[];
+	/**
+	 * The command's declared constraint set (§26.1). The container is named
+	 * for what it holds: the schema key has been `constraints` since v1, so
+	 * the declaration surface was the last place using the other noun.
+	 */
+	readonly constraints: readonly Constraint[];
 	/**
 	 * Merged ROOT-LEVEL declaration list (own flags, then flag-set flags), in
 	 * declaration order. A selector appears here as one entry; the flags its
@@ -2111,7 +2617,7 @@ export interface AnyCommand {
 	readonly flags: FlagMap;
 	readonly args: readonly AnyArg[];
 	readonly flagSets: readonly AnyFlagSet[];
-	readonly dependencies: readonly Dependency[];
+	readonly constraints: readonly Constraint[];
 	readonly allDecls: readonly AnyDecl[];
 	readonly allFlags: readonly AnyFlag[];
 	readonly handler: (
@@ -2140,7 +2646,7 @@ export interface ReadOnlyCommandSpec<
 	readonly flags?: F;
 	readonly args?: A;
 	readonly flagSets?: FS;
-	readonly dependencies?: readonly Dependency[];
+	readonly constraints?: readonly Constraint[];
 	readonly handler: Handler<F, A, FS, ReadOnlyContext>;
 	/**
 	 * Declaring this on a read_only command is a registration-time hard error:
@@ -2187,7 +2693,7 @@ export interface MutatingCommandSpec<
 	readonly flags?: F;
 	readonly args?: A;
 	readonly flagSets?: FS;
-	readonly dependencies?: readonly Dependency[];
+	readonly constraints?: readonly Constraint[];
 	readonly handler: Handler<F, A, FS, MutatingContext>;
 	/**
 	 * Declares that this command's effects are worth interrupting someone for.
@@ -2395,7 +2901,7 @@ function buildCommandDef<
 	const flags = spec.flags ?? ({} as F);
 	const args = spec.args ?? ([] as unknown as A);
 	const flagSets = spec.flagSets ?? ([] as unknown as FS);
-	const dependencies = spec.dependencies ?? [];
+	const constraints = spec.constraints ?? [];
 
 	validateFlagMapKeys(name, flags);
 	for (const fs of flagSets) {
@@ -2456,103 +2962,17 @@ function buildCommandDef<
 		}
 	});
 
-	// Dependency reference validation, in the Python check order (unknown
-	// references are reported before same-flag violations). A SCOPED operand
-	// is refused before either: the scope already is the constraint, and it
-	// would otherwise report as an unknown flag, which is the wrong diagnosis
-	// (§24.8).
-	const refuseScopedOperand = (family: string, flagName: string): void => {
-		const path = scopedFlagPaths.get(flagName);
-		if (path !== undefined) {
-			throw new RegistrationError(
-				errConstraintReferencesScopedFlag(name, family, flagName, path),
-			);
-		}
-	};
-	for (const dep of dependencies) {
-		switch (dep.kind) {
-			case "co-required": {
-				if (dep.flags.length < 2) {
-					throw new RegistrationError(
-						errCommandCoRequiredMinFlags(name, dep.flags.length),
-					);
-				}
-				const seenDep = new Set<string>();
-				for (const flagName of dep.flags) {
-					refuseScopedOperand("CoRequired", flagName);
-					if (!seenFlagNames.has(flagName)) {
-						throw new RegistrationError(
-							errCommandCoRequiredUnknownFlag(name, flagName),
-						);
-					}
-					if (seenDep.has(flagName)) {
-						throw new RegistrationError(
-							errCommandCoRequiredDuplicate(name, flagName),
-						);
-					}
-					seenDep.add(flagName);
-				}
-				break;
-			}
-			case "requires": {
-				refuseScopedOperand("Requires", dep.flag);
-				refuseScopedOperand("Requires", dep.dependsOn);
-				if (!seenFlagNames.has(dep.flag)) {
-					throw new RegistrationError(
-						errCommandRequiresUnknownFlag(name, dep.flag),
-					);
-				}
-				if (!seenFlagNames.has(dep.dependsOn)) {
-					throw new RegistrationError(
-						errCommandRequiresUnknownFlag(name, dep.dependsOn),
-					);
-				}
-				if (dep.flag === dep.dependsOn) {
-					throw new RegistrationError(
-						errCommandRequiresSameFlag(name, dep.flag),
-					);
-				}
-				break;
-			}
-			case "implies": {
-				refuseScopedOperand("Implies", dep.flag);
-				refuseScopedOperand("Implies", dep.implies);
-				if (!seenFlagNames.has(dep.flag)) {
-					throw new RegistrationError(
-						errCommandImpliesUnknownFlag(name, dep.flag),
-					);
-				}
-				if (!seenFlagNames.has(dep.implies)) {
-					throw new RegistrationError(
-						errCommandImpliesUnknownFlag(name, dep.implies),
-					);
-				}
-				if (dep.flag === dep.implies) {
-					throw new RegistrationError(
-						errCommandImpliesSameFlag(name, dep.flag),
-					);
-				}
-				const trigger = allFlags.find((f) => f.name === dep.flag);
-				const target = allFlags.find((f) => f.name === dep.implies);
-				if (trigger?.schema !== "bool") {
-					throw new RegistrationError(
-						errCommandImpliesTriggerNotBool(name, dep.flag),
-					);
-				}
-				if (target?.schema !== "bool") {
-					throw new RegistrationError(
-						errCommandImpliesTargetNotBool(name, dep.implies),
-					);
-				}
-				if (typeof dep.value !== "boolean") {
-					throw new RegistrationError(
-						errCommandImpliesValueMustBeBool(name, pyTypeName(dep.value)),
-					);
-				}
-				break;
-			}
-		}
-	}
+	// The constraint set: name legality, member arity, member resolution,
+	// scope, nesting legality, election legality, presence legality -- in that
+	// pinned order (§26.8), so a message never blames a member for a fault in
+	// the constraint that names it.
+	validateConstraintSet({
+		commandName: name,
+		constraints,
+		decls: allDecls,
+		args,
+		scopedFlagPaths,
+	});
 
 	const tags = validateAndDedupTags(spec.tags ?? []);
 	return {
@@ -2568,7 +2988,7 @@ function buildCommandDef<
 		flags,
 		args,
 		flagSets,
-		dependencies,
+		constraints,
 		allDecls,
 		allFlags,
 		handler: spec.handler as Handler<F, A, FS, C>,
@@ -2583,7 +3003,7 @@ function buildCommandDef<
 
 /**
  * Creates a `read_only` command descriptor with typed flags (ordinary or
- * scoped selectors), args, flag sets and dependencies. Validates all
+ * scoped selectors), args, flag sets and constraints. Validates all
  * constraints at construction time.
  *
  * A read_only command never prompts (§8) and cannot be declared consequential;
@@ -2605,7 +3025,7 @@ export function defineReadOnlyCommand<
 
 /**
  * Creates a `mutating` command descriptor with typed flags (ordinary or
- * scoped selectors), args, flag sets and dependencies. Validates all
+ * scoped selectors), args, flag sets and constraints. Validates all
  * constraints at construction time.
  *
  * A mutating command participates in dry mode and may call every member of the

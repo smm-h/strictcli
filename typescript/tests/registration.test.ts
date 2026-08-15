@@ -5,10 +5,11 @@ import { test } from "node:test";
 import type { AppImpl } from "../src/app.js";
 import type { App } from "../src/index.js";
 import {
+	allOrNone,
 	arg,
+	atLeastOne,
 	choice,
 	choiceFlag,
-	coRequired,
 	createApp,
 	defineReadOnlyCommand,
 	deprecated,
@@ -808,54 +809,330 @@ test("command: variadic arg constraints", () => {
 	);
 });
 
-test("command: CoRequired reference validation", () => {
+// --- The constraint system (contract §26, §12.15) ---
+
+test("constraint: name legality -- charset, duplicates, flag/arg collision", () => {
 	rejects(
 		() =>
 			defineReadOnlyCommand("cmd", {
 				help: "h",
-				dependencies: [coRequired(["a"])],
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					allOrNone({
+						name: "Bad-Name",
+						members: [{ name: "a" }, { name: "b" }],
+					}),
+				],
 				handler: () => 0,
 			}),
-		'command "cmd": CoRequired must have at least 2 flags, got 1',
+		'command "cmd": constraint name "Bad-Name" must match [a-z][a-z0-9-]*',
 	);
 	rejects(
 		() =>
 			defineReadOnlyCommand("cmd", {
 				help: "h",
-				flags: { a: strFlag("a") },
-				dependencies: [coRequired(["a", "b"])],
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					allOrNone({ name: "pair", members: [{ name: "a" }, { name: "b" }] }),
+					atLeastOne({ name: "pair", members: [{ name: "a" }, { name: "b" }] }),
+				],
 				handler: () => 0,
 			}),
-		'command "cmd": CoRequired references unknown flag "b"',
+		'command "cmd": duplicate constraint name "pair"',
 	);
 	rejects(
 		() =>
 			defineReadOnlyCommand("cmd", {
 				help: "h",
-				flags: { a: strFlag("a"), b: strFlag("b") },
-				dependencies: [coRequired(["a", "b", "a"])],
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					allOrNone({ name: "a", members: [{ name: "a" }, { name: "b" }] }),
+				],
 				handler: () => 0,
 			}),
-		'command "cmd": CoRequired has duplicate flag "a"',
+		'command "cmd": constraint name "a" is already a flag or arg name: a member reference resolves by name and would be ambiguous',
+	);
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				args: [arg("target", t.str, { help: "h", presence: "optional" })],
+				constraints: [
+					allOrNone({
+						name: "target",
+						members: [{ name: "a" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint name "target" is already a flag or arg name: a member reference resolves by name and would be ambiguous',
 	);
 });
 
-test("command: Requires reference validation (unknown reported before same-flag)", () => {
+test("constraint: the two-member floor is a compile error, and a widened caller still refuses", () => {
+	// The typed `members` tuple makes a one-member constraint a COMPILE error
+	// (§26.6); the runtime guard is reachable only through a widened or
+	// JSON-shaped caller, which is exactly the covering input its conformance
+	// case asserts.
 	rejects(
 		() =>
 			defineReadOnlyCommand("cmd", {
 				help: "h",
-				dependencies: [requires({ flag: "a", dependsOn: "a" })],
+				flags: { a: optStrFlag("a") },
+				constraints: [
+					allOrNone(loose({ name: "pair", members: [{ name: "a" }] })),
+				],
 				handler: () => 0,
 			}),
-		'command "cmd": Requires references unknown flag "a"',
+		'command "cmd": constraint "pair" must declare at least two members, got 1',
+	);
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					allOrNone(loose({ name: "pair", members: ["a", { name: "b" }] })),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "pair" member 0 is a bare name: declare it as { name: "<x>" }',
+	);
+});
+
+test("constraint: member resolution -- unknown, ambiguous, duplicate", () => {
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a") },
+				constraints: [
+					allOrNone({ name: "pair", members: [{ name: "a" }, { name: "b" }] }),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "pair" references unknown member "b"',
+	);
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				args: [arg("a", t.str, { help: "h", presence: "optional" })],
+				constraints: [
+					allOrNone({ name: "pair", members: [{ name: "a" }, { name: "b" }] }),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "pair" references "a", which names both a flag and a positional arg',
+	);
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					allOrNone({
+						name: "pair",
+						members: [{ name: "a" }, { name: "b" }, { name: "a" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "pair" declares member "a" twice',
+	);
+});
+
+test("constraint: nesting legality -- family, election, cycles", () => {
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: boolFlag("a"), b: boolFlag("b") },
+				constraints: [
+					requires({ name: "dep", flag: "a", dependsOn: "b" }),
+					atLeastOne({
+						name: "top",
+						members: [{ name: "dep" }, { name: "a", when: "true" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "top" references constraint "dep", which declares a one-way dependency rather than a co-occurrence rule: only at-least-one and all-or-none can be members of another constraint',
+	);
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					allOrNone({ name: "pair", members: [{ name: "a" }, { name: "b" }] }),
+					atLeastOne({
+						name: "top",
+						members: [{ name: "pair", when: "present" }, { name: "a" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "top" member "pair" is a constraint and cannot declare an election: a nested constraint is engaged when its own members are',
+	);
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					atLeastOne({
+						name: "loop",
+						members: [{ name: "a" }, { name: "loop" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraints form a cycle: loop -> loop',
+	);
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					atLeastOne({
+						name: "one",
+						members: [{ name: "a" }, { name: "two" }],
+					}),
+					allOrNone({ name: "two", members: [{ name: "b" }, { name: "one" }] }),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraints form a cycle: one -> two -> one',
+	);
+});
+
+test("constraint: election legality -- the bool refusal and the two type guards", () => {
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { all: boolFlag("all"), b: optStrFlag("b") },
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "all" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'--all\' is a bool and must declare its election: when: "true" counts only a true value, when: "present" counts any',
+	);
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "a", when: "true" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'--a\' declares when: "true", which needs a bool; \'--a\' is a str',
+	);
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: {
+					n: flag("n", t.int, { help: "h", presence: "optional" }),
+					b: optStrFlag("b"),
+				},
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "n", when: "non_empty" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'--n\' declares when: "non_empty", which needs a string or a collection; \'--n\' is a int',
+	);
+});
+
+test("constraint: presence legality -- a required member is refused, flag and arg alike", () => {
+	// §26.5's INVERSION: the shipped exempt-from-required rule has no referent
+	// after the presence round, and what survives is a refusal. Membership
+	// neither makes a flag required nor exempts it from being required.
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: strFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					allOrNone({ name: "pair", members: [{ name: "a" }, { name: "b" }] }),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "pair" member \'--a\' declares presence: "required": a member the invocation must always supply leaves the constraint nothing to decide',
+	);
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { b: optStrFlag("b") },
+				args: [arg("targets", t.str, { help: "h", presence: "required" })],
+				constraints: [
+					atLeastOne({
+						name: "sel",
+						members: [{ name: "targets" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "sel" member \'targets\' declares presence: "required": a member the invocation must always supply leaves the constraint nothing to decide',
+	);
+});
+
+test("constraint: the resolution order runs identity-outward across the whole set", () => {
+	// §26.8: name legality for every constraint before member arity for any,
+	// so a message never blames a member for a fault in the constraint that
+	// names it.
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				flags: { a: optStrFlag("a"), b: optStrFlag("b") },
+				constraints: [
+					allOrNone(loose({ name: "first", members: [{ name: "a" }] })),
+					allOrNone({
+						name: "Second",
+						members: [{ name: "a" }, { name: "b" }],
+					}),
+				],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint name "Second" must match [a-z][a-z0-9-]*',
+	);
+});
+
+test("constraint: Requires reference validation (unknown reported before same-flag)", () => {
+	rejects(
+		() =>
+			defineReadOnlyCommand("cmd", {
+				help: "h",
+				constraints: [requires({ name: "dep", flag: "a", dependsOn: "a" })],
+				handler: () => 0,
+			}),
+		'command "cmd": constraint "dep" references unknown flag "a"',
 	);
 	rejects(
 		() =>
 			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: strFlag("a") },
-				dependencies: [requires({ flag: "a", dependsOn: "a" })],
+				constraints: [requires({ name: "dep", flag: "a", dependsOn: "a" })],
 				handler: () => 0,
 			}),
 		'command "cmd": Requires flag and depends_on cannot be the same ("a")',
@@ -865,29 +1142,33 @@ test("command: Requires reference validation (unknown reported before same-flag)
 			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: strFlag("a") },
-				dependencies: [requires({ flag: "a", dependsOn: "b" })],
+				constraints: [requires({ name: "dep", flag: "a", dependsOn: "b" })],
 				handler: () => 0,
 			}),
-		'command "cmd": Requires references unknown flag "b"',
+		'command "cmd": constraint "dep" references unknown flag "b"',
 	);
 });
 
-test("command: Implies reference validation", () => {
+test("constraint: Implies reference validation", () => {
 	rejects(
 		() =>
 			defineReadOnlyCommand("cmd", {
 				help: "h",
-				dependencies: [implies({ flag: "a", implies: "b", value: true })],
+				constraints: [
+					implies({ name: "imp", flag: "a", implies: "b", value: true }),
+				],
 				handler: () => 0,
 			}),
-		'command "cmd": Implies references unknown flag "a"',
+		'command "cmd": constraint "imp" references unknown flag "a"',
 	);
 	rejects(
 		() =>
 			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: boolFlag("a") },
-				dependencies: [implies({ flag: "a", implies: "a", value: true })],
+				constraints: [
+					implies({ name: "imp", flag: "a", implies: "a", value: true }),
+				],
 				handler: () => 0,
 			}),
 		'command "cmd": Implies flag and implies cannot be the same ("a")',
@@ -897,7 +1178,9 @@ test("command: Implies reference validation", () => {
 			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: strFlag("a"), b: boolFlag("b") },
-				dependencies: [implies({ flag: "a", implies: "b", value: true })],
+				constraints: [
+					implies({ name: "imp", flag: "a", implies: "b", value: true }),
+				],
 				handler: () => 0,
 			}),
 		'command "cmd": Implies trigger flag "a" must be a bool flag',
@@ -907,7 +1190,9 @@ test("command: Implies reference validation", () => {
 			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: boolFlag("a"), b: strFlag("b") },
-				dependencies: [implies({ flag: "a", implies: "b", value: true })],
+				constraints: [
+					implies({ name: "imp", flag: "a", implies: "b", value: true }),
+				],
 				handler: () => 0,
 			}),
 		'command "cmd": Implies target flag "b" must be a bool flag',
@@ -917,7 +1202,9 @@ test("command: Implies reference validation", () => {
 			defineReadOnlyCommand("cmd", {
 				help: "h",
 				flags: { a: boolFlag("a"), b: boolFlag("b") },
-				dependencies: [implies(loose({ flag: "a", implies: "b", value: 5n }))],
+				constraints: [
+					implies(loose({ name: "imp", flag: "a", implies: "b", value: 5n })),
+				],
 				handler: () => 0,
 			}),
 		"command \"cmd\": Implies value must be a bool, got 'int'",
@@ -1361,7 +1648,9 @@ const deployCmd = defineReadOnlyCommand("deploy", {
 		}),
 	],
 	args: [arg("service", t.str, { help: "Service name", presence: "required" })],
-	dependencies: [requires({ flag: "replicas", dependsOn: "region" })],
+	constraints: [
+		requires({ name: "scale", flag: "replicas", dependsOn: "region" }),
+	],
 	handler: (args) => {
 		type _Args = Assert<
 			Equals<

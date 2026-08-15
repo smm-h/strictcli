@@ -718,47 +718,12 @@ export function errCommandEnvVarPrefix(
 	return `command ${q(name)}: env var ${q(envVar)} for flag ${q(flagName)} must start with ${q(expectedPrefix)} (or set prefixed=false)`;
 }
 
-export function errCommandCoRequiredMinFlags(
-	name: string,
-	count: number,
-): string {
-	return `command ${q(name)}: CoRequired must have at least 2 flags, got ${count}`;
-}
-
-export function errCommandCoRequiredUnknownFlag(
-	name: string,
-	flagName: string,
-): string {
-	return `command ${q(name)}: CoRequired references unknown flag ${q(flagName)}`;
-}
-
-export function errCommandCoRequiredDuplicate(
-	name: string,
-	flagName: string,
-): string {
-	return `command ${q(name)}: CoRequired has duplicate flag ${q(flagName)}`;
-}
-
 export function errCommandRequiresSameFlag(name: string, flag: string): string {
 	return `command ${q(name)}: Requires flag and depends_on cannot be the same (${q(flag)})`;
 }
 
-export function errCommandRequiresUnknownFlag(
-	name: string,
-	flagName: string,
-): string {
-	return `command ${q(name)}: Requires references unknown flag ${q(flagName)}`;
-}
-
 export function errCommandImpliesSameFlag(name: string, flag: string): string {
 	return `command ${q(name)}: Implies flag and implies cannot be the same (${q(flag)})`;
-}
-
-export function errCommandImpliesUnknownFlag(
-	name: string,
-	flagName: string,
-): string {
-	return `command ${q(name)}: Implies references unknown flag ${q(flagName)}`;
 }
 
 export function errCommandImpliesTriggerNotBool(
@@ -952,7 +917,7 @@ export function errFlagSetInBothCliAndConfig(flagName: string): string {
 
 // ---------------------------------------------------------------------------
 // parse.go — validateAndBuildKwargs (parse-time)
-// (mutex, dependencies, custom validation, positional args)
+// (constraints, custom validation, positional args)
 // ---------------------------------------------------------------------------
 
 export function errMutuallyExclusive(setFlags: string): string {
@@ -975,21 +940,62 @@ export function errMutexDeclineClause(name: string): string {
 	return ` (--no-${name} declines an option; it does not choose one)`;
 }
 
+/**
+ * The prefix every constraint sentence carries, parse-time and
+ * registration-time alike (§12.15). The name takes DOUBLE quotes because the
+ * catalog quotes by kind of thing rather than by category of message: a
+ * declared identifier is double-quoted (`command "<name>"`, `Flag "<name>"`)
+ * and a token the operator typed is single-quoted -- and a constraint name is
+ * a declared identifier no invocation ever contains.
+ */
+export function constraintPrefix(c: string): string {
+	return `constraint ${q(c)}: `;
+}
+
 export function errImpliesConflict(
+	c: string,
 	flag: string,
 	neg: string,
 	target: string,
 	explicitNeg: string,
 ): string {
-	return `flag '--${flag}' implies '--${neg}${target}', but '--${explicitNeg}${target}' was explicitly provided`;
+	return `${constraintPrefix(c)}flag '--${flag}' implies '--${neg}${target}', but '--${explicitNeg}${target}' was explicitly provided`;
 }
 
-export function errFlagsMustBeUsedTogether(names: string): string {
-	return `flags ${names} must be used together`;
+/**
+ * at-least-one's violation (§12.15). `<members>` is the whole member list by
+ * §12.15's rendering rule, in declaration order; `<clause>` is §21.4's decline
+ * clause verbatim, appended when a bool member declaring `when: "true"` was
+ * provided false.
+ *
+ * This family is NEVER exclusivity: it has no upper bound and never refuses a
+ * second member (§26.1). The shared clause is a fact about a negated bool, not
+ * a claim about the construct.
+ */
+export function errAtLeastOneRequired(
+	c: string,
+	members: string,
+	clause: string,
+): string {
+	return `${constraintPrefix(c)}at least one of ${members} is required${clause}`;
 }
 
-export function errFlagRequiresFlag(flag: string, dependsOn: string): string {
-	return `flag '--${flag}' requires '--${dependsOn}'`;
+/**
+ * all-or-none's violation (§12.15). Every member is listed, engaged or not,
+ * which is the shipped `flags --a, --b must be used together` behaviour
+ * carried over; the noun `flags` is dropped because a member may be a
+ * positional arg or a nested constraint.
+ */
+export function errAllOrNoneTogether(c: string, members: string): string {
+	return `${constraintPrefix(c)}${members} must be used together`;
+}
+
+export function errFlagRequiresFlag(
+	c: string,
+	flag: string,
+	dependsOn: string,
+): string {
+	return `${constraintPrefix(c)}flag '--${flag}' requires '--${dependsOn}'`;
 }
 
 export function errFlagValueError(flagName: string, msg: string): string {
@@ -2641,15 +2647,187 @@ export function errScopedPositional(c: string, sel: string): string {
 
 /**
  * The scope already IS the constraint, and expressing one fact in two
- * mechanisms is how the two disagree later (§24.8). `<Family>` is the
- * declared family's own spelling, exactly as the existing
- * `... references unknown flag ...` trio names itself.
+ * mechanisms is how the two disagree later (§24.8). The refusal names the
+ * CONSTRAINT rather than its family (§12.15's amendment table): one of the
+ * three family words (`CoRequired`) no longer exists, and a mandatory name is
+ * a better identifier than a family word ever was.
  */
 export function errConstraintReferencesScopedFlag(
 	name: string,
-	family: string,
+	c: string,
 	x: string,
 	path: string,
 ): string {
-	return `command ${q(name)}: ${family} references '${x}', which is declared under '${path}': dependency constraints operate at root scope only`;
+	return `command ${q(name)}: constraint ${q(c)} references '${x}', which is declared under '${path}': constraints operate at root scope only`;
+}
+
+// --- Registration guards: the constraint system (§12.15, §26.8) ---
+
+/** The three `when` spellings, per §12.15's per-language substitution table. */
+export const WHEN_PRESENT_SPELLING = 'when: "present"';
+export const WHEN_TRUE_SPELLING = 'when: "true"';
+export const WHEN_NON_EMPTY_SPELLING = 'when: "non_empty"';
+/**
+ * `<constraint-member-spelling>`: TypeScript's member is a plain object
+ * literal, matching the value-flag choice record (§26.6). The `<x>` slot is
+ * literal here, as Python's `Member("<x>")` is -- the template names the
+ * shape, and the entry that violated it carries no name to substitute.
+ */
+export const CONSTRAINT_MEMBER_SPELLING = '{ name: "<x>" }';
+
+export function errConstraintNameCharset(name: string, c: string): string {
+	return `command ${q(name)}: constraint name ${q(c)} must match [a-z][a-z0-9-]*`;
+}
+
+export function errConstraintNameDuplicate(name: string, c: string): string {
+	return `command ${q(name)}: duplicate constraint name ${q(c)}`;
+}
+
+export function errConstraintNameCollides(name: string, c: string): string {
+	return `command ${q(name)}: constraint name ${q(c)} is already a flag or arg name: a member reference resolves by name and would be ambiguous`;
+}
+
+/**
+ * Reachable only through a WIDENED or JSON-shaped caller: `members` is typed
+ * `readonly [ConstraintMember, ConstraintMember, ...ConstraintMember[]]`, so
+ * the two-member floor is a COMPILE error for an ordinary caller (§26.6).
+ * The runtime guard stays because the covering input exists -- the treatment
+ * §12.13 item 213 established. Go-excluded: its constructors take two named
+ * members before the variadic tail.
+ */
+export function errConstraintMinMembers(
+	name: string,
+	c: string,
+	n: number,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} must declare at least two members, got ${n}`;
+}
+
+/**
+ * `errChoicesEntryNotRecord`'s exact discipline one construct over (§26.6): a
+ * spelling that lets one member carry an election and another not carry the
+ * word for it is two spellings for one fact.
+ */
+export function errConstraintMemberNotRecord(
+	name: string,
+	c: string,
+	i: number,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} member ${i} is a bare name: declare it as ${CONSTRAINT_MEMBER_SPELLING}`;
+}
+
+export function errConstraintMemberUnknown(
+	name: string,
+	c: string,
+	x: string,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} references unknown member ${q(x)}`;
+}
+
+export function errConstraintMemberAmbiguous(
+	name: string,
+	c: string,
+	x: string,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} references ${q(x)}, which names both a flag and a positional arg`;
+}
+
+export function errConstraintMemberDuplicate(
+	name: string,
+	c: string,
+	x: string,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} declares member ${q(x)} twice`;
+}
+
+/**
+ * §26.5's inversion: a constraint never subtracts from a declaration, so
+ * membership neither makes a flag required nor exempts it from being
+ * required -- and a member that declares requiredness leaves the constraint
+ * nothing to decide. `<x>` renders by §12.15's single-member quoting rule.
+ */
+export function errConstraintMemberRequired(
+	name: string,
+	c: string,
+	member: string,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} member ${member} declares ${PRESENCE_SPELLING_REQUIRED}: a member the invocation must always supply leaves the constraint nothing to decide`;
+}
+
+/**
+ * The default `when` is `present`, and omitting it on a BOOL is refused: that
+ * default would otherwise mean `--no-all` engages a constraint while selecting
+ * nothing -- the mutex survey's shipped-dangerous class arriving in a new
+ * family by omission (§26.3).
+ */
+export function errConstraintMemberBoolWhen(
+	name: string,
+	c: string,
+	member: string,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} member ${member} is a bool and must declare its election: ${WHEN_TRUE_SPELLING} counts only a true value, ${WHEN_PRESENT_SPELLING} counts any`;
+}
+
+/**
+ * `<t>` is the framework's OWN type word (`str`, `bool`, `int`, `float`, and
+ * the compound spellings the existing type errors use), never a language type
+ * name. The member renders once quoted after `member` and once more as the
+ * subject of the trailing clause -- the same rendering both times.
+ */
+export function errConstraintWhenTrueNotBool(
+	name: string,
+	c: string,
+	member: string,
+	t: string,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} member ${member} declares ${WHEN_TRUE_SPELLING}, which needs a bool; ${member} is a ${t}`;
+}
+
+export function errConstraintWhenNonEmptyNotSized(
+	name: string,
+	c: string,
+	member: string,
+	t: string,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} member ${member} declares ${WHEN_NON_EMPTY_SPELLING}, which needs a string or a collection; ${member} is a ${t}`;
+}
+
+export function errConstraintNestedWhen(
+	name: string,
+	c: string,
+	x: string,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} member ${q(x)} is a constraint and cannot declare an election: a nested constraint is engaged when its own members are`;
+}
+
+export function errConstraintNestedFamily(
+	name: string,
+	c: string,
+	x: string,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} references constraint ${q(x)}, which declares a one-way dependency rather than a co-occurrence rule: only at-least-one and all-or-none can be members of another constraint`;
+}
+
+/**
+ * `<path>` renders the participating names joined by ` -> `, starting AND
+ * ending at the same name, beginning at the first participant in declaration
+ * order. A constraint naming itself is the degenerate case and takes this same
+ * template, never a second one (§12.15).
+ */
+export function errConstraintCycle(name: string, path: string): string {
+	return `command ${q(name)}: constraints form a cycle: ${path}`;
+}
+
+/**
+ * `Requires` and `Implies` keep the flags-only operand vocabulary (§26.13),
+ * so their unknown-name refusal keeps the flag noun. The two shipped
+ * family-specific templates collapse onto the constraint's own name, which is
+ * what tells the reader which declaration to fix.
+ */
+export function errConstraintUnknownFlag(
+	name: string,
+	c: string,
+	x: string,
+): string {
+	return `command ${q(name)}: constraint ${q(c)} references unknown flag ${q(x)}`;
 }

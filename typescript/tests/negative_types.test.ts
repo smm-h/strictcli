@@ -120,6 +120,26 @@ test("negative types: a COMPUTED choice key does not compile, naming itself", ()
 	assert.match(cachedRaw, /__choice_keys_must_be_literal/);
 });
 
+test("negative types: the two-member floor and the `when` union are compile errors", () => {
+	// §26.6's two TypeScript payoffs. The floor makes a one-member constraint
+	// unwritable by an ordinary caller, and the literal union makes a `when`
+	// typo a compile error rather than a registration one.
+	const d = diagnostics().filter((x) =>
+		x.file.endsWith("constraint_member_floor.ts"),
+	);
+	assert.equal(d.length, 2, JSON.stringify(d));
+	assert.equal(d[0]?.code, "TS2322");
+	assert.equal(
+		d[0]?.text,
+		"Type '[{ name: string; }]' is not assignable to type 'ConstraintMembers'.",
+	);
+	assert.equal(d[1]?.code, "TS2820");
+	assert.equal(
+		d[1]?.text,
+		`Type '"nonempty"' is not assignable to type 'When'. Did you mean '"non_empty"'?`,
+	);
+});
+
 test("negative types: a selector default naming no choice does not compile", () => {
 	// Typed `keyof C & string`, so the mistake is a COMPILE error before it is
 	// a registration error (§24.12).
@@ -155,5 +175,5 @@ test("negative types: a sub-flag is not a top-level arg, and the switch is exhau
 });
 
 test("negative types: the fixture project produces exactly the pinned errors", () => {
-	assert.equal(diagnostics().length, 7, JSON.stringify(diagnostics()));
+	assert.equal(diagnostics().length, 9, JSON.stringify(diagnostics()));
 });
