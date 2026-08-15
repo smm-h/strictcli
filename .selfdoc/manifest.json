@@ -351,8 +351,8 @@
         },
         {
           "level": 3,
-          "text": "Full check gate (all eleven checks)",
-          "anchor": "full-check-gate-all-eleven-checks"
+          "text": "Full check gate (all twelve checks)",
+          "anchor": "full-check-gate-all-twelve-checks"
         },
         {
           "level": 3,
@@ -4608,6 +4608,11 @@
         },
         {
           "level": 3,
+          "text": "`_raise_flag_required`",
+          "anchor": "_raise_flag_required"
+        },
+        {
+          "level": 3,
           "text": "`_validate_and_build_kwargs`",
           "anchor": "_validate_and_build_kwargs"
         },
@@ -4678,8 +4683,43 @@
         },
         {
           "level": 3,
+          "text": "`_live_site`",
+          "anchor": "_live_site"
+        },
+        {
+          "level": 3,
+          "text": "`_coerce_scoped_occurrence`",
+          "anchor": "_coerce_scoped_occurrence"
+        },
+        {
+          "level": 3,
           "text": "`_report_skipped_bindings`",
           "anchor": "_report_skipped_bindings"
+        },
+        {
+          "level": 3,
+          "text": "`_widen_integral_number`",
+          "anchor": "_widen_integral_number"
+        },
+        {
+          "level": 3,
+          "text": "`_widen_pre_typed_value`",
+          "anchor": "_widen_pre_typed_value"
+        },
+        {
+          "level": 3,
+          "text": "`_check_pre_typed_value`",
+          "anchor": "_check_pre_typed_value"
+        },
+        {
+          "level": 3,
+          "text": "`_check_pre_typed_arg_value`",
+          "anchor": "_check_pre_typed_arg_value"
+        },
+        {
+          "level": 3,
+          "text": "`_check_pre_typed_arg_element`",
+          "anchor": "_check_pre_typed_arg_element"
         },
         {
           "level": 3,
@@ -4723,6 +4763,11 @@
         },
         {
           "level": 3,
+          "text": "`_resolve_declared_marker`",
+          "anchor": "_resolve_declared_marker"
+        },
+        {
+          "level": 3,
           "text": "`_declared_default_record`",
           "anchor": "_declared_default_record"
         },
@@ -4753,8 +4798,58 @@
         },
         {
           "level": 3,
-          "text": "`_selector_result_from_records`",
-          "anchor": "_selector_result_from_records"
+          "text": "`_RecordSelectorDoor`",
+          "anchor": "_recordselectordoor"
+        },
+        {
+          "level": 4,
+          "text": "`read`",
+          "anchor": "read"
+        },
+        {
+          "level": 4,
+          "text": "`presence`",
+          "anchor": "presence"
+        },
+        {
+          "level": 3,
+          "text": "`_FlatSelectorDoor`",
+          "anchor": "_flatselectordoor"
+        },
+        {
+          "level": 4,
+          "text": "`read`",
+          "anchor": "read-1"
+        },
+        {
+          "level": 4,
+          "text": "`presence`",
+          "anchor": "presence-1"
+        },
+        {
+          "level": 3,
+          "text": "`_record_choice_spec`",
+          "anchor": "_record_choice_spec"
+        },
+        {
+          "level": 3,
+          "text": "`_is_declared_selection_default`",
+          "anchor": "_is_declared_selection_default"
+        },
+        {
+          "level": 3,
+          "text": "`_walk_record_shape`",
+          "anchor": "_walk_record_shape"
+        },
+        {
+          "level": 3,
+          "text": "`_record_field_value`",
+          "anchor": "_record_field_value"
+        },
+        {
+          "level": 3,
+          "text": "`_record_from_caller`",
+          "anchor": "_record_from_caller"
         },
         {
           "level": 3,
@@ -6045,6 +6140,16 @@
         },
         {
           "level": 3,
+          "text": "`coerceConfigScalarLong`",
+          "anchor": "coerceconfigscalarlong"
+        },
+        {
+          "level": 3,
+          "text": "`widenJsonIntegers`",
+          "anchor": "widenjsonintegers"
+        },
+        {
+          "level": 3,
           "text": "`coerceConfigValueForFlag`",
           "anchor": "coerceconfigvalueforflag"
         },
@@ -6678,11 +6783,6 @@
           "level": 3,
           "text": "`errFlagRepeatableIncompatibleBool`",
           "anchor": "errflagrepeatableincompatiblebool"
-        },
-        {
-          "level": 3,
-          "text": "`errFlagChoicesIncompatibleCompound`",
-          "anchor": "errflagchoicesincompatiblecompound"
         },
         {
           "level": 3,
@@ -8171,6 +8271,16 @@
         },
         {
           "level": 3,
+          "text": "`RequiredFlagForm`",
+          "anchor": "requiredflagform"
+        },
+        {
+          "level": 3,
+          "text": "`errFlagRequired`",
+          "anchor": "errflagrequired"
+        },
+        {
+          "level": 3,
           "text": "`errScopeSuffix`",
           "anchor": "errscopesuffix"
         },
@@ -8670,6 +8780,11 @@
           "level": 3,
           "text": "`isChoiceFlag`",
           "anchor": "ischoiceflag"
+        },
+        {
+          "level": 3,
+          "text": "`requiredFlagForm`",
+          "anchor": "requiredflagform"
         },
         {
           "level": 3,
@@ -9183,6 +9298,11 @@
         },
         {
           "level": 3,
+          "text": "`serializeInfraMarker`",
+          "anchor": "serializeinframarker"
+        },
+        {
+          "level": 3,
           "text": "`expandTilde`",
           "anchor": "expandtilde"
         },
@@ -9227,6 +9347,31 @@
           "level": 3,
           "text": "`commandClassification`",
           "anchor": "commandclassification"
+        },
+        {
+          "level": 3,
+          "text": "`paramToFlagName`",
+          "anchor": "paramtoflagname"
+        },
+        {
+          "level": 3,
+          "text": "`preTypedValueRefusal`",
+          "anchor": "pretypedvaluerefusal"
+        },
+        {
+          "level": 3,
+          "text": "`preTypedValueOutcome`",
+          "anchor": "pretypedvalueoutcome"
+        },
+        {
+          "level": 3,
+          "text": "`markDeclarationElected`",
+          "anchor": "markdeclarationelected"
+        },
+        {
+          "level": 3,
+          "text": "`markSuppliedKeys`",
+          "anchor": "marksuppliedkeys"
         },
         {
           "level": 3,
@@ -9373,6 +9518,11 @@
           "level": 3,
           "text": "`parseCommand`",
           "anchor": "parsecommand"
+        },
+        {
+          "level": 3,
+          "text": "`Positionals`",
+          "anchor": "positionals"
         },
         {
           "level": 3,
@@ -9619,6 +9769,11 @@
         },
         {
           "level": 3,
+          "text": "`OccurrenceValue`",
+          "anchor": "occurrencevalue"
+        },
+        {
+          "level": 3,
           "text": "`Occurrence`",
           "anchor": "occurrence"
         },
@@ -9674,8 +9829,28 @@
         },
         {
           "level": 3,
+          "text": "`recordValidateRefusal`",
+          "anchor": "recordvalidaterefusal"
+        },
+        {
+          "level": 3,
           "text": "`installScopedValueParser`",
           "anchor": "installscopedvalueparser"
+        },
+        {
+          "level": 3,
+          "text": "`installScopedDefaultApplier`",
+          "anchor": "installscopeddefaultapplier"
+        },
+        {
+          "level": 3,
+          "text": "`applyScopedDefault`",
+          "anchor": "applyscopeddefault"
+        },
+        {
+          "level": 3,
+          "text": "`firstProblem`",
+          "anchor": "firstproblem"
         },
         {
           "level": 3,
@@ -10090,5 +10265,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-15T04:33:24.048155+00:00"
+  "last_gen": "2026-08-15T14:54:40.351541+00:00",
+  "theme": "minimal"
 }
