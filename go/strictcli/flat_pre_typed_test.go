@@ -897,3 +897,40 @@ func TestRecordDoorUnknownKeyUnderAFlatElection(t *testing.T) {
 	})
 	wantRefusal(t, ir.err, `unknown parameter "bogus" for command "run" under '--via email --format rich'`)
 }
+
+// A nested scope's parameter written in the OUTER record names nothing that
+// record's scope declares: the namespace is per LEVEL, so the nested scope's
+// values belong in the nested record (§24.11 item 246).
+func TestRecordDoorNestedScopeValuesBelongInTheNestedRecord(t *testing.T) {
+	var captured map[string]interface{}
+	app := recordDepthApp(&captured)
+	email := recordChoice(app, "via", "email")
+	ir := app.invoke("run", map[string]interface{}{
+		"via": Elect(email, Fields{"retries": 1, "format": "rich", "width": 80}),
+	})
+	wantRefusal(t, ir.err, `unknown parameter "width" for command "run" under '--via email'`)
+	// Naming the nested choice inside a record still elects it, so its own
+	// required flag is then missing rather than misread.
+	ir = app.invoke("run", map[string]interface{}{
+		"via": Elect(email, Fields{"retries": 1, "format": "rich"}),
+	})
+	wantRefusal(t, ir.err, "flag '--width' is required under '--via email --format rich'")
+	// And a nested choice that requires nothing is elected and delivered.
+	ir = app.invoke("run", map[string]interface{}{
+		"via": Elect(email, Fields{"retries": 1, "format": "plain"}),
+	})
+	if ir.err != "" {
+		t.Fatalf("the call was refused with %q", ir.err)
+	}
+	el, ok := captured["via"].(*Elected)
+	if !ok {
+		t.Fatalf("via = %T, want *Elected", captured["via"])
+	}
+	nested, ok := el.Fields["format"].(*Elected)
+	if !ok {
+		t.Fatalf("format = %T, want *Elected", el.Fields["format"])
+	}
+	if nested.Name() != "plain" {
+		t.Fatalf("format = %q, want plain", nested.Name())
+	}
+}

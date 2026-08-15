@@ -882,17 +882,16 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 // from whichever of the two doors supplied them.
 func bindSelectorValues(sel *Flag, args map[string]interface{}, sup *suppliedElections, binds *[]pendingBind, root *Flag) {
 	if rec, isRecord := args[flagParamName(sel.Name)].(*Elected); isRecord {
-		// The record door: the scope's values are the record's own fields, and
-		// a nested selector's are the nested record's.
+		// The record door: the scope's values are the record's own fields.
 		if findChoice(sel, rec.decl.Name) == rec.decl {
-			bindScopeValues(rec.decl, rec.Fields, nil, sup, binds, root)
+			bindScopeValues(rec.decl, rec.Fields, sup, binds, root)
 		}
 		return
 	}
 	// The flat door: every scoped parameter sits beside the selector in the one
-	// top-level object, at every depth.
+	// object that carries the selector itself.
 	if ch := electedScope(sel, sup); ch != nil {
-		bindScopeValues(ch, Fields(args), args, sup, binds, root)
+		bindScopeValues(ch, Fields(args), sup, binds, root)
 	}
 }
 
@@ -923,10 +922,11 @@ func electedScope(sel *Flag, sup *suppliedElections) *ChoiceDecl {
 //
 // A nested selector is descended WHERE IT IS DECLARED, so the values one level
 // down sit between the scoped flags declared before and after it, exactly as an
-// argv written in declaration order would type them. flatArgs is the flat
-// door's one top-level object, and nil at the record door, where each level's
-// values are the record's own fields.
-func bindScopeValues(ch *ChoiceDecl, fields Fields, flatArgs map[string]interface{}, sup *suppliedElections, binds *[]pendingBind, root *Flag) {
+// argv written in declaration order would type them. fields is the object that
+// carries this scope's values -- a record's own fields at the record door, and
+// the one top-level object at the flat door, where every depth reads the same
+// one. The two spellings may be mixed, so each level answers for itself.
+func bindScopeValues(ch *ChoiceDecl, fields Fields, sup *suppliedElections, binds *[]pendingBind, root *Flag) {
 	for i := range ch.Flags {
 		sub := &ch.Flags[i]
 		key := flagParamName(sub.Name)
@@ -945,14 +945,16 @@ func bindScopeValues(ch *ChoiceDecl, fields Fields, flatArgs map[string]interfac
 			}
 		}
 		if sub.Type == TypeChoice {
-			if flatArgs != nil {
-				if nested := electedScope(sub, sup); nested != nil {
-					bindScopeValues(nested, Fields(flatArgs), flatArgs, sup, binds, root)
+			if rec, isRecord := fields[key].(*Elected); isRecord {
+				if findChoice(sub, rec.decl.Name) == rec.decl {
+					bindScopeValues(rec.decl, rec.Fields, sup, binds, root)
 				}
 				continue
 			}
-			if rec, isRecord := fields[key].(*Elected); isRecord && findChoice(sub, rec.decl.Name) == rec.decl {
-				bindScopeValues(rec.decl, rec.Fields, nil, sup, binds, root)
+			// The flat spelling at this level: the nested scope's values sit in
+			// the same object the nested selector's own election was read from.
+			if nested := electedScope(sub, sup); nested != nil {
+				bindScopeValues(nested, fields, sup, binds, root)
 			}
 			continue
 		}
