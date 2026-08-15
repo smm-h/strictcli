@@ -3372,6 +3372,15 @@ selection must teach rather than mislead. There is deliberately **no** analogous
 declaring `<when-non-empty-spelling>` that was provided empty, because A2 places empty-value
 legality on the flag's own value validation and never on the layer above it.
 
+> **Pinned (2026-08-15, reconciliation round, §18.31 item 290): the clause searches DIRECT members
+> only.** The scan runs the violated constraint's own member list in declaration order and does
+> **not** descend into a nested constraint's members. The clause teaches about the sentence it is
+> appended to, and that sentence lists the parent's operands: a nested constraint renders
+> structurally, so `--no-<x>` for an `<x>` two levels down names a token the reader is not looking
+> at, and the nested constraint has its own line and its own sentence to carry it. A decline inside a
+> nested group also leaves that group vacuous rather than violated (§26.4), so the fact the clause
+> would teach is not the fact the parent's violation reports.
+
 ```
 constraint "<c>": <members> must be used together
 ```
@@ -3405,6 +3414,27 @@ entry index in the catalog.
 `<t>` in the two `when`-type guards is the framework's own type word (`str`, `bool`, `int`, `float`,
 and the compound spellings the existing type errors already use), never a language type name.
 
+> **Pinned (2026-08-15, reconciliation round, §18.31 item 289): the exact `<t>` vocabulary.** The
+> three implementations derived the word three ways and reached three answers on states a case can
+> reach, so the set is closed here rather than described. The canon is Go's `flagTypeName` map: the
+> four scalar words `str`, `bool`, `int`, `float`, the collection spellings `list[<elem>]` and
+> `dict[<value>]` formed from them (`list[str]`, `dict[int]`, and `list[bool]` for the one shape
+> that reaches it, a variadic bool arg), and `choice flag`. Three consequences, each of them a byte
+> a message prints:
+>
+> - **a dict renders its VALUE type in one argument** -- `dict[int]`, never `dict[str,int]`. The
+>   key type is `str` by construction (§25.2's own reason for the one-argument dump spelling), so a
+>   two-argument word states a fact no declaration can vary. TypeScript's carrier schema string
+>   (`dict[str,${elem}]`) is a *carrier* spelling and never reaches a message.
+> - **a value with a size renders its collection spelling** -- a repeatable flag and a variadic arg
+>   are both `list[<elem>]`, because what the sentence describes is the value the selector would be
+>   evaluated against, and that value is a sequence. The element word alone would name the type of a
+>   thing the member does not hold.
+> - **a token-spelled selector member renders `choice flag`** (§26.2 allows one as a member). Its
+>   value is a record that neither `true` nor `non_empty` can test, so the word names the
+>   **construct** -- `choice` alone is the dump's enum spelling for a flag's type and reads, in this
+>   sentence, as a value word for a value that does not exist.
+
 `<path>` in `errConstraintCycle` renders the participating names joined by ` -> `, starting **and
 ending** at the same name, beginning at the first participant in declaration order:
 `author-change -> author-name -> author-change`. A constraint naming itself is the degenerate case
@@ -3415,6 +3445,23 @@ never a second one.
 quoting rule above. It is one template with one substitution, not a `Flag`/`Arg` twin pair:
 §12.12's twinning rule applies to messages whose *prefix* names a surface, and this one's prefix
 names the constraint.
+
+> **Ratified (2026-08-15, reconciliation round, §18.31 item 287): the rule above is all four
+> member-naming guards', and the presence spelling inside it stays per-language.** The four are
+> `errConstraintMemberRequired`, `errConstraintMemberBoolWhen`, `errConstraintWhenTrueNotBool` and
+> `errConstraintWhenNonEmptyNotSized` -- every template whose text writes `member '--<x>'`. All four
+> substitute §12.15's member rendering, so an arg member reads `member 'targets'` in each of them,
+> and in the two `when`-type guards the trailing clause's subject is **the same rendering a second
+> time** (`'targets' is a list[str]`). The row texts keep the `'--<x>'` spelling as their flag-side
+> illustration; the substitution is the rule.
+>
+> **The spellings inside stay per-language, by §12.12's mechanism unchanged**, and Go's is recorded
+> rather than corrected: `errConstraintMemberRequired` prints Go's **flag** spelling `Required()`
+> for an arg member too, where §12.12's table gives an arg `ArgRequired()`. That is the one-spelling
+> reading of the same reason the template is not twinned -- the prefix names the constraint, not a
+> surface, so the message never claims to be quoting the arg surface's own option. Python
+> (`presence="required"`) and TypeScript (`presence: "required"`) spell both operand kinds one way
+> already, so Go is the only implementation where the two readings differ at all.
 
 **Amended in place: the shipped sentences these replace.** Every row below is a **visible
 amendment** rather than a silent rewrite, because the bytes a user reads change:
@@ -3429,6 +3476,28 @@ amendment** rather than a silent rewrite, because the bytes a user reads change:
 | ~~`command "<name>": CoRequired has duplicate flag "<x>"`~~ | `errConstraintMemberDuplicate` above | as above |
 | ~~`command "<name>": Requires references unknown flag "<x>"`~~ / ~~`... Implies references unknown flag "<x>"`~~ | `errConstraintUnknownFlag` above | two templates for one condition collapse onto the constraint's own name, which is what tells the reader which declaration to fix |
 | ~~`command "<name>": <Family> references '<x>', which is declared under '<scope path>': dependency constraints operate at root scope only`~~ (§12.13, `errConstraintReferencesScopedFlag`) | `command "<name>": constraint "<c>" references '<x>', which is declared under '<scope path>': constraints operate at root scope only` | `<Family>` was the declared family's own spelling and one of its three values (`CoRequired`) no longer exists; the name is a better identifier than the family word ever was, and the trailing clause loses `dependency` because the noun for all four kinds is now `constraint` |
+
+> **Ratified (2026-08-15, reconciliation round, §18.31 item 288): two per-language extras.** Both
+> are §12.12's language-specific-template precedent applied where only one language has an input
+> that reaches the state, and both are recorded rather than made parity rows.
+>
+> - **`Member(when=<bad string>)` is Python-only**, and its bytes are
+>   `Member "<name>": when must be "present", "true" or "non_empty", got <repr>` -- the `<repr>` being
+>   Python's own, so `Member("all", when="tru")` reads `... got 'tru'`. It is raised from
+>   `Member.__post_init__` rather than from the registration order, because a malformed record is
+>   refused where it is written. **Only a string-taking keyword can reach it**: Go declares the
+>   selector with `WhenTrue()` / `WhenPresent()` / `WhenNonEmpty()` and TypeScript with a literal
+>   union, so a typo is a compile error in both and neither has an input that could produce this
+>   sentence. The pinned `when` guards above all describe a *declared value that cannot apply to the
+>   member's type* and none of them describes a typo in the keyword's own vocabulary, which is why
+>   this is an addition rather than one of them. It joins `check_error_parity.py` as an `excluded:`
+>   entry for Go and TypeScript with that rationale.
+> - **`errConstraintMemberNotRecord` renders its spelling with the placeholder literal.** The
+>   substituted `<constraint-member-spelling>` is `Member("<x>")` / `{ name: "<x>" }` **as written**,
+>   with `<x>` printed verbatim rather than replaced by the bare name the caller wrote. The message
+>   teaches the *shape* a member takes, and a name is exactly what the malformed entry already
+>   carried -- echoing it back would read as though the framework had accepted it. This is
+>   `errChoicesEntryNotRecord`'s rendering one construct over, as the row's own rationale says.
 
 **Category and coverage.** The two violation templates are **parse-time** and take the covering
 conformance case every parse template takes. The guards are registration-time and are asserted **per
@@ -3830,6 +3899,55 @@ exclusion rationale.
 > (`default` has had no baseline since presence became the authority -- it is emitted exactly when
 > `presence` is `"default"`), and gains baselines for the entities it never covered. §25.10 is the
 > block, written out.
+
+> **Ratification (2026-08-15, reconciliation round, §18.31 item 291): the case schema's constraint
+> surface.** The three harnesses were written independently against §26 and converged on one
+> encoding; it is pinned here as the case-schema surface rather than left as three agreeing
+> implementations. The `$defs` are the corpus wave's work -- this is what they must encode.
+>
+> **The command key is `constraints`**, an array in declaration order, mirroring the declaration
+> surface's own container rename (§26.1). **The pre-§26 `dependencies` key is deleted with the
+> construct it carried**: a case still spelling it declares no constraint at all, and no harness
+> reads it.
+>
+> **Four entry shapes, discriminated by `type`**, whose four values are §25.7's rewritten catalogue
+> read on the input side -- `at_least_one`, `all_or_none`, `requires`, `implies`. Every entry carries
+> the mandatory `name`:
+>
+> ```json
+> "constraints": [
+>   {"type": "all_or_none", "name": "author-name",
+>    "members": [{"name": "old-name"}, {"name": "new-name"}]},
+>   {"type": "at_least_one", "name": "purge-selection",
+>    "members": [{"name": "targets", "when": "non_empty"}, {"name": "older-than"},
+>                {"name": "all", "when": "true"}]},
+>   {"type": "requires", "name": "verbose-needs-log", "flag": "verbose", "depends_on": "log"},
+>   {"type": "implies", "name": "quiet-implies-plain", "flag": "quiet", "implies": "plain",
+>    "value": true}
+> ]
+> ```
+>
+> - the two co-occurrence families carry `members`; the two dependency families carry their own
+>   operands (`flag` + `depends_on`, `flag` + `implies` + `value`) and no `members`, which is their
+>   flags-only operand vocabulary (§26.13) spelled on the input side;
+> - a **member is `{name, when?}`**, `when` being `{"enum": ["present", "true", "non_empty"]}` and
+>   **omitted when not declared** -- the omission is a declaration state of its own (§26.3's bool
+>   refusal distinguishes it from an explicit `"present"`), so a case schema that defaulted the key
+>   could not spell the refused input;
+> - **a bare string member stays spellable**, and each harness passes it through unconverted: it is
+>   the covering input for `errConstraintMemberNotRecord`, which Python and TypeScript reach and Go
+>   cannot express at all (§26.6). The presence box's rule again -- a schema that cannot spell the
+>   refused declaration cannot test the refusal -- and a case spelling it restricts its targets;
+> - **a member declares no `kind`.** §25.7 *publishes* the resolved kind because a consumer must not
+>   have to search the flag and arg lists; a *case* declares a name and registration resolves it,
+>   which is item 200's declaration-versus-published-fact distinction applied once more. Declaring
+>   the kind on the input side would also make `errConstraintMemberAmbiguous` unspellable, the
+>   ambiguity being exactly a name whose kind is not declared.
+>
+> The three harnesses map this onto §26.6's spellings, the materialization rule §14.4 pins:
+> `conformance/ref_python.py` emits `AtLeastOne(name, [Member(...), ...])`,
+> `conformance/harness/main.go` splits the member array into Go's two-named-plus-variadic
+> constructors, and `conformance/harness_ts/main.js` builds the option object with its member tuple.
 
 ---
 
@@ -8176,6 +8294,170 @@ rewritten and every entry gains a mandatory `name`).
      those two families' semantics, L3's update construct, multi-elect -- and that the implementation
      joins the campaign's single breaking release rather than creating one of its own.
 
+### 18.31 The constraint system reconciled against three implementations (2026-08-15)
+
+Ten items reconciling **§26** and **§12.15** with the three implementations that shipped them.
+§18.30 was authored **before** implementation on purpose; implementation then had to answer
+questions the authored text left to derivation, and three derivations produced two and sometimes
+three answers. Every item below is a **convergence pin** or the **ratification of an answer all
+three already agree on**. Numbering continues §18.30's, for the reason §18.14 gave: the same
+campaign's ledger.
+
+**Nothing here is a semantic change.** No family, predicate, vocabulary, operand rule or evaluation
+order moves; what moves is bytes, key positions, one fidelity computation and one classification.
+
+**What was read**, on disk, all three shipped implementations: `python/strictcli/__init__.py`'s
+constraint block (the `Member` / `AtLeastOne` / `AllOrNone` / `Requires` / `Implies` dataclasses,
+`_validate_constraint_set`, `_constraint_keywords`, `_constraint_description_line`, the
+`_raise_constraint_*` templates), `go/strictcli/constraints.go` with `tool.go`'s description path
+and `errors.go`'s templates, and `typescript/src/constraints.ts`, `tool.ts`, `factories.ts`'s
+registration passes and `errors.ts`; plus the three conformance harnesses' constraint builders
+(`conformance/ref_python.py`, `conformance/harness/main.go`, `conformance/harness_ts/main.js`).
+
+**Origin tags**, per §18.14's preamble. Every item is **untagged**: none is a `(D)` directive and
+none is a `[%%]` adopted recommendation. They are this round's convergence decisions, each with its
+reason stated where it is pinned.
+
+**Sites amended in place**: §12.15 (the `<t>` vocabulary; the member-rendering rule extended to all
+four member-naming guards; the decline clause's search scope; two per-language extras); §26.3 (the
+variadic bool arg's classification); §26.8 (step 1's namespace); §26.12 (the fidelity table's
+nesting rows, the `anyOf`/`allOf` shape, the keyword position, the two dependency families'
+sentences); §13 (the case schema's constraint surface).
+
+283. **The MCP description block's `requires` and `implies` sentences, pinned in property names
+     (§26.12).** §26.10 pinned the help forms and §26.12 pinned the two co-occurrence forms; the
+     dependency families' MCP forms were left to derivation and came out three ways. Go wrote
+     `<flag> implies <target>=<value>` unspaced, TypeScript `<flag> implies <target> = <value>`
+     spaced, and Python rendered the value into the *name* -- `<flag> implies no_<target>` for a
+     false value -- with the partial clause written into the sentence itself rather than taken from
+     the block's closed set. The pin is `<flag> requires <depends_on>` and
+     `<flag> implies <target> = <value>`, both operands underscored property names, `<value>`
+     spelled `true` or `false`, and the clause supplied by the block's mechanism like every other
+     partial. **Python's two spellings die.** A false value is a value, not a name: `no_<target>`
+     names a key the schema does not carry and the caller can never send, and it hides the one fact
+     the line exists to publish -- what the framework will set. The CLI's `--no-` negation stays
+     where a reader types tokens (§26.10), and does not travel to the door where a reader writes
+     keys.
+
+284. **Two or more at-least-one constraints wrap in `allOf`; exactly one stays a bare `anyOf`
+     (§26.12).** Go and TypeScript both emit `allOf: [{anyOf: ...}, {anyOf: ...}]` for a command
+     declaring two, and the bare `anyOf` for one. **Python merges the branches of every at-least-one
+     into a single flat `anyOf`** (`any_of.extend(...)` across the constraint loop), which publishes
+     a schema satisfied by *either* rule where the command declares that **both** must hold -- a
+     strictly weaker document than the declaration, produced silently. It is the shape §26.12
+     forbids in its other direction (a silent omission) arriving as a silent weakening. Go's shape
+     is pinned, TypeScript agrees, and Python implements it. `dependentRequired` needs no equivalent
+     because it is a map and merges by key, deduplicated, in declaration order -- which all three
+     already do.
+
+285. **at-least-one fidelity is computed RECURSIVELY, and §26.12's nesting rows say so (§26.12).**
+     The authored table's two nesting rows read "exact" without stating over what, and the three
+     implementations read the omission two ways: Python and Go walk the whole subtree for a
+     non-`present` selector, TypeScript tests the constraint's **direct** members only, so an
+     at-least-one whose nested pair declares `when: "true"` publishes as **exact** there while the
+     `required` branch it emits claims a key's presence is enough. Recursion is the reading pinned:
+     an at-least-one is exact **when no election selector appears at any depth beneath it**, and
+     partial as soon as one does, wherever it sits, with the same closed-set reason a direct
+     selector takes. The walk is the engagement predicate's own (§26.4) asked a different question.
+     §26.7's safegit site is **unaffected and stays exact** -- it declares no selector at any depth,
+     which was always the property that made it the no-loss example rather than the nesting itself.
+
+286. **`anyOf` / `allOf` and `dependentRequired` sit after `required` and before
+     `additionalProperties` (§26.12).** All three currently append them after the whole object is
+     built, so the keywords trail `additionalProperties` in Python and TypeScript, and in Go the
+     tool schema is a `map[string]interface{}` whose encoder sorts keys and whose construction has
+     no order at all. The pin places the rule-carrying keywords beside the two keys they qualify,
+     ahead of the key that closes the object. It is the **declared order of one document**, not a
+     byte promise across three: `conformance/cases/presence_mcp.json` already acknowledges that the
+     MCP wire form is each language's own encoder's and asserts structurally, naming Go's key
+     sorting as the reason. The pin binds every implementation whose encoder preserves construction
+     order and is the order Go takes if it ever renders one through an ordered encoder.
+
+287. **All four member-naming guards render an arg member bare, and Go's presence spelling inside
+     one is recorded (§12.15).** §12.15 pinned the rendering explicitly for
+     `errConstraintMemberRequired` only, leaving the other three (`errConstraintMemberBoolWhen`,
+     `errConstraintWhenTrueNotBool`, `errConstraintWhenNonEmptyNotSized`) to read their `'--<x>'`
+     row text literally. Python and Go both substitute the §12.15 rendering in all four already, so
+     the pin **ratifies** rather than changes: an arg member reads `member 'targets'` in each, and
+     in the two `when`-type guards the trailing clause's subject takes the same rendering a second
+     time. Presence spellings inside stay per-language by §12.12's mechanism, and **Go's
+     `errConstraintMemberRequired` prints the flag spelling `Required()` for an arg member** where
+     §12.12's table gives `ArgRequired()`. That one-spelling reading is accepted and recorded: the
+     template's prefix names the constraint rather than a surface, which is the same reason it is
+     not a `Flag`/`Arg` twin pair, so it never claims to quote the arg surface's own option. Python
+     and TypeScript spell both operand kinds one way, so Go is the only place the two readings
+     differ.
+
+288. **Two per-language extras ratified (§12.15).** **`Member(when=<bad string>)` is Python-only**,
+     with the bytes `Member "<name>": when must be "present", "true" or "non_empty", got <repr>`,
+     raised from `Member.__post_init__` rather than from §26.8's order because a malformed record is
+     refused where it is written. Only a string-taking keyword can reach it: Go declares the
+     selector with `WhenTrue()` / `WhenPresent()` / `WhenNonEmpty()` and TypeScript with a literal
+     union, so a typo is a compile error in both. It is a genuine addition rather than one of the
+     pinned `when` guards, all of which describe a *declared value that cannot apply to the member's
+     type* and none of which describes a typo in the keyword's own vocabulary -- §12.12's
+     language-specific-template precedent, with an `excluded:` entry for the other two. Second,
+     **`errConstraintMemberNotRecord` renders its spelling with the placeholder literal**:
+     `Member("<x>")` / `{ name: "<x>" }` as written, `<x>` printed verbatim rather than replaced by
+     the name the caller wrote. The message teaches the shape, and echoing the name back would read
+     as though the framework had accepted the bare entry.
+
+289. **The `<t>` vocabulary, closed (§12.15).** The authored text said "the framework's own type
+     word ... and the compound spellings the existing type errors already use", and three derivations
+     disagreed on states a case reaches: Go renders the **scalar** word for a repeatable flag and a
+     variadic arg (`str`), TypeScript renders the two-argument carrier spelling for a dict
+     (`dict[str,int]`) and the element word for a variadic arg, and Python renders `list[<elem>]`
+     and the one-argument `dict[<value>]`. The set is now closed: Go's `flagTypeName` map is the
+     vocabulary (`str`, `bool`, `int`, `float`, `list[<elem>]`, `dict[<value>]`, plus `list[bool]`
+     for the single shape that reaches it), a **dict renders its value type in one argument** since
+     the key type is `str` by construction, and **a value with a size renders its collection
+     spelling** because what the sentence describes is the value the selector would be evaluated
+     against. A token-spelled selector member renders **`choice flag`** -- TypeScript's derivation,
+     taken because its value is a record neither selector can test, so the word names the construct;
+     the dump's `choice` enum word alone would read as a value word for a value that does not exist.
+
+290. **Three parse- and registration-time pins the implementations answered differently (§12.15,
+     §26.3, §26.8).** **The decline clause searches DIRECT members only** -- Python and TypeScript
+     do, Go descends into nested constraints. The clause teaches about the sentence it is appended
+     to, and that sentence lists the parent's operands rendered structurally, so a `--no-<x>` two
+     levels down names a token the reader is not looking at; a decline inside a nested group also
+     leaves that group vacuous rather than violated (§26.4), so the fact the clause would teach is
+     not the fact the parent reports. **A variadic bool arg classifies as sized, never as bool** --
+     Python and TypeScript classify it that way, Go classifies it as both, which makes `when`
+     mandatory on it and `true` legal. Its value is a sequence whatever its element type, and the
+     mandatory-election refusal's own reason has no referent: a variadic arg has no `--no-` spelling
+     and no way to be provided while selecting nothing. There is no flag-side twin to state, a
+     repeatable bool flag being refused at declaration. **Step 1's collision check reads root flags
+     and args only** -- all three agree, and it is pinned because the alternative is invisible until
+     someone widens it: a member naming a scoped flag is refused one step later with
+     `errConstraintReferencesScopedFlag`, which names the actual fault (§24.8), and widening step 1
+     would refuse constraint names that collide with nothing a member can reach.
+
+291. **The conformance case encoding, ratified as §13's case-schema surface (§13).** The three
+     harnesses were written independently and converged on one encoding, which is now the surface
+     rather than three agreeing implementations: the command key is `constraints`, entries carry a
+     mandatory `name` and a `type` from §25.7's four values, the two co-occurrence families carry
+     `members: [{name, when?}]` and the two dependency families carry their own flag operands, and
+     `when` is **omitted when not declared** because the omission is a declaration state of its own
+     (§26.3's bool refusal reads it). Two properties carry the reasoning: a **bare string member
+     stays spellable**, being the covering input for `errConstraintMemberNotRecord`, which Go cannot
+     express at all; and **a member declares no `kind`**, registration resolving it, which is item
+     200's declaration-versus-published-fact distinction and is also what keeps
+     `errConstraintMemberAmbiguous` spellable -- the ambiguity is exactly a name whose kind is not
+     declared. The pre-§26 `dependencies` key is deleted with the construct it carried. The `$defs`
+     themselves are the corpus wave's work; this is what they must encode.
+
+292. **The two recorded questions stay recorded, and this round does not rule either.** §26.2's --
+     whether a command declaring a flag **and** a positional arg of one name should be refused
+     outright, rather than refusing only the constraint that cannot resolve inside that state -- and
+     §26.13's, whether `Requires` and `Implies` take election selectors so that `--no-x` stops
+     satisfying a `Requires` naming `x` and stops firing an `Implies` triggering on it. Both were
+     flagged for the user rather than for a session, both have fleet blast radius, and neither is a
+     byte or a shape the implementations disagreed about, which is the whole of what this round
+     reconciles. Ruling either inside a reconciliation round is exactly the drift the out-of-scope
+     notes exist to prevent; they remain open questions with their evidence attached where §18.30
+     recorded them (items 271 and 280).
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -11358,6 +11640,17 @@ knows.
 (`errConstraintWhenTrueNotBool`, `errConstraintWhenNonEmptyNotSized`). A selector that cannot be
 evaluated against the declared type is a mis-declaration, not a no-op.
 
+> **Pinned (2026-08-15, reconciliation round, §18.31 item 290): a variadic bool arg classifies as
+> SIZED, never as bool.** Its value is a sequence whatever its element type is, so `non_empty` is
+> legal on it, `true` is a registration error on it (`errConstraintWhenTrueNotBool`, with `<t>`
+> reading `list[bool]`), and **omitting `when` is legal** -- the mandatory-election refusal does not
+> apply. The refusal's own reason has no referent here: it exists because `present` on a bool lets
+> `--no-all` engage a constraint while selecting nothing, and a variadic arg has no negated
+> spelling, no `--no-` form and no way to be provided while selecting nothing. Classifying it as a
+> bool would demand an election word for a value the word cannot test. There is no flag-side twin of
+> this shape to state: a repeatable bool flag is refused at declaration (`repeatable is incompatible
+> with type=bool`), so the variadic arg is the only sized bool a member can name.
+
 **There is no source filter in the vocabulary**, and this is the round's answer to L2.2's
 reconcile-the-two-presence-definitions note. The two definitions were `is_present_for_mutex`
 (command-line only) and `is_present_for_deps` (provided, from any source). The first belongs to a
@@ -11620,6 +11913,15 @@ three implementations must report the same first error for a declaration with tw
 The order runs from the constraint's own identity outward to the declarations it names, so a message
 never blames a member for a fault in the constraint that names it.
 
+> **Pinned (2026-08-15, reconciliation round, §18.31 item 290): step 1's collision check reads ROOT
+> flags and args only.** A constraint may carry the name of a flag declared inside a choice scope
+> without colliding, because the two names live in different namespaces and a member reference
+> resolves in the root one. A **member** naming that same scoped flag is refused one step later, at
+> step 4, with `errConstraintReferencesScopedFlag` -- which is the message that names the actual
+> fault (§24.8: the scope already is the constraint). Widening step 1 to scoped names would report a
+> collision for a declaration whose only problem is that it reaches into a scope, and would refuse
+> constraint names that collide with nothing a member can reach.
+
 ### 26.9 Violations at parse time
 
 The two violation sentences, their clause and their rendering are §12.15's. Two properties are pinned
@@ -11708,13 +12010,52 @@ between `partial` and refusal rather than inventing a third answer.
 | Kind and shape | Emitted | Fidelity |
 |---|---|---|
 | at-least-one, every member a flag or arg with `when: present` | `anyOf: [{required: [<member>]}, ...]`, one branch per member | **exact** |
-| at-least-one with an all-or-none member | that member becomes **one branch** listing all of its leaves in `required` | **exact** |
-| at-least-one with a nested at-least-one member | the nested branches are **inlined** into the parent's `anyOf` | **exact** |
-| at-least-one, any member declaring `when: "true"` or `"non_empty"` | the same `anyOf` | **partial** -- `required` says a key is present, not that it is true or non-empty |
+| at-least-one with an all-or-none member, no election selector **at any depth** | that member becomes **one branch** listing all of its leaves in `required` | **exact** |
+| at-least-one with a nested at-least-one member, no election selector **at any depth** | the nested branches are **inlined** into the parent's `anyOf` | **exact** |
+| at-least-one with a `when: "true"` or `"non_empty"` member **at any depth**, its own or a nested constraint's | the same `anyOf` | **partial** -- `required` says a key is present, not that it is true or non-empty |
 | all-or-none, every member a flag or arg with `when: present` | `dependentRequired`, mapping each member to all the others | **exact** |
 | all-or-none with a nested constraint member, or any non-`present` selector | nothing | **partial** -- the keyword cannot carry a group as an operand |
 | requires | `dependentRequired: {<flag>: [<depends_on>]}` | **exact** |
 | implies | nothing | **partial** -- it injects a value rather than constraining the input, so there is nothing for a schema to say |
+
+> **Amended (2026-08-15, reconciliation round, §18.31 item 285): fidelity is computed
+> RECURSIVELY.** The three nesting rows above said "exact" without saying over what, and the exact
+> verdict is now stated as the whole condition it always was: an at-least-one is **exact when no
+> election selector appears at any depth beneath it**, and **partial** as soon as one does, wherever
+> it sits. A nested member's leaves are what the parent's branch publishes in `required`, so a
+> `when: "true"` two levels down is a rule the parent's own `anyOf` states falsely -- the branch
+> claims the key's presence is enough. The recursion is the same walk the engagement predicate
+> already does (§26.4), read for a different question. §26.7's safegit site stays **exact**: its two
+> nested pairs and its parent name four flags and no selector at all, which is the property that
+> made it the no-loss example, not the nesting itself.
+>
+> The `partial` clause the recursive verdict appends is `the "true" and "non_empty" selectors`, the
+> same closed-set reason a direct selector takes -- there is no separate reason word for a nested
+> one, because the fact being stated is identical: the schema says a key is present where the rule
+> asks what it holds.
+
+> **Pinned (2026-08-15, reconciliation round, §18.31 item 284): one `anyOf` bare, two or more
+> wrapped in `allOf`.** A command declaring exactly one at-least-one emits its branches as the
+> object's own `anyOf`. A command declaring **two or more** emits
+> `allOf: [{anyOf: [...]}, {anyOf: [...]}, ...]`, one element per constraint in declaration order,
+> and no bare `anyOf` at all. One object schema carries one `anyOf`, and two at-least-one
+> constraints are two independent rules that must **both** hold: merging their branches into one
+> `anyOf` says "satisfy either rule", which is a strictly weaker document that no declaration asked
+> for, and dropping one is the silent omission this section forbids. `allOf` adds no variants and no
+> restructuring -- it is a conjunction of keywords beside `properties`, which is the same bet the
+> paragraph below makes for `anyOf` itself. `dependentRequired` needs no equivalent: it is a map, so
+> every all-or-none and every `requires` merges into the one key by name, with each member's list
+> deduplicated and in declaration order.
+
+> **Pinned (2026-08-15, reconciliation round, §18.31 item 286): where the keywords sit.** In the
+> constructed tool schema `anyOf` / `allOf` and `dependentRequired` are inserted **after `required`
+> and before `additionalProperties`** -- the rule-carrying keywords beside the two keys they qualify,
+> ahead of the key that closes the object. It is the declared order of one document, not a byte
+> promise across three: the MCP wire form is produced by each language's own encoder, and Go's
+> `encoding/json` sorts map keys, which is the divergence `conformance/cases/presence_mcp.json`
+> already acknowledges with its structural assertions. The pin binds every implementation whose
+> encoder preserves construction order, and it is the order Go takes if it ever renders a tool
+> schema through an ordered one.
 
 **Why `anyOf` here when §24.11 refused `oneOf` for selectors.** The two are not the same bet.
 §24.11's `oneOf` would have **restructured** the tool schema into variants, changing the shape every
@@ -11741,6 +12082,29 @@ Constraints (enforced at call time):
   from a closed set: `the "true" and "non_empty" selectors`, `the nested grouping`, `the injection`;
 - an **exact** projection appends no clause at all. The block names every constraint either way, so
   the presence of a clause tells a reader exactly where the schema is weaker than the rule.
+
+> **Pinned (2026-08-15, reconciliation round, §18.31 item 283): the two dependency families'
+> sentences in this block.** §26.10 pinned their **help** sentences and this section pinned the two
+> co-occurrence forms; the dependency families' MCP forms were left to derivation and came out three
+> ways. They are:
+>
+> ```
+> <flag> requires <depends_on>
+> <flag> implies <target> = <value>
+> ```
+>
+> - both operands are **property names** (underscored), like every other member in this block: the
+>   caller writes keys, not argv. There is no `--` prefix here and no `--no-` spelling -- the help
+>   block's negation form (§26.10) belongs to the surface where a reader types tokens;
+> - `implies` states its injected value as `= <value>`, spaced, with `<value>` rendered `true` or
+>   `false`. **A false value is a value, not a name**: rendering it by prefixing the property with
+>   `no_` describes a key the schema does not have and that the caller can never send, and it makes
+>   the one fact the line exists to publish -- what the framework will set -- unreadable. This is the
+>   one place the CLI's negation spelling does not travel with the sentence;
+> - `implies` is **partial** by the table above and takes the clause from the closed set like every
+>   other partial, appended by the block rather than written into the sentence. `requires` is
+>   **exact** and takes no clause. Neither line says anything else: no per-family commentary, no
+>   restatement of the rule in a second form.
 
 **Enforcement at call time is unchanged and total.** Every constraint is evaluated at the machine
 doors exactly as at the argv door, and a violation returns the §12.15 sentence through the framework's
