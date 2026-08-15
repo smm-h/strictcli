@@ -154,7 +154,7 @@ app.run(process.argv.slice(2));
 - Environment variable binding with prefix enforcement
 - Flag tags -- reusable bundles of flags shared across commands
 - Choice flags -- elect exactly one of a flag's declared choices, each choice owning a scope of flags legal only while it is elected, spelled as a token (`--via email`) or as the choices' own flags (`--profile work` / `--all-profiles`); the handler receives one tagged record consumed exhaustively, and recursion is unlimited
-- Implies dependencies -- auto-set a bool flag when another flag is provided; explicit contradictions are parse errors
+- Constraints -- four named rules over a command's own flags and args: at-least-one, all-or-none, requires, and implies (auto-set a bool flag when another is provided; explicit contradictions are parse errors). A member is a reference by name to a flag, a positional arg, or another named constraint, nested to unlimited depth, carrying a declared election selector (`present` / `true` / `non_empty`) that says when it counts; every constraint renders in `--help`, publishes its members in `--dump-schema`, and projects into MCP tool schemas with any remainder stated in the tool description
 - Global flags (parsed before and after the command token)
 - Passthrough commands -- delegate unparsed args to another tool
 - Repeatable flags (accumulate values into a list)
