@@ -2865,6 +2865,24 @@ level down reads `one of --profile, --all-profiles is required under '--mode adv
 suffix is empty at root scope, which is what makes every root-scope message byte-identical to what
 it was before this round.
 
+**Composition, when more than one clause applies, is closed** *(added 2026-08-15, contract-pin
+round, §18.23 item 239)*: **the scope suffix, then the origin suffix, then §21.4's decline clause**,
+and never any other order. Each pair had been pinned against one neighbour -- the origin suffix goes
+after the scope suffix (below), the decline clause is "appended" (§21.4) -- and all three can land
+on one `one of --a, --b is required` at once, which reads:
+
+```
+one of --profile, --all-profiles is required under '--via email' (elected from env var 'NOTIFY_VIA') (--no-all-profiles declines an option; it does not choose one)
+```
+
+`errOneOfRequired(<members>, <scope suffix> + <origin suffix> + <decline clause>)`. All three. The
+scope suffix names **where** the requirement lives and belongs to the sentence; both parentheticals
+follow a complete sentence, and the decline clause is last because it is a teaching note about a
+token the operator did type rather than a fact about the requirement's location. Composing the
+clause before the suffix puts an aside between the requirement and its location and splits the
+sentence around it. The order holds however few of the three apply: dropping a clause never
+reorders the ones that remain.
+
 **The out-of-scope flag** -- the round's central error, and deliberately **not** "unknown flag": the
 flag is declared, it is simply not in the elected scope, and the sentence names both sides.
 
@@ -6547,13 +6565,193 @@ own block struck) and §18.21 item 231 (one stale count corrected).
        check any charset. Every other banned name -- `force`, the reserved quartet, `json`, `yes`,
        and every `no-` prefixed name -- clears the charset, so this one name is the whole exposure,
        and one input producing two different sentences is a plain divergence rather than the
-       unconstructable-state class of items 213 and 227. It sits in item 231's class: the
+       unconstructable-state class of items 213 and 227. ~~It sits in item 231's class: the
        implementation is what changes, and the obstacle is named -- Go validates a flag's name
-       inside the flag constructor, so nothing evaluated later can reach the charset first.
+       inside the flag constructor, so nothing evaluated later can reach the charset first.~~
+       *(amended 2026-08-15, contract-pin round, §18.23 item 241)* **It sits in neither class: the
+       obstacle named in the struck words is the whole finding, and §18.23 item 241 reclassifies
+       this as a permanent acknowledged divergence rather than a defect awaiting a fix.**
      - **`errFlagChoicesIncompatibleCompound`'s death is already covered**, by item 231's last
        bullet, which names it and says why no TypeScript path can ever call it. Only the bullet's
        headline was wrong: it said three orphan templates die and then named four. The count is
        corrected in place and no other word of it changes.
+
+### 18.23 Pins forced by the flat boundary's residuals (2026-08-15)
+
+§18.22 pinned the states the flat form can spell that item 229's bullets had not reached. Fixing the
+three implementations against *those* pins left five residuals -- states the fix round walked past
+and one classification it got wrong -- and this section closes them. It is the same sweep one pass
+further in, so it asks the same question §18.22 asked: *what would this be on the command line?*
+Numbering continues §18.22's, for the reason §18.14 gave: the same campaign's ledger.
+
+**Nothing below changes a guarantee.** Items 236, 238 and 239 are **new pins** on states composed of
+halves this document already pins, where the composition itself had no sentence. Item 240 is a **new
+pin** whose scope turned out to be larger than the residual that raised it. Item 237 is a **record**
+against a rule §23.5 already states in one line. Item 241 is a **reclassification**: §18.22 item
+235's first bullet filed a divergence in item 231's fixable class, and it belongs in the conformance
+suite's `acknowledged_divergence` mechanism instead.
+
+**Every claim below was probed against all three implementations** through the front door the claim
+is about -- Python's `_call_with_kwargs(..., flat=True)`, Go's `App.Call`, TypeScript's
+`asTools()[n].execute`, and each implementation's own `test()` for the command-line baselines.
+Where a probe contradicted the residual as filed, the item says so and the probe wins.
+
+**Origin tags**, per §18.14's preamble. Every item here is **untagged**: none is a `(D)` directive
+and none is a `[%%]` adopted recommendation. They are implementation-forced pins in the §18.3 class.
+
+**Sites amended in place**: §24.11 (three new blocks, after item 234's), §12.13 (one composition
+sentence added to the scope-suffix block) and §18.22 item 235 (its first bullet's closing
+classification struck).
+
+236. **The selector's property wins when it elects a payload-less member the member's own key
+     declines (§24.11, §24.4).** `{"target": "all-profiles", "all_profiles": false}` elects
+     `all-profiles` through the selector's property and declines that same member through its own
+     key, and **no command line spells it**: a member-spelled selector has no token of its own
+     (§24.4), so there is nothing an operator could type that both elects and declines one member.
+     The contradiction exists only because the flat object has two ways to name one member and no
+     order between them. **The election stands and the decline is dropped**, and the reason is the
+     property map rather than a tie-break invented here: after item 234's fix a payload-less member
+     **publishes no property of its own** (§18.21 item 231), so the selector's property is the one
+     thing the schema tells a caller to send for electing it, while the member's own key is read
+     only because the boundary reads the command line the flat object spells. What the schema
+     publishes outranks what it does not. **All three already answer this way**, which makes this a
+     ratification and not a change: Go's `collectFlatMemberElections` writes the decline into
+     `memberElected` and the elected loop then overwrites it with `true`; Python's
+     `_flat_occurrences` skips a choice already in `elected` before it can reach `declined`;
+     TypeScript's `electMembers` takes the `named === choiceName` branch and never inspects the
+     key. Three independent arrivals at one answer, and the answer is the one the property map
+     implies, so the pin records the agreement rather than choosing between disagreements.
+
+237. **A scoped flag's `RelativeToRoot` default resolves exactly as a root flag's does, and two
+     implementations do not (§23.5, §24.6).** §23.5's amendment table already says it in one line --
+     `RelativeToRoot` "means inside a scope exactly what it means at root scope" -- so nothing is
+     decided here; what is recorded is that the line is false of two implementations today. A
+     declared `RelativeToRoot` default on a flag inside a choice's scope must deliver the
+     **resolved path**, through the declared root, labelled `infra` wherever the record exposes a
+     source, and `provided` false either way (§23.6's table: `infra` is a declared default with a
+     distinct label). **Go delivers exactly that** on both front doors: with `MYAPP_HOME` declared
+     as `/opt/myhome`, a scoped `cfg` defaulted `RelativeToRoot("MYAPP_HOME", "cfg", "x.toml")`
+     arrives as `/opt/myhome/cfg/x.toml` from the command line and from the flat object alike.
+     **Python and TypeScript both deliver the raw marker.** Python's `_apply_scoped_presence`
+     returns `f.default, "default"` with no marker branch at all, so the handler receives the
+     `RelativeToRoot` object itself and the record's source map says `default`; TypeScript's scoped
+     presence path does the same and the record carries `{"envVar": "MYAPP_HOME", "parts": ["cfg",
+     "x.toml"]}`. Both are wrong twice over -- wrong value and wrong source label -- and both are
+     wrong only inside a scope: each resolves a **root** flag's marker correctly and reports
+     `infra` for it in the same run, so the divergence is a missing branch on one code path rather
+     than a different reading of the rule. This is item 231's class: the rule stands, the
+     implementations change.
+
+238. **An unknown property is refused before every phase, because it is a fact about the object's
+     shape (§24.11, §24.3).** A key that names nothing the command declares -- not a flag, not a
+     positional, not a global, not a selector, and not a scoped parameter under any choice, elected
+     or not -- reports **ahead of** any election, scope, value or presence problem the same object
+     also contains. The model is the command line's own precedence, and it is the same in all three
+     implementations today: `myapp run --all-profiles --profile work --bogus` prints `unknown flag
+     '--bogus'` and not the double election beside it, because tokenizing precedes electing. The
+     flat form is that command line with the tokens removed (§24.11), so `{"target":
+     "all-profiles", "profile": "work", "bogus": 1}` prints `unknown parameter "bogus" for command
+     "run"`. The stage is the one item 233's missing-payload refusal already occupies -- a shape
+     fact outranks a phase fact -- and this pin states it for the whole class rather than for one
+     template. **Go already stages it this way**: its unknown-parameter sweep runs between the
+     declaration walk and `elect()`, so the unknown key beats a double election, a decline and a
+     missing payload alike. **Python and TypeScript both report the selector work first** and reach
+     the unknown key only when that work succeeded -- `{"target": "profile", "bogus": 1}` prints
+     `flag '--profile' requires a value` in both, and `{"target": "all-profiles", "profile":
+     "work", "bogus": 1}` prints the mutual-exclusion sentence -- because each finishes converting
+     the selectors (Python in `_flat_occurrences` plus `_resolve_selectors`, TypeScript by throwing
+     `firstProblem(problems)` at the end of `flatToCallKwargs`) before the unknown-parameter check
+     downstream of it ever runs. **One residual is Go's**, and it is named here rather than left
+     for a later reader to rediscover: a selector property naming no declared choice is refused
+     inside the declaration walk, so `{"target": "nope", "bogus": 1}` prints `--target: invalid
+     value 'nope', must be one of: profile, all-profiles` where the command line's unknown token
+     would have won. Two implementations change for the rule, and the third changes for its
+     residual.
+
+239. **The scope suffix, the origin suffix and the decline clause compose in that order, and only
+     that order (§12.13, §21.4).** Three clauses can land on one `one of --a, --b is required`, and
+     each was pinned against one neighbour and none against all three at once: §12.13 pins the
+     origin suffix "**after** the scope suffix and never before it", and §21.4 says the decline
+     clause is "appended" without saying to what. The composition is now closed --
+     `errOneOfRequired(<members>, <scope suffix> + <origin suffix> + <decline clause>)` -- so a
+     required member-spelled selector one level down, elected from an environment variable, with a
+     member declined and none elected, reads exactly:
+
+     ```
+     one of --profile, --all-profiles is required under '--via email' (elected from env var 'NOTIFY_VIA') (--no-all-profiles declines an option; it does not choose one)
+     ```
+
+     The reason for the order is the one the origin suffix already follows. The scope suffix names
+     **where** the requirement lives and belongs to the sentence; both parentheticals follow a
+     complete sentence, and the decline clause is a teaching note about the token the operator did
+     type, so it goes last. `errOneOfRequired(<members>, <clause>) + <suffix>` puts an aside
+     between the requirement and its location and splits the sentence around it. **Go composes all
+     three correctly** (`scopedPresenceSuffix` is scope-then-origin, and `unsatisfiedSelectorError`
+     appends the decline clause after it). **Python has the order right and drops the origin
+     suffix**: it computes `origin_suffix`, spends it on the token-spelled `flag '--<sel>' is
+     required` branch, and writes the member-spelled branch as `f"one of {names} is
+     required{scope_suffix}{clause}"` -- so an ambient election that caused the requirement goes
+     unnamed on exactly the message §12.13 item 216 wrote the suffix for. **TypeScript drops the
+     origin suffix too and inverts the remaining two**, in `scopeparse.ts` and `tool.ts` alike:
+     `` `${errOneOfRequired(memberList(sel), clause)}${suffix}` `` renders `... is required
+     (--no-all-profiles declines an option; it does not choose one) under '--via email'`. Go is the
+     reference; Python and TypeScript change.
+
+240. **A pre-typed value must satisfy the declaration it is supplied against, and no implementation
+     checks this anywhere (§24.11, §23.4).** The residual that raised this was narrow -- an
+     explicit null for a member's payload at the flat boundary -- and reported Go as already
+     coercing through `coerceInvokeValue`. Probing all three found the opposite and found it much
+     wider. `coerceInvokeValue` converts **shapes**, not types: its dict branch refuses a non-map
+     (`dict flag "labels": expected map type, got string`, the one type refusal that exists on this
+     path), its list branch converts typed slices and returns anything else untouched, and its
+     scalar branch is `return value, ""`. So `{"retries": "nope"}` on an `int`-declared flag,
+     `{"profile": 123}` on a `str`-declared member payload, and `{"name": null}` on a **required**
+     `str` flag all reach the handler unexamined -- **in Python, Go and TypeScript, at root scope,
+     inside a scope, and at both front doors**. `null` satisfying a required declaration is the
+     sharpest of the three: the flag's own presence rule is answered by a value the declaration
+     forbids. **The pin**: *pre-typed* has always meant **already of the declared type**, never
+     *exempt from the declaration*, so every supplied value is checked against the type its
+     declaration names, and `null` is not a legal value for anything -- a flag that may be absent
+     declares `optional` and is delivered absent (§23.4's one spelling for optionality), and a flag
+     that may not be absent is refused. The check belongs to the **value phase**: after every
+     election and every scope decision, in declaration order (§24.3, §18.22 item 232), which is
+     where a value refusal already sits. **This is an extension of what the path already does, not
+     a new duty invented for it**: `call()` validates a pre-typed value against `choices` in all
+     three today (`{"color": 123}` on a two-choice flag is refused by every implementation), so the
+     declaration is already consulted -- just its closed-set half and not its type half, and
+     neither half sees `null`. **No sentence is authored here.** The scalar branch has a template
+     family in all three already -- `expected str, got <type>` / `expected int, got <type>` /
+     `expected float, got <type>` / `expected bool, got <type>`, used today for compound element
+     and config coercion -- and which wrapper carries it on this path is an implementation-round
+     decision, not a contract one. What this item fixes is the **verdict**, which is the part that
+     silently differed.
+
+241. **The `approve_consequential` charset-versus-ban ordering is a permanent acknowledged
+     divergence, not a defect (§12.13, §18.22 item 235).** Item 235's first bullet found the fact
+     correctly and then filed it in the wrong place. The fact, re-probed and confirmed: exactly one
+     name fails the choice-name charset **and** the flag-name ban list, and the two languages
+     answer with different sentences. Declaring a member choice named `approve_consequential`
+     raises `Flag "mode": choice name "approve_consequential" must match [a-z][a-z0-9-]*` in Python
+     and TypeScript, and `flag name 'approve_consequential' is reserved by the framework: it names
+     the programmatic consent parameter` in Go. **Both refuse the declaration; only the sentence
+     differs**, and no program can be written that one accepts and another runs. The reason is
+     structural and not incidental: a Go member choice is spelled `MemberChoice(StringFlag("...",
+     ...), ...)`, and `StringFlag` runs `validateFlagConfig` at **construction**, so the ban fires
+     before a `MemberChoiceFlag` -- the only thing that could hold a charset check -- exists at
+     all. There is no ordering Go can adopt while its flag constructors validate their own names.
+     **The restructuring alternative was considered and rejected**: moving Go's name bans out of
+     the flag constructors and into command build would reach the charset first, and it would also
+     move every ban in the list off the constructor that gives it its best property -- a bad name
+     failing where it is written, on the line that writes it, rather than several declarations
+     later. Trading that for one name's wording is disproportionate. So this goes to the
+     conformance suite's **`acknowledged_divergence`** mechanism, which is exactly what that block
+     is for: a per-stream target list with a mandatory reason, where the acknowledged targets are
+     excluded from byte-identity comparison while the case's own `expect` block still asserts the
+     refusal **everywhere**. The case therefore keeps proving the guarantee that holds -- every
+     implementation refuses this declaration -- and stops asserting the one that does not.
+     Acknowledging it is not filing it away: a stale acknowledgment is reported by the suite, so
+     the day Go's structure changes, the block's own machinery says the acknowledgment is no longer
+     earned.
 
 ---
 
@@ -8454,6 +8652,48 @@ and the redundant-negation refusal when something did. Reading a key the flatten
 not publish (§18.21 item 231) is not a contradiction: the map publishes what a caller should send,
 and this boundary reads the command line the flat object spells. Ignoring the key is refused for
 §3.5's reason, the same one that refuses dropping a losing election above.
+
+**When the two ways of naming one member contradict each other, the selector's property wins**
+*(added 2026-08-15, contract-pin round, §18.23 item 236)*. `{"target": "all-profiles",
+"all_profiles": false}` elects a payload-less member through the selector's property and declines
+that same member through its own key. **No command line spells this**: a member-spelled selector has
+no token of its own (§24.4), so nothing an operator can type both elects and declines one member,
+and the state exists only because the flat object has two ways to name one member and no order
+between them. **The election stands and the decline is dropped.** The tie is broken by the property
+map rather than by a rule invented at this boundary: a payload-less member publishes no property of
+its own (§18.21 item 231), so the selector's property is the one thing the schema tells a caller to
+send in order to elect it, while the member's own key is read only because this boundary reads the
+command line the flat object spells. What the schema publishes outranks what it does not. Everything
+else about the key is unchanged -- a decline beside the election of a *different* member is still
+§21.4's redundant negation, and a decline with nothing elected still carries §21.4's clause.
+
+**An unknown property is refused before every phase** *(added 2026-08-15, contract-pin round, §18.23
+item 238)*. A key naming nothing the command declares -- not a flag, not a positional, not a global,
+not a selector, and not a scoped parameter under any choice, elected or not -- is a fact about the
+object's **shape**, and it reports ahead of any election, scope, value or presence problem the same
+object also contains. This is the command line's own precedence carried over: `--bogus` beside a
+double election prints `unknown flag '--bogus'`, because tokenizing precedes electing, and the flat
+form is that command line with the tokens removed. So `{"target": "all-profiles", "profile": "work",
+"bogus": 1}` prints `unknown parameter "bogus" for command "run"` rather than the mutual-exclusion
+sentence, and `{"target": "profile", "bogus": 1}` prints it rather than the missing-payload
+sentence. The stage is the one the missing-payload refusal above already occupies: a shape fact
+outranks a phase fact, and that holds for the whole class rather than for one template. A selector
+property naming no declared choice is a shape fact too, so it takes the same stage and does not
+outrank an unknown key beside it.
+
+**A supplied value must satisfy the declaration it is supplied against** *(added 2026-08-15,
+contract-pin round, §18.23 item 240)*. *Pre-typed* means **already of the declared type**, never
+*exempt from the declaration*. Every value this boundary carries -- a member's payload, a scoped
+parameter, a root-scope flag -- is checked against the type its declaration names, and **`null` is
+not a legal value for anything**: a flag that may be absent declares `optional` and is delivered
+absent (§23.4's one spelling for optionality), and a flag that may not be absent is refused rather
+than satisfied by a value its own declared type forbids. `{"profile": null}` is therefore refused,
+not delivered as a record whose `str`-declared field holds nothing, and an `int`-declared scoped
+flag handed `"nope"` is refused rather than passed through. The check is the **value phase's** --
+after every election and every scope decision, in declaration order (§24.3, §18.22 item 232) -- so
+it never outranks an election refusal, and it sits beside the `choices` check this path already
+performs on pre-typed values. The same rule governs the record front door below: two spellings of
+one declaration cannot mean two different things about what a value may be.
 
 **Choice names ride the description map exactly as declared** *(added 2026-08-15, implementation
 round, §18.19 item 222)*. The block's key is `<selector>=<choice>` where the **selector** is the
