@@ -509,7 +509,7 @@ function newScopedLookups(decls: readonly AnyDecl[]): ScopedLookups {
  * `seq` is the occurrence's position in the whole token scan -- the same
  * counter root occurrences take -- so the value phase can report a scoped
  * coercion failure against a root one by the order they were TYPED (§24.3,
- * §18.27 item 257).
+ * §18.28 item 262).
  */
 function recordOccurrence(
 	occ: Occurrences,
@@ -730,7 +730,7 @@ export function parseCommand(
 	// scan, so a coercion failure can never outrank a structural verdict; each
 	// failure carries the position of the token that produced it, so the value
 	// stage reports root and scoped coercions in ONE command-line order rather
-	// than root-first (contract §24.3, §18.27 item 257). Nothing here partitions
+	// than root-first (contract §24.3, §18.28 item 262). Nothing here partitions
 	// the two: the scopes' own value phase runs below and its failures are
 	// positioned on the same scale.
 	for (const { f, raw, seq } of rootOccs) {

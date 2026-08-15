@@ -11703,7 +11703,7 @@ def _resolve_scoped_value(
 
     ``cli_values`` is the argv path's own coercion sweep, already run in
     command-line order across root and scoped occurrences alike (§24.3,
-    §18.27 item 257): where it is supplied, a supplied token's value was
+    §18.28 item 262): where it is supplied, a supplied token's value was
     coerced there and this function only decides what the AMBIENT sources say
     about the flags no token named. The programmatic doors pass nothing and
     coerce here, in the command's declaration order (§18.25 item 249).
@@ -12901,7 +12901,7 @@ def _parse_command(
     # COMMAND-LINE order (§24.3). One sweep, not two: partitioning root values
     # ahead of scoped ones would make which of two true refusals is printed
     # depend on a declaration the operator cannot see, which is the outcome the
-    # phase order exists to prevent (§18.27 item 257; Go is the reference).
+    # phase order exists to prevent (§18.28 item 262; Go is the reference).
     # Only coercion happens here -- the closed set and `validate` run in a
     # later pass, so every coercion failure outranks every callback refusal
     # (§18.20 item 226).

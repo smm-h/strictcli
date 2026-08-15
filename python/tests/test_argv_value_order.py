@@ -1,4 +1,4 @@
-"""The argv path's own value order (contract §24.3, §18.27 item 257).
+"""The argv path's own value order (contract §24.3, §18.28 item 262).
 
 §24.3 pins command-line order *within* a phase, and the value phase is ONE
 phase: a root flag's token and a scoped flag's token are read in the order they

@@ -261,7 +261,7 @@ def test_a_scoped_presence_refusal_outranks_a_missing_required_root_flag():
 
 
 def test_the_command_line_reads_its_own_tokens_in_its_own_order():
-    """The argv path is NOT a party to the sweep above (§18.27 item 257).
+    """The argv path is NOT a party to the sweep above (§18.28 item 262).
 
     §24.3 pins command-line order within a phase, and the value phase is one
     phase whether a token names a root flag or a scoped one: the first token

@@ -72,7 +72,7 @@ import {
 /**
  * One positive occurrence: the raw token text, and the position the token scan
  * gave it. The position is what makes the VALUE phase report in command-line
- * order across root and scoped flags alike (§24.3, §18.27 item 257) -- a scope
+ * order across root and scoped flags alike (§24.3, §18.28 item 262) -- a scope
  * is a position on the command line, never a group behind the root flags.
  */
 export interface OccurrenceValue {
@@ -117,7 +117,7 @@ export const STAGE = {
  *
  * `seq` is the position of the token whose COERCION produced the problem, and
  * it is set for exactly those: a value is coerced as its token is consumed, so
- * a coercion failure is ordered by the command line (§24.3, §18.27 item 257).
+ * a coercion failure is ordered by the command line (§24.3, §18.28 item 262).
  * Everything else in the value stage -- a `choices` refusal, a `validate`
  * refusal, an env or config coercion -- belongs to a later pass over the
  * declarations, carries no position, and is therefore reported after every
@@ -618,7 +618,7 @@ function resolveScopedFlag(
 				} catch (e) {
 					// The token's own position: a scoped value is coerced where its
 					// token sits on the command line, exactly as a root one is
-					// (§24.3, §18.27 item 257).
+					// (§24.3, §18.28 item 262).
 					run.problems.push({
 						stage: STAGE.value,
 						message: (e as Error).message,

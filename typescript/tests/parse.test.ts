@@ -3495,7 +3495,7 @@ test("precedence: an unknown flag outranks an unknown choice on a selector", asy
 
 // ---------------------------------------------------------------------------
 // The argv value phase's own order: COMMAND-LINE order, root and scoped alike
-// (§24.3, §18.27 item 257), with §18.20 item 226's exception intact -- every
+// (§24.3, §18.28 item 262), with §18.20 item 226's exception intact -- every
 // coercion failure is reported before any `validate` refusal.
 //
 // The command's declaration order decides the two PROGRAMMATIC doors' sweep
