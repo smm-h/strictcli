@@ -118,7 +118,8 @@
   "en/typescript-src-constraints.md": {
     "content": "65f1edcd8a7d79d1992d31914bb0bd020c3416698ef202b5c9d80e64667d2c92",
     "description": "7693a72e89600a4eb4a57a94d7c09a6a3e93f67d89aca6a0dce2925a2e8cc69a",
-    "seed_hash": "7693a72e89600a4eb4a57a94d7c09a6a3e93f67d89aca6a0dce2925a2e8cc69a"
+    "seed_hash": "7693a72e89600a4eb4a57a94d7c09a6a3e93f67d89aca6a0dce2925a2e8cc69a",
+    "source_docstring": "477fd9285d4e118d5aa76fc959773eaa7aed33ac4496c0d871bb4d2bca36f63e"
   },
   "en/typescript-src-context.md": {
     "content": "b1748e9063f5023a87169894b57d2b1918d87ff06881fb4d5da989c5902ade40",
