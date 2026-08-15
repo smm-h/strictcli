@@ -2412,5 +2412,72 @@
       "stdout_equals": "a=x\n",
       "stderr_equals": ""
     }
+  },
+  {
+    "name": "constraints: a violation at the programmatic door carries the same sentence",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "pre_call": [
+        {
+          "command": "purge",
+          "kwargs": {}
+        }
+      ],
+      "commands": [
+        {
+          "name": "purge",
+          "help": "purge it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "the larger-than",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "older={older-than}"
+        },
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
+      ]
+    },
+    "argv": [
+      "noop"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_equals": "call error: constraint \"purge-selection\": at least one of --older-than, --larger-than is required\n"
+    }
   }
 ]

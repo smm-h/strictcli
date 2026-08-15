@@ -1321,5 +1321,246 @@
       "exit_code": 0,
       "stderr_equals": ""
     }
+  },
+  {
+    "name": "mcp constraints: the Constraints block follows the scope block, separated by a blank line",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "as email",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "type": "str",
+                      "help": "the subject",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "as sms"
+                }
+              ]
+            },
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "the larger-than",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "x"
+        }
+      ]
+    },
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}",
+        "expect_line": {
+          "json_equals": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "resultType": "complete",
+              "tools": [
+                {
+                  "name": "send",
+                  "description": "send it\n\nScoped parameters (enforced at call time):\n  via=email: subject (required)\n  via=sms: (no parameters)\n\nConstraints (enforced at call time):\n  at least one of: older_than, larger_than",
+                  "effect": "read_only",
+                  "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                      "older_than": {
+                        "type": "string",
+                        "description": "the older-than"
+                      },
+                      "larger_than": {
+                        "type": "string",
+                        "description": "the larger-than"
+                      },
+                      "via": {
+                        "type": "string",
+                        "enum": [
+                          "email",
+                          "sms"
+                        ],
+                        "description": "delivery channel"
+                      },
+                      "subject": {
+                        "type": "string",
+                        "description": "the subject"
+                      }
+                    },
+                    "required": [
+                      "via"
+                    ],
+                    "anyOf": [
+                      {
+                        "required": [
+                          "older_than"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "larger_than"
+                        ]
+                      }
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              ],
+              "ttlMs": 3600000,
+              "cacheScope": "public",
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "myapp",
+                  "version": "1.0.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "mcp constraints: a violation at the machine door is an isError result carrying the parser's own sentence, never -32602",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "purge",
+          "help": "purge it",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "the larger-than",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "older={older-than}"
+        }
+      ]
+    },
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys -- so §26.12's pinned keyword position (item 286, anyOf/allOf/dependentRequired after `required` and before `additionalProperties`) binds construction order and not these bytes. The scripted assertions are structural (json_equals parses each line), so they are identical for all three targets and are what pins the projection.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"purge\",\"arguments\":{},\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}",
+        "expect_line": {
+          "json_equals": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+              "resultType": "complete",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "constraint \"purge-selection\": at least one of --older-than, --larger-than is required"
+                }
+              ],
+              "isError": true,
+              "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                  "name": "myapp",
+                  "version": "1.0.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
   }
 ]
