@@ -29,6 +29,7 @@ import {
 	resolveInfraRootPath,
 	validateFlagInfraMarker,
 } from "../src/infra.js";
+import { dumpSchemaCore } from "../src/schema.js";
 
 async function withEnv<T>(
 	vars: Record<string, string | undefined>,
@@ -751,5 +752,171 @@ test("infra: a scoped marker resolves at BOTH programmatic front doors", async (
 		assert.ok(send);
 		await send.execute({ via: "email", subject: "hi" });
 		assert.equal(seen, "/opt/data/mail/outbox");
+	});
+});
+
+// --- A marker inside a DEFAULTED selection (contract §24.5, §18.26 item 256) ---
+
+/**
+ * §24.5 says a defaulted selection is COMPLETE and delivered as declared, and
+ * "as declared" means the declaration's SEMANTICS, never its raw objects: a
+ * `RelativeToRoot` sitting inside the selection a selector's own `default`
+ * names is the same declared default one frame further in, so it resolves at
+ * delivery -- at every door and at every depth, with `provided` false.
+ *
+ * Handing the marker object over instead would deliver a handler something no
+ * command line can produce, and something the identical declaration one
+ * presence away already resolves.
+ *
+ * The selector's default NAMES A CHOICE here, so nothing holds a pre-built
+ * instance: the scope is rebuilt from its declarations and every field runs the
+ * ordinary default path (electDefaultRecord at the programmatic doors, the
+ * scoped default applier on the argv path).
+ */
+function defaultedSelectionInfraApp(seen?: Record<string, unknown>): App {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "t",
+		infraRoot: { MYAPP_HOME: "/var/lib/myapp" },
+	});
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "email",
+							flags: {
+								store: flag("store", t.str, {
+									help: "where the copy goes",
+									presence: "default",
+									default: relativeToRoot("MYAPP_HOME", "mail", "outbox"),
+								}),
+								format: choiceFlag(
+									"format",
+									{
+										plain: choice({
+											help: "plain text",
+											flags: {
+												sheet: flag("sheet", t.str, {
+													help: "the style sheet",
+													presence: "default",
+													default: relativeToRoot("MYAPP_HOME", "plain.css"),
+												}),
+											},
+										}),
+										rich: choice({ help: "rich text" }),
+									},
+									{
+										help: "the body format",
+										presence: "default",
+										default: "plain",
+									},
+								),
+							},
+						}),
+						sms: choice({ help: "sms" }),
+					},
+					{ help: "delivery channel", presence: "default", default: "email" },
+				),
+			},
+			handler: (args) => {
+				if (seen !== undefined && args.via.choice === "email") {
+					Object.assign(seen, {
+						store: args.via.store,
+						storeProvided: provided(args.via, "store"),
+						sheet:
+							args.via.format.choice === "plain"
+								? args.via.format.sheet
+								: undefined,
+					});
+				}
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+test("infra: a defaulted selection's marker resolves on the argv path", async () => {
+	await withEnv({ MYAPP_HOME: "/opt/data" }, async () => {
+		const seen: Record<string, unknown> = {};
+		// Nobody elected anything: the whole selection comes from the
+		// declaration, nested selector included.
+		const r = await defaultedSelectionInfraApp(seen).test(["send"]);
+		assert.equal(r.exitCode, 0);
+		assert.equal(seen.store, "/opt/data/mail/outbox");
+		// The declaration decided it, which is what "infra" means (§23.6).
+		assert.equal(seen.storeProvided, false);
+		assert.equal(seen.sheet, "/opt/data/plain.css");
+		// The root has no argv dependency, so --hermetic changes nothing.
+		const hermetic: Record<string, unknown> = {};
+		await defaultedSelectionInfraApp(hermetic).test(["--hermetic", "send"]);
+		assert.equal(hermetic.store, "/opt/data/mail/outbox");
+		assert.equal(hermetic.sheet, "/opt/data/plain.css");
+	});
+});
+
+test("infra: a defaulted selection's marker resolves at both programmatic doors", async () => {
+	await withEnv({ MYAPP_HOME: "/opt/data" }, async () => {
+		// The record door, with the selector omitted entirely.
+		const record: Record<string, unknown> = {};
+		await defaultedSelectionInfraApp(record).call("send", {});
+		assert.equal(record.store, "/opt/data/mail/outbox");
+		assert.equal(record.storeProvided, false);
+		assert.equal(record.sheet, "/opt/data/plain.css");
+		// The record door with the OUTER selection elected by hand: the nested
+		// selector is still the declaration's, one frame further in.
+		const nested: Record<string, unknown> = {};
+		await defaultedSelectionInfraApp(nested).call("send", {
+			via: { choice: "email" },
+		});
+		assert.equal(nested.store, "/opt/data/mail/outbox");
+		assert.equal(nested.sheet, "/opt/data/plain.css");
+		// The flat machine door.
+		const flat: Record<string, unknown> = {};
+		const send = defaultedSelectionInfraApp(flat)
+			.asTools()
+			.find((x) => x.name === "send");
+		assert.ok(send);
+		await send.execute({});
+		assert.equal(flat.store, "/opt/data/mail/outbox");
+		assert.equal(flat.sheet, "/opt/data/plain.css");
+	});
+});
+
+test("infra: the root is unset, so a defaulted selection takes the declared path", async () => {
+	await withEnv({ MYAPP_HOME: undefined }, async () => {
+		const seen: Record<string, unknown> = {};
+		await defaultedSelectionInfraApp(seen).test(["send"]);
+		assert.equal(seen.store, "/var/lib/myapp/mail/outbox");
+		const record: Record<string, unknown> = {};
+		await defaultedSelectionInfraApp(record).call("send", {});
+		assert.equal(record.store, "/var/lib/myapp/mail/outbox");
+	});
+});
+
+test("infra: the schema publishes the marker, never its resolution", async () => {
+	// The schema is the other direction and stays there (§25.10): a dump is a
+	// property of the DECLARATION where a delivery is a property of the run.
+	await withEnv({ MYAPP_HOME: "/opt/data" }, () => {
+		const schema = dumpSchemaCore(
+			defaultedSelectionInfraApp() as never,
+		) as unknown as {
+			commands: Record<string, { flags: { name: string; default: unknown }[] }>;
+		};
+		const send = schema.commands.send;
+		assert.ok(send);
+		const via = send.flags.find((f) => f.name === "via");
+		assert.ok(via);
+		assert.deepEqual(via.default, {
+			choice: "email",
+			store: {
+				relative_to_root: { env_var: "MYAPP_HOME", parts: ["mail", "outbox"] },
+			},
+		});
 	});
 });
