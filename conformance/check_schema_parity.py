@@ -375,14 +375,37 @@ RICH_APP = {
                     "presence": "optional",
                 },
             ],
-            # Two of the four constraint kinds, each with the mandatory name
+            "args": [
+                {
+                    "name": "regions",
+                    "help": "Regions to deploy to",
+                    "presence": "optional",
+                    "variadic": True,
+                },
+            ],
+            # Three of the four constraint kinds, each with the mandatory name
             # §26.1 gives it, and the co-occurrence family carrying the member
-            # records §26.11 publishes as `{kind, name, when}`.
+            # records §26.11 publishes as `{kind, name, when}`. The at-least-one
+            # names all three member kinds in one constraint -- a positional arg
+            # under an election selector, the all-or-none declared above it as a
+            # NESTED member (published as `kind: "constraint"` with no `when`),
+            # and a flag -- because §26.11 calls the nesting encoding the
+            # difference between a complete encoding and an indicative one, and
+            # a `kind: "flag"` pair alone leaves both of the others uncompared.
             "constraints": [
                 {
                     "type": "all_or_none",
                     "name": "endpoint",
                     "members": [{"name": "host"}, {"name": "port-num"}],
+                },
+                {
+                    "type": "at_least_one",
+                    "name": "deploy-selection",
+                    "members": [
+                        {"name": "regions", "when": "non_empty"},
+                        {"name": "endpoint"},
+                        {"name": "cert"},
+                    ],
                 },
                 {
                     "type": "requires",
