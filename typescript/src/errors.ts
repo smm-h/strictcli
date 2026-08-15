@@ -2272,6 +2272,32 @@ function choicePrefix(choiceName: string, selector: string): string {
 	return `Choice ${q(choiceName)} of ${q(selector)}: `;
 }
 
+// --- Parse-time: a required flag that nothing supplied ---
+
+/**
+ * Which required-flag sentence a declaration takes. A bool's requirement names
+ * the tokens that satisfy it -- `--x` IS the value and `--no-x` is the other
+ * one, so "is required" would leave a reader looking for a value to type --
+ * and a non-negatable bool names the only token it has.
+ */
+export type RequiredFlagForm = "negatable-bool" | "bool" | "value";
+
+/**
+ * The required-flag sentence, at root scope and inside a scope alike. It is a
+ * COMPLETE sentence: a scoped site appends the scope clause and the origin
+ * clause to it, in that order (§12.13), and never writes a sentence of its
+ * own for the same condition.
+ */
+export function errFlagRequired(name: string, form: RequiredFlagForm): string {
+	if (form === "negatable-bool") {
+		return `flag '--${name}' must be passed as --${name} or --no-${name}`;
+	}
+	if (form === "bool") {
+		return `flag '--${name}' must be passed as --${name}`;
+	}
+	return `flag '--${name}' is required`;
+}
+
 // --- Parse-time: the scope suffix and the out-of-scope frame ---
 
 /**

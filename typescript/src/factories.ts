@@ -124,6 +124,7 @@ import {
 	PRESENCE_SPELLING_REQUIRED,
 	presenceSpellingDefault,
 	RegistrationError,
+	type RequiredFlagForm,
 } from "./errors.js";
 import type { HandlerArgs } from "./infer.js";
 import { type InfraRootPath, isInfraRootPath } from "./infra.js";
@@ -1340,6 +1341,19 @@ export function flagParamName(flagName: string): string {
 /** Narrows a declaration to a selector. */
 export function isChoiceFlag(d: AnyDecl): d is AnyChoiceFlag {
 	return d.kind === "choice-flag";
+}
+
+/**
+ * Which required-flag sentence one declaration takes (errors.ts
+ * errFlagRequired). It is a property of the DECLARATION, so every site that
+ * refuses an unsupplied required flag -- root scope, inside a scope, either
+ * front door -- reads it from the same place and renders the same sentence.
+ */
+export function requiredFlagForm(f: AnyFlag): RequiredFlagForm {
+	if (f.schema !== "bool") {
+		return "value";
+	}
+	return flagOpts(f).negatable !== false ? "negatable-bool" : "bool";
 }
 
 /**

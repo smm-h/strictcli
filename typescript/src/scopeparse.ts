@@ -32,6 +32,7 @@ import {
 	errElectionOriginSuffix,
 	errFlagInvalidChoice,
 	errFlagOutOfScope,
+	errFlagRequired,
 	errFlagValueError,
 	errMutexDeclineClause,
 	errMutexRedundantNegation,
@@ -55,6 +56,7 @@ import {
 	flagOpts,
 	flagParamName,
 	memberList,
+	requiredFlagForm,
 	type ScopeIndexEntry,
 	type ScopeStep,
 	scopePath,
@@ -638,7 +640,11 @@ function resolveScopedFlag(
 		if (o.presence === "required") {
 			run.problems.push({
 				stage: STAGE.presence,
-				message: `flag '--${f.name}' is required${suffix}`,
+				// The ROOT sentence plus the suffix, never a sentence of its own: a
+				// required bool inside a scope names the tokens that satisfy it
+				// exactly as it does at root, and the suffix says where the
+				// requirement lives (§12.13).
+				message: `${errFlagRequired(f.name, requiredFlagForm(f))}${suffix}`,
 			});
 			return;
 		}

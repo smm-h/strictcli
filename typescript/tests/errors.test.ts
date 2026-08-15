@@ -101,7 +101,13 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // the only reachable half is dict-only -- the list half is the declaration
 // whose enum belongs inside `items` -- and the dict half already has
 // errFlagDictCannotCombineChoices. No TypeScript path ever called it.
-const EXPECTED_TEMPLATE_COUNT = 356;
+// The required-flag sentence adds 1: errFlagRequired, which renders all three
+// spellings of "nothing supplied this required flag" -- the two bool forms name
+// the tokens that satisfy the requirement -- and takes the scope suffix as an
+// argument, so root scope, inside a scope and both front doors render one
+// sentence from one place (§12.13). The three inline templates it replaces were
+// never catalogued.
+const EXPECTED_TEMPLATE_COUNT = 357;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,
