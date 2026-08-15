@@ -1469,10 +1469,10 @@ test("election: a member-spelled selector may default to a payload-less member",
 });
 
 // =========================================================================
-// dependencies.json
+// constraints.json
 // =========================================================================
 
-function coRequiredApp(out: string[]): AppImpl {
+function allOrNoneApp(out: string[]): AppImpl {
 	const app = makeApp();
 	app.command(
 		defineReadOnlyCommand("cmd", {
@@ -1503,24 +1503,24 @@ function coRequiredApp(out: string[]): AppImpl {
 	return app;
 }
 
-test("dependencies: coRequired both/neither ok, one is exact error", async () => {
+test("constraints: all-or-none both/neither ok, one is exact error", async () => {
 	const out: string[] = [];
 	assert.equal(
 		(
 			await run(
-				coRequiredApp(out),
+				allOrNoneApp(out),
 				["cmd", "--output", "file.txt", "--format", "json"],
 				out,
 			)
 		).stdout,
 		"output=file.txt format=json",
 	);
-	assert.equal((await run(coRequiredApp([]), ["cmd"])).exitCode, 0);
+	assert.equal((await run(allOrNoneApp([]), ["cmd"])).exitCode, 0);
 	for (const argv of [
 		["cmd", "--output", "file.txt"],
 		["cmd", "--format", "json"],
 	]) {
-		const r = await run(coRequiredApp([]), argv);
+		const r = await run(allOrNoneApp([]), argv);
 		assert.equal(
 			r.stderr,
 			errOut(
@@ -1534,16 +1534,17 @@ test("dependencies: coRequired both/neither ok, one is exact error", async () =>
 /**
  * §23.6's one predicate: an `infra` source is a RelativeToRoot default
  * resolved through a declared root -- still the declaration deciding, so it
- * never counts as supplied, and a CoRequired group holding such a flag sees
- * ZERO present members when nothing is typed.
+ * never counts as supplied, and an all-or-none constraint holding such a flag
+ * sees ZERO engaged members when nothing is typed.
  *
  * Two independent things produce that answer today: the predicate excludes
  * `infra`, and the dependency step runs BEFORE defaults are applied, so the
  * infra value is not even in the store yet. This test pins the composed rule
- * (§23.5's CoRequired row) so neither can drift alone; the predicate's own
+ * (§23.5's co-required row, now §26.1's all-or-none) so neither can drift
+ * alone; the predicate's own
  * discriminating case is the validate step, which runs after defaults.
  */
-function infraCoRequiredApp(out: string[]): AppImpl {
+function infraAllOrNoneApp(out: string[]): AppImpl {
 	const app = makeApp({ infraRoot: { MYAPP_HOME: "/var/lib/myapp" } });
 	app.command(
 		defineReadOnlyCommand("cmd", {
@@ -1573,9 +1574,9 @@ function infraCoRequiredApp(out: string[]): AppImpl {
 	return app;
 }
 
-test("dependencies: an infra default does not count as present for coRequired", async () => {
+test("constraints: an infra default does not count as present for all-or-none", async () => {
 	const out: string[] = [];
-	const r = await run(infraCoRequiredApp(out), ["cmd"], out);
+	const r = await run(infraAllOrNoneApp(out), ["cmd"], out);
 	assert.equal(r.exitCode, 0);
 	assert.equal(r.stderr, "");
 	assert.equal(r.stdout, "db=/var/lib/myapp/db.sqlite user=None");
@@ -1588,7 +1589,7 @@ test("dependencies: an infra default does not count as present for coRequired", 
 
 	// The other side of the same predicate: typing one member alone is still
 	// a violation, because the infra-defaulted member is not provided.
-	const solo = await run(infraCoRequiredApp([]), ["cmd", "--user", "admin"]);
+	const solo = await run(infraAllOrNoneApp([]), ["cmd", "--user", "admin"]);
 	assert.equal(
 		solo.stderr,
 		errOut(
@@ -1599,7 +1600,7 @@ test("dependencies: an infra default does not count as present for coRequired", 
 	// Both typed satisfies it.
 	const both: string[] = [];
 	const ok = await run(
-		infraCoRequiredApp(both),
+		infraAllOrNoneApp(both),
 		["cmd", "--db", "/tmp/x.sqlite", "--user", "admin"],
 		both,
 	);
