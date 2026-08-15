@@ -945,6 +945,146 @@ def test_an_unknown_elect_by_is_refused():
     )
 
 
+def test_a_choice_name_obeys_the_flag_name_charset():
+    """A choice name is a name the reader types or reads back, so it obeys the
+    same charset every other declared name does."""
+    Shouty = choice("Email", help="deliver it loudly")(type("Shouty", (), {}))
+    with pytest.raises(ValueError) as exc:
+        choice_flag(
+            "via", help="delivery channel", presence="required",
+            elect_by="selector-token", choices=[Shouty, Sms],
+        )
+    assert str(exc.value) == (
+        'Flag "via": choice name "Email" must match [a-z][a-z0-9-]*'
+    )
+
+
+def test_a_scope_field_that_declares_no_flag_is_refused():
+    """A scope's fields ARE its flags: a plain field would otherwise be a
+    silently unreachable parameter of the delivered record."""
+
+    @choice("email", help="deliver the notification as an email message")
+    class Plain:
+        subject: str = "hi"
+
+    with pytest.raises(ValueError) as exc:
+        choice_flag(
+            "via", help="delivery channel", presence="required",
+            elect_by="selector-token", choices=[Plain, Sms],
+        )
+    assert str(exc.value) == (
+        'Choice "email" of "via": field \'subject\' declares no flag: declare '
+        "it with sub_flag(...), sub_choice_flag(...) or member_value(...)"
+    )
+
+
+def test_a_member_payload_must_be_declared_on_the_reserved_field_name():
+    """The payload is delivered under one name, so it is declared under that
+    same name -- `Profile(value=...)`, never `Profile(name=...)`."""
+
+    @choice("profile", help="one named profile")
+    class Misnamed:
+        name: str = member_value(help="the profile name")
+
+    @choice("all-profiles", help="every profile")
+    class AllOfThem:
+        pass
+
+    with pytest.raises(ValueError) as exc:
+        choice_flag(
+            "mode", help="which profiles", presence="required",
+            elect_by="member-flags", choices=[Misnamed, AllOfThem],
+        )
+    assert str(exc.value) == (
+        'Choice "profile" of "mode": member_value(...) declares the payload '
+        "on field 'name': a member-spelled choice's payload is delivered "
+        "under the reserved name 'value'"
+    )
+
+
+def test_a_choices_entry_that_is_a_plain_class_is_refused():
+    class Undecorated:
+        pass
+
+    with pytest.raises(ValueError) as exc:
+        choice_flag(
+            "via", help="delivery channel", presence="required",
+            elect_by="selector-token", choices=[Email, Undecorated],
+        )
+    assert str(exc.value) == (
+        'Flag "via": choices entry 1 is the class \'Undecorated\', not a '
+        "choice class: declare it with @choice(...)"
+    )
+
+
+def test_a_choices_entry_that_is_a_record_names_it_as_one():
+    """The case twins are the likeliest slip: `Choice(<value>, help=...)`
+    declares a value flag's entry, not a selector's choice."""
+    with pytest.raises(ValueError) as exc:
+        choice_flag(
+            "via", help="delivery channel", presence="required",
+            elect_by="selector-token",
+            choices=[strictcli.Choice("email", help="by email"), Sms],
+        )
+    assert str(exc.value) == (
+        'Flag "via": choices entry 0 is a value record, not a choice class: '
+        "declare it with @choice(...)"
+    )
+
+
+def test_a_choices_entry_that_is_a_value_is_named_by_its_value():
+    with pytest.raises(ValueError) as exc:
+        choice_flag(
+            "via", help="delivery channel", presence="required",
+            elect_by="selector-token", choices=["email", Sms],
+        )
+    assert str(exc.value) == (
+        'Flag "via": choices entry 0 is the value \'email\', not a choice '
+        "class: declare it with @choice(...)"
+    )
+
+
+def test_a_default_that_is_not_a_choice_record_is_refused():
+    """Distinct from a default naming no declared choice: this one is not a
+    record at all, so the message names the spelling rather than the name."""
+
+    class NotARecord:
+        pass
+
+    with pytest.raises(ValueError) as exc:
+        choice_flag(
+            "via", help="delivery channel", default=NotARecord(),
+            elect_by="selector-token", choices=[Email, Sms],
+        )
+    assert str(exc.value) == (
+        'Flag "via": default= must be an instance of a declared choice class, '
+        "got NotARecord"
+    )
+
+
+def test_a_scope_field_annotated_only_under_type_checking_is_refused():
+    """The scoped counterpart of the handler-annotation guard: a name that is
+    importable only under TYPE_CHECKING is named at registration, not left to
+    a NameError at import time."""
+
+    @choice("email", help="deliver the notification as an email message")
+    class Unresolvable:
+        subject: "NotImportedAtRuntime" = sub_flag(  # noqa: F821
+            help="subject line of the message", presence="required",
+        )
+
+    with pytest.raises(ValueError) as exc:
+        choice_flag(
+            "via", help="delivery channel", presence="required",
+            elect_by="selector-token", choices=[Unresolvable, Sms],
+        )
+    assert str(exc.value) == (
+        'Choice "email" of "via": the annotation of field \'subject\' cannot '
+        "be resolved at registration: a choice class must be importable at "
+        "run time, not only under TYPE_CHECKING"
+    )
+
+
 # ---------------------------------------------------------------------------
 # §12.13 / §24.12 -- the Python-only handler-annotation family
 # ---------------------------------------------------------------------------
