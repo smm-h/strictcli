@@ -1327,12 +1327,14 @@ The encoding is complete rather than indicative -- a consumer reconstructs the
 rule without re-reading the declaration:
 
 ```json
-{"type": "all_or_none", "name": "author-name", "members": [
-  {"kind": "flag", "name": "old-name", "when": "present"},
-  {"kind": "flag", "name": "new-name", "when": "present"}]}
-{"type": "at_least_one", "name": "author-change", "members": [
-  {"kind": "constraint", "name": "author-name"},
-  {"kind": "constraint", "name": "author-email"}]}
+[
+  {"type": "all_or_none", "name": "author-name", "members": [
+    {"kind": "flag", "name": "old-name", "when": "present"},
+    {"kind": "flag", "name": "new-name", "when": "present"}]},
+  {"type": "at_least_one", "name": "author-change", "members": [
+    {"kind": "constraint", "name": "author-name"},
+    {"kind": "constraint", "name": "author-email"}]}
+]
 ```
 
 The `kind` is the **resolved** kind, so no name lookup is needed; `when` is
