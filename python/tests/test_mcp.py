@@ -1690,3 +1690,65 @@ class TestMcpContinuationState:
         assert other.verify(state, "cli/1.0.0", "digest") == (
             "requestState failed verification"
         )
+
+
+# ---------------------------------------------------------------------------
+# Selector election at the machine boundary (§24.11, §21.4)
+# ---------------------------------------------------------------------------
+
+
+class TestMcpMemberElection:
+    """A member's payload key elects that member here exactly as on the
+    command line, and a second election is refused the same way -- as isError
+    content carrying the parser's own sentence, never a dropped key."""
+
+    @staticmethod
+    def _app():
+        from strictcli import choice, choice_flag, member_value
+
+        @choice("profile", help="operate on one named profile")
+        class Profile:
+            value: str = member_value(help="profile name")
+
+        @choice("all-profiles", help="operate on every profile")
+        class AllProfiles:
+            pass
+
+        app = _build_app()
+
+        @app.command("run", effect="read_only", help="run it", payload_schema={})
+        @choice_flag(
+            "target", help="which profiles to operate on", presence="required",
+            elect_by="member-flags", choices=[Profile, AllProfiles],
+        )
+        def run(ctx, target: Profile | AllProfiles):
+            ctx.payload({"elected": type(target).__name__})
+            return strictcli.outcome()
+
+        return app
+
+    def _call(self, arguments):
+        return _send_one(self._app(), {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "run", "arguments": arguments},
+        })
+
+    def test_a_second_member_supplied_by_payload_key_is_iserror(self):
+        resp = self._call({"target": "all-profiles", "profile": "work"})
+        assert "error" not in resp
+        assert resp["result"]["isError"] is True
+        assert resp["result"]["content"][0]["text"] == (
+            "--profile and --all-profiles are mutually exclusive"
+        )
+
+    def test_a_payload_key_alone_elects_its_member(self):
+        resp = self._call({"profile": "work"})
+        assert "isError" not in resp["result"]
+        parsed = json.loads(resp["result"]["content"][0]["text"])
+        assert parsed == {"elected": "Profile"}
+
+    def test_the_selector_key_alone_still_elects(self):
+        resp = self._call({"target": "all-profiles"})
+        assert "isError" not in resp["result"]
+        parsed = json.loads(resp["result"]["content"][0]["text"])
+        assert parsed == {"elected": "AllProfiles"}

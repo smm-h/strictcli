@@ -358,3 +358,95 @@ def test_a_member_spelled_selector_renders_as_a_heading():
         "    --all                                      every profile "
         "[required]\n"
     )
+
+
+# ---------------------------------------------------------------------------
+# The flat machine form (§24.11, §21.4): a member's payload key IS an election
+# ---------------------------------------------------------------------------
+
+
+def _flat(app, **arguments):
+    """Call `run` through the flat machine form the MCP boundary uses."""
+    return app._call_with_kwargs(
+        "run", dict(arguments), approve_consequential=False, flat=True,
+    )
+
+
+def test_a_payload_key_beside_another_members_election_is_a_double_election():
+    """Supplying a member's payload key elects that member, so the pair is
+    the SAME double election `--profile work --all-profiles` is, refused with
+    §21.4's sentence in the parser's own bytes -- never silently discarded."""
+    app = _election_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, mode="all-profiles", profile="work")
+    assert str(exc.value) == "--profile and --all-profiles are mutually exclusive"
+
+
+def test_the_double_election_sentence_is_the_clis_own_bytes():
+    """The renderer is shared: the command line and the flat form produce one
+    sentence, in declaration order, whatever order the keys arrived in."""
+    app = _election_app()
+    r = app.test(["run", "--profile", "work", "--all-profiles"])
+    cli = r.stderr.split("\n")[0].removeprefix("error: ")
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, profile="work", mode="all-profiles")
+    assert str(exc.value) == cli
+
+
+def test_two_payload_keys_are_a_double_election_too():
+    @choice("profile", help="one named profile")
+    class OneProfile:
+        value: str = member_value(help="the profile name")
+
+    @choice("group", help="one named group")
+    class OneGroup:
+        value: str = member_value(help="the group name")
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "mode", help="which profiles", presence="required",
+        elect_by="member-flags", choices=[OneProfile, OneGroup],
+    )
+    def run(ctx, mode: OneProfile | OneGroup):
+        print(repr(mode))
+
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, profile="work", group="team")
+    assert str(exc.value) == "--profile and --group are mutually exclusive"
+
+
+def test_a_payload_key_alone_elects_its_member(capsys):
+    """The flat form maps onto the command line: `--profile work` needs no
+    second token naming the selector, and neither does `{profile: "work"}`."""
+    _flat(_election_app(), profile="work")
+    assert capsys.readouterr().out == "profile=work\n"
+
+
+def test_a_payload_key_alone_opens_its_scope(capsys):
+    """Electing by payload key opens that member's scope, so its own flags
+    are in scope -- the flat reading of `--work w --create-missing`."""
+    _flat(_scoped_member_app(), work="w", create_missing=True)
+    assert capsys.readouterr().out == "Work(value='w', create_missing=True)\n"
+
+
+def test_the_selector_key_and_its_own_payload_key_still_elect_once(capsys):
+    """The canonical pair names one member twice: one election, not two."""
+    _flat(_election_app(), mode="profile", profile="work")
+    assert capsys.readouterr().out == "profile=work\n"
+
+
+def test_a_payload_less_member_still_elects_through_the_selector_key(capsys):
+    _flat(_election_app(), mode="all-profiles")
+    assert capsys.readouterr().out == "all\n"
+
+
+def test_a_selector_key_naming_no_declared_member_is_still_refused():
+    app = _election_app()
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _flat(app, mode="nope")
+    assert str(exc.value) == (
+        "--mode: invalid value 'nope', must be one of: profile, "
+        "all-profiles, current-profile"
+    )

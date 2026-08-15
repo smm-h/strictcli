@@ -11809,6 +11809,14 @@ def _flat_occurrences(cmd: Command, arguments: dict) -> list[_Occ]:
     A member-spelled selector projects IDENTICALLY to a token-spelled one:
     tokenization is a command-line fact and there are no tokens at this
     boundary, so a member's payload flattens under the member's own name.
+
+    Supplying a member's payload key IS electing that member, exactly as
+    typing `--profile work` is: the key becomes its OWN occurrence, so every
+    member the arguments name reaches phase 1 together. A second member beside
+    an election is then the ordinary double election of §21.4, refused with the
+    parser's own sentence instead of being silently discarded -- and a payload
+    key with no selector key elects its member, which is the flat reading of a
+    command line that never types the selector's name.
     """
     occs: list[_Occ] = []
     seen_selectors: set[int] = set()
@@ -11818,23 +11826,32 @@ def _flat_occurrences(cmd: Command, arguments: dict) -> list[_Occ]:
             return
         seen_selectors.add(id(sel))
         param = _flag_param_name(sel.name)
-        if param not in arguments:
-            return
-        value = arguments[param]
         if not sel.is_member_spelled:
-            occs.append(_Occ(sel.name, value, f"--{sel.name}"))
+            if param in arguments:
+                occs.append(_Occ(sel.name, arguments[param], f"--{sel.name}"))
             return
-        spec = sel.choice_by_name(str(value))
-        if spec is None:
-            names = ", ".join(c.name for c in sel.choices)
-            raise _ParseError(
-                f"--{sel.name}: invalid value '{value}', must be one of: {names}"
+        elected: list = []
+        if param in arguments:
+            value = arguments[param]
+            spec = sel.choice_by_name(str(value))
+            if spec is None:
+                names = ", ".join(c.name for c in sel.choices)
+                raise _ParseError(
+                    f"--{sel.name}: invalid value '{value}', "
+                    f"must be one of: {names}"
+                )
+            elected.append(spec)
+        for c in sel.choices:
+            if c.payload is None or any(e is c for e in elected):
+                continue
+            if _flag_param_name(c.name) in arguments:
+                elected.append(c)
+        for spec in elected:
+            payload = (
+                arguments.get(_flag_param_name(spec.name))
+                if spec.payload is not None else True
             )
-        payload = (
-            arguments.get(_flag_param_name(spec.name))
-            if spec.payload is not None else True
-        )
-        occs.append(_Occ(spec.name, payload, f"--{spec.name}"))
+            occs.append(_Occ(spec.name, payload, f"--{spec.name}"))
 
     for sel in cmd.selectors:
         add_selector(sel)
