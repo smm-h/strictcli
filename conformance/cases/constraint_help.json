@@ -1,0 +1,200 @@
+[
+  {
+    "name": "constraint help: the Constraints block renders names, nesting and its own alignment column",
+    "app": {
+      "name": "safegit",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "rewrite",
+          "help": "rewrite author identity across history",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "old-name",
+              "type": "str",
+              "help": "current author or committer display name",
+              "presence": "optional"
+            },
+            {
+              "name": "new-name",
+              "type": "str",
+              "help": "new display name",
+              "presence": "optional"
+            },
+            {
+              "name": "old-email",
+              "type": "str",
+              "help": "current author or committer email address",
+              "presence": "optional"
+            },
+            {
+              "name": "new-email",
+              "type": "str",
+              "help": "new email address",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "author-name",
+              "members": [
+                {
+                  "name": "old-name"
+                },
+                {
+                  "name": "new-name"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "author-email",
+              "members": [
+                {
+                  "name": "old-email"
+                },
+                {
+                  "name": "new-email"
+                }
+              ]
+            },
+            {
+              "type": "at_least_one",
+              "name": "author-change",
+              "members": [
+                {
+                  "name": "author-name"
+                },
+                {
+                  "name": "author-email"
+                }
+              ]
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "rewrite",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "safegit rewrite -- rewrite author identity across history\n\nFlags:\n  --old-name <str>     current author or committer display name [optional]\n  --new-name <str>     new display name [optional]\n  --old-email <str>    current author or committer email address [optional]\n  --new-email <str>    new email address [optional]\n\nConstraints:\n  author-name      all or none of --old-name, --new-name\n  author-email     all or none of --old-email, --new-email\n  author-change    at least one of (--old-name with --new-name), (--old-email with --new-email)\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "constraint help: the block follows Arguments and Flags, and carries all four kinds",
+    "app": {
+      "name": "saferm",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "purge",
+          "help": "permanently destroy archived items",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "Purge items older than duration",
+              "presence": "optional"
+            },
+            {
+              "name": "larger-than",
+              "type": "str",
+              "help": "Only purge items larger than this size",
+              "presence": "optional"
+            },
+            {
+              "name": "all",
+              "type": "bool",
+              "help": "Select all archived items",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "report",
+              "type": "str",
+              "help": "write a report here",
+              "presence": "optional"
+            },
+            {
+              "name": "quietly",
+              "type": "bool",
+              "help": "say nothing",
+              "presence": "default",
+              "default": false
+            },
+            {
+              "name": "verbose-log",
+              "type": "bool",
+              "help": "log everything",
+              "presence": "default",
+              "default": false
+            }
+          ],
+          "args": [
+            {
+              "name": "targets",
+              "help": "Record UUIDs or numeric database IDs",
+              "presence": "optional",
+              "variadic": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "targets",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "older-than"
+                },
+                {
+                  "name": "larger-than"
+                },
+                {
+                  "name": "all",
+                  "when": "true"
+                }
+              ]
+            },
+            {
+              "type": "requires",
+              "name": "report-target",
+              "flag": "report",
+              "depends_on": "older-than"
+            },
+            {
+              "type": "implies",
+              "name": "quiet-log",
+              "flag": "quietly",
+              "implies": "verbose-log",
+              "value": false
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "purge",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "saferm purge -- permanently destroy archived items\n\nArguments:\n  targets...    Record UUIDs or numeric database IDs [optional]\n\nFlags:\n  --older-than <str>                 Purge items older than duration [optional]\n  --larger-than <str>                Only purge items larger than this size [optional]\n  --all, --no-all                    Select all archived items [default: false]\n  --report <str>                     write a report here [optional]\n  --quietly, --no-quietly            say nothing [default: false]\n  --verbose-log, --no-verbose-log    log everything [default: false]\n\nConstraints:\n  purge-selection    at least one of targets, --older-than, --larger-than, --all\n  report-target      --report requires --older-than\n  quiet-log          --quietly implies --no-verbose-log\n",
+      "stderr_equals": ""
+    }
+  }
+]
