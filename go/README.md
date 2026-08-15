@@ -265,33 +265,79 @@ A choice flag declares `Required()` or `Default(<choice name>)`; `Optional()` is
 refused, because an absent selection is a choice nobody named. A choice flag is
 a flag, so one may be declared inside a choice's scope, to unlimited depth.
 
-### Flag dependencies
+### Constraints
 
-Three relationship types, all passed via `WithDependencies(...)`:
+Four declared rules, all passed via `WithConstraints(...)`, each carrying a
+mandatory name that identifies it in help and in every violation message:
 
-- `CoRequired{Flags: []string{"output", "format"}}` -- all must appear together, or none
-- `Requires{Flag: "trace", DependsOn: "output"}` -- one-way dependency
-- `Implies{Flag: "trace", Implies: "log-output", Value: true}` -- auto-set a bool flag when another is provided; explicit contradictions are parse errors
+- `AtLeastOne(name, a, b, rest...)` -- at least one member is engaged. Members
+  MAY co-occur: it has no upper bound and never refuses a second member.
+- `AllOrNone(name, a, b, rest...)` -- either every member is engaged or none is.
+  With nothing engaged it is vacuously satisfied.
+- `Requires(name, flag, dependsOn)` -- one-way dependency.
+- `Implies(name, flag, implies, value)` -- auto-set a bool flag when another is
+  provided; explicit contradictions are parse errors.
+
+A member is a flag, a positional arg, or another named at-least-one or
+all-or-none, referenced by name and resolved at registration. Nesting is a
+cycle-checked DAG of unlimited depth. Two named members precede the variadic
+tail, so a one-member constraint is a compile error.
+
+Each flag or arg member declares WHEN it engages, from a closed vocabulary:
+`WhenPresent()` (the default -- the value was provided from cli, env, config or
+an implication, never a default), `WhenTrue()` (bool only), `WhenNonEmpty()`
+(strings and collections only). A **bool member must declare its election**:
+without that rule `--no-all` would engage a constraint while selecting nothing.
 
 ```go
-app.Command("export", "Export data", handler,
+app.Command("purge", "Purge archived items", handler,
     strictcli.WithEffect(strictcli.EffectMutating),
     strictcli.WithFlags(
-        strictcli.StringFlag("output", "Output path", strictcli.Optional()),
-        strictcli.StringFlag("format", "Output format", strictcli.Optional()),
-        strictcli.BoolFlag("trace", "Emit a trace", strictcli.Default(false)),
-        strictcli.BoolFlag("log-output", "Log the output path", strictcli.Default(false)),
+        strictcli.StringFlag("older-than", "Purge items older than duration", strictcli.Optional()),
+        strictcli.StringFlag("larger-than", "Only purge items larger than this size", strictcli.Optional()),
+        strictcli.BoolFlag("all", "Select all archived items", strictcli.Default(false)),
     ),
-    strictcli.WithDependencies(
-        strictcli.CoRequired{Flags: []string{"output", "format"}},
-        strictcli.Requires{Flag: "trace", DependsOn: "output"},
-        strictcli.Implies{Flag: "trace", Implies: "log-output", Value: true},
+    strictcli.WithArgs(
+        strictcli.NewArg("targets", "Record UUIDs or numeric database IDs",
+            strictcli.Variadic(), strictcli.ArgOptional()),
+    ),
+    strictcli.WithConstraints(
+        strictcli.AtLeastOne("purge-selection",
+            strictcli.Member("targets", strictcli.WhenNonEmpty()),
+            strictcli.Member("older-than"),
+            strictcli.Member("larger-than"),
+            strictcli.Member("all", strictcli.WhenTrue()),
+        ),
     ),
 )
 ```
 
-Dependencies can only reference flags you declared, so the reserved quartet
-(`dry-run`, `approve-consequential`, `quiet`, `verbose`) can never appear in one.
+```
+constraint "purge-selection": at least one of targets, --older-than, --larger-than, --all is required
+```
+
+Nesting expresses a rule over pairs -- an at-least-one over two all-or-none
+groups, where a half-typed pair reports its own incompleteness first:
+
+```go
+strictcli.WithConstraints(
+    strictcli.AllOrNone("author-name", strictcli.Member("old-name"), strictcli.Member("new-name")),
+    strictcli.AllOrNone("author-email", strictcli.Member("old-email"), strictcli.Member("new-email")),
+    strictcli.AtLeastOne("author-change", strictcli.Member("author-name"), strictcli.Member("author-email")),
+)
+```
+
+No member may declare `Required()`: a member the invocation must always supply
+leaves the constraint nothing to decide. Constraints reference root-scope
+declarations only -- naming a flag inside a choice scope is a registration
+error, because the scope already IS the constraint. Every constraint renders in
+`--help` under a `Constraints:` section, is published in `--dump-schema`, and is
+projected into MCP tool schemas (`anyOf` / `dependentRequired`) with anything a
+keyword cannot carry stated in the tool description.
+
+Constraints can only reference flags and args you declared, so the reserved
+quartet (`dry-run`, `approve-consequential`, `quiet`, `verbose`) can never
+appear in one.
 
 ### Global flags
 
@@ -632,7 +678,7 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | `WithFlags(flags...)` | Add flags to a command |
 | `WithArgs(args...)` | Add positional arguments |
 | `WithFlagSets(flagSets...)` | Attach flag set bundles |
-| `WithDependencies(deps...)` | Add CoRequired/Requires/Implies constraints |
+| `WithConstraints(cs...)` | Add AtLeastOne/AllOrNone/Requires/Implies constraints |
 | `WithPassthrough(handler)` | Mark as passthrough command |
 | `WithHidden()` | Hide from help output |
 | `WithEffect(effect)` | **Mandatory.** `EffectReadOnly` or `EffectMutating` |
@@ -684,9 +730,8 @@ arg  := strictcli.NewArg(name, help, opts ...ArgOption)
 | `ChoiceDecl` | One choice of a choice flag: a name, help, and a scope (minted by `Choice` / `MemberChoice`) |
 | `Elected` | The delivered tagged record: the elected `*ChoiceDecl` plus its `Fields` |
 | `ChoiceValue` | One entry of a `Choices(...)` value flag: a value with optional help (minted by `Ch`) |
-| `CoRequired` | Flags that must appear together |
-| `Requires` | One flag depends on another |
-| `Implies` | Auto-set a bool flag from another |
+| `Constraint` | A declared rule, minted by `AtLeastOne` / `AllOrNone` / `Requires` / `Implies` |
+| `ConstraintMember` | One operand of a co-occurrence constraint (minted by `Member`) |
 | `Result` | Return type of `app.Test()` (Stdout, Stderr, ExitCode, Data) |
 | `Tool` | LLM tool descriptor |
 | `Outcome` | Branded handler return type (via `Exit` only) |
