@@ -6184,8 +6184,25 @@ _FRAMEWORK_INTERNAL_FORWARDING_REASON = (
 _CHECK_PAYLOAD_SCHEMA = {"type": "array", "items": {"type": "object"}}
 # config show's payload is one object keyed by flag/config-field name, plus the
 # "__infrastructure__" entry; the keys are dynamic, so the declaration names
-# the container only.
+# the container only. Every value it carries is a JSON document, which is what
+# admits a `RelativeToRoot` default in §13's machine-stable marker shape.
 _CONFIG_SHOW_PAYLOAD_SCHEMA = {"type": "object"}
+
+
+def _config_show_value(value: object) -> object:
+    """One config-show value, as the MACHINE form publishes it.
+
+    A `RelativeToRoot` default is not a JSON value and has no resolution to
+    publish here: `config show` displays what the configuration says rather
+    than what a run would produce, exactly as `--dump-schema` does (§25.10).
+    So it is published in §13's machine-stable marker shape -- the declared env
+    var and path parts, never the resolved machine-specific path -- which is
+    the one shape this document has ever pinned for a marker. The human form
+    renders the marker as written and is untouched.
+    """
+    if isinstance(value, RelativeToRoot):
+        return _serialize_marker(value)
+    return value
 
 
 def _raise_handler_var_keyword_undeclared(name: str):
@@ -8597,7 +8614,9 @@ class App:
             for f in all_flags:
                 param = _flag_param_name(f.name)
                 value, source = _resolve_flag_show_source(f, config_data)
-                result[param] = {"value": value, "source": source}
+                result[param] = {
+                    "value": _config_show_value(value), "source": source,
+                }
             # Include config fields (skip those colliding with a flag: they
             # are validation-only and render once, on the flag entry).
             for cf_name, cf in app_ref._config_fields.items():

@@ -420,6 +420,71 @@ def test_infra_config_show_surface(monkeypatch, tmp_path):
     assert infra["CI_TOKEN"]["set"] is False
 
 
+def test_config_show_publishes_a_marker_default_in_both_forms(monkeypatch, tmp_path):
+    """`config show` displays what the configuration SAYS, not what a run would
+    produce (§25.10's split), so a `RelativeToRoot` default is the declaration
+    in both forms: the human rendering prints the marker as written, and the
+    machine form carries §13's marker shape rather than failing to encode it.
+    """
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    config_file = tmp_path / "config.json"
+    config_file.write_text("{}")
+    app = App(name="myapp", version="1.0.0", help="t",
+              config=True, config_path=str(config_file),
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+
+    @app.command("run", effect="read_only", help="run it")
+    @strictcli.flag("db", type=str, help="the database file",
+                    default=RelativeToRoot("MYAPP_HOME", "db.sqlite"))
+    def run(ctx, db):
+        return 0
+
+    r = app.test(["config", "show", "--plain"])
+    assert r.exit_code == 0
+    assert (
+        "db = RelativeToRoot('MYAPP_HOME', 'db.sqlite')  (source: default)"
+    ) in r.stdout
+
+    rj = app.test(["config", "show", "--json"])
+    assert rj.exit_code == 0, rj.stderr
+    entry = payload(rj)["db"]
+    assert entry["source"] == "default"
+    assert entry["value"] == {
+        "relative_to_root": {
+            "env_var": "MYAPP_HOME", "parts": ["db.sqlite"],
+        }
+    }
+
+
+def test_config_show_publishes_the_declaration_and_never_the_resolution(
+    monkeypatch, tmp_path,
+):
+    """The root the marker names is declared and resolvable, and the machine
+    form still publishes the declared parts: a resolved absolute path is a
+    property of the dumping machine, and no surface here emits one."""
+    monkeypatch.setenv("MYAPP_HOME", "/opt/data")
+    config_file = tmp_path / "config.json"
+    config_file.write_text("{}")
+    app = App(name="myapp", version="1.0.0", help="t",
+              config=True, config_path=str(config_file),
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+
+    @app.command("run", effect="read_only", help="run it")
+    @strictcli.flag("db", type=str, help="the database file",
+                    default=RelativeToRoot("MYAPP_HOME", "sub", "db.sqlite"))
+    def run(ctx, db):
+        return 0
+
+    rj = app.test(["config", "show", "--json"])
+    assert rj.exit_code == 0, rj.stderr
+    assert payload(rj)["db"]["value"] == {
+        "relative_to_root": {
+            "env_var": "MYAPP_HOME", "parts": ["sub", "db.sqlite"],
+        }
+    }
+    assert "/opt/data" not in json.dumps(payload(rj)["db"])
+
+
 # --- The same marker, carried by a DEFAULTED SELECTION's declared instance ---
 #
 # A defaulted selection is COMPLETE by declaration (§24.5) and the walk stops at
