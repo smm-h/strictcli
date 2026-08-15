@@ -45,6 +45,7 @@ import {
 	type CallOptions,
 	commandClassification,
 	paramToFlagName,
+	preTypedValueRefusal,
 } from "./invoke.js";
 import { flagParamName } from "./parse.js";
 import { resolveCommand } from "./routing.js";
@@ -656,6 +657,19 @@ export function flatToCallKwargs(
 			const payloadKey = flagParamName(tag);
 			if (Object.hasOwn(kwargs, payloadKey)) {
 				record.value = kwargs[payloadKey];
+				// The payload is declared by the member's own flag -- named by the
+				// member's token and required once the member is elected (§24.4) --
+				// so the value supplied for it is checked against that declaration.
+				checkValue(
+					{
+						kind: "flag",
+						name: tag,
+						schema: chosen.value.carrier.schema,
+						carrier: chosen.value.carrier,
+						opts: { help: chosen.value.help, presence: "required" },
+					},
+					kwargs[payloadKey],
+				);
 			} else {
 				// Electing a payload-carrying member while omitting the property that
 				// carries its payload is the flat form of typing the member's token
@@ -678,10 +692,27 @@ export function flatToCallKwargs(
 			const param = flagParamName(sub.name);
 			if (Object.hasOwn(kwargs, param)) {
 				record[subKey] = kwargs[param];
+				checkValue(sub, kwargs[param]);
 			}
 		}
 		return record;
 	};
+
+	/**
+	 * The value phase, recorded rather than thrown (§24.11 item 240): a
+	 * pre-typed value is checked against the declaration it was supplied
+	 * against, and the check belongs to the phase a value refusal already sits
+	 * in -- after every election and scope decision, and ahead of a presence
+	 * problem, which is a stage the conversion can also record. Asking it here
+	 * rather than downstream in call() is what lets the stage table decide
+	 * between the two.
+	 */
+	function checkValue(f: AnyFlag, value: unknown): void {
+		const refusal = preTypedValueRefusal(f, value);
+		if (refusal !== undefined) {
+			problems.push({ stage: STAGE.value, message: refusal });
+		}
+	}
 
 	const out: Record<string, unknown> = {};
 	for (const d of decls) {
@@ -695,6 +726,15 @@ export function flatToCallKwargs(
 		}
 		if (Object.hasOwn(kwargs, param)) {
 			out[param] = kwargs[param];
+			checkValue(d, kwargs[param]);
+		}
+	}
+	// An app-level global is a declaration like any other, so a value supplied
+	// for one is checked in the same phase (§24.11).
+	for (const gf of app.globalFlags) {
+		const param = flagParamName(gf.name);
+		if (Object.hasOwn(kwargs, param)) {
+			checkValue(gf, kwargs[param]);
 		}
 	}
 	// Everything no scope claims passes through untouched: positional args,

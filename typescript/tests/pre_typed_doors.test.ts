@@ -5,15 +5,17 @@
  *   - A positional arg is a declaration exactly as a flag is: a value supplied
  *     for one is CHECKED against the type it declares and never stringified
  *     into a token the caller did not write.
- *   - Both doors are one parser. `call()` takes the elected record, the flat
- *     machine form takes the choice name and the scoped keys, and every
- *     election is settled command-wide before any value is refused, so the two
- *     answer the same states with the same sentence.
+ *   - Both doors are one parser. `call()` takes the elected record and the flat
+ *     machine form takes the choice name and the scoped keys, but the phases
+ *     are the parser's: every selector's election is settled command-wide, then
+ *     scope, then values, then presence, with the lowest stage over the whole
+ *     command deciding what is reported -- so the two doors answer the same
+ *     states with the same sentence.
  *   - A required bool inside a scope takes the ROOT sentence plus the scope
  *     suffix: the suffix says where the requirement lives and follows a
  *     complete sentence (§12.13).
- *   - The flat schema publishes PARAMETER names, so a dash-spelled key names
- *     nothing the command declares.
+ *   - The key namespace is the underscored parameter one both doors publish, so
+ *     a dash-spelled key names nothing the command declares.
  */
 
 import { strict as assert } from "node:assert";
@@ -220,17 +222,20 @@ function twoSelectorApp(): App {
 
 const missingModeElection = "one of --fast, --slow is required";
 
-test("call: every election is settled before any value is refused", async () => {
-	// A wrong-typed payload and a wrong-typed scoped value both sit in the
-	// VALUE phase, and an election that never happened outranks them: walking
-	// one selector to its end before starting the next reported the value.
+test("call: a value refusal outranks a missing election, at both doors", async () => {
+	// The pre-typed value check IS the value phase (§24.11 item 240), and
+	// presence is the phase after it, so a wrong-typed payload or scoped value
+	// is what a caller hears -- the command line answers the same way, where a
+	// bad scoped token beats an election that never happened.
+	const badPayload = "--profile: expected string, got int";
+	const badScoped = "--depth: expected integer, got str";
 	assert.equal(
 		await refusal(
 			twoSelectorApp().call("run", {
 				target: { choice: "profile", value: 123 },
 			}),
 		),
-		missingModeElection,
+		badPayload,
 	);
 	assert.equal(
 		await refusal(
@@ -238,13 +243,13 @@ test("call: every election is settled before any value is refused", async () => 
 				target: { choice: "profile", value: "work", depth: "deep" },
 			}),
 		),
-		missingModeElection,
+		badScoped,
 	);
 	// The flat door answers the same states identically -- one parser, two
 	// spellings of the same object.
 	assert.equal(
 		await refusal(toolFor(twoSelectorApp(), "run").execute({ profile: 123 })),
-		missingModeElection,
+		badPayload,
 	);
 	assert.equal(
 		await refusal(
@@ -252,6 +257,21 @@ test("call: every election is settled before any value is refused", async () => 
 				profile: "work",
 				depth: "deep",
 			}),
+		),
+		badScoped,
+	);
+	// And with nothing to refuse, the missing election is what is left.
+	assert.equal(
+		await refusal(
+			twoSelectorApp().call("run", {
+				target: { choice: "profile", value: "work" },
+			}),
+		),
+		missingModeElection,
+	);
+	assert.equal(
+		await refusal(
+			toolFor(twoSelectorApp(), "run").execute({ profile: "work" }),
 		),
 		missingModeElection,
 	);
@@ -291,6 +311,96 @@ test("call: a record's shape outranks every phase fact beside it", async () => {
 	assert.equal(
 		await refusal(twoSelectorApp().call("run", { target: "profile" })),
 		"flag '--target': the elected value must be a record carrying its 'choice' tag",
+	);
+});
+
+/**
+ * A token-spelled selector declared BEFORE a member-spelled one, so the first
+ * selector's record can carry a problem of each stage while the second's names
+ * an undeclared choice -- the election refusal that must be heard over all of
+ * them.
+ */
+function stagedSelectorApp(): App {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "an email message",
+							flags: {
+								retries: flag("retries", t.int, {
+									help: "how many",
+									presence: "required",
+								}),
+							},
+						}),
+						sms: choice({
+							help: "a text message",
+							flags: {
+								phone_number: flag("phone-number", t.str, {
+									help: "the destination",
+									presence: "required",
+								}),
+							},
+						}),
+					},
+					{ help: "delivery channel", presence: "required" },
+				),
+				target: memberChoiceFlag(
+					"target",
+					{
+						profile: choice({
+							help: "one named profile",
+							value: { carrier: t.str, help: "the profile name" },
+						}),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "what to run", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("call: a later selector's election beats every stage below it", async () => {
+	// The stage table decides across the WHOLE command, so the second
+	// selector's election refusal is heard over a value, a presence and a scope
+	// problem in the first selector's record alike.
+	const badTag = { choice: "other" };
+	const want =
+		"--target: invalid value 'other', must be one of: profile, all-profiles";
+	assert.equal(
+		await refusal(
+			stagedSelectorApp().call("run", {
+				via: { choice: "email", retries: "nope" },
+				target: badTag,
+			}),
+		),
+		want,
+	);
+	assert.equal(
+		await refusal(
+			stagedSelectorApp().call("run", {
+				via: { choice: "email" },
+				target: badTag,
+			}),
+		),
+		want,
+	);
+	assert.equal(
+		await refusal(
+			stagedSelectorApp().call("run", {
+				via: { choice: "email", retries: 1, phone_number: "x" },
+				target: badTag,
+			}),
+		),
+		want,
 	);
 });
 
@@ -446,13 +556,14 @@ test("scope: a non-negatable required bool names the one token it has", async ()
 	);
 });
 
-// --- A dash-spelled flat key names nothing (§24.11) ---
+// --- A dash-spelled key names nothing, at either door (§24.11) ---
 
 /**
- * The flat schema's property for a flag is its PARAMETER name -- underscored,
- * exactly as a handler receives it -- so the flag's own dashed spelling is a
- * key the command does not declare, and it is refused rather than silently
- * dropped.
+ * The key namespace at both programmatic doors is the underscored DELIVERY-name
+ * space -- the parameter name a handler receives, which is exactly what the
+ * flat schema publishes. A flag's dashed spelling is its command-line TOKEN,
+ * and neither door has tokens, so a dashed key is refused rather than accepted
+ * under a second spelling or silently dropped.
  */
 function dashKeyApp(captured?: Record<string, unknown>): App {
 	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
@@ -541,6 +652,29 @@ test("flat: a dash-spelled key is an unknown parameter, never a silent drop", as
 		),
 		'unknown parameter "all-profiles" for command "run"',
 	);
+});
+
+test("call: the record door refuses a dash-spelled key too", async () => {
+	// One implementation's two doors disagreeing about one key is the same
+	// defect as two implementations disagreeing.
+	assert.equal(
+		await refusal(
+			dashKeyApp().call("run", {
+				"keep-going": "yes",
+				target: { choice: "all-profiles" },
+			}),
+		),
+		'unknown parameter "keep-going" for command "run"',
+	);
+	const captured: Record<string, unknown> = {};
+	assert.equal(
+		await dashKeyApp(captured).call("run", {
+			keep_going: "yes",
+			target: { choice: "all-profiles" },
+		}),
+		0,
+	);
+	assert.equal(captured.keep_going, "yes");
 });
 
 test("flat: the underscored spelling is the one the schema publishes", async () => {

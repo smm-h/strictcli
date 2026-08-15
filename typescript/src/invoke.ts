@@ -156,6 +156,25 @@ function coerceInvokeValue(f: AnyFlag, value: unknown): unknown {
 	}
 }
 
+/**
+ * The refusal one pre-typed value earns against its declaration, or undefined
+ * when the declaration accepts it. It is the VALUE phase's own question
+ * (§24.11 item 240), so the flat door asks it where that phase runs -- after
+ * every election and scope decision, and before a presence problem is
+ * reported -- rather than leaving it to the conversion's downstream call().
+ */
+export function preTypedValueRefusal(
+	f: AnyFlag,
+	value: unknown,
+): string | undefined {
+	try {
+		coerceInvokeValue(f, value);
+		return undefined;
+	} catch (e) {
+		return (e as Error).message;
+	}
+}
+
 function coerceInvokeDict(f: AnyFlag, value: unknown): Map<string, unknown> {
 	if (value instanceof Map) {
 		return value as Map<string, unknown>;
@@ -281,6 +300,18 @@ export async function invokeApp(
 	// flag names. Provided kwargs are marked "cli"; absent flags get their
 	// defaults inside validateAndBuildKwargs.
 	const store = new SourcedStore();
+	// The key namespace here is the UNDERSCORED delivery-name space -- the
+	// parameter name a handler receives, which is exactly what the flat schema
+	// publishes (§24.11). A flag's dashed spelling is its command-line TOKEN,
+	// and this door has no tokens, so a dashed key names nothing.
+	const declaredByParam = new Map<string, string>();
+	for (const name of [
+		...flagByName.keys(),
+		...selectorByName.keys(),
+		...app.globalFlagNames,
+	]) {
+		declaredByParam.set(flagParamName(name), name);
+	}
 	// A key naming nothing this command declares is a fact about the object's
 	// SHAPE, and shape is decided before every phase (§24.11, §24.3): an unknown
 	// flag outranks every election, scope, value and presence problem on the
@@ -290,13 +321,9 @@ export async function invokeApp(
 	// pass below walks declarations rather than the caller's key order.
 	const suppliedByFlagName = new Map<string, unknown>();
 	for (const paramName of Object.keys(kwargs)) {
-		const flagName = paramToFlagName(paramName);
-		if (
-			flagByName.has(flagName) ||
-			selectorByName.has(flagName) ||
-			app.globalFlagNames.has(flagName)
-		) {
-			suppliedByFlagName.set(flagName, kwargs[paramName]);
+		const declared = declaredByParam.get(paramName);
+		if (declared !== undefined) {
+			suppliedByFlagName.set(declared, kwargs[paramName]);
 			continue;
 		}
 		if (argNames.has(paramName)) {
@@ -307,15 +334,17 @@ export async function invokeApp(
 		);
 	}
 
+	// The phase order is the PARSER's, so it governs this door too (§24.3,
+	// §18.24 item 243): every problem below is recorded with its stage and the
+	// lowest one over the whole command decides, exactly as the flat door and
+	// the command line select their refusal.
+	const problems: ParseProblem[] = [];
+
 	// Pass 1: every selector's election, command-wide and outermost first, with
-	// the record facts that outrank an election recorded beside them (§24.3,
-	// §18.22 item 232). Walking one selector to its END before starting the next
-	// let a value refusal inside one record precede another selector's missing
-	// election -- an answer neither the command line nor the flat door gives.
-	// Each problem carries its stage and the LOWEST one over the whole command
-	// decides, exactly as the flat door selects its refusal.
+	// the record facts that outrank an election recorded beside them. Walking
+	// one selector to its END before starting the next decided every stage below
+	// election for one selector before the next selector's record was looked at.
 	const elections = new Map<AnyChoiceFlag, string>();
-	const electionProblems: ParseProblem[] = [];
 	for (const [name, sel] of selectorByName) {
 		electFromRecord(
 			sel,
@@ -323,56 +352,59 @@ export async function invokeApp(
 			suppliedByFlagName.get(name),
 			"",
 			elections,
-			electionProblems,
+			problems,
 		);
-	}
-	const firstElectionProblem = firstProblem(electionProblems);
-	if (firstElectionProblem !== undefined) {
-		throw new InvokeError(firstElectionProblem.message);
 	}
 
 	// Pass 2: the values, in DECLARATION order. An object has no order of its
 	// own, so the order the caller happened to write its keys in decides
-	// nothing (§21.4's reason, applied to this door).
+	// nothing (§21.4's reason, applied to this door). A selector whose election
+	// never settled is skipped: its refusal is already recorded, and there is
+	// no elected scope to read values from.
+	const recordValue = (f: AnyFlag, value: unknown): void => {
+		const refusal = preTypedValueRefusal(f, value);
+		if (refusal !== undefined) {
+			problems.push({ stage: STAGE.value, message: refusal });
+			return;
+		}
+		store.set(f.name, coerceInvokeValue(f, value), "cli");
+	};
 	for (const d of def.allDecls) {
 		const supplied = suppliedByFlagName.has(d.name);
 		if (d.kind === "choice-flag") {
-			try {
-				store.set(
-					d.name,
-					supplied
-						? buildElectedRecord(
-								d,
-								suppliedByFlagName.get(d.name) as Record<string, unknown>,
-								elections,
-								app.infraRoots,
-							)
-						: electDefaultRecord(d, elections.get(d) as string, app.infraRoots),
-					supplied ? "cli" : "default",
-				);
-			} catch (e) {
-				throw new InvokeError((e as Error).message);
+			const tag = elections.get(d);
+			if (tag === undefined) {
+				continue;
 			}
+			store.set(
+				d.name,
+				supplied
+					? buildElectedRecord(
+							d,
+							suppliedByFlagName.get(d.name) as Record<string, unknown>,
+							elections,
+							app.infraRoots,
+							problems,
+						)
+					: electDefaultRecord(d, tag, app.infraRoots),
+				supplied ? "cli" : "default",
+			);
 			continue;
 		}
 		if (supplied) {
-			store.set(
-				d.name,
-				coerceInvokeValue(d, suppliedByFlagName.get(d.name)),
-				"cli",
-			);
+			recordValue(d, suppliedByFlagName.get(d.name));
 		}
 	}
 	// An app-level global is a declaration like any other, so a value supplied
 	// for one is checked like any other (§24.11).
 	for (const gf of app.globalFlags) {
 		if (suppliedByFlagName.has(gf.name)) {
-			store.set(
-				gf.name,
-				coerceInvokeValue(gf, suppliedByFlagName.get(gf.name)),
-				"cli",
-			);
+			recordValue(gf, suppliedByFlagName.get(gf.name));
 		}
+	}
+	const first = firstProblem(problems);
+	if (first !== undefined) {
+		throw new InvokeError(first.message);
 	}
 
 	// Positionals from kwargs in arg declaration order. They are handed to the
@@ -639,22 +671,36 @@ function electFromRecord(
  * declaration it was supplied against, a required sub-flag that nothing
  * supplied is refused, an optional one delivers absence as a PRESENT field,
  * and a defaulted one is filled from the declaration.
+ *
+ * Nothing throws: a value refusal and a scoped presence refusal each carry
+ * their stage into the same list pass 1 wrote to, so the phases -- and not the
+ * order this walk happens to reach them in -- decide which is reported.
  */
 function buildElectedRecord(
 	sel: AnyChoiceFlag,
 	raw: Record<string, unknown>,
 	elections: ReadonlyMap<AnyChoiceFlag, string>,
 	infraRoots: ReadonlyMap<string, string>,
+	problems: ParseProblem[],
 ): unknown {
 	const tag = elections.get(sel) as string;
 	const chosen = sel.choices[tag] as NonNullable<(typeof sel.choices)[string]>;
 	const out: Record<string, unknown> = { [CHOICE_TAG_KEY]: tag };
 	const provided = new Set<string>();
+	const take = (f: AnyFlag, key: string, value: unknown): void => {
+		const refusal = preTypedValueRefusal(f, value);
+		if (refusal !== undefined) {
+			problems.push({ stage: STAGE.value, message: refusal });
+			return;
+		}
+		out[key] = coerceInvokeValue(f, value);
+		provided.add(key);
+	};
 	if (chosen.value !== undefined) {
 		// The member's payload is declared by its own flag -- named by the
 		// member's own token and required once the member is elected (§24.4) --
 		// so the value supplied for it is checked against that declaration.
-		out[CHOICE_VALUE_KEY] = coerceInvokeValue(
+		take(
 			{
 				kind: "flag",
 				name: tag,
@@ -662,42 +708,44 @@ function buildElectedRecord(
 				carrier: chosen.value.carrier,
 				opts: { help: chosen.value.help, presence: "required" },
 			},
+			CHOICE_VALUE_KEY,
 			raw[CHOICE_VALUE_KEY],
 		);
-		provided.add(CHOICE_VALUE_KEY);
 	}
 	const path = electedScopePath(sel, tag);
 	for (const [key, sub] of Object.entries(chosen.flags)) {
 		if (sub.kind === "choice-flag") {
+			const subTag = elections.get(sub);
+			if (subTag === undefined) {
+				continue;
+			}
 			if (Object.hasOwn(raw, key)) {
 				out[key] = buildElectedRecord(
 					sub,
 					raw[key] as Record<string, unknown>,
 					elections,
 					infraRoots,
+					problems,
 				);
 				provided.add(key);
 			} else {
-				out[key] = electDefaultRecord(
-					sub,
-					elections.get(sub) as string,
-					infraRoots,
-				);
+				out[key] = electDefaultRecord(sub, subTag, infraRoots);
 			}
 			continue;
 		}
 		if (Object.hasOwn(raw, key)) {
-			out[key] = coerceInvokeValue(sub, raw[key]);
-			provided.add(key);
+			take(sub, key, raw[key]);
 			continue;
 		}
 		if (sub.opts.presence === "required") {
 			// The ROOT sentence plus the scope suffix (§12.13): a required bool
 			// inside a scope names the tokens that satisfy it exactly as it does at
 			// root, and the suffix says where the requirement lives.
-			throw new Error(
-				`${errFlagRequired(sub.name, requiredFlagForm(sub))}${errScopeSuffix(path)}`,
-			);
+			problems.push({
+				stage: STAGE.presence,
+				message: `${errFlagRequired(sub.name, requiredFlagForm(sub))}${errScopeSuffix(path)}`,
+			});
+			continue;
 		}
 		// The declaration decides, exactly as it does on the argv path: a compound
 		// default is copied and a RelativeToRoot marker resolves through the app's
