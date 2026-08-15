@@ -1837,3 +1837,55 @@ def test_the_decline_clause_searches_direct_members_only():
         'error: constraint "outer": at least one of (--a with --b), --c '
         "is required"
     )
+
+
+def test_when_non_empty_on_a_scalar_arg_renders_the_member_bare():
+    """The fourth member-naming guard takes §12.15's rendering too, and its
+    trailing clause takes it a second time (§18.31 item 287)."""
+    with pytest.raises(ValueError) as exc:
+        _register(
+            [AtLeastOne("selection", [
+                Member("count", when="non_empty"), Member("a"),
+            ])],
+            args=[strictcli.Arg(
+                "count", type=int, help="how many", presence="optional",
+            )],
+        )()
+    assert str(exc.value) == (
+        'command "cmd": constraint "selection" member \'count\' declares '
+        'when="non_empty", which needs a string or a collection; '
+        "'count' is a int"
+    )
+
+
+def test_a_constraint_name_may_collide_with_a_scoped_flag_name():
+    """§18.31 item 290: step 1's collision check reads ROOT flags and args
+    only -- a member naming that scoped flag is refused one step later, with
+    the message that names the actual fault."""
+
+    @strictcli.choice("email", help="deliver by email")
+    class Email:
+        subject: str = strictcli.sub_flag(help="the subject", presence="required")
+
+    @strictcli.choice("sms", help="deliver by text")
+    class Sms:
+        phone: str = strictcli.sub_flag(help="the number", presence="required")
+
+    app = strictcli.App(name="test", version="1.0.0", help="test app")
+
+    @app.command(
+        "cmd", effect="read_only", help="a command",
+        constraints=[AllOrNone("subject", [Member("a"), Member("b")])],
+    )
+    @strictcli.choice_flag(
+        "via", help="delivery channel", presence="required",
+        elect_by="selector-token", choices=[Email, Sms],
+    )
+    @strictcli.flag("a", type=str, help="a", presence="optional")
+    @strictcli.flag("b", type=str, help="b", presence="optional")
+    def cmd(ctx, a, b, via: Email | Sms):
+        print("ran")
+
+    assert app.test(
+        ["cmd", "--via", "sms", "--phone", "1", "--a", "x", "--b", "y"],
+    ).exit_code == 0
