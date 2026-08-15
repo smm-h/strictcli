@@ -333,7 +333,42 @@ def _check_effects_equals(log_path: str | None, expected: list) -> list[str]:
     ]
 
 
-SCHEMA_ASSERT_KEYS = ("schema_command_keys", "schema_command_absent_keys")
+SCHEMA_ASSERT_KEYS = (
+    "schema_command_keys", "schema_command_absent_keys", "schema_bytes_equal",
+)
+
+
+def _check_schema_bytes(proj_dir: str | None, expected: str) -> list[str]:
+    """Assert the emitted schema file's WHOLE BYTES (effects contract §25.8).
+
+    The committed `.strictcli/schema.json` must be dumper-independent: a
+    repository whose file is written sometimes by a Go binary and sometimes by
+    a Python one must see a diff exactly when something changed. Key order,
+    escaping, number form, indentation and the single trailing newline are all
+    part of the contract after v2, so this assertion reads the file as text and
+    compares it whole rather than parsing it first.
+    """
+    if proj_dir is None:
+        return ["  schema_bytes_equal requires --dump-schema in the case argv"]
+    path = os.path.join(proj_dir, ".strictcli", "schema.json")
+    if not os.path.exists(path):
+        return [f"  schema_bytes_equal: no schema was emitted at {path}"]
+    with open(path, encoding="utf-8") as fh:
+        actual = fh.read()
+    if actual == expected:
+        return []
+    exp_lines = expected.split("\n")
+    act_lines = actual.split("\n")
+    for i in range(max(len(exp_lines), len(act_lines))):
+        e = exp_lines[i] if i < len(exp_lines) else "<missing>"
+        a = act_lines[i] if i < len(act_lines) else "<missing>"
+        if e != a:
+            return [
+                f"  schema_bytes_equal: first difference at line {i + 1}",
+                f"    expected: {e!r}",
+                f"    actual:   {a!r}",
+            ]
+    return ["  schema_bytes_equal: files differ but no line differs"]
 
 
 def _resolve_schema_command(schema: dict, dotted: str) -> dict | None:
@@ -984,6 +1019,10 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
         # Check the schema file a --dump-schema run emitted into proj_dir.
         if any(k in expect for k in SCHEMA_ASSERT_KEYS):
             errors.extend(_check_schema_commands(proj_dir, expect))
+        if "schema_bytes_equal" in expect:
+            errors.extend(
+                _check_schema_bytes(proj_dir, expect["schema_bytes_equal"])
+            )
 
     except subprocess.TimeoutExpired:
         errors.append("  timed out after 10 seconds")

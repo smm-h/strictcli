@@ -1,0 +1,370 @@
+[
+  {
+    "name": "selector help: a token-spelled selector renders long-first with its short",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "short": "v",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "recipient",
+                      "help": "destination email address",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "dry-run-report",
+              "help": "print what would be sent",
+              "type": "bool",
+              "presence": "default",
+              "default": false
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp send -- send one notification\n\nFlags:\n  --via, -v <choice>                       delivery channel [required]\n    email                                  deliver the notification as an email message\n      --subject <str>                      subject line of the message [required]\n      --recipient <str>                    destination email address [required]\n    sms                                    deliver the notification as a text message\n      --phone-number <str>                 destination number in E.164 form [required]\n  --dry-run-report, --no-dry-run-report    print what would be sent [default: false]"
+    }
+  },
+  {
+    "name": "selector help: one alignment column spans the whole block, deepest entry included",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "a",
+              "help": "the first level",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "one",
+                  "help": "the first choice",
+                  "flags": [
+                    {
+                      "name": "b",
+                      "help": "the second level",
+                      "presence": "required",
+                      "elect_by": "selector-token",
+                      "choices": [
+                        {
+                          "name": "two",
+                          "help": "the second choice",
+                          "flags": [
+                            {
+                              "name": "c",
+                              "help": "the third level",
+                              "presence": "required",
+                              "elect_by": "selector-token",
+                              "choices": [
+                                {
+                                  "name": "three",
+                                  "help": "the third choice",
+                                  "flags": [
+                                    {
+                                      "name": "deepest",
+                                      "help": "the deepest flag of all",
+                                      "type": "str",
+                                      "presence": "optional"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "name": "four",
+                                  "help": "the fourth choice"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "name": "five",
+                          "help": "the fifth choice"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "six",
+                  "help": "the sixth choice"
+                }
+              ]
+            },
+            {
+              "name": "dry-run-report",
+              "help": "print what would be sent",
+              "type": "bool",
+              "presence": "default",
+              "default": false
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp send -- send one notification\n\nFlags:\n  --a <choice>                             the first level [required]\n    one                                    the first choice\n      --b <choice>                         the second level [required]\n        two                                the second choice\n          --c <choice>                     the third level [required]\n            three                          the third choice\n              --deepest <str>              the deepest flag of all [optional]\n            four                           the fourth choice\n        five                               the fifth choice\n    six                                    the sixth choice\n  --dry-run-report, --no-dry-run-report    print what would be sent [default: false]"
+    }
+  },
+  {
+    "name": "selector help: a member-spelled selector carries the clause on its own line",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  },
+                  "flags": [
+                    {
+                      "name": "create-missing",
+                      "help": "create the profile when absent",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    }
+                  ]
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            },
+            {
+              "name": "dry-run-report",
+              "help": "print what would be sent",
+              "type": "bool",
+              "presence": "default",
+              "default": false
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp send -- send one notification\n\nFlags:\n  target                                       which profiles to operate on (exactly one of the following) [required]\n    --profile <str>                            operate on one named profile [required]\n      --create-missing, --no-create-missing    create the profile when absent [default: false]\n    --all-profiles                             operate on every profile [required]\n  --dry-run-report, --no-dry-run-report        print what would be sent [default: false]"
+    }
+  },
+  {
+    "name": "selector help: the Arguments section computes its own column, never the flag block's",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "short": "v",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "recipient",
+                      "help": "destination email address",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number in E.164 form",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "args": [
+            {
+              "name": "level",
+              "help": "how loud",
+              "type": "str",
+              "presence": "default",
+              "default": "normal",
+              "choices_str": [
+                {
+                  "value": "quiet",
+                  "help": "say as little as possible"
+                },
+                {
+                  "value": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp send -- send one notification\n\nArguments:\n  level       how loud [default: normal]\n    quiet     say as little as possible\n    normal\n\nFlags:\n  --via, -v <choice>          delivery channel [required]\n    email                     deliver the notification as an email message\n      --subject <str>         subject line of the message [required]\n      --recipient <str>       destination email address [required]\n    sms                       deliver the notification as a text message\n      --phone-number <str>    destination number in E.164 form [required]"
+    }
+  },
+  {
+    "name": "selector help: a negatable scoped bool renders both spellings and one presence part",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "how to run",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "simple",
+                  "help": "the simple way",
+                  "flags": [
+                    {
+                      "name": "fast",
+                      "help": "skip the slow path",
+                      "type": "bool",
+                      "presence": "default",
+                      "default": false
+                    },
+                    {
+                      "name": "strict",
+                      "help": "refuse anything doubtful",
+                      "type": "bool",
+                      "presence": "optional",
+                      "negatable": false
+                    }
+                  ]
+                },
+                {
+                  "name": "advanced",
+                  "help": "the advanced way"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "myapp send -- send one notification\n\nFlags:\n  --mode <choice>          how to run [required]\n    simple                 the simple way\n      --fast, --no-fast    skip the slow path [default: false]\n      --strict             refuse anything doubtful [optional]\n    advanced               the advanced way"
+    }
+  }
+]

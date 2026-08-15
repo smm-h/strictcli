@@ -1972,6 +1972,10 @@
             }
           },
           "description": "The mirror of schema_command_keys: maps a dotted command path to keys that must NOT appear on that entry. Pins the emit-when-declared contract (a key omitted by one implementation and emitted with a default value by another is a silent divergence). Requires --dump-schema in the case argv."
+        },
+        "schema_bytes_equal": {
+          "type": "string",
+          "description": "The WHOLE bytes of the emitted .strictcli/schema.json (contract §25.8's byte canon). Key order, escaping, number form, two-space indentation and the single trailing newline are all part of the contract after schema v2, so the assertion compares the file as text rather than parsing it first. Requires --dump-schema in the case argv."
         }
       }
     }
