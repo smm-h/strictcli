@@ -10163,6 +10163,7 @@ class App:
             if flat:
                 selector_result = _resolve_selectors(
                     cmd, _flat_occurrences(cmd, kwargs), pre_typed=True,
+                    infra_roots=self._infra_roots,
                 )
                 kwargs = {
                     k: v for k, v in kwargs.items()
@@ -11497,9 +11498,26 @@ def _check_scoped_value(
 
 def _apply_scoped_presence(
     f: Flag, *, scope_suffix: str, origin_suffix: str,
+    infra_roots: dict[str, str] | None = None,
 ) -> tuple[object, str]:
-    """The PRESENCE phase for one scoped flag no value phase supplied."""
+    """The PRESENCE phase for one scoped flag no value phase supplied.
+
+    A scope is not a second declaration language (§24.3): a `RelativeToRoot`
+    default resolves through the declared infrastructure roots and reports
+    source ``infra`` inside a scope exactly as it does on the root surface, so
+    a handler reads a path rather than a marker it would have to resolve
+    itself.
+    """
     if f.presence == _PRESENCE_DEFAULT:
+        if isinstance(f.default, RelativeToRoot):
+            try:
+                resolved = _resolve_infra_root_path(f.default, infra_roots or {})
+            except ValueError as e:
+                # The marker's own sentence, authored where it is raised, plus
+                # §12.13's suffixes. Registration never sees inside a scope, so
+                # this is where an undeclared root is reported.
+                raise _ParseError(str(e) + scope_suffix + origin_suffix)
+            return resolved, "infra"
         if f.compound == "dict":
             return dict(f.default), "default"
         if f.repeatable:
@@ -11620,6 +11638,7 @@ def _instantiate_choice(
     stdin_consumed_by: list,
     member_spelled: dict[str, bool],
     conflict_mode: str = "cli-wins",
+    infra_roots: dict[str, str] | None = None,
 ) -> object:
     """Build one elected choice's record: the tag plus that choice's fields."""
     record_values: dict[str, object] = {}
@@ -11632,7 +11651,7 @@ def _instantiate_choice(
         spec.members, path, occs, state, values,
         config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
         stdin_consumed_by=stdin_consumed_by, member_spelled=member_spelled,
-        conflict_mode=conflict_mode,
+        conflict_mode=conflict_mode, infra_roots=infra_roots,
     )
     record_values.update(inner.values)
     sources.update(inner.sources)
@@ -11669,6 +11688,7 @@ def _build_scope_values(
     stdin_consumed_by: list,
     member_spelled: dict[str, bool],
     conflict_mode: str = "cli-wins",
+    infra_roots: dict[str, str] | None = None,
 ) -> _SelectorResult:
     """The PRESENCE phase, building the records the value phase filled (§24.3).
 
@@ -11685,6 +11705,7 @@ def _build_scope_values(
             if resolved is None:
                 resolved = _apply_scoped_presence(
                     m, scope_suffix=scope_suffix, origin_suffix=origin_suffix,
+                    infra_roots=infra_roots,
                 )
             value, source = resolved
             result.values[_flag_param_name(m.name)] = value
@@ -11716,7 +11737,7 @@ def _build_scope_values(
             m, elected, path + ((m.name, elected.name),), occs, state, values,
             config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
             stdin_consumed_by=stdin_consumed_by, member_spelled=member_spelled,
-            conflict_mode=conflict_mode,
+            conflict_mode=conflict_mode, infra_roots=infra_roots,
         )
         origin = state.origin.get(key, "")
         result.sources[param] = (
@@ -11764,6 +11785,7 @@ def _resolve_selectors(
     stdin_consumed_by: list | None = None,
     conflict_mode: str = "cli-wins",
     state: _ElectionState | None = None,
+    infra_roots: dict[str, str] | None = None,
 ) -> _SelectorResult:
     """Run all four phases over a command's selectors.
 
@@ -11790,7 +11812,7 @@ def _resolve_selectors(
         cmd.selectors, (), occs, state, values,
         config_data=config_data, hermetic=hermetic, pre_typed=pre_typed,
         stdin_consumed_by=stdin_consumed_by, member_spelled=member_spelled,
-        conflict_mode=conflict_mode,
+        conflict_mode=conflict_mode, infra_roots=infra_roots,
     )
     if not pre_typed and not hermetic:
         _report_skipped_bindings(
@@ -12311,7 +12333,7 @@ def _parse_command(
         selector_result = _resolve_selectors(
             cmd, scoped_occs, config_data=config_data, hermetic=hermetic,
             stdin_consumed_by=stdin_consumed_by, conflict_mode=conflict_mode,
-            state=election_state,
+            state=election_state, infra_roots=infra_roots,
         )
         if out_diagnostics is not None:
             out_diagnostics.extend(selector_result.diagnostics)

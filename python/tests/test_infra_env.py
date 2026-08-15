@@ -8,6 +8,7 @@ from conftest import payload
 
 import strictcli
 from strictcli import App, Context, RelativeToRoot
+from strictcli import choice, choice_flag, member_value, sub_flag
 
 
 # --- Eager root resolution ---
@@ -86,6 +87,165 @@ def test_cli_override_not_infra(monkeypatch):
     assert r.exit_code == 0, r.stderr
     assert captured["db"] == "/tmp/custom.db"
     assert app._last_sources["db"] == "cli"
+
+
+# --- The same marker, declared INSIDE a scope (§23.5, §24.6) ---
+#
+# §18.23 item 237. A scope is not a second declaration language: `RelativeToRoot`
+# means inside a scope exactly what it means at root scope, so a scoped flag's
+# declared marker reaches the handler as the resolved PATH, labelled infra
+# wherever the record exposes a source and `provided` false either way -- never
+# as the marker itself, which no handler should have to resolve.
+
+
+@choice("email", help="an email message")
+class _Email:
+    cache: str = sub_flag(
+        help="where the cache lives",
+        default=RelativeToRoot("MYAPP_HOME", "cache", "email.db"),
+    )
+
+
+@choice("sms", help="a text message")
+class _Sms:
+    pass
+
+
+@choice("profile", help="a profile")
+class _Profile:
+    value: str = member_value(help="the profile name")
+    store: str = sub_flag(
+        help="where the profile lives",
+        default=RelativeToRoot("MYAPP_HOME", "profiles"),
+    )
+
+
+@choice("all-profiles", help="every profile")
+class _AllProfiles:
+    pass
+
+
+def _make_scoped_marker_app():
+    app = App(name="myapp", version="1.0.0", help="t",
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+    captured: dict = {}
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag("via", help="delivery channel", presence="required",
+                 elect_by="selector-token", choices=[_Email, _Sms])
+    @choice_flag("mode", help="which profiles", presence="required",
+                 elect_by="member-flags", choices=[_Profile, _AllProfiles])
+    def run(ctx, via: "_Email | _Sms", mode: "_Profile | _AllProfiles"):
+        captured["via"] = via
+        captured["mode"] = mode
+        return 0
+
+    return app, captured
+
+
+def test_scoped_flag_default_marker_resolves(monkeypatch):
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, captured = _make_scoped_marker_app()
+    r = app.test(["run", "--via", "email", "--profile", "work"])
+    assert r.exit_code == 0, r.stderr
+    assert captured["via"].cache == "/var/lib/myapp/cache/email.db"
+
+
+def test_member_scope_flag_default_marker_resolves(monkeypatch):
+    """A member's scope is a scope like any other, at any depth."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, captured = _make_scoped_marker_app()
+    r = app.test(["run", "--via", "sms", "--profile", "work"])
+    assert r.exit_code == 0, r.stderr
+    assert captured["mode"].store == "/var/lib/myapp/profiles"
+
+
+def test_scoped_flag_default_marker_is_not_provided(monkeypatch):
+    """Source `infra` says the DECLARATION decided, so provided-ness is false
+    inside a scope exactly as it is on the root surface."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, captured = _make_scoped_marker_app()
+    app.test(["run", "--via", "email", "--profile", "work"])
+    assert strictcli.provided(captured["via"], "cache") is False
+    assert strictcli.provided(captured["mode"], "store") is False
+    # The label the record carries says WHICH default it was, as it does on
+    # the root surface -- `infra`, not the plain `default` it reported before.
+    sources = getattr(captured["via"], strictcli._RECORD_SOURCES_ATTR)
+    assert sources["cache"] == "infra"
+
+
+def test_scoped_flag_default_marker_reads_the_env_root(monkeypatch):
+    monkeypatch.setenv("MYAPP_HOME", "/opt/data")
+    app, captured = _make_scoped_marker_app()
+    r = app.test(["run", "--via", "email", "--profile", "work"])
+    assert r.exit_code == 0, r.stderr
+    assert captured["via"].cache == "/opt/data/cache/email.db"
+
+
+def test_scoped_flag_default_marker_is_hermetic_immune(monkeypatch):
+    """A root has no argv dependency, so `--hermetic` cannot suppress it."""
+    monkeypatch.setenv("MYAPP_HOME", "/opt/data")
+    app, captured = _make_scoped_marker_app()
+    r = app.test(["--hermetic", "run", "--via", "email", "--profile", "work"])
+    assert r.exit_code == 0, r.stderr
+    assert captured["via"].cache == "/opt/data/cache/email.db"
+
+
+def test_scoped_cli_value_overrides_the_marker(monkeypatch):
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, captured = _make_scoped_marker_app()
+    r = app.test([
+        "run", "--via", "email", "--cache", "/tmp/custom.db", "--profile", "work",
+    ])
+    assert r.exit_code == 0, r.stderr
+    assert captured["via"].cache == "/tmp/custom.db"
+    assert strictcli.provided(captured["via"], "cache") is True
+
+
+def test_scoped_flag_default_marker_resolves_at_the_flat_boundary(monkeypatch):
+    """The flat machine form runs the same presence phase, so it delivers the
+    same resolved path rather than a marker no MCP caller could interpret."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+    app, captured = _make_scoped_marker_app()
+    app._call_with_kwargs(
+        "run", {"via": "email", "profile": "work"},
+        approve_consequential=False, flat=True,
+    )
+    assert captured["via"].cache == "/var/lib/myapp/cache/email.db"
+    assert captured["mode"].store == "/var/lib/myapp/profiles"
+
+
+def test_scoped_marker_naming_an_undeclared_root_is_a_parse_error(monkeypatch):
+    """Registration does not see inside a scope, so the refusal arrives at
+    parse time -- carrying the scope it was declared in."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+
+    @choice("email", help="an email message")
+    class Email:
+        cache: str = sub_flag(
+            help="where the cache lives",
+            default=RelativeToRoot("NOPE", "cache"),
+        )
+
+    @choice("sms", help="a text message")
+    class Sms:
+        pass
+
+    app = App(name="myapp", version="1.0.0", help="t",
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag("via", help="delivery channel", presence="required",
+                 elect_by="selector-token", choices=[Email, Sms])
+    def run(ctx, via: "Email | Sms"):
+        return 0
+
+    r = app.test(["run", "--via", "email"])
+    assert r.exit_code == 1
+    assert (
+        'error: RelativeToRoot references undeclared infra root "NOPE"; '
+        "declare it as an infra root under '--via email'\n"
+    ) in r.stderr
 
 
 # --- Config-path marker rewrite ---
