@@ -11,7 +11,7 @@ strictcli ships three independent implementations -- Python, Go, and TypeScript 
 
 ## What the suite covers
 
-The conformance suite enforces behavioral parity through eleven checks, all gated
+The conformance suite enforces behavioral parity through twelve checks, all gated
 at error severity so that any failure blocks a release. These checks cover API
 surface consistency, error message parity, the suite's own extraction and
 registry surfaces, per-target test case execution, cross-target output
@@ -195,7 +195,7 @@ consistency:
 
 All commands are run from the repository root unless otherwise noted. The test
 runner supports filtering by case name, verbose output for debugging, and parity
-mode for cross-target comparison. The full check gate runs all eleven checks in
+mode for cross-target comparison. The full check gate runs all twelve checks in
 dependency order.
 
 ### Single target
@@ -219,18 +219,18 @@ python conformance/run.py --target python --filter "config" -v
 python conformance/run.py --both --filter "hermetic" -v
 ```
 
-### Full check gate (all eleven checks)
+### Full check gate (all twelve checks)
 
-The full check gate runs all eleven conformance checks in dependency order from the
+The full check gate runs all twelve conformance checks in dependency order from the
 `conformance/` directory. It starts with the fast pure checks (api-surface,
 error-parity and conformance-meta), then runs per-target conformance suites, then
-parity and schema checks. All eleven checks must pass for a release to proceed:
+parity and schema checks. All twelve checks must pass for a release to proceed:
 
 ```bash
 uv run conformance check --tag pre-release
 ```
 
-This runs all eleven checks in dependency order: `api-surface`, `error-parity` and `conformance-meta` first (fast, pure), then the per-target conformance runs, then parity and schema checks.
+This runs all twelve checks in dependency order: `api-surface`, `error-parity` and `conformance-meta` first (fast, pure), then the per-target conformance runs, then parity and schema checks.
 
 ### Individual supplementary checks
 

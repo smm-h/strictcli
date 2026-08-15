@@ -227,7 +227,12 @@ handler reconstructs that boolean out of a sentinel:
 An optional flag that received nothing carries source `default` and reports
 `false`. An unknown name throws exactly as `ctx.source` does. The same predicate
 decides presence for `coRequired`, `requires` and `implies`, so a declared
-default never satisfies a dependency.
+default never satisfies a dependency. Inside a choice flag's scope the answer
+depends on the door a value arrived through: a scoped field the caller supplied
+answers `true` from the command line and from the flat machine door, and `false`
+from the record door, where a constructed record has already filled its declared
+defaults and the framework refuses to guess which fields the caller wrote (see
+[the door table](flag-system.md#was-this-supplied-ctxprovided)).
 
 ### Boolean Flags
 

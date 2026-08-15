@@ -181,6 +181,23 @@ boolean out of a sentinel:
 An optional flag that received nothing carries source `default` and reports
 `false`. Unknown names raise exactly as `ctx.source` does.
 
+**Inside a choice flag's scope the answer depends on the door**, because the
+three doors do not carry the same information about their own input:
+
+| Door | A scoped field the caller supplied |
+|------|------------------------------------|
+| the command line | `provided` **true**, source `cli` |
+| the flat machine door (an MCP `tools/call`, a flat kwargs map) | `provided` **true**, source `cli` |
+| the record door (a constructed scope handed to `call()`) | `provided` **false**, source `default` |
+
+The record door's answer is an acknowledged limitation rather than a different
+rule: a scope class fills its declared defaults at construction, so a field
+holding its declared default cannot be told from one the caller wrote by hand,
+and the framework refuses to guess by comparing the value against the
+declaration. The flat door has no such problem -- it reads the caller's own
+keys, so a key it read is a value the caller wrote. Everywhere, a
+`RelativeToRoot` default resolves with source `infra` and reports `false`.
+
 ### Presence in help output
 
 Every flag and every arg renders **exactly one** presence part, and it is the
@@ -966,9 +983,22 @@ not consulted: config key 'subject' binds flag '--subject' under '--via email', 
 ```
 
 An election from a non-CLI source names itself in every message it causes, so a
-refusal never blames a command line that does not contain the cause: the
-clauses ` from env var '<VAR>'`, ` from config key '<key>'` and ` by default`
-are appended to the sentence.
+refusal never blames a command line that does not contain the cause. The clause
+is `(elected from env var 'NOTIFY_VIA')`, `(elected from config key 'via')` or
+`(elected by default)`, appended after the scope suffix; an election the command
+line made renders no clause at all, because the cause is already on the line the
+reader typed.
+
+```
+error: flag '--phone-number' is required under '--via sms' (elected from env var 'NOTIFY_VIA')
+```
+
+The one template that already ends in the election carries the same clause
+without the parentheses, because there is nothing left to wrap:
+
+```
+error: flag '--subject' is only valid under '--via email', but '--via sms' was elected from env var 'NOTIFY_VIA'
+```
 
 ### Constraints operate at root scope only
 

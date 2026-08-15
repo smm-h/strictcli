@@ -374,7 +374,12 @@ def publish(ctx, tag=""): ...
 
 To ask whether the invocation supplied a value rather than the declaration, use
 `ctx.provided(name)` -- `True` for `cli`, `env`, `config` and `implied`, `False`
-for `default` and `infra`.
+for `default` and `infra`. Inside a choice flag's scope the answer depends on the
+door a value arrived through: a scoped field the caller supplied answers `True`
+from the command line and from the flat machine door, and `False` from the record
+door, where a constructed scope has already filled its declared defaults and the
+framework refuses to guess which fields the caller wrote (see
+[the door table](flag-system.md#was-this-supplied-ctxprovided)).
 
 In help output, every flag and arg renders exactly one presence part:
 `[required]`, `[optional]`, or `[default: <value>]`.
@@ -1253,11 +1258,11 @@ Both produce specific, actionable messages:
 
 ```
 $ mytool deploy --unknown-flag
-error: unknown flag "--unknown-flag"
+error: unknown flag '--unknown-flag'
 try 'mytool deploy --help'
 
 $ mytool deploy
-error: missing required flag "--target"
+error: flag '--target' is required
 try 'mytool deploy --help'
 ```
 
