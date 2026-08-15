@@ -509,45 +509,124 @@ func collectInvokeElections(cmd *Command, kwargs map[string]interface{}, sup *su
 			if f.Type != TypeChoice {
 				continue
 			}
-			raw, ok := args[flagParamName(f.Name)]
-			if !ok {
+			raw, named := args[flagParamName(f.Name)]
+			if rec, isRecord := raw.(*Elected); named && isRecord {
+				// The record front door, at either spelling: the caller handed
+				// over the election already made.
+				ch := findChoice(f, rec.decl.Name)
+				if ch != rec.decl {
+					return errElectNotAChoice(f.Name, rec.decl.Name)
+				}
+				sup.suppliedNames[f.Name] = true
+				sup.preElected[f] = ch
+				if errStr := bindElectedFields(f, ch, rec.Fields, sup, cliByFlag); errStr != "" {
+					return errStr
+				}
+				if errStr := walk(ch.Flags, rec.Fields); errStr != "" {
+					return errStr
+				}
 				continue
 			}
-			sup.suppliedNames[f.Name] = true
-			switch v := raw.(type) {
-			case *Elected:
-				ch := findChoice(f, v.decl.Name)
-				if ch != v.decl {
-					return errElectNotAChoice(f.Name, v.decl.Name)
-				}
-				sup.preElected[f] = ch
-				if errStr := bindElectedFields(f, ch, v.Fields, sup, cliByFlag); errStr != "" {
+			if f.memberSpelled {
+				if errStr := collectFlatMemberElections(f, args, named, raw, sup, cliByFlag, walk); errStr != "" {
 					return errStr
 				}
-				if errStr := walk(ch.Flags, v.Fields); errStr != "" {
-					return errStr
-				}
-			case string:
-				ch := findChoice(f, v)
-				if ch == nil {
-					return errFlagInvalidChoice(f.Name, v, strings.Join(choiceNames(f), ", "))
-				}
-				sup.preElected[f] = ch
-				// The flat form's scoped parameters sit beside the selector, so
-				// the same top-level object supplies the next level too.
-				if errStr := bindElectedFields(f, ch, Fields(args), sup, cliByFlag); errStr != "" {
-					return errStr
-				}
-				if errStr := walk(ch.Flags, args); errStr != "" {
-					return errStr
-				}
-			default:
+				continue
+			}
+			if !named {
+				continue
+			}
+			v, isName := raw.(string)
+			if !isName {
 				return errSelectorValueNotElected(f.Name, raw)
+			}
+			ch := findChoice(f, v)
+			if ch == nil {
+				return errFlagInvalidChoice(f.Name, v, strings.Join(choiceNames(f), ", "))
+			}
+			sup.suppliedNames[f.Name] = true
+			sup.preElected[f] = ch
+			// The flat form's scoped parameters sit beside the selector, so
+			// the same top-level object supplies the next level too.
+			if errStr := bindElectedFields(f, ch, Fields(args), sup, cliByFlag); errStr != "" {
+				return errStr
+			}
+			if errStr := walk(ch.Flags, args); errStr != "" {
+				return errStr
 			}
 		}
 		return ""
 	}
 	return walk(cmd.flags, kwargs)
+}
+
+// collectFlatMemberElections reads a member-spelled selector's elections out of
+// the flat machine object (contract §24.11, §21.4).
+//
+// Supplying a member's payload key IS electing that member, exactly as typing
+// its token is: the flat form is the command line with the tokens removed, not
+// a second election vocabulary. So an object naming one member under the
+// selector's own key AND carrying another member's payload key has elected
+// TWICE, and the refusal is the election phase's own -- §21.4's mutual-exclusion
+// sentence, reached by handing both elections to the same machinery the argv
+// path hands its tokens to, rather than by a second rule written here.
+func collectFlatMemberElections(
+	sel *Flag,
+	args map[string]interface{},
+	named bool,
+	raw interface{},
+	sup *suppliedElections,
+	cliByFlag map[*Flag]interface{},
+	walk func([]Flag, map[string]interface{}) string,
+) string {
+	elected := map[string]bool{}
+	if named {
+		v, isName := raw.(string)
+		if !isName {
+			return errSelectorValueNotElected(sel.Name, raw)
+		}
+		ch := findChoice(sel, v)
+		if ch == nil {
+			return errFlagInvalidChoice(sel.Name, v, strings.Join(choiceNames(sel), ", "))
+		}
+		sup.suppliedNames[sel.Name] = true
+		elected[ch.Name] = true
+	}
+	for _, ch := range sel.choiceDecls {
+		value, supplied := args[flagParamName(ch.Name)]
+		if !supplied {
+			continue
+		}
+		sup.suppliedNames[ch.Name] = true
+		// A payload-less member elects on presence and DECLINES on the false its
+		// `--no-<name>` token would have carried (§21.2), which is what keeps the
+		// flat form and the command line one rule rather than two.
+		if !choiceCarriesPayload(ch) {
+			if b, isBool := value.(bool); isBool && !b {
+				sup.memberElected[ch.Name] = false
+				continue
+			}
+		}
+		elected[ch.Name] = true
+	}
+	for name := range elected {
+		sup.memberElected[name] = true
+	}
+	// Nothing elected, or several: the election phase is what says so, with the
+	// sentence the command line would have produced.
+	if len(elected) != 1 {
+		return ""
+	}
+	var only *ChoiceDecl
+	for _, ch := range sel.choiceDecls {
+		if elected[ch.Name] {
+			only = ch
+		}
+	}
+	if errStr := bindElectedFields(sel, only, Fields(args), sup, cliByFlag); errStr != "" {
+		return errStr
+	}
+	return walk(only.Flags, args)
 }
 
 // bindElectedFields records the values a scope's flags were given, keyed by the

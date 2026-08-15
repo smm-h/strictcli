@@ -2181,3 +2181,72 @@ func TestMCPContinuationExpiryAndIsolation(t *testing.T) {
 		t.Errorf("another process accepted the blob: %q", refusal)
 	}
 }
+
+// --- A double election at the MCP boundary (contract §24.11, §21.4) ---
+
+// mcpMemberSelectorApp is the flat form's shape: one payload-carrying member
+// and one payload-less one.
+func mcpMemberSelectorApp() *App {
+	app := NewApp("testapp", "1.0.0", "test application")
+	app.Command("run", "run it", nopHandler,
+		WithFlags(MemberChoiceFlag("target", "which profiles", Required(),
+			MemberChoice(StringFlag("profile", "the profile name", Required()), "one named profile"),
+			MemberChoice(BoolFlag("all-profiles", "every profile", Required()), "every profile"),
+		)), WithEffect(EffectReadOnly))
+	return app
+}
+
+// The refusal travels the ordinary tool-result error path: isError, with the
+// CLI's own sentence as its text. A silently dropped key would have run the
+// command with an argument the caller sent and the server ignored.
+func TestMCPToolsCallDoubleElectionIsRefused(t *testing.T) {
+	resp, err := sendMCPRequest(mcpMemberSelectorApp(), "tools/call", 7, map[string]interface{}{
+		"name": "run",
+		"arguments": map[string]interface{}{
+			"target":  "all-profiles",
+			"profile": "work",
+		},
+	})
+	if err != nil {
+		t.Fatalf("tools/call error: %v", err)
+	}
+	result := resp["result"].(map[string]interface{})
+	if result["isError"] != true {
+		t.Fatalf("expected isError=true, got result %#v", result)
+	}
+	content := result["content"].([]interface{})
+	item := content[0].(map[string]interface{})
+	text := item["text"].(string)
+	if !strings.Contains(text, "--profile and --all-profiles are mutually exclusive") {
+		t.Fatalf("error text = %q", text)
+	}
+}
+
+// tools/list publishes exactly the two properties a caller can send: the
+// selector's enum and the payload-carrying member's payload.
+func TestMCPToolsListMemberSelectorProperties(t *testing.T) {
+	resp, err := sendMCPRequest(mcpMemberSelectorApp(), "tools/list", 8, map[string]interface{}{})
+	if err != nil {
+		t.Fatalf("tools/list error: %v", err)
+	}
+	result := resp["result"].(map[string]interface{})
+	tools := result["tools"].([]interface{})
+	var props map[string]interface{}
+	for _, raw := range tools {
+		tool := raw.(map[string]interface{})
+		if tool["name"] != "run" {
+			continue
+		}
+		schema := tool["inputSchema"].(map[string]interface{})
+		props = schema["properties"].(map[string]interface{})
+	}
+	if props == nil {
+		t.Fatal("tool 'run' not found")
+	}
+	if _, spurious := props["all_profiles"]; spurious {
+		t.Fatalf("payload-less member published a property: %#v", props)
+	}
+	if len(props) != 2 {
+		t.Fatalf("properties = %#v, want exactly target and profile", props)
+	}
+}

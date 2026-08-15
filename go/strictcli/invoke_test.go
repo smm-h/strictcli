@@ -863,3 +863,132 @@ func TestCallHandlerSourceProvenance(t *testing.T) {
 		t.Fatalf("expected source 'default' for loud, got %q", capturedSources["loud"])
 	}
 }
+
+// --- The flat machine boundary and its elections (contract §24.11, §21.4) ---
+//
+// The flat form is the CLI's own election rules with the tokens removed:
+// supplying a member's payload key IS electing that member, exactly as typing
+// its token is. A flat object that names one member under the selector's own
+// key and supplies another member's payload key therefore elects TWICE, and
+// §21.4's mutual-exclusion sentence refuses it -- the CLI's own bytes, through
+// the boundary that produced them. Dropping the second key silently is the one
+// answer the boundary may not give.
+
+// flatMemberApp is the finding's shape: a payload-carrying member and a
+// payload-less one under a member-spelled selector.
+func flatMemberApp(captured *map[string]interface{}) *App {
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("run", "run it", captureHandler(captured),
+		WithFlags(MemberChoiceFlag("target", "which profiles", Required(),
+			MemberChoice(StringFlag("profile", "a profile", Required()), "one named profile"),
+			MemberChoice(BoolFlag("all-profiles", "every profile", Required()), "every profile"),
+		)), WithEffect(EffectReadOnly))
+	return app
+}
+
+func TestFlatFormDoubleElectionIsRefusedWithTheMutexSentence(t *testing.T) {
+	var captured map[string]interface{}
+	app := flatMemberApp(&captured)
+	ir := app.invoke("run", map[string]interface{}{
+		"target":  "all-profiles",
+		"profile": "work",
+	})
+	if ir.err == "" {
+		t.Fatalf("expected a refusal, got kwargs %v", captured)
+	}
+	if !strings.Contains(ir.err, "--profile and --all-profiles are mutually exclusive") {
+		t.Fatalf("error = %q", ir.err)
+	}
+}
+
+// The CLI reaches the identical sentence through the identical path.
+func TestFlatFormDoubleElectionMatchesTheCLIsOwnBytes(t *testing.T) {
+	var captured map[string]interface{}
+	r := flatMemberApp(&captured).Test([]string{"run", "--all-profiles", "--profile", "work"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", r.ExitCode)
+	}
+	want := "error: --profile and --all-profiles are mutually exclusive\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// A payload key alone elects its member: the flat form maps onto the command
+// line, where `--profile work` is the whole election.
+func TestFlatFormPayloadKeyAloneElectsItsMember(t *testing.T) {
+	var captured map[string]interface{}
+	app := flatMemberApp(&captured)
+	ir := app.invoke("run", map[string]interface{}{"profile": "work"})
+	if ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+	e := GetElected(captured, "target")
+	if e.Name() != "profile" {
+		t.Fatalf("elected = %q, want \"profile\"", e.Name())
+	}
+	if got := Get[string](e.Fields, "value"); got != "work" {
+		t.Fatalf("payload = %q, want \"work\"", got)
+	}
+}
+
+// Naming a member under the selector's key AND supplying its own payload key is
+// ONE election, not two: both name the same member.
+func TestFlatFormSelectorKeyWithItsOwnPayloadIsOneElection(t *testing.T) {
+	var captured map[string]interface{}
+	app := flatMemberApp(&captured)
+	ir := app.invoke("run", map[string]interface{}{
+		"target":  "profile",
+		"profile": "work",
+	})
+	if ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+	e := GetElected(captured, "target")
+	if e.Name() != "profile" {
+		t.Fatalf("elected = %q, want \"profile\"", e.Name())
+	}
+	if got := Get[string](e.Fields, "value"); got != "work" {
+		t.Fatalf("payload = %q, want \"work\"", got)
+	}
+}
+
+// The single-election paths are untouched: a payload-less member is elected by
+// the selector's own key, which is the only property the schema publishes for
+// it.
+func TestFlatFormSelectorKeyAloneElectsAPayloadLessMember(t *testing.T) {
+	var captured map[string]interface{}
+	app := flatMemberApp(&captured)
+	ir := app.invoke("run", map[string]interface{}{"target": "all-profiles"})
+	if ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+	e := GetElected(captured, "target")
+	if e.Name() != "all-profiles" {
+		t.Fatalf("elected = %q, want \"all-profiles\"", e.Name())
+	}
+}
+
+// A token-spelled selector's flat form is unchanged: its key names the choice
+// and its scoped flags sit beside it.
+func TestFlatFormTokenSpelledSelectorIsUnchanged(t *testing.T) {
+	var captured map[string]interface{}
+	app := NewApp("myapp", "1.0.0", "test app")
+	app.Command("send", "send it", captureHandler(&captured),
+		WithFlags(ChoiceFlag("via", "delivery channel", Required(),
+			Choice("email", "an email message", StringFlag("subject", "subject line", Required())),
+			Choice("sms", "a text message", StringFlag("phone-number", "destination", Required())),
+		)), WithEffect(EffectReadOnly))
+
+	ir := app.invoke("send", map[string]interface{}{"via": "email", "subject": "hi"})
+	if ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+	e := GetElected(captured, "via")
+	if e.Name() != "email" {
+		t.Fatalf("elected = %q, want \"email\"", e.Name())
+	}
+	if got := Get[string](e.Fields, "subject"); got != "hi" {
+		t.Fatalf("subject = %q, want \"hi\"", got)
+	}
+}
