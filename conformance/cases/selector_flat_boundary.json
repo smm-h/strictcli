@@ -1,0 +1,1723 @@
+[
+  {
+    "name": "selector flat door: a payload key alone elects its member",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"profile\": \"work\"}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "matches": "^(?!.*isError).*ok"
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: one election named twice is one election",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"target\": \"profile\", \"profile\": \"work\"}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "matches": "^(?!.*isError).*ok"
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: a second member elected by its payload key is a double election",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"target\": \"all-profiles\", \"profile\": \"work\"}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": [
+            "\"isError\"",
+            "--profile and --all-profiles are mutually exclusive"
+          ]
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: every election stages before any presence refusal",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"target\": \"all-profiles\", \"profile\": \"work\"}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": [
+            "\"isError\"",
+            "--profile and --all-profiles are mutually exclusive"
+          ]
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: an elected member with no payload key takes the missing-value sentence",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"target\": \"profile\"}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": [
+            "\"isError\"",
+            "flag '--profile' requires a value"
+          ]
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: a payload-less member's own key elects on true",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"all_profiles\": true}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "matches": "^(?!.*isError).*ok"
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: a payload-less member's own key declines on false",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"all_profiles\": false}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": [
+            "\"isError\"",
+            "one of --profile, --all-profiles is required (--no-all-profiles declines an option; it does not choose one)"
+          ]
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: the selector's property wins over its member key's decline",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"target\": \"all-profiles\", \"all_profiles\": false}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "matches": "^(?!.*isError).*ok"
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: an unknown property is refused ahead of a double election",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge. The unknown-parameter template also quotes its own operands per language -- Python single-quotes where Go and TypeScript quote Go-style (contract \u00a724.11's item-242 block names it) -- so the scripted assertion matches either quoting and pins the sentence rather than the quotes.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"target\": \"all-profiles\", \"profile\": \"work\", \"bogus\": 1}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": "\"isError\"",
+          "matches": "unknown parameter (\\\\\"|')bogus(\\\\\"|') for command (\\\\\"|')send(\\\\\"|')"
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: an unknown property is refused ahead of a missing payload",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge. The unknown-parameter template also quotes its own operands per language -- Python single-quotes where Go and TypeScript quote Go-style (contract \u00a724.11's item-242 block names it) -- so the scripted assertion matches either quoting and pins the sentence rather than the quotes.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"target\": \"profile\", \"bogus\": 1}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": "\"isError\"",
+          "matches": "unknown parameter (\\\\\"|')bogus(\\\\\"|') for command (\\\\\"|')send(\\\\\"|')"
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: a dash-spelled scoped key names nothing",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge. The unknown-parameter template also quotes its own operands per language -- Python single-quotes where Go and TypeScript quote Go-style (contract \u00a724.11's item-242 block names it) -- so the scripted assertion matches either quoting and pins the sentence rather than the quotes.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"sms\", \"phone-number\": \"555\", \"target\": \"all-profiles\"}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": "\"isError\"",
+          "matches": "unknown parameter (\\\\\"|')phone-number(\\\\\"|') for command (\\\\\"|')send(\\\\\"|')"
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: a dash-spelled member key names nothing",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge. The unknown-parameter template also quotes its own operands per language -- Python single-quotes where Go and TypeScript quote Go-style (contract \u00a724.11's item-242 block names it) -- so the scripted assertion matches either quoting and pins the sentence rather than the quotes.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"all-profiles\": true}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": "\"isError\"",
+          "matches": "unknown parameter (\\\\\"|')all-profiles(\\\\\"|') for command (\\\\\"|')send(\\\\\"|')"
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: a scoped value is checked against its declared type",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"retries\": \"nope\", \"target\": \"all-profiles\"}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": [
+            "\"isError\"",
+            "--retries: expected integer, got str"
+          ]
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: null is legal for nothing",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": null, \"target\": \"all-profiles\"}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": [
+            "\"isError\"",
+            "--subject: expected string, got null"
+          ]
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: an integral number satisfies an int declaration",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"retries\": 7.0, \"target\": \"all-profiles\"}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "matches": "^(?!.*isError).*ok"
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "selector flat door: a fractional number does not",
+    "acknowledged_divergence": {
+      "reason": "The MCP JSON-RPC wire form is produced by each language's own JSON encoder, which is not part of the contract: Python's json.dumps inserts a space after every separator, and Go's encoding/json sorts map keys. The scripted assertions are structural (json_equals / matches parse or search the line), so they are identical for all three targets and are what pins the projection; only the raw bytes of the whole stream diverge.",
+      "streams": {
+        "stdout": [
+          "python",
+          "go"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "data",
+            "data": {
+              "ok": true
+            }
+          },
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "profile",
+                  "help": "operate on one named profile",
+                  "value": {
+                    "type": "str",
+                    "help": "profile name"
+                  }
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--mcp"
+    ],
+    "protocol_script": [
+      {
+        "send": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"send\", \"arguments\": {\"via\": \"email\", \"subject\": \"hi\", \"retries\": 7.5, \"target\": \"all-profiles\"}, \"_meta\": {\"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\", \"io.modelcontextprotocol/clientCapabilities\": {}}}}",
+        "expect_line": {
+          "contains": [
+            "\"isError\"",
+            "--retries: expected integer, got float"
+          ]
+        }
+      }
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": ""
+    }
+  }
+]

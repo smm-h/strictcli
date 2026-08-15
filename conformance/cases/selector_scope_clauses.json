@@ -1,0 +1,653 @@
+[
+  {
+    "name": "scope clauses: scope suffix, origin suffix and decline clause compose in that order",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "target",
+                      "help": "which profiles to operate on",
+                      "presence": "required",
+                      "elect_by": "member-flags",
+                      "choices": [
+                        {
+                          "name": "profile",
+                          "help": "operate on one named profile",
+                          "value": {
+                            "type": "str",
+                            "help": "profile name"
+                          }
+                        },
+                        {
+                          "name": "all-profiles",
+                          "help": "operate on every profile"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ],
+              "env": "NOTIFY_VIA"
+            }
+          ]
+        }
+      ]
+    },
+    "env": {
+      "NOTIFY_VIA": "email"
+    },
+    "argv": [
+      "send",
+      "--no-all-profiles"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "one of --profile, --all-profiles is required under '--via email' (elected from env var 'NOTIFY_VIA') (--no-all-profiles declines an option; it does not choose one)"
+    }
+  },
+  {
+    "name": "scope clauses: the order holds when only the scope suffix and the decline clause apply",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "target",
+                      "help": "which profiles to operate on",
+                      "presence": "required",
+                      "elect_by": "member-flags",
+                      "choices": [
+                        {
+                          "name": "profile",
+                          "help": "operate on one named profile",
+                          "value": {
+                            "type": "str",
+                            "help": "profile name"
+                          }
+                        },
+                        {
+                          "name": "all-profiles",
+                          "help": "operate on every profile"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--no-all-profiles"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "one of --profile, --all-profiles is required under '--via email' (--no-all-profiles declines an option; it does not choose one)"
+    }
+  },
+  {
+    "name": "scope clauses: a required bool inside a scope keeps its own presence sentence",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "watch",
+                      "help": "follow the delivery until it settles",
+                      "type": "bool",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "flag '--watch' must be passed as --watch or --no-watch under '--via email'"
+    }
+  },
+  {
+    "name": "scope clauses: a non-negatable required bool inside a scope names its one token",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "watch",
+                      "help": "follow the delivery until it settles",
+                      "type": "bool",
+                      "presence": "required",
+                      "negatable": false
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "flag '--watch' must be passed as --watch under '--via email'"
+    }
+  },
+  {
+    "name": "scope clauses: a required bool inside an ambiently elected scope carries both clauses",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "watch",
+                      "help": "follow the delivery until it settles",
+                      "type": "bool",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ],
+              "env": "NOTIFY_VIA"
+            }
+          ]
+        }
+      ]
+    },
+    "env": {
+      "NOTIFY_VIA": "email"
+    },
+    "argv": [
+      "send"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "flag '--watch' must be passed as --watch or --no-watch under '--via email' (elected from env var 'NOTIFY_VIA')"
+    }
+  },
+  {
+    "name": "scope clauses: the origin suffix names the outermost ambient election on the path",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "transport",
+                      "help": "how the message travels",
+                      "presence": "required",
+                      "env": "NOTIFY_TRANSPORT",
+                      "elect_by": "selector-token",
+                      "choices": [
+                        {
+                          "name": "fast",
+                          "help": "the low-latency path",
+                          "flags": [
+                            {
+                              "name": "timeout",
+                              "help": "seconds before giving up",
+                              "type": "int",
+                              "presence": "required"
+                            }
+                          ]
+                        },
+                        {
+                          "name": "cheap",
+                          "help": "the low-cost path"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ],
+              "env": "NOTIFY_VIA"
+            }
+          ]
+        }
+      ]
+    },
+    "env": {
+      "NOTIFY_VIA": "email",
+      "NOTIFY_TRANSPORT": "fast"
+    },
+    "argv": [
+      "send"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "flag '--timeout' is required under '--via email --transport fast' (elected from env var 'NOTIFY_VIA')"
+    }
+  },
+  {
+    "name": "scope clauses: a command-line election is not an ambient cause, so the inner one is named",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "transport",
+                      "help": "how the message travels",
+                      "presence": "required",
+                      "env": "NOTIFY_TRANSPORT",
+                      "elect_by": "selector-token",
+                      "choices": [
+                        {
+                          "name": "fast",
+                          "help": "the low-latency path",
+                          "flags": [
+                            {
+                              "name": "timeout",
+                              "help": "seconds before giving up",
+                              "type": "int",
+                              "presence": "required"
+                            }
+                          ]
+                        },
+                        {
+                          "name": "cheap",
+                          "help": "the low-cost path"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ],
+              "env": "NOTIFY_VIA"
+            }
+          ]
+        }
+      ]
+    },
+    "env": {
+      "NOTIFY_TRANSPORT": "fast"
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "flag '--timeout' is required under '--via email --transport fast' (elected from env var 'NOTIFY_TRANSPORT')"
+    }
+  },
+  {
+    "name": "scope clauses: a path elected entirely from the command line earns no origin clause",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "transport",
+                      "help": "how the message travels",
+                      "presence": "required",
+                      "env": "NOTIFY_TRANSPORT",
+                      "elect_by": "selector-token",
+                      "choices": [
+                        {
+                          "name": "fast",
+                          "help": "the low-latency path",
+                          "flags": [
+                            {
+                              "name": "timeout",
+                              "help": "seconds before giving up",
+                              "type": "int",
+                              "presence": "required"
+                            }
+                          ]
+                        },
+                        {
+                          "name": "cheap",
+                          "help": "the low-cost path"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ],
+              "env": "NOTIFY_VIA"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--via",
+      "email",
+      "--transport",
+      "fast"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "flag '--timeout' is required under '--via email --transport fast'",
+      "stderr_not_contains": "(elected"
+    }
+  },
+  {
+    "name": "scope clauses: a member flag's owners path stops at the scope that owns it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "operating mode",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "advanced",
+                  "help": "the mode that opens a profile selection of its own",
+                  "flags": [
+                    {
+                      "name": "target",
+                      "help": "which profiles to operate on",
+                      "presence": "required",
+                      "elect_by": "member-flags",
+                      "choices": [
+                        {
+                          "name": "profile",
+                          "help": "operate on one named profile",
+                          "value": {
+                            "type": "str",
+                            "help": "profile name"
+                          }
+                        },
+                        {
+                          "name": "all-profiles",
+                          "help": "operate on every profile"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "simple",
+                  "help": "the mode that declares no profile selection"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "send",
+      "--mode",
+      "simple",
+      "--profile",
+      "work"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "flag '--profile' is only valid under '--mode advanced', but '--mode simple' was elected"
+    }
+  }
+]

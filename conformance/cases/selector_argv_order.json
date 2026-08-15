@@ -1,0 +1,740 @@
+[
+  {
+    "name": "argv value order: a scoped occurrence typed first is the one reported",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "jobs",
+          "help": "how many workers",
+          "type": "int",
+          "presence": "optional"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "via={via}",
+          "flags": [
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional"
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "after",
+              "help": "a root flag declared after the selector",
+              "type": "int",
+              "presence": "optional"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--via",
+      "email",
+      "--retries",
+      "nope",
+      "--before",
+      "nope"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "--retries: expected integer, got 'nope'"
+    }
+  },
+  {
+    "name": "argv value order: a root occurrence typed first is the one reported",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "jobs",
+          "help": "how many workers",
+          "type": "int",
+          "presence": "optional"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "via={via}",
+          "flags": [
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional"
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "after",
+              "help": "a root flag declared after the selector",
+              "type": "int",
+              "presence": "optional"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--via",
+      "email",
+      "--before",
+      "nope",
+      "--retries",
+      "nope"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "--before: expected integer, got 'nope'"
+    }
+  },
+  {
+    "name": "argv value order: declaration position after the selector changes nothing",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "jobs",
+          "help": "how many workers",
+          "type": "int",
+          "presence": "optional"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "via={via}",
+          "flags": [
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional"
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "after",
+              "help": "a root flag declared after the selector",
+              "type": "int",
+              "presence": "optional"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--via",
+      "email",
+      "--retries",
+      "nope",
+      "--after",
+      "nope"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "--retries: expected integer, got 'nope'"
+    }
+  },
+  {
+    "name": "argv value order: a root occurrence declared after the selector still wins when typed first",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "jobs",
+          "help": "how many workers",
+          "type": "int",
+          "presence": "optional"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "via={via}",
+          "flags": [
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional"
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "after",
+              "help": "a root flag declared after the selector",
+              "type": "int",
+              "presence": "optional"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--via",
+      "email",
+      "--after",
+      "nope",
+      "--retries",
+      "nope"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "--after: expected integer, got 'nope'"
+    }
+  },
+  {
+    "name": "argv value order: an app global loses to a scoped occurrence typed before it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "jobs",
+          "help": "how many workers",
+          "type": "int",
+          "presence": "optional"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "via={via}",
+          "flags": [
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional"
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "after",
+              "help": "a root flag declared after the selector",
+              "type": "int",
+              "presence": "optional"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--via",
+      "email",
+      "--retries",
+      "nope",
+      "--jobs",
+      "nope"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "--retries: expected integer, got 'nope'"
+    }
+  },
+  {
+    "name": "argv value order: an app global typed first is the one reported",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "jobs",
+          "help": "how many workers",
+          "type": "int",
+          "presence": "optional"
+        }
+      ],
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "via={via}",
+          "flags": [
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional"
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "after",
+              "help": "a root flag declared after the selector",
+              "type": "int",
+              "presence": "optional"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--via",
+      "email",
+      "--jobs",
+      "nope",
+      "--retries",
+      "nope"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "--jobs: expected integer, got 'nope'"
+    }
+  },
+  {
+    "name": "argv value order: a coercion failure outranks a root callback refusal typed before it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "via={via}",
+          "flags": [
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional",
+              "validate": {
+                "rejects": [
+                  9
+                ],
+                "message": "nine is refused"
+              }
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "optional"
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--before",
+      "9",
+      "--via",
+      "email",
+      "--retries",
+      "nope"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "--retries: expected integer, got 'nope'"
+    }
+  },
+  {
+    "name": "argv value order: a coercion failure outranks a scoped callback refusal typed before it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "via={via}",
+          "flags": [
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional"
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "optional",
+                      "validate": {
+                        "rejects": [
+                          9
+                        ],
+                        "message": "nine is refused"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--via",
+      "email",
+      "--retries",
+      "9",
+      "--before",
+      "nope"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "--before: expected integer, got 'nope'"
+    }
+  },
+  {
+    "name": "argv value order: a scoped callback refusal outranks a root one typed before it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run the job",
+          "effect": "read_only",
+          "handler_prints": "via={via}",
+          "flags": [
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional",
+              "validate": {
+                "rejects": [
+                  9
+                ],
+                "message": "nine is refused"
+              }
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "optional",
+                      "validate": {
+                        "rejects": [
+                          9
+                        ],
+                        "message": "nine is refused"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "optional"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "run",
+      "--before",
+      "9",
+      "--via",
+      "email",
+      "--retries",
+      "9"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_contains": "--retries: nine is refused"
+    }
+  }
+]
