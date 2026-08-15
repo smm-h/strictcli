@@ -654,7 +654,7 @@ function resolveScopedFlag(
 		// declared infrastructure roots. Delivering the marker itself would hand
 		// a handler an opaque object no command line can produce, where the same
 		// declaration at root delivers the resolved path.
-		out.values[key] = scopedDefaultApplier(f, run.input.infraRoots).value;
+		out.values[key] = applyScopedDefault(f, run.input.infraRoots, suffix).value;
 		return;
 	}
 
@@ -763,7 +763,9 @@ export function installScopedValueParser(
  * scoped flag's default is applied exactly as a root flag's is -- compounds
  * copied, and a RelativeToRoot marker resolved through the declared roots the
  * snapshot carries. Reached only for a presence the declaration ANSWERS
- * (optional or default), so it never throws here.
+ * (optional or default), so the one refusal it can produce is a marker naming
+ * a root the app never declared -- which applyScopedDefault below is where
+ * every door hears about.
  */
 let scopedDefaultApplier: (
 	f: AnyFlag,
@@ -780,6 +782,35 @@ export function installScopedDefaultApplier(
 	) => { value: unknown },
 ): void {
 	scopedDefaultApplier = fn;
+}
+
+/**
+ * One scoped declaration's default, applied through the seam above with
+ * §12.13's suffix on whatever it refuses.
+ *
+ * Registration never looks inside a scope, so a `RelativeToRoot` naming an
+ * undeclared infra root is refused HERE, at delivery -- and a refusal from
+ * inside a scope says where the declaration sits, exactly as every other
+ * scoped refusal does. Authoring the suffix at this ONE seam is what makes
+ * every door carry it: a door that reached the default itself would print the
+ * marker's bare sentence and name no scope at all.
+ *
+ * `suffix` is the scope suffix and the origin suffix already composed, in that
+ * order and never the other way round.
+ */
+export function applyScopedDefault(
+	f: AnyFlag,
+	infraRoots: ReadonlyMap<string, string>,
+	suffix: string,
+): { value: unknown } {
+	try {
+		return scopedDefaultApplier(f, infraRoots);
+	} catch (e) {
+		if (e instanceof ParseError) {
+			throw new ParseError(`${e.message}${suffix}`);
+		}
+		throw e;
+	}
 }
 
 // --- The conditional-binding diagnostics (§24.6) ---

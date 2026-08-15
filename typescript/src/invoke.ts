@@ -28,6 +28,8 @@ import {
 	errCallConsequentialUnconsented,
 	errCallPathIsGroup,
 	errDictFlagExpectedMapType,
+	errElectionOriginDefault,
+	errElectionOriginSuffix,
 	errFlagInvalidChoice,
 	errFlagRequired,
 	errFlagRequiresValue,
@@ -60,7 +62,12 @@ import {
 	validateAndBuildKwargs,
 } from "./parse.js";
 import { resolveCommand } from "./routing.js";
-import { firstProblem, type ParseProblem, STAGE } from "./scopeparse.js";
+import {
+	applyScopedDefault,
+	firstProblem,
+	type ParseProblem,
+	STAGE,
+} from "./scopeparse.js";
 import { SourcedStore } from "./sources.js";
 import { formatChoices } from "./values.js";
 
@@ -197,6 +204,28 @@ function applyFlagDefaultForInvoke(
 ): { value: unknown; source: string } {
 	try {
 		return applyFlagDefault(f, prefix, infraRoots);
+	} catch (e) {
+		if (e instanceof ParseError) {
+			throw new InvokeError(e.message);
+		}
+		throw e;
+	}
+}
+
+/**
+ * One SCOPED declaration's default at this door, through the seam the argv
+ * path uses. The seam authors §12.13's suffix, so a marker naming an
+ * undeclared infra root names the scope it was declared in here exactly as it
+ * does on the command line -- this door reaches the declaration, never the
+ * refusal's wording.
+ */
+function applyScopedDefaultForInvoke(
+	f: AnyFlag,
+	infraRoots: ReadonlyMap<string, string>,
+	suffix: string,
+): unknown {
+	try {
+		return applyScopedDefault(f, infraRoots, suffix).value;
 	} catch (e) {
 		if (e instanceof ParseError) {
 			throw new InvokeError(e.message);
@@ -390,7 +419,7 @@ export async function invokeApp(
 							problems,
 							[],
 						)
-					: electDefaultRecord(d, tag, app.infraRoots),
+					: electDefaultRecord(d, tag, app.infraRoots, []),
 				supplied ? "cli" : "default",
 			);
 			continue;
@@ -703,15 +732,28 @@ function buildElectedRecord(
 	const tag = elections.get(sel) as string;
 	const chosen = sel.choices[tag] as NonNullable<(typeof sel.choices)[string]>;
 	const out: Record<string, unknown> = { [CHOICE_TAG_KEY]: tag };
-	const provided = new Set<string>();
 	const take = (f: AnyFlag, key: string, value: unknown): void => {
+		if (
+			(value === undefined || value === null) &&
+			f.opts.presence === "optional"
+		) {
+			// The ONE place an explicit nothing is legal (§18.26 item 252). A scope
+			// is an object here, and an object has no way to omit a key it is
+			// declaring: `{subject: undefined}` is exactly how a caller writes an
+			// optional property that is not set, so it IS the absence key omission
+			// spells at the flat boundary -- and it delivers §23.4's own delivery,
+			// a present key holding nothing. Every other presence, and every value
+			// at the flat boundary, is unchanged: null is legal for nothing there,
+			// where absence already has a spelling of its own.
+			out[key] = undefined;
+			return;
+		}
 		const refusal = preTypedValueRefusal(f, value);
 		if (refusal !== undefined) {
 			problems.push({ stage: STAGE.value, message: refusal });
 			return;
 		}
 		out[key] = coerceInvokeValue(f, value);
-		provided.add(key);
 	};
 	if (chosen.value !== undefined) {
 		// The member's payload is declared by its own flag -- named by the
@@ -748,9 +790,8 @@ function buildElectedRecord(
 					problems,
 					scope,
 				);
-				provided.add(key);
 			} else {
-				out[key] = electDefaultRecord(sub, subTag, infraRoots);
+				out[key] = electDefaultRecord(sub, subTag, infraRoots, scope);
 			}
 			continue;
 		}
@@ -770,10 +811,26 @@ function buildElectedRecord(
 		}
 		// The declaration decides, exactly as it does on the argv path: a compound
 		// default is copied and a RelativeToRoot marker resolves through the app's
-		// declared infrastructure roots (§23, §24.6).
-		out[key] = applyFlagDefaultForInvoke(sub, "", infraRoots).value;
+		// declared infrastructure roots (§23, §24.6). Every election on this path
+		// was the CALLER's, so the scope suffix carries no origin clause -- there
+		// is no ambient cause to name.
+		out[key] = applyScopedDefaultForInvoke(
+			sub,
+			infraRoots,
+			errScopeSuffix(scopePath(scope)),
+		);
 	}
-	attachProvidedFields(out, provided);
+	// Every field this door delivers reports the DECLARATION, so `provided()`
+	// answers false for all of them (§18.26 item 253). The supplied-versus-
+	// declared distinction is not decidable at every implementation's record
+	// door -- a constructed scope fills its declared defaults before anything
+	// can look -- and one accessor answering three ways for one call is the
+	// divergence parity forbids, so the door that can answer least decides what
+	// the shared answer is. The `cli` heuristic is refused by name: labelling a
+	// field by whether its value DIFFERS from the declaration answers a value
+	// comparison instead of §23.6's question, and answers false for a caller who
+	// deliberately supplied exactly the default.
+	attachProvidedFields(out, new Set());
 	return out;
 }
 
@@ -781,23 +838,35 @@ function buildElectedRecord(
  * The record a selector's own `default` elects. A defaulted selection is
  * COMPLETE by registration (§24.5), so every sub-flag resolves from its own
  * declaration and nothing can be missing.
+ *
+ * `path` is the elections ABOVE this selector, so a refusal from inside the
+ * selection names the whole path §12.13 renders. This selection is the
+ * DECLARATION's, which is the ambient cause a reader cannot see in their own
+ * call, so the origin clause names it -- and it is the outermost non-caller
+ * election on the path by construction, because a caller-supplied record never
+ * reaches this walk.
  */
 function electDefaultRecord(
 	sel: AnyChoiceFlag,
 	choiceName: string,
 	infraRoots: ReadonlyMap<string, string>,
+	path: readonly ScopeStep[],
 ): unknown {
 	const chosen = sel.choices[choiceName];
 	const out: Record<string, unknown> = { [CHOICE_TAG_KEY]: choiceName };
+	const scope: readonly ScopeStep[] = [...path, { selector: sel, choiceName }];
+	const suffix =
+		errScopeSuffix(scopePath(scope)) +
+		errElectionOriginSuffix(errElectionOriginDefault);
 	for (const [key, sub] of Object.entries(chosen?.flags ?? {})) {
 		if (sub.kind === "choice-flag") {
 			out[key] =
 				sub.opts.default === undefined
 					? undefined
-					: electDefaultRecord(sub, sub.opts.default, infraRoots);
+					: electDefaultRecord(sub, sub.opts.default, infraRoots, scope);
 			continue;
 		}
-		out[key] = applyFlagDefaultForInvoke(sub, "", infraRoots).value;
+		out[key] = applyScopedDefaultForInvoke(sub, infraRoots, suffix);
 	}
 	attachProvidedFields(out, new Set());
 	return out;

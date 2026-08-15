@@ -920,3 +920,200 @@ test("infra: the schema publishes the marker, never its resolution", async () =>
 		});
 	});
 });
+
+// --- An undeclared root inside a scope names WHERE (§12.13, §18.26) ---
+
+/**
+ * Registration never looks inside a scope, so a marker naming a root the app
+ * does not declare is refused where it RESOLVES -- at delivery, one level down.
+ * The refusal is the marker's own sentence plus §12.13's suffix saying where
+ * the declaration sits, and the suffix is composed exactly as every other
+ * scoped refusal composes it: the scope path, then the origin clause naming an
+ * election the reader cannot see in their own command line.
+ *
+ * Every door reaches the declaration through ONE seam, so every door says it:
+ * the command line, `call()`'s record, and the flat machine form that converts
+ * into that record.
+ *
+ * `--format` nests a second marker one level deeper, so the same states can be
+ * asked at depth, where the suffix names the whole path.
+ */
+function undeclaredRootScopeApp(defaulted: boolean): App {
+	const app = createApp({
+		name: "myapp",
+		version: "1.0.0",
+		help: "t",
+		infraRoot: { MYAPP_HOME: "/var/lib/myapp" },
+	});
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "email",
+							flags: {
+								cfg: flag("cfg", t.str, {
+									help: "the config file",
+									presence: "default",
+									default: relativeToRoot("NOPE", "x.toml"),
+								}),
+							},
+						}),
+						sms: choice({
+							help: "sms",
+							flags: {
+								format: choiceFlag(
+									"format",
+									{
+										plain: choice({
+											help: "plain text",
+											flags: {
+												sheet: flag("sheet", t.str, {
+													help: "the style sheet",
+													presence: "default",
+													default: relativeToRoot("ALSO-NOPE", "plain.css"),
+												}),
+											},
+										}),
+										rich: choice({ help: "rich text" }),
+									},
+									{
+										help: "the body format",
+										presence: "default",
+										default: "plain",
+									},
+								),
+							},
+						}),
+					},
+					defaulted
+						? {
+								help: "delivery channel",
+								presence: "default",
+								default: "email",
+							}
+						: { help: "delivery channel", presence: "required" },
+				),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+const undeclaredRoot =
+	'RelativeToRoot references undeclared infra root "NOPE"; declare it as an infra root';
+const undeclaredNestedRoot =
+	'RelativeToRoot references undeclared infra root "ALSO-NOPE"; declare it as an infra root';
+
+/** The refusal one promise produced, or a failure when it was accepted. */
+async function refusalOf(p: Promise<unknown>): Promise<string> {
+	try {
+		await p;
+	} catch (e) {
+		return (e as Error).message;
+	}
+	throw new Error("the call was accepted; want a refusal");
+}
+
+function toolNamed(app: App, name: string) {
+	const found = app.asTools().find((x) => x.name === name);
+	assert.ok(found, `no tool named ${name}`);
+	return found;
+}
+
+test("infra: a scoped undeclared root carries the scope suffix at every door", async () => {
+	const want = `${undeclaredRoot} under '--via email'`;
+	// The command line, where the election was typed: the scope path and no
+	// origin clause, because there is no ambient cause to name.
+	assert.equal(
+		(await undeclaredRootScopeApp(false).test(["send", "--via", "email"]))
+			.stderr,
+		`error: ${want}\ntry 'myapp send --help'\n`,
+	);
+	// The record door, whose caller elected the same choice by hand.
+	assert.equal(
+		await refusalOf(
+			undeclaredRootScopeApp(false).call("send", { via: { choice: "email" } }),
+		),
+		want,
+	);
+	// The flat machine form converts into that record and reaches the same seam.
+	assert.equal(
+		await refusalOf(
+			toolNamed(undeclaredRootScopeApp(false), "send").execute({
+				via: "email",
+			}),
+		),
+		want,
+	);
+});
+
+test("infra: a defaulted selection's undeclared root names the origin too", async () => {
+	// Nobody elected anything: the declaration did, and the origin clause says
+	// so -- the ambient cause a reader cannot see in their own command line.
+	const want = `${undeclaredRoot} under '--via email' (elected by default)`;
+	assert.equal(
+		(await undeclaredRootScopeApp(true).test(["send"])).stderr,
+		`error: ${want}\ntry 'myapp send --help'\n`,
+	);
+	assert.equal(
+		await refusalOf(undeclaredRootScopeApp(true).call("send", {})),
+		want,
+	);
+	// The flat machine form ELECTS before call() sees anything: its conversion
+	// materializes the record the declaration's default names, so by the time
+	// the record door reads it, the election is the object's. It therefore
+	// carries the scope suffix and no origin clause -- the same conversion that
+	// already answers ctx.source("via") with "cli" here where the command line
+	// and the record door both answer "default".
+	assert.equal(
+		await refusalOf(
+			toolNamed(undeclaredRootScopeApp(true), "send").execute({}),
+		),
+		`${undeclaredRoot} under '--via email'`,
+	);
+});
+
+test("infra: the suffix names the WHOLE path at depth", async () => {
+	// Two levels down, with the outer election typed and the inner one the
+	// declaration's: the path names both, and the origin clause names the
+	// election that was not typed.
+	const want = `${undeclaredNestedRoot} under '--via sms --format plain' (elected by default)`;
+	assert.equal(
+		(await undeclaredRootScopeApp(false).test(["send", "--via", "sms"])).stderr,
+		`error: ${want}\ntry 'myapp send --help'\n`,
+	);
+	assert.equal(
+		await refusalOf(
+			undeclaredRootScopeApp(false).call("send", { via: { choice: "sms" } }),
+		),
+		want,
+	);
+	// Both elections typed by the caller: the path is the same and the origin
+	// clause is empty, because nothing ambient decided.
+	const typed = `${undeclaredNestedRoot} under '--via sms --format plain'`;
+	assert.equal(
+		(
+			await undeclaredRootScopeApp(false).test([
+				"send",
+				"--via",
+				"sms",
+				"--format",
+				"plain",
+			])
+		).stderr,
+		`error: ${typed}\ntry 'myapp send --help'\n`,
+	);
+	assert.equal(
+		await refusalOf(
+			undeclaredRootScopeApp(false).call("send", {
+				via: { choice: "sms", format: { choice: "plain" } },
+			}),
+		),
+		typed,
+	);
+});

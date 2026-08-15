@@ -29,6 +29,7 @@ import {
 	defineReadOnlyCommand,
 	flag,
 	memberChoiceFlag,
+	provided,
 	type Tool,
 	t,
 } from "../src/index.js";
@@ -1129,4 +1130,217 @@ test("flat: the machine door binds positionals by key too", async () => {
 		await refusal(toolFor(keyedArgsApp(), "run").execute({ label: "x" })),
 		"missing required argument 'count'",
 	);
+});
+
+// =========================================================================
+// The record door's own two pins (§18.26 items 252 and 253)
+// =========================================================================
+
+/**
+ * One selector whose elected scope declares every presence: an optional field,
+ * a required one, and a defaulted one. `store` is what tells absence-by-key
+ * from absence-by-value, and `depth` is the required field an explicit nothing
+ * must never satisfy.
+ */
+function presencesApp(captured?: Record<string, unknown>): App {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send it",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "an email message",
+							flags: {
+								subject: flag("subject", t.str, {
+									help: "the subject",
+									presence: "optional",
+								}),
+								recipient: flag("recipient", t.str, {
+									help: "to whom",
+									presence: "required",
+								}),
+								store: flag("store", t.str, {
+									help: "where the copy goes",
+									presence: "default",
+									default: "outbox",
+								}),
+							},
+						}),
+						sms: choice({
+							help: "a text message",
+							flags: {
+								phone_number: flag("phone-number", t.str, {
+									help: "the destination",
+									presence: "required",
+								}),
+							},
+						}),
+					},
+					{ help: "delivery channel", presence: "required" },
+				),
+			},
+			handler: (args) => {
+				if (captured !== undefined) {
+					Object.assign(captured, { via: args.via });
+				}
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+/**
+ * A top-level optional flag, so the same explicit nothing can be asked at the
+ * flat boundary, where key omission is the spelling absence already has.
+ */
+function flatOptionalApp(): App {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			flags: {
+				subject: flag("subject", t.str, {
+					help: "the subject",
+					presence: "optional",
+				}),
+			},
+			handler: () => 0,
+		}),
+	);
+	return app;
+}
+
+test("call: an explicit nothing on an optional scoped field IS absence", async () => {
+	// The record door is the one place absence has no spelling of its own: a
+	// scope is an object, and `{subject: undefined}` is exactly how a caller
+	// writes an optional property that is not set. So an explicit nothing
+	// delivers §23.4's own delivery -- a PRESENT key holding nothing (§18.26
+	// item 252).
+	for (const nothing of [undefined, null]) {
+		const captured: Record<string, unknown> = {};
+		assert.equal(
+			await presencesApp(captured).call("send", {
+				via: { choice: "email", subject: nothing, recipient: "a@b.test" },
+			}),
+			0,
+		);
+		const rec = captured.via as Record<string, unknown>;
+		assert.ok("subject" in rec);
+		assert.equal(rec.subject, undefined);
+		// Omitting the key delivers the identical record, which is the point:
+		// one fact, and now one delivery.
+		const omitted: Record<string, unknown> = {};
+		await presencesApp(omitted).call("send", {
+			via: { choice: "email", recipient: "a@b.test" },
+		});
+		assert.deepEqual(rec, omitted.via);
+	}
+});
+
+test("call: an explicit nothing is refused for every other presence", async () => {
+	// Item 240's line narrows to the optional declaration and to nothing else:
+	// a required field is not satisfied by a null, and a defaulted one is not
+	// reset to its declaration by one.
+	assert.equal(
+		await refusal(
+			presencesApp().call("send", {
+				via: { choice: "email", recipient: null },
+			}),
+		),
+		"--recipient: expected string, got null",
+	);
+	assert.equal(
+		await refusal(
+			presencesApp().call("send", {
+				via: { choice: "email", recipient: undefined },
+			}),
+		),
+		"--recipient: expected string, got null",
+	);
+	assert.equal(
+		await refusal(
+			presencesApp().call("send", {
+				via: { choice: "email", recipient: "a@b.test", store: null },
+			}),
+		),
+		"--store: expected string, got null",
+	);
+});
+
+test("call: the flat boundary refuses an explicit nothing, unchanged", async () => {
+	// Absence has a spelling of its own here -- the caller omits the key -- so a
+	// null would be a SECOND spelling of one fact (§24.11 item 240, unnarrowed).
+	assert.equal(
+		await refusal(flatOptionalApp().call("run", { subject: null })),
+		"--subject: expected string, got null",
+	);
+	assert.equal(
+		await refusal(flatOptionalApp().call("run", { subject: undefined })),
+		"--subject: expected string, got null",
+	);
+	// And the flat MACHINE form spells a scoped field flat, so it is the same
+	// boundary one level down.
+	assert.equal(
+		await refusal(
+			toolFor(presencesApp(), "send").execute({
+				via: "email",
+				recipient: "a@b.test",
+				subject: null,
+			}),
+		),
+		"--subject: expected string, got null",
+	);
+});
+
+test("call: every field a record supplies reports the declaration (§18.26 item 253)", async () => {
+	// The supplied-versus-declared distinction is not decidable at every
+	// implementation's record door, and one accessor answering three ways for
+	// one call is the divergence parity forbids: the door that can answer least
+	// decides what the shared answer is. So `provided()` over a caller-supplied
+	// record answers false for every field, and the limitation is written down
+	// rather than papered over with a value comparison.
+	const captured: Record<string, unknown> = {};
+	await presencesApp(captured).call("send", {
+		via: { choice: "email", subject: "hi", recipient: "a@b.test" },
+	});
+	const rec = captured.via as Record<string, unknown>;
+	assert.equal(provided(rec, "subject"), false);
+	assert.equal(provided(rec, "recipient"), false);
+	// A field the caller did not supply was already the declaration's.
+	assert.equal(provided(rec, "store"), false);
+	// The flat machine form converts into that record, so it answers the same.
+	const flat: Record<string, unknown> = {};
+	await toolFor(presencesApp(flat), "send").execute({
+		via: "email",
+		subject: "hi",
+		recipient: "a@b.test",
+	});
+	assert.equal(provided(flat.via as Record<string, unknown>, "subject"), false);
+	// An unknown name still raises the existing error rather than answering.
+	assert.throws(() => provided(rec, "nonesuch"), {
+		message: 'no source info for flag "nonesuch"',
+	});
+});
+
+test("call: the command line still answers provided() with what it caused", async () => {
+	// The pin is the RECORD door's alone: a command line names its own tokens,
+	// so §23.6's predicate is decidable there and keeps its answer.
+	const captured: Record<string, unknown> = {};
+	await presencesApp(captured).test([
+		"send",
+		"--via",
+		"email",
+		"--subject",
+		"hi",
+		"--recipient",
+		"a@b.test",
+	]);
+	const rec = captured.via as Record<string, unknown>;
+	assert.equal(provided(rec, "subject"), true);
+	assert.equal(provided(rec, "recipient"), true);
+	assert.equal(provided(rec, "store"), false);
 });
