@@ -107,6 +107,12 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // argument, so root scope, inside a scope and both front doors render one
 // sentence from one place (§12.13). The three inline templates it replaces were
 // never catalogued.
+// §12.15's constraint system nets +12: sixteen registration guards plus the
+// two violation sentences are added (`constraintPrefix` is not an `err`
+// template and does not count), and six go with `CoRequired` -- its three
+// registration guards, the two family-specific unknown-flag templates that
+// collapse onto the constraint's own name, and `errFlagsMustBeUsedTogether`,
+// whose sentence is now `errAllOrNoneTogether`'s.
 const EXPECTED_TEMPLATE_COUNT = 369;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
