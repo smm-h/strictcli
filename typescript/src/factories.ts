@@ -2086,16 +2086,35 @@ function validateSiblingScopeShorts(
  * Every name declared inside SOME scope, mapped to the rendered scope path it
  * lives under -- the lookup the constraint families consult before reporting
  * an operand as unknown (§24.8).
+ *
+ * A member-spelled selector's ELECTION flag counts as scoped even though it is
+ * typed at the enclosing level: the token IS the scope it opens, so a
+ * constraint naming `--all-profiles` reaches into a scope exactly as one
+ * naming a flag declared under it does, and takes the same refusal. Its
+ * rendered path is its own segment appended to where the selector sits.
  */
 function scopedFlagPathMap(
 	decls: readonly AnyDecl[],
 ): ReadonlyMap<string, string> {
 	const out = new Map<string, string>();
 	for (const [name, entries] of buildScopeIndex(decls)) {
-		const scoped = entries.find((e) => e.path.length > 0);
-		if (scoped !== undefined && !out.has(name)) {
-			out.set(name, scopePath(scoped.path));
+		const scoped = entries.find(
+			(e) => e.path.length > 0 || e.elects !== undefined,
+		);
+		if (scoped === undefined || out.has(name)) {
+			continue;
 		}
+		const path =
+			scoped.elects === undefined
+				? scoped.path
+				: [
+						...scoped.path,
+						{
+							selector: scoped.decl as AnyChoiceFlag,
+							choiceName: scoped.elects,
+						},
+					];
+		out.set(name, scopePath(path));
 	}
 	return out;
 }

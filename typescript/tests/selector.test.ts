@@ -1586,6 +1586,97 @@ test("guard: a constraint naming a scoped flag is a registration error", () => {
 	);
 });
 
+test("guard: a constraint naming a MEMBER flag is refused by the same rule", () => {
+	// A member-spelled selector's election flag IS the scope it opens, so a
+	// member or an operand naming it is the scoped-operand refusal, not an
+	// unknown name: the scope path renders as the member's own token (§24.8,
+	// §12.13).
+	const cmd = (constraint: Constraint) =>
+		defineReadOnlyCommand("run", {
+			help: "h",
+			flags: {
+				loud: flag("loud", t.bool, {
+					help: "h",
+					presence: "default",
+					default: false,
+				}),
+				target: memberChoiceFlag(
+					"target",
+					{
+						profile: choice({
+							help: "one named profile",
+							value: { carrier: t.str, help: "profile name" },
+							flags: {
+								create_missing: flag("create-missing", t.bool, {
+									help: "h",
+									presence: "default",
+									default: false,
+								}),
+							},
+						}),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "h", presence: "required" },
+				),
+			},
+			constraints: [constraint],
+			handler: () => 0,
+		});
+	rejects(
+		() =>
+			cmd(
+				allOrNone({
+					name: "reach",
+					members: [{ name: "all-profiles" }, { name: "loud", when: "true" }],
+				}),
+			),
+		"command \"run\": constraint \"reach\" references 'all-profiles', which is declared under '--all-profiles': constraints operate at root scope only",
+	);
+	rejects(
+		() =>
+			cmd(
+				atLeastOne({
+					name: "reach",
+					members: [{ name: "profile" }, { name: "loud", when: "true" }],
+				}),
+			),
+		"command \"run\": constraint \"reach\" references 'profile', which is declared under '--profile': constraints operate at root scope only",
+	);
+	// A flag declared inside a member's scope already reported this way; the
+	// member's own election flag now joins it.
+	rejects(
+		() =>
+			cmd(
+				allOrNone({
+					name: "reach",
+					members: [
+						{ name: "create-missing", when: "true" },
+						{ name: "loud", when: "true" },
+					],
+				}),
+			),
+		"command \"run\": constraint \"reach\" references 'create-missing', which is declared under '--profile': constraints operate at root scope only",
+	);
+	// The two dependency families take the same refusal on the same name.
+	rejects(
+		() =>
+			cmd(requires({ name: "reach", flag: "all-profiles", dependsOn: "loud" })),
+		"command \"run\": constraint \"reach\" references 'all-profiles', which is declared under '--all-profiles': constraints operate at root scope only",
+	);
+	rejects(
+		() =>
+			cmd(
+				implies({
+					name: "reach",
+					flag: "all-profiles",
+					implies: "loud",
+					value: true,
+				}),
+			),
+		"command \"run\": constraint \"reach\" references 'all-profiles', which is declared under '--all-profiles': constraints operate at root scope only",
+	);
+});
+
 // =========================================================================
 // The value-flag record, and the deleted bare entry (§24.2)
 // =========================================================================
