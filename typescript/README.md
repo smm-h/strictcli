@@ -125,6 +125,61 @@ selection is a choice nobody named. Scoped flags are never top-level `args`
 keys, at any depth, and a choice flag may be declared inside a choice's scope
 without limit.
 
+### Constraints
+
+Four declared rules, all passed via `constraints: [...]`, all taking one option
+object with a **mandatory name** -- the name is what a violation prints and what
+`--help` shows, and it is what lets one constraint be a member of another.
+
+- `atLeastOne({ name, members })` -- at least one member is engaged. Members may
+  co-occur; it has no upper bound and is never exclusivity
+- `allOrNone({ name, members })` -- either every member is engaged or none is.
+  Nothing engaged is vacuously satisfied
+- `requires({ name, flag, dependsOn })` -- one-way dependency
+- `implies({ name, flag, implies, value })` -- auto-set a bool flag when another
+  is provided; explicit contradictions are parse errors
+
+A **member** is a plain object literal `{ name, when? }` naming a command flag,
+a positional arg, or another named at-least-one or all-or-none (nesting is a
+cycle-checked DAG). `members` is typed
+`readonly [ConstraintMember, ConstraintMember, ...ConstraintMember[]]`, so a
+one-member constraint is a compile error, and `when` is the literal union
+`"present" | "true" | "non_empty"`, so a typo is one too. `when` says when a
+member counts as engaged -- `"present"` (the default; the value was provided by
+the invocation, never by a declared default), `"true"` (bool only),
+`"non_empty"` (strings and collections) -- and a **bool member must declare it
+explicitly**, so `--no-all` can never engage a constraint while selecting
+nothing.
+
+```ts
+constraints: [
+	allOrNone({ name: "author-name", members: [{ name: "old-name" }, { name: "new-name" }] }),
+	allOrNone({ name: "author-email", members: [{ name: "old-email" }, { name: "new-email" }] }),
+	atLeastOne({ name: "author-change", members: [
+		{ name: "author-name" }, { name: "author-email" },
+	]}),
+],
+```
+
+```
+Constraints:
+  author-name      all or none of --old-name, --new-name
+  author-email     all or none of --old-email, --new-email
+  author-change    at least one of (--old-name with --new-name), (--old-email with --new-email)
+```
+
+Children are evaluated before parents, so an operator who typed one half of a
+pair is told the pair is incomplete rather than that the whole selection is
+missing. No member of a co-occurrence constraint may declare
+`presence: "required"` -- a member the invocation must always supply leaves the
+constraint nothing to decide. Constraints reference root-scope flags and args
+only: naming a flag declared inside a choice's scope is a registration error,
+because the scope already IS the constraint, and the reserved quartet is not
+declarable so it can never appear in one. Every constraint renders in `--help`
+under a `Constraints:` section, is published in `--dump-schema`, and is
+projected into MCP tool schemas (`anyOf` / `dependentRequired`) with anything a
+JSON Schema keyword cannot carry stated in the tool description instead.
+
 Note that `--dry-run`, `--approve-consequential`, `--quiet` and `--verbose` are
 framework-owned names. You never declare them; their values arrive on the
 context as `ctx.dryRun`, `ctx.approveConsequential`, `ctx.quiet` and
@@ -176,8 +231,15 @@ context as `ctx.dryRun`, `ctx.approveConsequential`, `ctx.quiet` and
   (`choiceFlag` for `--via email`, `memberChoiceFlag` for `--profile work` /
   `--all-profiles`). Delivery is a derived discriminated union, `provided(record,
   name)` answers per-field provided-ness, and recursion is unlimited.
-- **Groups, passthrough commands, deprecation notices, co-required/requires/implies
-  dependencies** — the complete strictcli surface.
+- **Named constraints** — at-least-one, all-or-none, requires and implies, all
+  declared through `constraints: [...]` with a mandatory name. A member is a
+  reference by name to a flag, a positional arg or another named constraint,
+  nested to unlimited depth, with a declared election selector saying when it
+  counts. Constraints render in `--help`, publish their members in
+  `--dump-schema`, and project into MCP tool schemas with any remainder stated
+  in the tool description.
+- **Groups, passthrough commands, deprecation notices** — the complete strictcli
+  surface.
 
 ## Sibling implementations
 
