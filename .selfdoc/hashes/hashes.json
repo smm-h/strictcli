@@ -138,7 +138,8 @@
   "en/typescript-src-elected.md": {
     "content": "5b2759c226947d688c9a407310362c473a128a0cddc79cd321274fc6a4eab644",
     "description": "7dceb5b0ef9b92d072f7eb57c4284e6d21a520cb2bf6c8ab452920df92b86718",
-    "seed_hash": "7dceb5b0ef9b92d072f7eb57c4284e6d21a520cb2bf6c8ab452920df92b86718"
+    "seed_hash": "7dceb5b0ef9b92d072f7eb57c4284e6d21a520cb2bf6c8ab452920df92b86718",
+    "source_docstring": "f92f90a335ecd00fe9727d593f2e6f53d16c996fd89a881e23db2d5339b6d191"
   },
   "en/typescript-src-env.md": {
     "content": "83dd97bbffef8158329e1522f094497f2f360d1819a3f308710cd6860bbbf067",
@@ -218,7 +219,8 @@
   "en/typescript-src-scopeparse.md": {
     "content": "5abb34e54f1b65bc3a08fd480dfeded04bd0be23a032262e4e4e2e076da19d70",
     "description": "d43b4c2bfb5f94d4e0d017746e3b7a243cdaad3d9424053b4e5819d00c64504b",
-    "seed_hash": "d43b4c2bfb5f94d4e0d017746e3b7a243cdaad3d9424053b4e5819d00c64504b"
+    "seed_hash": "d43b4c2bfb5f94d4e0d017746e3b7a243cdaad3d9424053b4e5819d00c64504b",
+    "source_docstring": "08014525171d5231995c078ac5c6d1ae316d64fadee925afe8ed5a753486b5f2"
   },
   "en/typescript-src-sources.md": {
     "content": "02fcdd654b46be28226b39558c840355982ed6169ee585eb5d3d714d4e8fba6f",
