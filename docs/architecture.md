@@ -1,6 +1,6 @@
 ---
 title: Architecture and Internals
-description: "strictcli internals: the five-stage parse pipeline, its two-region reserved-flag pre-scan, presence resolution, registration-time validation, the schema format, and config."
+description: "strictcli internals: the parse pipeline and its four phases, election and presence resolution, registration-time checks, and the version-2 schema format."
 nav_group: "Guides"
 nav_order: 10
 ---
@@ -437,8 +437,8 @@ root list is the construct's most likely correctness defect:
   redirect that names the remedy.
 - A default must name a declared choice, and its selection must be **complete**:
   a choice whose scope declares a required sub-flag cannot be a default (Go and
-  TypeScript check it; in Python the default is a choice instance, so the
-  incomplete state is unconstructable).
+  TypeScript check it; in Python the default is a choice instance, which cannot
+  be constructed without its required fields).
 - A member flag must declare `required`, read as *required once this member is
   elected*. A member-spelled choice flag cannot carry a short. A defaulted
   member-spelled choice flag may only default to a payload-less member.
@@ -618,8 +618,9 @@ for which JSON Schema has no vocabulary:
 ]
 ```
 
-Entries are in declaration order, `value` is emitted with its own type (never
-stringified), and `help` is omitted when the entry declares none.
+Entries are in declaration order, `value` is emitted with its own type -- a
+string, an integer or a float token, never wrapped in quotes when it is not a
+string -- and `help` is omitted when the entry declares none.
 
 ### A dump
 

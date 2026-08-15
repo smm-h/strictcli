@@ -1,6 +1,6 @@
 ---
 title: Cross-Language Conformance
-description: "How the conformance suite's eleven checks keep the Python, Go, and TypeScript implementations behaviorally identical, using JSON cases and parity mode."
+description: "How twelve conformance checks keep the Python, Go and TypeScript implementations behaviorally identical, from JSON cases to byte-identical schema dumps."
 nav_group: "Guides"
 nav_order: 10
 ---

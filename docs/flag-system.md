@@ -1,6 +1,6 @@
 ---
 title: Flag System
-description: "strictcli's flag and argument system: the mandatory three-way presence declaration, four types, boolean negation and tri-state, repeatable flags, the reserved names, choice flags and their declaration scopes, and positional args."
+description: "strictcli's flags and args: the three-way presence declaration, four types, boolean tri-state, choice flags and their declaration scopes, and positionals."
 nav_group: "Guides"
 nav_order: 3
 ---
@@ -907,7 +907,7 @@ that choice's fields, in each language's own exhaustively-checkable shape:
 | TypeScript | a member of a derived discriminated union, tagged `choice` | `switch (args.via.choice)`, with `assertNever` in the default branch |
 
 See the [Python](python-quickstart.md#choice-flags), [Go](go-quickstart.md#choice-flags)
-and [TypeScript](typescript-quickstart.md#choice-flags) quickstarts for each.
+and [TypeScript](typescript-quickstart.md#choice-flags) quickstart guides for each.
 
 **Scoped flags are never top-level handler arguments, at any depth.** The only
 key a choice flag adds is its own, so every declared top-level key is still
@@ -992,8 +992,8 @@ and its absence *is* the declaration -- and it publishes nested `choices` plus
 per command: the choice flag contributes one property named after itself,
 `{"type": "string", "enum": [<choice names>]}`, in `required` iff it declares
 `required`; every scoped flag contributes a top-level property and **never**
-appears in `required`, because its requiredness is conditional and the schema
-has no vocabulary for that. A member-spelled choice flag projects identically to
+appears in `required`, because whether it is required depends on the election
+and the schema has no vocabulary for that. A member-spelled choice flag projects identically to
 a token-spelled one -- tokenization is a command-line fact and there are no
 tokens at this boundary.
 

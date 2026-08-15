@@ -1,6 +1,6 @@
 ---
 title: Python Quickstart
-description: "Build Python CLIs with strictcli: apps, effect classification, the required/optional/default presence declaration, flags, args, groups, payloads under --json, and consequential consent on CLI, call and MCP."
+description: "Build Python CLIs with strictcli: effect classification, the required/optional/default presence declaration, choice flags consumed by match, and consent."
 nav_group: "Guides"
 nav_order: 2
 ---
@@ -957,7 +957,7 @@ Flag "via": a choice flag cannot declare presence="optional": an absent selectio
 
 A default **is a choice instance**, so a defaulted selection is complete by
 construction -- a frozen dataclass cannot be built without its required fields,
-and the incomplete state is unconstructable rather than merely refused:
+so there is nothing to check and no error to raise:
 
 ```python
 @strictcli.choice_flag("via", help="Delivery channel", elect_by="selector-token",

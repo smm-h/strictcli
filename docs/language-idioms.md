@@ -1,6 +1,6 @@
 ---
 title: Language Idioms
-description: "Why strictcli's Python, Go, and TypeScript declaration surfaces are deliberately different, what parity actually binds (semantics and pinned sentences), and how strictness serves each language's own idea of clean code."
+description: "Why strictcli's three declaration surfaces are deliberately different, shown through the presence declaration and the choice flag, and what parity binds."
 nav_group: "Guides"
 nav_order: 5
 ---
