@@ -269,6 +269,10 @@ class _ChoiceClassEmitter:
                 parts.append("repeatable=True")
             if "unique" in sub:
                 parts.append(f"unique={sub['unique']}")
+            if "conflict_mode" in sub:
+                parts.append(f"conflict_mode={sub['conflict_mode']!r}")
+            if "env_separator" in sub:
+                parts.append(f"env_separator={sub['env_separator']!r}")
             if "negatable" in sub and not sub["negatable"]:
                 parts.append("negatable=False")
             parts.extend(_validate_part(sub))
