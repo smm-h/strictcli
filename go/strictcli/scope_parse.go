@@ -621,33 +621,43 @@ func (st *electionState) resolveScopedValue(f *Flag, isMember bool, ls *liveSel,
 	if v, ok := cliByFlag[f]; ok {
 		return v, SourceCLI, ""
 	}
-	if isMember && ls.memberImplied {
-		// The selector's own default elected this payload-less member; the
-		// declaration decided, so the source stays "default".
-		return true, SourceDefault, ""
-	}
-	if !isMember {
-		if envVal, ok := amb.env(f.Env); ok {
-			val, errStr := resolveFlagEnvValue(f, envVal, stdinConsumedBy)
-			if errStr != "" {
-				return nil, SourceEnv, errStr
-			}
-			return val, SourceEnv, ""
+	if isMember {
+		if ls.memberImplied {
+			// The selector's own default elected this payload-less member; the
+			// declaration decided, so the source stays "default".
+			return true, SourceDefault, ""
 		}
-		if raw, ok := amb.config(flagParamName(f.Name)); ok {
-			coerced, errStr := coerceConfigValue(raw, f)
-			if errStr != "" {
-				return nil, SourceConfig, errConfigValueError(f.Name, errStr)
-			}
-			if f.Unique {
-				if arr, ok := coerced.([]interface{}); ok {
-					if dup := findDuplicate(arr); dup != nil {
-						return nil, SourceConfig, errConfigValueDuplicate(f.Name, formatValueForError(dup))
-					}
+		// A member flag is elected by its own token, and that token CARRIES the
+		// payload: `--profile work`. So a payload-carrying member elected with
+		// no value is the command line's own `--profile` with nothing after it,
+		// and the refusal is that sentence. Only a programmatic door reaches
+		// this state -- a record whose Fields omit "value", or a flat object
+		// electing the member through the selector's key without its payload
+		// key (§24.11). The ordinary required-flag message is refused for it,
+		// because a member flag's scope path stops at the scope that OWNS it
+		// (§12.13), so that message would render the member as its own owner.
+		return nil, SourceCLI, errFlagRequiresValue("--" + f.Name)
+	}
+	if envVal, ok := amb.env(f.Env); ok {
+		val, errStr := resolveFlagEnvValue(f, envVal, stdinConsumedBy)
+		if errStr != "" {
+			return nil, SourceEnv, errStr
+		}
+		return val, SourceEnv, ""
+	}
+	if raw, ok := amb.config(flagParamName(f.Name)); ok {
+		coerced, errStr := coerceConfigValue(raw, f)
+		if errStr != "" {
+			return nil, SourceConfig, errConfigValueError(f.Name, errStr)
+		}
+		if f.Unique {
+			if arr, ok := coerced.([]interface{}); ok {
+				if dup := findDuplicate(arr); dup != nil {
+					return nil, SourceConfig, errConfigValueDuplicate(f.Name, formatValueForError(dup))
 				}
 			}
-			return coerced, SourceConfig, ""
 		}
+		return coerced, SourceConfig, ""
 	}
 	val, src, errMsg := applyFlagDefault(f, "", infraRoots)
 	if errMsg != "" {

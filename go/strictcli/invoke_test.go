@@ -1031,3 +1031,154 @@ func TestFlatFormNestedMemberElection(t *testing.T) {
 		t.Fatalf("error = %q", ir.err)
 	}
 }
+
+// flatDoubleElection is §21.4's first error, in the CLI parser's own bytes: the
+// electing members in DECLARATION order, since a flat object has no order of
+// its own (§24.11).
+const flatDoubleElection = "--profile and --all-profiles are mutually exclusive"
+
+// --- A member's payload is absent (contract §24.11, §24.4) ------------------
+//
+// A member flag is elected by its own token and that token CARRIES the payload:
+// `--profile work`. Electing the member without supplying the payload is a
+// state only a programmatic door can reach, and the refusal is the command
+// line's own -- `--profile` with nothing after it -- not a required-flag
+// message, which would name the member as its own owner.
+
+func TestFlatFormElectedMemberWithNoPayloadRequiresAValue(t *testing.T) {
+	var captured map[string]interface{}
+	ir := flatMemberApp(&captured).invoke("run", map[string]interface{}{"target": "profile"})
+	want := "flag '--profile' requires a value"
+	if ir.err != want {
+		t.Fatalf("error = %q, want %q", ir.err, want)
+	}
+	// The CLI's own bytes, from the token that cannot carry its value.
+	r := flatMemberApp(&captured).Test([]string{"run", "--profile"})
+	if !strings.Contains(r.Stderr, "error: "+want+"\n") {
+		t.Fatalf("cli stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// The record front door reaches the same state and takes the same sentence: a
+// choice elected with an empty scope is a member whose payload was never given.
+func TestRecordFormElectedMemberWithNoPayloadRequiresAValue(t *testing.T) {
+	var captured map[string]interface{}
+	app := flatMemberApp(&captured)
+	target := app.commands["run"].flags[0]
+	ir := app.invoke("run", map[string]interface{}{
+		"target": Elect(target.choiceDecls[0], Fields{}),
+	})
+	want := "flag '--profile' requires a value"
+	if ir.err != want {
+		t.Fatalf("error = %q, want %q", ir.err, want)
+	}
+}
+
+// The election phase still precedes it: a double election beside the missing
+// payload is the double election's sentence.
+func TestFlatFormMissingPayloadLosesToADoubleElection(t *testing.T) {
+	var captured map[string]interface{}
+	ir := flatMemberApp(&captured).invoke("run", map[string]interface{}{
+		"target": "profile", "all_profiles": true,
+	})
+	if ir.err != flatDoubleElection {
+		t.Fatalf("error = %q, want %q", ir.err, flatDoubleElection)
+	}
+}
+
+// --- A payload-less member's own key (contract §24.11, §21.2) ---------------
+//
+// A payload-less member has no payload to carry, so its own key carries the one
+// thing its token says: `true` ELECTS it, exactly as `--all-profiles` does, and
+// `false` DECLINES it, exactly as `--no-all-profiles` does. That keeps the flat
+// form and the command line one rule rather than two.
+
+func TestFlatFormPayloadLessMemberKeyTrueElects(t *testing.T) {
+	var captured map[string]interface{}
+	ir := flatMemberApp(&captured).invoke("run", map[string]interface{}{"all_profiles": true})
+	if ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+	if e := GetElected(captured, "target"); e.Name() != "all-profiles" {
+		t.Fatalf("elected = %q, want \"all-profiles\"", e.Name())
+	}
+}
+
+func TestFlatFormPayloadLessMemberKeyFalseDeclines(t *testing.T) {
+	var captured map[string]interface{}
+	ir := flatMemberApp(&captured).invoke("run", map[string]interface{}{"all_profiles": false})
+	want := "one of --profile, --all-profiles is required" +
+		" (--no-all-profiles declines an option; it does not choose one)"
+	if ir.err != want {
+		t.Fatalf("error = %q, want %q", ir.err, want)
+	}
+	// `--no-all-profiles` alone produces exactly these bytes.
+	r := flatMemberApp(&captured).Test([]string{"run", "--no-all-profiles"})
+	if !strings.Contains(r.Stderr, "error: "+want+"\n") {
+		t.Fatalf("cli stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// A decline beside the election of a DIFFERENT member is §21.4's redundant
+// negation, with the CLI's own bytes.
+func TestFlatFormPayloadLessDeclineBesideAnotherMembersElection(t *testing.T) {
+	var captured map[string]interface{}
+	ir := flatMemberApp(&captured).invoke("run", map[string]interface{}{
+		"target": "profile", "profile": "work", "all_profiles": false,
+	})
+	want := "--no-all-profiles cannot be combined with --profile" +
+		" (--no-all-profiles declines an option; it does not choose one)"
+	if ir.err != want {
+		t.Fatalf("error = %q, want %q", ir.err, want)
+	}
+	r := flatMemberApp(&captured).Test([]string{"run", "--profile", "work", "--no-all-profiles"})
+	if !strings.Contains(r.Stderr, "error: "+want+"\n") {
+		t.Fatalf("cli stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// The same member named twice, consistently, is ONE election: the selector key
+// and the member's own `true` say the same thing.
+func TestFlatFormPayloadLessMemberKeyTrueBesideItsOwnSelectorKey(t *testing.T) {
+	var captured map[string]interface{}
+	ir := flatMemberApp(&captured).invoke("run", map[string]interface{}{
+		"target": "all-profiles", "all_profiles": true,
+	})
+	if ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+	if e := GetElected(captured, "target"); e.Name() != "all-profiles" {
+		t.Fatalf("elected = %q, want \"all-profiles\"", e.Name())
+	}
+}
+
+// The selector key and the member's own `false` name the same member and
+// contradict each other, and the command line has no spelling for that state --
+// a member-spelled selector has no token of its own. The published property
+// wins: the selector's key is what the schema publishes for electing a
+// payload-less member (a payload-less member contributes no property of its
+// own), so the election stands and the unpublished decline does not undo it.
+func TestFlatFormPayloadLessMemberKeyFalseBesideItsOwnSelectorKey(t *testing.T) {
+	var captured map[string]interface{}
+	ir := flatMemberApp(&captured).invoke("run", map[string]interface{}{
+		"target": "all-profiles", "all_profiles": false,
+	})
+	if ir.err != "" {
+		t.Fatalf("invoke error: %s", ir.err)
+	}
+	if e := GetElected(captured, "target"); e.Name() != "all-profiles" {
+		t.Fatalf("elected = %q, want \"all-profiles\"", e.Name())
+	}
+}
+
+// A payload-less member's own `true` beside a selector key naming a DIFFERENT
+// member is the ordinary double election.
+func TestFlatFormPayloadLessMemberKeyTrueBesideAnotherMembersSelectorKey(t *testing.T) {
+	var captured map[string]interface{}
+	ir := flatMemberApp(&captured).invoke("run", map[string]interface{}{
+		"target": "profile", "profile": "work", "all_profiles": true,
+	})
+	if ir.err != flatDoubleElection {
+		t.Fatalf("error = %q, want %q", ir.err, flatDoubleElection)
+	}
+}
