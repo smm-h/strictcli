@@ -2479,5 +2479,282 @@
       "stdout_equals": "",
       "stderr_equals": "call error: constraint \"purge-selection\": at least one of --older-than, --larger-than is required\n"
     }
+  },
+  {
+    "name": "constraints: a selector member is NOT engaged by a default election",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "transport",
+              "help": "how to reach it",
+              "presence": "default",
+              "default": {
+                "choice": "https"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "https",
+                  "help": "over TLS"
+                },
+                {
+                  "name": "http",
+                  "help": "in the clear"
+                }
+              ]
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pick",
+              "members": [
+                {
+                  "name": "transport"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"pick\": at least one of --transport, --b is required\ntry 'myapp cmd --help'\n"
+    }
+  },
+  {
+    "name": "constraints: a selector member IS engaged when the invocation elects it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "transport={transport}",
+          "flags": [
+            {
+              "name": "transport",
+              "help": "how to reach it",
+              "presence": "default",
+              "default": {
+                "choice": "https"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "https",
+                  "help": "over TLS"
+                },
+                {
+                  "name": "http",
+                  "help": "in the clear"
+                }
+              ]
+            },
+            {
+              "name": "b",
+              "type": "str",
+              "help": "the b",
+              "presence": "optional"
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "pick",
+              "members": [
+                {
+                  "name": "transport"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd",
+      "--transport",
+      "https"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "transport=https"
+    }
+  },
+  {
+    "name": "constraints: an explicitly empty variadic arg is not a provision at the programmatic door",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "purge",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "targets={targets}",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "targets",
+              "help": "the targets",
+              "presence": "optional",
+              "variadic": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "targets",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "older-than"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
+      ],
+      "pre_call": [
+        {
+          "command": "purge",
+          "kwargs": {
+            "targets": []
+          }
+        }
+      ]
+    },
+    "argv": [
+      "noop"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_equals": "call error: constraint \"purge-selection\": at least one of targets, --older-than is required\n"
+    }
+  },
+  {
+    "name": "constraints: one element at the programmatic door is a provision, and engages the member",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "purge",
+          "help": "a command",
+          "effect": "read_only",
+          "handler_prints": "targets={targets}",
+          "flags": [
+            {
+              "name": "older-than",
+              "type": "str",
+              "help": "the older-than",
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "targets",
+              "help": "the targets",
+              "presence": "optional",
+              "variadic": true
+            }
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "purge-selection",
+              "members": [
+                {
+                  "name": "targets",
+                  "when": "non_empty"
+                },
+                {
+                  "name": "older-than"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
+      ],
+      "pre_call": [
+        {
+          "command": "purge",
+          "kwargs": {
+            "targets": [
+              "a"
+            ]
+          }
+        }
+      ]
+    },
+    "argv": [
+      "noop"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "targets=a\ncall ok: purge\n",
+      "stderr_equals": ""
+    }
   }
 ]
