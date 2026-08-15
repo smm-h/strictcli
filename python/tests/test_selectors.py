@@ -2044,3 +2044,116 @@ def test_a_root_value_problem_is_still_reported_when_the_shape_is_sound():
     )
     assert r.exit_code == 1
     assert "error: --count: expected integer, got 'abc'\n" in r.stderr
+# ---------------------------------------------------------------------------
+# §12.13, §18.24 item 245 -- the presence sentence a declaration takes is the
+# same sentence inside a scope
+#
+# A required bool's requirement names the TOKENS that satisfy it, because
+# `--watch` IS the value and `--no-watch` is the other one. A scope is not a
+# second declaration language, so one level down the sentence is that same
+# sentence plus the scope suffix, plus the origin suffix when an ambient
+# election caused it.
+# ---------------------------------------------------------------------------
+
+
+@choice("plain", help="nothing special")
+class _PlainMode:
+    pass
+
+
+@choice("watched", help="watched delivery")
+class _WatchedMode:
+    watch: bool = sub_flag(help="watch the delivery", presence="required")
+
+
+@choice("forced", help="forced delivery")
+class _ForcedMode:
+    force_it: bool = sub_flag(
+        help="force the delivery", presence="required", negatable=False,
+    )
+
+
+def _required_bool_app():
+    app = strictcli.App(name="notify", version="1.0.0", help="notifier")
+
+    @app.command("send", effect="mutating", help="send one")
+    @strictcli.flag("watch", type=bool, help="watch it", presence="required")
+    def send(ctx, watch):
+        print(f"watch={watch!r}")
+
+    @app.command("deliver", effect="mutating", help="deliver one")
+    @choice_flag(
+        "mode", help="the delivery mode", presence="required",
+        elect_by="selector-token",
+        choices=[_PlainMode, _WatchedMode, _ForcedMode],
+        env="NOTIFY_MODE",
+    )
+    def deliver(ctx, mode: _PlainMode | _WatchedMode | _ForcedMode):
+        print(repr(mode))
+
+    return app
+
+
+def test_a_required_bool_names_its_two_tokens_at_root():
+    r = _required_bool_app().test(["send"])
+    assert r.exit_code == 1
+    assert (
+        "error: flag '--watch' must be passed as --watch or --no-watch\n"
+    ) in r.stderr
+
+
+def test_a_required_bool_inside_a_scope_takes_the_same_sentence():
+    """Not `flag '--watch' is required under '--mode watched'`: substituting
+    the generic sentence would make one declaration say two different things
+    about itself and drop the pair of tokens the sentence exists to name."""
+    r = _required_bool_app().test(["deliver", "--mode", "watched"])
+    assert r.exit_code == 1
+    assert (
+        "error: flag '--watch' must be passed as --watch or --no-watch "
+        "under '--mode watched'\n"
+    ) in r.stderr
+
+
+def test_a_required_non_negatable_bool_inside_a_scope_names_its_one_token():
+    r = _required_bool_app().test(["deliver", "--mode", "forced"])
+    assert r.exit_code == 1
+    assert (
+        "error: flag '--force-it' must be passed as --force-it "
+        "under '--mode forced'\n"
+    ) in r.stderr
+
+
+def test_the_origin_suffix_follows_the_scope_suffix_on_that_sentence_too(
+    monkeypatch,
+):
+    """§18.23 item 239's composition, over item 245's sentence: scope, then
+    origin, both following a complete sentence."""
+    monkeypatch.setenv("NOTIFY_MODE", "watched")
+    r = _required_bool_app().test(["deliver"])
+    assert r.exit_code == 1
+    assert (
+        "error: flag '--watch' must be passed as --watch or --no-watch "
+        "under '--mode watched' (elected from env var 'NOTIFY_MODE')\n"
+    ) in r.stderr
+
+
+def test_a_non_bool_scoped_flag_keeps_the_generic_sentence():
+    """The sentence is chosen by the declaration, not by the depth: a value
+    flag has a value to type, so it reads `is required`."""
+    r = _notify().test(["send", "--via", "sms"])
+    assert r.exit_code == 1
+    assert "error: flag '--phone-number' is required under '--via sms'\n" in r.stderr
+
+
+def test_the_machine_boundary_reads_the_same_sentence():
+    """Both doors are one parser: the flat form is the command line with the
+    tokens removed, so it takes the command line's own bytes."""
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _required_bool_app()._call_with_kwargs(
+            "deliver", {"mode": "watched"}, approve_consequential=False,
+            flat=True,
+        )
+    assert str(exc.value) == (
+        "flag '--watch' must be passed as --watch or --no-watch "
+        "under '--mode watched'"
+    )

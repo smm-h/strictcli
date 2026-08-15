@@ -10764,6 +10764,29 @@ def _validate_choices(
             )
 
 
+def _raise_flag_required(f: Flag):
+    """The presence refusal a required flag takes at ROOT scope (§23, §12.13).
+
+    Which sentence a declaration takes is a fact about the declaration and not
+    about where it was written: a required bool names the TOKENS that satisfy
+    it -- `--x` IS the value and `--no-x` is the other one, so "is required"
+    would leave a reader looking for a value to type -- and a non-negatable
+    bool names the only token it has. The scoped path calls this and appends
+    §12.13's suffixes to whatever it says, so one declaration never says two
+    different things about itself (§18.24 item 245).
+    """
+    if f.type is bool and f.negatable:
+        raise _ParseError(
+            f"flag '--{f.name}' must be passed as "
+            f"--{f.name} or --no-{f.name}"
+        )
+    if f.type is bool and not f.negatable:
+        raise _ParseError(
+            f"flag '--{f.name}' must be passed as --{f.name}"
+        )
+    raise _ParseError(f"flag '--{f.name}' is required")
+
+
 def _validate_and_build_kwargs(
     cmd: Command,
     store: _SourcedStore,
@@ -10855,16 +10878,7 @@ def _validate_and_build_kwargs(
             store.set(f.name, None, _Source.DEFAULT)
         else:
             # Declared required and nothing supplied it, from any source.
-            if f.type is bool and f.negatable:
-                raise _ParseError(
-                    f"flag '--{f.name}' must be passed as "
-                    f"--{f.name} or --no-{f.name}"
-                )
-            if f.type is bool and not f.negatable:
-                raise _ParseError(
-                    f"flag '--{f.name}' must be passed as --{f.name}"
-                )
-            raise _ParseError(f"flag '--{f.name}' is required")
+            _raise_flag_required(f)
 
     # Step 5.5: validate choices
     for f in cmd.flags:
@@ -11626,9 +11640,15 @@ def _apply_scoped_presence(
         return f.default, "default"
     if f.presence == _PRESENCE_OPTIONAL:
         return None, "default"
-    raise _ParseError(
-        f"flag '--{f.name}' is required{scope_suffix}{origin_suffix}"
-    )
+    # A scope is not a second declaration language (§24.3): the sentence is
+    # whatever the ROOT path's presence resolution says for this declaration --
+    # a required bool names its two tokens inside a scope exactly as it does at
+    # root -- and §12.13's suffixes follow that complete sentence, in the order
+    # item 239 closed (§18.24 item 245).
+    try:
+        _raise_flag_required(f)
+    except _ParseError as e:
+        raise _ParseError(str(e) + scope_suffix + origin_suffix) from None
 
 
 def _coerce_member_payload(
