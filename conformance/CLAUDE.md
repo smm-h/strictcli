@@ -8,6 +8,15 @@ Cross-language conformance suite for strictcli (Python and Go implementations).
   `python run.py --target go` (requires both implementations).
 - API surface parity: `python check_api_surface.py`. Error message parity:
   `python check_error_parity.py`.
+- Learn a case's real bytes instead of guessing them:
+  `python scripts/probe_case.py cases/<file>.json [--index N|--name SUBSTR]`
+  runs the case against every target and prints each one's exit status, stdout
+  and stderr without asserting anything.
+- The two programmatic doors have case encodings of their own. `pre_call` drives
+  `call()`: a selector's value is the elected record, spelled as the flat map the
+  schema publishes (`{"choice": "email", "subject": "hi"}`, nested to any depth),
+  and each harness materializes it in its own language's shape. The flat machine
+  door is reached through `--mcp` plus a `protocol_script` sending `tools/call`.
 - Differential argv fuzzing: `python fuzz.py --iterations N [--seed S]`. It
   generates random argv, runs it against all three implementations (Python via
   `ref_python.py` codegen, Go and TypeScript via the `run.py` runtime harnesses),
