@@ -641,3 +641,70 @@ def test_a_defaulted_selection_copies_its_compound_defaults(monkeypatch):
     app.call("run")
     assert captured["via"].tags == []
     assert captured["via"].limits == {}
+
+
+def test_a_member_spelled_defaulted_selection_resolves_its_marker(monkeypatch):
+    """A member's scope is a scope like any other: the same resolution, and
+    the member's own spelling in the refusal's scope path."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+
+    @choice("all-profiles", help="every profile")
+    class Every:
+        store: str = sub_flag(
+            help="where the profiles live",
+            default=RelativeToRoot("MYAPP_HOME", "profiles"),
+        )
+
+    @choice("profile", help="one named profile")
+    class One:
+        value: str = member_value(help="the profile name")
+
+    app = App(name="myapp", version="1.0.0", help="t",
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+    captured: dict = {}
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag("mode", help="which profiles", default=Every(),
+                 elect_by="member-flags", choices=[One, Every])
+    def run(ctx, mode: "One | Every"):
+        captured["mode"] = mode
+        return 0
+
+    app.test(["run"])
+    assert captured["mode"].store == "/var/lib/myapp/profiles"
+    app.call("run")
+    assert captured["mode"].store == "/var/lib/myapp/profiles"
+    app._call_with_kwargs("run", {}, approve_consequential=False, flat=True)
+    assert captured["mode"].store == "/var/lib/myapp/profiles"
+
+
+def test_a_member_spelled_marker_names_the_member_in_its_refusal(monkeypatch):
+    """§12.13's path for a member-spelled scope is the member's own token."""
+    monkeypatch.delenv("MYAPP_HOME", raising=False)
+
+    @choice("all-profiles", help="every profile")
+    class Every:
+        store: str = sub_flag(
+            help="where the profiles live",
+            default=RelativeToRoot("NOPE", "profiles"),
+        )
+
+    @choice("profile", help="one named profile")
+    class One:
+        value: str = member_value(help="the profile name")
+
+    app = App(name="myapp", version="1.0.0", help="t",
+              infra_root={"MYAPP_HOME": "/var/lib/myapp"})
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag("mode", help="which profiles", default=Every(),
+                 elect_by="member-flags", choices=[One, Every])
+    def run(ctx, mode: "One | Every"):
+        return 0
+
+    r = app.test(["run"])
+    assert r.exit_code == 1
+    assert (
+        'error: RelativeToRoot references undeclared infra root "NOPE"; '
+        "declare it as an infra root under '--all-profiles'\n"
+    ) in r.stderr
