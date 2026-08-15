@@ -24,6 +24,7 @@ order: 90
 - [typescript/src/checks/tagdsl](../typescript-src-checks-tagdsl/)
 - [typescript/src/config](../typescript-src-config/)
 - [typescript/src/confirm](../typescript-src-confirm/)
+- [typescript/src/constraints](../typescript-src-constraints/)
 - [typescript/src/context](../typescript-src-context/)
 - [typescript/src/describe](../typescript-src-describe/)
 - [typescript/src/effects](../typescript-src-effects/)

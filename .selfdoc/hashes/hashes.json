@@ -115,6 +115,11 @@
     "description": "e4774aea23d35804f4474167d611ca802cb22724934e28459777c5c9a9717119",
     "source_docstring": "2ca2c4272c1df48a86dab368bd0685503a7119bdb30ab43419effe94c2419599"
   },
+  "en/typescript-src-constraints.md": {
+    "content": "65f1edcd8a7d79d1992d31914bb0bd020c3416698ef202b5c9d80e64667d2c92",
+    "description": "7693a72e89600a4eb4a57a94d7c09a6a3e93f67d89aca6a0dce2925a2e8cc69a",
+    "seed_hash": "7693a72e89600a4eb4a57a94d7c09a6a3e93f67d89aca6a0dce2925a2e8cc69a"
+  },
   "en/typescript-src-context.md": {
     "content": "b1748e9063f5023a87169894b57d2b1918d87ff06881fb4d5da989c5902ade40",
     "description": "ff9b75b1da14598214806628e0cde50c8fd96fa907dbf8a4afc0ac8f2c5677ef",

@@ -84,6 +84,11 @@
         },
         {
           "level": 3,
+          "text": "Constraint validation",
+          "anchor": "constraint-validation"
+        },
+        {
+          "level": 3,
           "text": "Choice-flag validation",
           "anchor": "choice-flag-validation"
         },
@@ -678,8 +683,38 @@
         },
         {
           "level": 2,
-          "text": "Dependencies",
-          "anchor": "dependencies"
+          "text": "Constraints",
+          "anchor": "constraints"
+        },
+        {
+          "level": 3,
+          "text": "Members",
+          "anchor": "members"
+        },
+        {
+          "level": 3,
+          "text": "The election vocabulary: `when`",
+          "anchor": "the-election-vocabulary-when"
+        },
+        {
+          "level": 3,
+          "text": "Engaged, vacuous, satisfied",
+          "anchor": "engaged-vacuous-satisfied"
+        },
+        {
+          "level": 3,
+          "text": "Nesting",
+          "anchor": "nesting"
+        },
+        {
+          "level": 3,
+          "text": "A member never declares `required`",
+          "anchor": "a-member-never-declares-required"
+        },
+        {
+          "level": 3,
+          "text": "Where constraints show up",
+          "anchor": "where-constraints-show-up"
         },
         {
           "level": 2,
@@ -862,8 +897,13 @@
         },
         {
           "level": 2,
-          "text": "Dependencies",
-          "anchor": "dependencies"
+          "text": "Constraints",
+          "anchor": "constraints"
+        },
+        {
+          "level": 3,
+          "text": "Members",
+          "anchor": "members"
         },
         {
           "level": 2,
@@ -1126,6 +1166,21 @@
         },
         {
           "level": 3,
+          "text": "`Constraint`",
+          "anchor": "constraint"
+        },
+        {
+          "level": 3,
+          "text": "`ConstraintMember`",
+          "anchor": "constraintmember"
+        },
+        {
+          "level": 3,
+          "text": "`MemberOption`",
+          "anchor": "memberoption"
+        },
+        {
+          "level": 3,
           "text": "`Context`",
           "anchor": "context"
         },
@@ -1231,26 +1286,6 @@
         },
         {
           "level": 3,
-          "text": "`CoRequired`",
-          "anchor": "corequired"
-        },
-        {
-          "level": 3,
-          "text": "`Requires`",
-          "anchor": "requires"
-        },
-        {
-          "level": 3,
-          "text": "`Implies`",
-          "anchor": "implies"
-        },
-        {
-          "level": 3,
-          "text": "`Dependency`",
-          "anchor": "dependency"
-        },
-        {
-          "level": 3,
           "text": "`InfraRootPath`",
           "anchor": "infrarootpath"
         },
@@ -1343,6 +1378,46 @@
           "level": 3,
           "text": "`ConfigFieldDefault`",
           "anchor": "configfielddefault"
+        },
+        {
+          "level": 3,
+          "text": "`Member`",
+          "anchor": "member"
+        },
+        {
+          "level": 3,
+          "text": "`WhenPresent`",
+          "anchor": "whenpresent"
+        },
+        {
+          "level": 3,
+          "text": "`WhenTrue`",
+          "anchor": "whentrue"
+        },
+        {
+          "level": 3,
+          "text": "`WhenNonEmpty`",
+          "anchor": "whennonempty"
+        },
+        {
+          "level": 3,
+          "text": "`AtLeastOne`",
+          "anchor": "atleastone"
+        },
+        {
+          "level": 3,
+          "text": "`AllOrNone`",
+          "anchor": "allornone"
+        },
+        {
+          "level": 3,
+          "text": "`Requires`",
+          "anchor": "requires"
+        },
+        {
+          "level": 3,
+          "text": "`Implies`",
+          "anchor": "implies"
         },
         {
           "level": 3,
@@ -1696,8 +1771,8 @@
         },
         {
           "level": 3,
-          "text": "`WithDependencies`",
-          "anchor": "withdependencies"
+          "text": "`WithConstraints`",
+          "anchor": "withconstraints"
         },
         {
           "level": 3,
@@ -2275,6 +2350,11 @@
         },
         {
           "level": 2,
+          "text": "A third case: the constraint member",
+          "anchor": "a-third-case-the-constraint-member"
+        },
+        {
+          "level": 2,
           "text": "What each surface bought",
           "anchor": "what-each-surface-bought"
         },
@@ -2611,8 +2691,13 @@
         },
         {
           "level": 2,
-          "text": "Dependencies",
-          "anchor": "dependencies"
+          "text": "Constraints",
+          "anchor": "constraints"
+        },
+        {
+          "level": 3,
+          "text": "Members",
+          "anchor": "members"
         },
         {
           "level": 2,
@@ -3813,6 +3898,26 @@
         },
         {
           "level": 3,
+          "text": "`_raise_constraint_references_scoped_flag`",
+          "anchor": "_raise_constraint_references_scoped_flag"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_constraint_member_not_record`",
+          "anchor": "_raise_constraint_member_not_record"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_constraint_member_required`",
+          "anchor": "_raise_constraint_member_required"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_constraint_unknown_flag`",
+          "anchor": "_raise_constraint_unknown_flag"
+        },
+        {
+          "level": 3,
           "text": "`_raise_handler_selector_annotation`",
           "anchor": "_raise_handler_selector_annotation"
         },
@@ -3958,8 +4063,28 @@
         },
         {
           "level": 3,
-          "text": "`CoRequired`",
-          "anchor": "corequired"
+          "text": "`Member`",
+          "anchor": "member"
+        },
+        {
+          "level": 4,
+          "text": "`resolved_when`",
+          "anchor": "resolved_when"
+        },
+        {
+          "level": 3,
+          "text": "`_normalize_members`",
+          "anchor": "_normalize_members"
+        },
+        {
+          "level": 3,
+          "text": "`AtLeastOne`",
+          "anchor": "atleastone"
+        },
+        {
+          "level": 3,
+          "text": "`AllOrNone`",
+          "anchor": "allornone"
         },
         {
           "level": 3,
@@ -3970,6 +4095,71 @@
           "level": 3,
           "text": "`Implies`",
           "anchor": "implies"
+        },
+        {
+          "level": 3,
+          "text": "`_declared_type_word`",
+          "anchor": "_declared_type_word"
+        },
+        {
+          "level": 3,
+          "text": "`_member_is_sized`",
+          "anchor": "_member_is_sized"
+        },
+        {
+          "level": 3,
+          "text": "`_validate_constraint_set`",
+          "anchor": "_validate_constraint_set"
+        },
+        {
+          "level": 3,
+          "text": "`_check_constraint_cycles`",
+          "anchor": "_check_constraint_cycles"
+        },
+        {
+          "level": 3,
+          "text": "`_constraint_index`",
+          "anchor": "_constraint_index"
+        },
+        {
+          "level": 3,
+          "text": "`_render_member_token`",
+          "anchor": "_render_member_token"
+        },
+        {
+          "level": 3,
+          "text": "`_render_member_list`",
+          "anchor": "_render_member_list"
+        },
+        {
+          "level": 3,
+          "text": "`_msg_constraint_prefix`",
+          "anchor": "_msg_constraint_prefix"
+        },
+        {
+          "level": 3,
+          "text": "`_is_non_empty_value`",
+          "anchor": "_is_non_empty_value"
+        },
+        {
+          "level": 3,
+          "text": "`_arg_engagement_inputs`",
+          "anchor": "_arg_engagement_inputs"
+        },
+        {
+          "level": 3,
+          "text": "`_member_engaged`",
+          "anchor": "_member_engaged"
+        },
+        {
+          "level": 3,
+          "text": "`_constraint_decline_clause`",
+          "anchor": "_constraint_decline_clause"
+        },
+        {
+          "level": 3,
+          "text": "`_enforce_constraints`",
+          "anchor": "_enforce_constraints"
         },
         {
           "level": 3,
@@ -4588,6 +4778,31 @@
         },
         {
           "level": 3,
+          "text": "`_mcp_member_property`",
+          "anchor": "_mcp_member_property"
+        },
+        {
+          "level": 3,
+          "text": "`_constraint_leaf_properties`",
+          "anchor": "_constraint_leaf_properties"
+        },
+        {
+          "level": 3,
+          "text": "`_at_least_one_branches`",
+          "anchor": "_at_least_one_branches"
+        },
+        {
+          "level": 3,
+          "text": "`_constraint_keywords`",
+          "anchor": "_constraint_keywords"
+        },
+        {
+          "level": 3,
+          "text": "`_constraint_description_line`",
+          "anchor": "_constraint_description_line"
+        },
+        {
+          "level": 3,
           "text": "`_tool_description`",
           "anchor": "_tool_description"
         },
@@ -4955,6 +5170,16 @@
           "level": 3,
           "text": "`_format_dry_run_section`",
           "anchor": "_format_dry_run_section"
+        },
+        {
+          "level": 3,
+          "text": "`_constraint_help_sentence`",
+          "anchor": "_constraint_help_sentence"
+        },
+        {
+          "level": 3,
+          "text": "`_format_constraints_section`",
+          "anchor": "_format_constraints_section"
         },
         {
           "level": 3,
@@ -5480,8 +5705,13 @@
         },
         {
           "level": 2,
-          "text": "Flag Dependencies",
-          "anchor": "flag-dependencies"
+          "text": "Constraints",
+          "anchor": "constraints"
+        },
+        {
+          "level": 3,
+          "text": "Members",
+          "anchor": "members"
         },
         {
           "level": 2,
@@ -6259,6 +6489,108 @@
           "level": 3,
           "text": "`confirmConsequential`",
           "anchor": "confirmconsequential"
+        }
+      ]
+    },
+    {
+      "path": "typescript-src-constraints.md",
+      "title": "typescript/src/constraints",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/constraints",
+          "anchor": "typescriptsrcconstraints"
+        },
+        {
+          "level": 2,
+          "text": "`typescript/src/constraints`",
+          "anchor": "typescriptsrcconstraints"
+        },
+        {
+          "level": 3,
+          "text": "`MemberKind`",
+          "anchor": "memberkind"
+        },
+        {
+          "level": 3,
+          "text": "`ResolvedMember`",
+          "anchor": "resolvedmember"
+        },
+        {
+          "level": 3,
+          "text": "`ResolvedCoOccurrence`",
+          "anchor": "resolvedcooccurrence"
+        },
+        {
+          "level": 3,
+          "text": "`ResolvedConstraint`",
+          "anchor": "resolvedconstraint"
+        },
+        {
+          "level": 3,
+          "text": "`isCoOccurrenceResolved`",
+          "anchor": "iscooccurrenceresolved"
+        },
+        {
+          "level": 3,
+          "text": "`resolveConstraints`",
+          "anchor": "resolveconstraints"
+        },
+        {
+          "level": 3,
+          "text": "`constraintIndex`",
+          "anchor": "constraintindex"
+        },
+        {
+          "level": 3,
+          "text": "`MemberStyle`",
+          "anchor": "memberstyle"
+        },
+        {
+          "level": 3,
+          "text": "`renderMember`",
+          "anchor": "rendermember"
+        },
+        {
+          "level": 3,
+          "text": "`renderMembers`",
+          "anchor": "rendermembers"
+        },
+        {
+          "level": 3,
+          "text": "`helpSentence`",
+          "anchor": "helpsentence"
+        },
+        {
+          "level": 3,
+          "text": "`mcpSentence`",
+          "anchor": "mcpsentence"
+        },
+        {
+          "level": 3,
+          "text": "`EngagementProbe`",
+          "anchor": "engagementprobe"
+        },
+        {
+          "level": 3,
+          "text": "`isEngaged`",
+          "anchor": "isengaged"
+        },
+        {
+          "level": 3,
+          "text": "`isVacuous`",
+          "anchor": "isvacuous"
+        },
+        {
+          "level": 3,
+          "text": "`findFlagDecl`",
+          "anchor": "findflagdecl"
+        },
+        {
+          "level": 3,
+          "text": "`findArgDecl`",
+          "anchor": "findargdecl"
         }
       ]
     },
@@ -7116,38 +7448,13 @@
         },
         {
           "level": 3,
-          "text": "`errCommandCoRequiredMinFlags`",
-          "anchor": "errcommandcorequiredminflags"
-        },
-        {
-          "level": 3,
-          "text": "`errCommandCoRequiredUnknownFlag`",
-          "anchor": "errcommandcorequiredunknownflag"
-        },
-        {
-          "level": 3,
-          "text": "`errCommandCoRequiredDuplicate`",
-          "anchor": "errcommandcorequiredduplicate"
-        },
-        {
-          "level": 3,
           "text": "`errCommandRequiresSameFlag`",
           "anchor": "errcommandrequiressameflag"
         },
         {
           "level": 3,
-          "text": "`errCommandRequiresUnknownFlag`",
-          "anchor": "errcommandrequiresunknownflag"
-        },
-        {
-          "level": 3,
           "text": "`errCommandImpliesSameFlag`",
           "anchor": "errcommandimpliessameflag"
-        },
-        {
-          "level": 3,
-          "text": "`errCommandImpliesUnknownFlag`",
-          "anchor": "errcommandimpliesunknownflag"
         },
         {
           "level": 3,
@@ -7331,13 +7638,23 @@
         },
         {
           "level": 3,
+          "text": "`constraintPrefix`",
+          "anchor": "constraintprefix"
+        },
+        {
+          "level": 3,
           "text": "`errImpliesConflict`",
           "anchor": "errimpliesconflict"
         },
         {
           "level": 3,
-          "text": "`errFlagsMustBeUsedTogether`",
-          "anchor": "errflagsmustbeusedtogether"
+          "text": "`errAtLeastOneRequired`",
+          "anchor": "erratleastonerequired"
+        },
+        {
+          "level": 3,
+          "text": "`errAllOrNoneTogether`",
+          "anchor": "errallornonetogether"
         },
         {
           "level": 3,
@@ -8468,6 +8785,106 @@
           "level": 3,
           "text": "`errConstraintReferencesScopedFlag`",
           "anchor": "errconstraintreferencesscopedflag"
+        },
+        {
+          "level": 3,
+          "text": "`WHEN_PRESENT_SPELLING`",
+          "anchor": "when_present_spelling"
+        },
+        {
+          "level": 3,
+          "text": "`WHEN_TRUE_SPELLING`",
+          "anchor": "when_true_spelling"
+        },
+        {
+          "level": 3,
+          "text": "`WHEN_NON_EMPTY_SPELLING`",
+          "anchor": "when_non_empty_spelling"
+        },
+        {
+          "level": 3,
+          "text": "`CONSTRAINT_MEMBER_SPELLING`",
+          "anchor": "constraint_member_spelling"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintNameCharset`",
+          "anchor": "errconstraintnamecharset"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintNameDuplicate`",
+          "anchor": "errconstraintnameduplicate"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintNameCollides`",
+          "anchor": "errconstraintnamecollides"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintMinMembers`",
+          "anchor": "errconstraintminmembers"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintMemberNotRecord`",
+          "anchor": "errconstraintmembernotrecord"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintMemberUnknown`",
+          "anchor": "errconstraintmemberunknown"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintMemberAmbiguous`",
+          "anchor": "errconstraintmemberambiguous"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintMemberDuplicate`",
+          "anchor": "errconstraintmemberduplicate"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintMemberRequired`",
+          "anchor": "errconstraintmemberrequired"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintMemberBoolWhen`",
+          "anchor": "errconstraintmemberboolwhen"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintWhenTrueNotBool`",
+          "anchor": "errconstraintwhentruenotbool"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintWhenNonEmptyNotSized`",
+          "anchor": "errconstraintwhennonemptynotsized"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintNestedWhen`",
+          "anchor": "errconstraintnestedwhen"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintNestedFamily`",
+          "anchor": "errconstraintnestedfamily"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintCycle`",
+          "anchor": "errconstraintcycle"
+        },
+        {
+          "level": 3,
+          "text": "`errConstraintUnknownFlag`",
+          "anchor": "errconstraintunknownflag"
         }
       ]
     },
@@ -8658,13 +9075,38 @@
         },
         {
           "level": 3,
-          "text": "`CoRequired`",
-          "anchor": "corequired"
+          "text": "`When`",
+          "anchor": "when"
         },
         {
           "level": 3,
-          "text": "`coRequired`",
-          "anchor": "corequired-1"
+          "text": "`ConstraintMember`",
+          "anchor": "constraintmember"
+        },
+        {
+          "level": 3,
+          "text": "`ConstraintMembers`",
+          "anchor": "constraintmembers"
+        },
+        {
+          "level": 3,
+          "text": "`AtLeastOne`",
+          "anchor": "atleastone"
+        },
+        {
+          "level": 3,
+          "text": "`AllOrNone`",
+          "anchor": "allornone"
+        },
+        {
+          "level": 3,
+          "text": "`atLeastOne`",
+          "anchor": "atleastone-1"
+        },
+        {
+          "level": 3,
+          "text": "`allOrNone`",
+          "anchor": "allornone-1"
         },
         {
           "level": 3,
@@ -8688,8 +9130,13 @@
         },
         {
           "level": 3,
-          "text": "`Dependency`",
-          "anchor": "dependency"
+          "text": "`Constraint`",
+          "anchor": "constraint"
+        },
+        {
+          "level": 3,
+          "text": "`CoOccurrence`",
+          "anchor": "cooccurrence"
         },
         {
           "level": 3,
@@ -9099,8 +9546,18 @@
         },
         {
           "level": 3,
+          "text": "`allOrNone`",
+          "anchor": "allornone"
+        },
+        {
+          "level": 3,
           "text": "`arg`",
           "anchor": "arg"
+        },
+        {
+          "level": 3,
+          "text": "`atLeastOne`",
+          "anchor": "atleastone"
         },
         {
           "level": 3,
@@ -9111,11 +9568,6 @@
           "level": 3,
           "text": "`choiceFlag`",
           "anchor": "choiceflag"
-        },
-        {
-          "level": 3,
-          "text": "`coRequired`",
-          "anchor": "corequired"
         },
         {
           "level": 3,
@@ -9975,6 +10427,11 @@
         },
         {
           "level": 3,
+          "text": "`constraintDescriptionBlock`",
+          "anchor": "constraintdescriptionblock"
+        },
+        {
+          "level": 3,
           "text": "`jsonSchemaForApp`",
           "anchor": "jsonschemaforapp"
         },
@@ -10265,6 +10722,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-15T14:54:40.351541+00:00",
+  "last_gen": "2026-08-15T16:55:11.845176+00:00",
   "theme": "minimal"
 }
