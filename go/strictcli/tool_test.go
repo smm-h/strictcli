@@ -995,3 +995,64 @@ func TestRouterToolForwardsConsent(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// --- The selector projection's member rows (contract §24.11, §25.5) ---
+
+// memberSelectorSchemaApp is the shape the projection has to get right: one
+// payload-carrying member and one payload-less one.
+func memberSelectorSchemaApp() *App {
+	app := NewApp("test", "1.0.0", "test app")
+	app.Command("run", "run it", nopHandler,
+		WithFlags(MemberChoiceFlag("target", "which profiles", Required(),
+			MemberChoice(StringFlag("profile", "the profile name", Required()), "one named profile"),
+			MemberChoice(BoolFlag("all-profiles", "every profile", Required()), "every profile"),
+		)), WithEffect(EffectReadOnly))
+	return app
+}
+
+// A payload-less member contributes NOTHING: electing it is the whole of what
+// it says, and the selector's own enum already carries that. A boolean property
+// named after it would be a second, unpublishable spelling of the election.
+func TestJsonSchemaPayloadLessMemberContributesNoProperty(t *testing.T) {
+	schema := memberSelectorSchemaApp().JsonSchema("run")
+	props := schema["properties"].(map[string]interface{})
+
+	var names []string
+	for k := range props {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	want := []string{"profile", "target"}
+	if !reflect.DeepEqual(names, want) {
+		t.Fatalf("properties = %v, want %v", names, want)
+	}
+}
+
+// A payload-carrying member contributes exactly its payload property, under its
+// own name and with its own value schema.
+func TestJsonSchemaPayloadCarryingMemberContributesItsPayload(t *testing.T) {
+	schema := memberSelectorSchemaApp().JsonSchema("run")
+	props := schema["properties"].(map[string]interface{})
+
+	payload, ok := props["profile"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("properties[profile] = %#v, want an object", props["profile"])
+	}
+	if payload["type"] != "string" {
+		t.Fatalf("payload type = %v, want \"string\"", payload["type"])
+	}
+	if payload["description"] != "the profile name" {
+		t.Fatalf("payload description = %v", payload["description"])
+	}
+	if _, isEnum := payload["enum"]; isEnum {
+		t.Fatalf("payload published an enum: %#v", payload)
+	}
+
+	sel, ok := props["target"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("properties[target] = %#v, want an object", props["target"])
+	}
+	if !reflect.DeepEqual(sel["enum"], []interface{}{"profile", "all-profiles"}) {
+		t.Fatalf("selector enum = %#v", sel["enum"])
+	}
+}

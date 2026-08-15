@@ -277,23 +277,35 @@ func choiceEnum(sel *Flag) []interface{} {
 // under the MEMBER's own flag name, which the framework already guarantees
 // unique command-wide (contract §24.11). Nothing added here ever joins the
 // schema's "required" array.
+//
+// The electing member flag is NOT a scoped flag: a payload-carrying member
+// contributes exactly its payload property, and a payload-less one contributes
+// nothing at all -- electing it is the whole of what it says, and the
+// selector's own enum already publishes that. A boolean property named after it
+// would be a second spelling of an election the schema already carries.
 func addScopedProperties(properties map[string]interface{}, flags []Flag) {
-	var walk func(flags []Flag, scoped bool)
-	walk = func(flags []Flag, scoped bool) {
+	var walk func(flags []Flag, owner *ChoiceDecl)
+	walk = func(flags []Flag, owner *ChoiceDecl) {
 		for i := range flags {
 			f := &flags[i]
-			if scoped {
-				properties[flagParamName(f.Name)] = scopedPropertySchema(f)
+			if owner != nil {
+				if owner.member && memberFlag(owner) == f {
+					if choiceCarriesPayload(owner) {
+						properties[flagParamName(f.Name)] = scopedPropertySchema(f)
+					}
+				} else {
+					properties[flagParamName(f.Name)] = scopedPropertySchema(f)
+				}
 			}
 			if f.Type != TypeChoice {
 				continue
 			}
 			for _, ch := range f.choiceDecls {
-				walk(ch.Flags, true)
+				walk(ch.Flags, ch)
 			}
 		}
 	}
-	walk(flags, false)
+	walk(flags, nil)
 }
 
 // scopedPropertySchema is one scoped flag's JSON Schema property, derived from
