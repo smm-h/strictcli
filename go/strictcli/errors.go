@@ -455,14 +455,6 @@ func errDeprecatedAlreadyRegistered(name string) string {
 // strictcli.go — buildAndValidateCommand
 // ---------------------------------------------------------------------------
 
-func errCommandMutexMinFlags(name string, count int) string {
-	return fmt.Sprintf("command %q: mutex group must have at least 2 flags, got %d", name, count)
-}
-
-func errCommandFlagInMultipleMutex(name string, flagName string) string {
-	return fmt.Sprintf("command %q: flag %q appears in multiple mutex groups", name, flagName)
-}
-
 func errCommandFlagCollidesGlobal(name string, flagName string) string {
 	return fmt.Sprintf("command %q: flag %q collides with a global flag", name, flagName)
 }
