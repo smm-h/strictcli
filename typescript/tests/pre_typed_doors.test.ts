@@ -297,15 +297,16 @@ test("call: a record's shape outranks every phase fact beside it", async () => {
 		),
 		"flag '--profile' requires a value",
 	);
-	// A key the elected scope never declared is the scope question one level
-	// down, which also outranks a missing election.
+	// A key the elected scope never declared names nothing the command declares,
+	// one level down: the flat door's own unknown-parameter sentence with
+	// §12.13's scope suffix saying where (§24.11 item 246).
 	assert.equal(
 		await refusal(
 			twoSelectorApp().call("run", {
 				target: { choice: "profile", value: "work", bogus: 1 },
 			}),
 		),
-		"flag '--bogus' is only valid under '--profile', but that scope does not declare it",
+		`unknown parameter "bogus" for command "run" under '--profile'`,
 	);
 	// A value that is not a record at all cannot carry a tag.
 	assert.equal(
@@ -370,8 +371,8 @@ function stagedSelectorApp(): App {
 
 test("call: a later selector's election beats every stage below it", async () => {
 	// The stage table decides across the WHOLE command, so the second
-	// selector's election refusal is heard over a value, a presence and a scope
-	// problem in the first selector's record alike.
+	// selector's election refusal is heard over a value and a presence problem
+	// in the first selector's record alike.
 	const badTag = { choice: "other" };
 	const want =
 		"--target: invalid value 'other', must be one of: profile, all-profiles";
@@ -393,6 +394,10 @@ test("call: a later selector's election beats every stage below it", async () =>
 		),
 		want,
 	);
+	// A key naming a flag a SIBLING scope declares is not a scope fact inside a
+	// record: the record's namespace is the elected scope's own, so the key
+	// names nothing at all -- a SHAPE fact, which outranks the second
+	// selector's election refusal rather than losing to it (§24.11 item 246).
 	assert.equal(
 		await refusal(
 			stagedSelectorApp().call("run", {
@@ -400,7 +405,7 @@ test("call: a later selector's election beats every stage below it", async () =>
 				target: badTag,
 			}),
 		),
-		want,
+		`unknown parameter "phone_number" for command "run" under '--via email'`,
 	);
 });
 
@@ -699,4 +704,429 @@ test("flat: the underscored spelling is the one the schema publishes", async () 
 	);
 	assert.equal(captured.keep_going, "yes");
 	assert.equal(captured.target_name, "x");
+});
+
+// --- A key inside an elected record (§24.11 item 246, §24.3) ---
+
+/**
+ * A record's key namespace is the ELECTED CHOICE'S OWN SCOPE: the tag key, the
+ * payload key where the choice carries one, and the parameters that scope
+ * declares at that level. A key outside that set names nothing the command
+ * declares, which is a fact about the object's SHAPE -- reported ahead of every
+ * election, scope, value and presence problem the same call contains, exactly
+ * as the flat door's own unknown key is.
+ *
+ * The sentence is the flat door's with §12.13's scope suffix on it, at every
+ * depth. The out-of-scope template is refused for this state: it names a flag
+ * the command DECLARES against the scopes that own it, and a key naming nothing
+ * anywhere has no other side to name.
+ */
+function recordDepthApp(captured?: Record<string, unknown>): App {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			flags: {
+				count: flag("count", t.int, { help: "how many", presence: "optional" }),
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "an email message",
+							flags: {
+								retries: flag("retries", t.int, {
+									help: "how many",
+									presence: "required",
+								}),
+								format: choiceFlag(
+									"format",
+									{
+										plain: choice({ help: "plain text" }),
+										rich: choice({
+											help: "rich text",
+											flags: {
+												width: flag("width", t.int, {
+													help: "columns",
+													presence: "required",
+												}),
+											},
+										}),
+									},
+									{
+										help: "the body format",
+										presence: "default",
+										default: "plain",
+									},
+								),
+							},
+						}),
+						sms: choice({
+							help: "a text message",
+							flags: {
+								phone_number: flag("phone-number", t.str, {
+									help: "the destination",
+									presence: "required",
+								}),
+							},
+						}),
+					},
+					{ help: "delivery channel", presence: "required" },
+				),
+				mode: memberChoiceFlag(
+					"mode",
+					{
+						profile: choice({
+							help: "one named profile",
+							value: { carrier: t.str, help: "the profile name" },
+						}),
+						"all-profiles": choice({ help: "every profile" }),
+					},
+					{ help: "what to act on", presence: "required" },
+				),
+			},
+			handler: (args) => {
+				if (captured !== undefined) {
+					Object.assign(captured, args);
+				}
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+const allProfiles = { choice: "all-profiles" };
+
+test("call: an unknown key inside a record is refused at the shape stage", async () => {
+	assert.equal(
+		await refusal(
+			recordDepthApp().call("run", {
+				mode: allProfiles,
+				via: { choice: "email", retries: 1, bogus: 2 },
+			}),
+		),
+		`unknown parameter "bogus" for command "run" under '--via email'`,
+	);
+	// A key naming a flag a SIBLING choice declares names nothing this scope
+	// declares either: the namespace is the elected scope's own.
+	assert.equal(
+		await refusal(
+			recordDepthApp().call("run", {
+				mode: allProfiles,
+				via: { choice: "email", retries: 1, phone_number: "x" },
+			}),
+		),
+		`unknown parameter "phone_number" for command "run" under '--via email'`,
+	);
+	// The same fact one level further down carries the WHOLE path.
+	assert.equal(
+		await refusal(
+			recordDepthApp().call("run", {
+				mode: allProfiles,
+				via: {
+					choice: "email",
+					retries: 1,
+					format: { choice: "rich", width: 5, bogus: 2 },
+				},
+			}),
+		),
+		`unknown parameter "bogus" for command "run" under '--via email --format rich'`,
+	);
+	// A member-spelled scope renders its own token in the suffix, and its
+	// payload key is declared.
+	assert.equal(
+		await refusal(
+			recordDepthApp().call("run", {
+				via: { choice: "email", retries: 1 },
+				mode: { choice: "profile", value: "work", bogus: 1 },
+			}),
+		),
+		`unknown parameter "bogus" for command "run" under '--profile'`,
+	);
+});
+
+test("call: a record's unknown key outranks every phase beside it", async () => {
+	const want = `unknown parameter "bogus" for command "run" under '--via email'`;
+	// Beside a second selector electing nothing (presence).
+	assert.equal(
+		await refusal(
+			recordDepthApp().call("run", {
+				via: { choice: "email", retries: 1, bogus: 2 },
+			}),
+		),
+		want,
+	);
+	// Beside a value refusal at root and inside the same record.
+	assert.equal(
+		await refusal(
+			recordDepthApp().call("run", {
+				count: "nope",
+				mode: allProfiles,
+				via: { choice: "email", retries: "nope", bogus: 2 },
+			}),
+		),
+		want,
+	);
+	// Beside a missing required flag in the same scope (presence).
+	assert.equal(
+		await refusal(
+			recordDepthApp().call("run", {
+				mode: allProfiles,
+				via: { choice: "email", bogus: 2 },
+			}),
+		),
+		want,
+	);
+	// Beside a payload-carrying member elected with no `value` -- also a shape
+	// fact, and recorded after the key that names nothing.
+	assert.equal(
+		await refusal(
+			recordDepthApp().call("run", {
+				via: { choice: "email", retries: 1 },
+				mode: { choice: "profile", bogus: 1 },
+			}),
+		),
+		`unknown parameter "bogus" for command "run" under '--profile'`,
+	);
+});
+
+test("call: a nested scope's parameters belong in the nested record", async () => {
+	// The namespace is per LEVEL, so a nested scope's flag written in the OUTER
+	// record names nothing that record's scope declares.
+	assert.equal(
+		await refusal(
+			recordDepthApp().call("run", {
+				mode: allProfiles,
+				via: { choice: "email", retries: 1, format: "rich", width: 80 },
+			}),
+		),
+		`unknown parameter "width" for command "run" under '--via email'`,
+	);
+	// Electing the nested choice inside its own record leaves its required flag
+	// missing rather than misread -- with the whole path in the suffix, exactly
+	// as the command line renders it.
+	assert.equal(
+		await refusal(
+			recordDepthApp().call("run", {
+				mode: allProfiles,
+				via: { choice: "email", retries: 1, format: { choice: "rich" } },
+			}),
+		),
+		"flag '--width' is required under '--via email --format rich'",
+	);
+	assert.equal(
+		(
+			await recordDepthApp().test([
+				"run",
+				"--all-profiles",
+				"--via",
+				"email",
+				"--retries",
+				"1",
+				"--format",
+				"rich",
+			])
+		).stderr,
+		errOut(
+			"flag '--width' is required under '--via email --format rich'",
+			"myapp run",
+		),
+	);
+	// And a nested choice that requires nothing is elected and delivered.
+	const captured: Record<string, unknown> = {};
+	assert.equal(
+		await recordDepthApp(captured).call("run", {
+			mode: allProfiles,
+			via: { choice: "email", retries: 1, format: { choice: "plain" } },
+		}),
+		0,
+	);
+	assert.deepEqual(captured.via, {
+		choice: "email",
+		retries: 1n,
+		format: { choice: "plain" },
+	});
+});
+
+test("flat: a declared flag out of scope keeps §12.13's own sentence", async () => {
+	// The record's unknown key is not the flat door's scope violation: the same
+	// parameter supplied at the flat door's TOP LEVEL is a flag the command
+	// declares, in a scope that does not own it, and keeps the sentence that
+	// names both sides.
+	assert.equal(
+		await refusal(
+			toolFor(recordDepthApp(), "run").execute({
+				all_profiles: true,
+				via: "email",
+				retries: 1,
+				phone_number: "x",
+			}),
+		),
+		"flag '--phone-number' is only valid under '--via sms', but '--via email' was elected",
+	);
+});
+
+// --- A pre-typed positional binds to the arg its KEY names (§24.11 item 248) ---
+
+/**
+ * A kwargs object has no order of its own (§21.4), so the key is the binding
+ * and an omitted key is the absence presence answers. Reading the supplied
+ * subset densely would hand a value the caller wrote under one name to whatever
+ * arg the omissions left in that slot, and then refuse it in the name of an arg
+ * nobody supplied.
+ *
+ * `label` is declared FIRST and optional, `count` second and required, so a
+ * call supplying only `count` is exactly the state position-binding gets wrong.
+ */
+function keyedArgsApp(captured?: Record<string, unknown>): App {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			flags: {},
+			args: [
+				arg("label", t.str, { help: "a label", presence: "optional" }),
+				arg("count", t.int, { help: "how many", presence: "required" }),
+			],
+			handler: (args) => {
+				if (captured !== undefined) {
+					Object.assign(captured, args);
+				}
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+function variadicArgsApp(captured?: Record<string, unknown>): App {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			flags: {},
+			args: [
+				arg("label", t.str, { help: "a label", presence: "optional" }),
+				arg("rest", t.int, {
+					help: "the rest",
+					presence: "optional",
+					variadic: true,
+				}),
+			],
+			handler: (args) => {
+				if (captured !== undefined) {
+					Object.assign(captured, args);
+				}
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+test("call: a positional binds to the arg its key names", async () => {
+	const captured: Record<string, unknown> = {};
+	assert.equal(await keyedArgsApp(captured).call("run", { count: 2 }), 0);
+	// The value the caller wrote under `count` is `count`'s, and the arg
+	// declared before it is delivered ABSENT rather than handed that value.
+	assert.equal(captured.count, 2n);
+	assert.ok("label" in captured);
+	assert.equal(captured.label, undefined);
+	const both: Record<string, unknown> = {};
+	assert.equal(
+		await keyedArgsApp(both).call("run", { count: 2, label: "x" }),
+		0,
+	);
+	assert.equal(both.label, "x");
+	assert.equal(both.count, 2n);
+});
+
+test("call: an omitted positional key is the absence presence answers", async () => {
+	// A required arg nobody named keeps the argv path's own sentence, whatever
+	// the supplied subset would have filled its slot with.
+	assert.equal(
+		await refusal(keyedArgsApp().call("run", { label: "x" })),
+		"missing required argument 'count'",
+	);
+	assert.equal(
+		await refusal(keyedArgsApp().call("run", {})),
+		"missing required argument 'count'",
+	);
+	// A refusal names the arg the KEY names, never the one a dense read would
+	// have reached.
+	assert.equal(
+		await refusal(keyedArgsApp().call("run", { count: "nope" })),
+		"argument 'count': expected integer, got str",
+	);
+	assert.equal(
+		await refusal(keyedArgsApp().call("run", { label: 5, count: 2 })),
+		"argument 'label': expected string, got int",
+	);
+});
+
+test("call: a defaulted positional takes its default when its key is absent", async () => {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	const captured: Record<string, unknown> = {};
+	app.command(
+		defineReadOnlyCommand("run", {
+			help: "run it",
+			flags: {},
+			args: [
+				arg("label", t.str, {
+					help: "a label",
+					presence: "default",
+					default: "d",
+				}),
+				arg("count", t.int, { help: "how many", presence: "required" }),
+			],
+			handler: (args) => {
+				Object.assign(captured, args);
+				return 0;
+			},
+		}),
+	);
+	assert.equal(await app.call("run", { count: 2 }), 0);
+	assert.equal(captured.label, "d");
+	assert.equal(captured.count, 2n);
+});
+
+test("call: a variadic positional is a sequence under its own key", async () => {
+	const captured: Record<string, unknown> = {};
+	assert.equal(
+		await variadicArgsApp(captured).call("run", { rest: [1, 2, 3] }),
+		0,
+	);
+	assert.deepEqual(captured.rest, [1n, 2n, 3n]);
+	assert.equal(captured.label, undefined);
+	// Anything but an array is the single element it looks like.
+	const single: Record<string, unknown> = {};
+	assert.equal(await variadicArgsApp(single).call("run", { rest: 7 }), 0);
+	assert.deepEqual(single.rest, [7n]);
+	// An absent key delivers no elements, and the arg declared before it keeps
+	// the value its own key named.
+	const omitted: Record<string, unknown> = {};
+	assert.equal(await variadicArgsApp(omitted).call("run", { label: "x" }), 0);
+	assert.deepEqual(omitted.rest, []);
+	assert.equal(omitted.label, "x");
+	// Each element is checked on its own, under the arg's own name.
+	assert.equal(
+		await refusal(variadicArgsApp().call("run", { rest: [1, "nope"] })),
+		"argument 'rest': expected integer, got str",
+	);
+});
+
+test("flat: the machine door binds positionals by key too", async () => {
+	// The flat door hands its object to call(), so the binding is the same one
+	// -- one parser, two spellings.
+	const captured: Record<string, unknown> = {};
+	assert.equal(
+		await toolFor(keyedArgsApp(captured), "run").execute({ count: 2 }),
+		0,
+	);
+	assert.equal(captured.count, 2n);
+	assert.equal(captured.label, undefined);
+	assert.equal(
+		await refusal(toolFor(keyedArgsApp(), "run").execute({ label: "x" })),
+		"missing required argument 'count'",
+	);
 });
