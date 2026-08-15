@@ -251,6 +251,44 @@ function isDeclarationElected(value: unknown): boolean {
 	);
 }
 
+/**
+ * The keys of one record the FLAT door read out of the caller's own object,
+ * carried on the record it converts so `provided()` can answer §23.6's question
+ * about them (§18.29 item 268).
+ *
+ * The record door labels every field it delivers the declaration's, because a
+ * constructed scope fills its declared defaults before anything can look
+ * (§18.26 item 253). The flat door is not in that position: a key it read is a
+ * value the caller wrote, which is decidable and decided right there -- so the
+ * conversion carries the answer forward instead of losing it on the way through
+ * a record. A record without the mark is a record door's, and answers as that
+ * door answers.
+ *
+ * A symbol for the same reason the mark above is one: it says something about
+ * how the record was produced, never something the record contains.
+ */
+const SUPPLIED_KEYS = Symbol("strictcli.suppliedKeys");
+
+/** Marks the keys one record was given by the caller (flat door only). */
+export function markSuppliedKeys(
+	record: Record<string, unknown>,
+	keys: ReadonlySet<string>,
+): void {
+	Object.defineProperty(record, SUPPLIED_KEYS, {
+		value: new Set(keys),
+		enumerable: false,
+	});
+}
+
+/** The keys the flat door read into this record; empty for every other door. */
+function suppliedKeysOf(value: unknown): ReadonlySet<string> {
+	if (typeof value !== "object" || value === null) {
+		return new Set();
+	}
+	const marked = (value as Record<symbol, unknown>)[SUPPLIED_KEYS];
+	return marked instanceof Set ? (marked as Set<string>) : new Set();
+}
+
 /** Wraps applyFlagDefault, converting its ParseError into an InvokeError. */
 function applyFlagDefaultForInvoke(
 	f: AnyFlag,
@@ -896,17 +934,22 @@ function buildElectedRecord(
 		// declared infrastructure roots (§23, §24.6).
 		out[key] = applyScopedDefaultForInvoke(sub, infraRoots, suffix);
 	}
-	// Every field this door delivers reports the DECLARATION, so `provided()`
-	// answers false for all of them (§18.26 item 253). The supplied-versus-
-	// declared distinction is not decidable at every implementation's record
-	// door -- a constructed scope fills its declared defaults before anything
-	// can look -- and one accessor answering three ways for one call is the
-	// divergence parity forbids, so the door that can answer least decides what
-	// the shared answer is. The `cli` heuristic is refused by name: labelling a
-	// field by whether its value DIFFERS from the declaration answers a value
-	// comparison instead of §23.6's question, and answers false for a caller who
-	// deliberately supplied exactly the default.
-	attachProvidedFields(out, new Set());
+	// Every field the RECORD door delivers reports the DECLARATION, so
+	// `provided()` answers false for all of them (§18.26 item 253). The
+	// supplied-versus-declared distinction is not decidable at every
+	// implementation's record door -- a constructed scope fills its declared
+	// defaults before anything can look -- and one accessor answering three ways
+	// for one call is the divergence parity forbids, so the door that can answer
+	// least decides what the shared answer is. The `cli` heuristic is refused by
+	// name: labelling a field by whether its value DIFFERS from the declaration
+	// answers a value comparison instead of §23.6's question, and answers false
+	// for a caller who deliberately supplied exactly the default.
+	//
+	// The FLAT door is not in that position and does not inherit the answer
+	// (§18.29 item 268): it reads the caller's own keys, so it marks them on the
+	// record it converts and those fields report the call, exactly as the command
+	// line reports the same values.
+	attachProvidedFields(out, new Set(suppliedKeysOf(raw)));
 	return out;
 }
 

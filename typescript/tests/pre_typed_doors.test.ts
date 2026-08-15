@@ -1312,14 +1312,18 @@ test("call: every field a record supplies reports the declaration (§18.26 item 
 	assert.equal(provided(rec, "recipient"), false);
 	// A field the caller did not supply was already the declaration's.
 	assert.equal(provided(rec, "store"), false);
-	// The flat machine form converts into that record, so it answers the same.
+	// The flat machine form converts into that record but does NOT inherit the
+	// answer: it reads the caller's own keys, so supplied-ness is decidable
+	// there and a field the caller wrote reports the call (§18.29 item 268).
 	const flat: Record<string, unknown> = {};
 	await toolFor(presencesApp(flat), "send").execute({
 		via: "email",
 		subject: "hi",
 		recipient: "a@b.test",
 	});
-	assert.equal(provided(flat.via as Record<string, unknown>, "subject"), false);
+	assert.equal(provided(flat.via as Record<string, unknown>, "subject"), true);
+	// A field that door did not read is still the declaration's.
+	assert.equal(provided(flat.via as Record<string, unknown>, "store"), false);
 	// An unknown name still raises the existing error rather than answering.
 	assert.throws(() => provided(rec, "nonesuch"), {
 		message: 'no source info for flag "nonesuch"',
@@ -1427,9 +1431,10 @@ test("flat: a selection the caller contributed nothing to is the declaration's",
 test("flat: a sibling key beside a defaulted election is delivered, election unchanged", async () => {
 	// The caller supplied a field of the elected scope and elected nothing: the
 	// election stays the declaration's, and the field is delivered exactly as
-	// the command line delivers it under a defaulted election. The field itself
-	// follows the record door's rule -- every field that door delivers reports
-	// the declaration (§18.26 item 253).
+	// the command line delivers it under a defaulted election. The two answers
+	// are separate facts -- the ELECTION is the declaration's (§18.28 item 264)
+	// and the FIELD is the caller's, because this door read the key the caller
+	// wrote (§18.29 item 268).
 	const flat: Record<string, unknown> = {};
 	assert.equal(
 		await toolFor(defaultedSelectionApp(flat), "send").execute({
@@ -1440,7 +1445,7 @@ test("flat: a sibling key beside a defaulted election is delivered, election unc
 	assert.equal(flat.source, "default");
 	assert.equal(flat.provided, false);
 	assert.deepEqual(flat.via, { choice: "email", subject: "yo" });
-	assert.equal(provided(flat.via as Record<string, unknown>, "subject"), false);
+	assert.equal(provided(flat.via as Record<string, unknown>, "subject"), true);
 
 	// The command line answers the same about the election, and delivers the
 	// same value for the flag the invocation did name.
@@ -1655,4 +1660,247 @@ test("flat: the callback answers the command line's sentence", async () => {
 		errOut("--subject: no is refused", "myapp send"),
 		r.stderr,
 	);
+});
+
+// =========================================================================
+// The whole declaration at the flat door: the type, the CLOSED SET and the
+// callback (§23.5, §24.11, §18.29 item 267)
+// =========================================================================
+
+/**
+ * A scope whose fields carry the two halves the type check does not cover: a
+ * closed set, a callback, and one field carrying both -- plus a root int
+ * declared after the selector, so a coercion failure can be posed against
+ * either of them.
+ */
+function scopedClosedSetApp(captured?: Record<string, unknown>): App {
+	const app = createApp({ name: "myapp", version: "1.0.0", help: "test app" });
+	app.command(
+		defineReadOnlyCommand("send", {
+			help: "send it",
+			flags: {
+				via: choiceFlag(
+					"via",
+					{
+						email: choice({
+							help: "an email message",
+							flags: {
+								subject: flag("subject", t.str, {
+									help: "the subject",
+									presence: "default",
+									default: "hi",
+									validate: (v) => {
+										if (v === "no") {
+											throw new Error("no is refused");
+										}
+									},
+								}),
+								fmt: flag("fmt", t.str, {
+									help: "the body format",
+									presence: "default",
+									default: "text",
+									choices: [
+										{ value: "text", help: "a plain-text body" },
+										{ value: "json", help: "a structured body" },
+									],
+								}),
+								tags: flag("tags", t.list(t.str), {
+									help: "labels for the message",
+									presence: "default",
+									default: [],
+									choices: [
+										{ value: "a", help: "the first" },
+										{ value: "b", help: "the second" },
+									],
+								}),
+								speed: choiceFlag(
+									"speed",
+									{
+										fast: choice({
+											help: "quickly",
+											flags: {
+												lane: flag("lane", t.str, {
+													help: "which lane",
+													presence: "default",
+													default: "left",
+													choices: [
+														{ value: "left", help: "the left one" },
+														{ value: "right", help: "the right one" },
+													],
+												}),
+											},
+										}),
+										slow: choice({ help: "safely" }),
+									},
+									{ help: "how fast", presence: "default", default: "fast" },
+								),
+							},
+						}),
+						sms: choice({ help: "a text message" }),
+					},
+					{ help: "delivery channel", presence: "default", default: "email" },
+				),
+				after: flag("after", t.int, {
+					help: "a root int declared after the selector",
+					presence: "optional",
+				}),
+			},
+			handler: (args) => {
+				if (captured !== undefined) {
+					Object.assign(captured, { via: args.via });
+				}
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+/** The refusal the flat machine door gives for one object, or "". */
+async function closedSetRefusal(
+	kwargs: Record<string, unknown>,
+): Promise<string> {
+	try {
+		await toolFor(scopedClosedSetApp(), "send").execute(kwargs);
+	} catch (e) {
+		return (e as Error).message;
+	}
+	return "";
+}
+
+test("flat: a scoped value the caller supplied is checked against its closed set", async () => {
+	// A key this door read is a value the caller wrote, so the WHOLE
+	// declaration answers for it -- the closed set as much as the type and the
+	// callback (§18.29 item 267). The sentence is the command line's own.
+	assert.equal(
+		await closedSetRefusal({ via: "email", fmt: "xml" }),
+		"--fmt: invalid value 'xml', must be one of: text, json",
+	);
+	// A defaulted election changes nothing: the field is what the caller wrote.
+	assert.equal(
+		await closedSetRefusal({ fmt: "xml" }),
+		"--fmt: invalid value 'xml', must be one of: text, json",
+	);
+	// One level further down, through a nested selection.
+	assert.equal(
+		await closedSetRefusal({ via: "email", lane: "middle" }),
+		"--lane: invalid value 'middle', must be one of: left, right",
+	);
+	// A list is matched per element, as the command line matches it.
+	assert.equal(
+		await closedSetRefusal({ via: "email", tags: ["a", "z"] }),
+		"--tags: invalid value 'z', must be one of: a, b",
+	);
+	// A value inside the set is delivered.
+	const captured: Record<string, unknown> = {};
+	assert.equal(
+		await toolFor(scopedClosedSetApp(captured), "send").execute({
+			via: "email",
+			fmt: "json",
+		}),
+		0,
+	);
+	assert.equal((captured.via as Record<string, unknown>).fmt, "json");
+});
+
+test("flat: the closed set never runs on a value the declaration decided", async () => {
+	// Every field is defaulted to a member of its own set, so this proves only
+	// that the sweep does not refuse a declared default -- the same shape §23.4
+	// gives the callback, applied to the half beside it.
+	const captured: Record<string, unknown> = {};
+	assert.equal(
+		await toolFor(scopedClosedSetApp(captured), "send").execute({}),
+		0,
+	);
+	assert.deepEqual(captured.via, {
+		choice: "email",
+		subject: "hi",
+		fmt: "text",
+		tags: [],
+		speed: { choice: "fast", lane: "left" },
+	});
+});
+
+test("flat: the closed set and the callback report in declaration order", async () => {
+	// Both halves run in the pass after the type checks, over the command's own
+	// declaration order -- so an EARLIER field's callback outranks a later
+	// field's closed-set refusal, which is what Python and Go both answer for
+	// the same object.
+	assert.equal(
+		await closedSetRefusal({ via: "email", subject: "no", fmt: "xml" }),
+		"--subject: no is refused",
+	);
+	// Written the other way round in the object, which decides nothing: the
+	// caller's key order is not an order (§18.25 item 249).
+	assert.equal(
+		await closedSetRefusal({ via: "email", fmt: "xml", subject: "no" }),
+		"--subject: no is refused",
+	);
+	// A coercion failure still outranks both, wherever the flag sits (§18.20
+	// item 226).
+	assert.equal(
+		await closedSetRefusal({ via: "email", fmt: "xml", after: "nope" }),
+		"--after: expected integer, got str",
+	);
+});
+
+// =========================================================================
+// The flat door decides supplied-ness for itself (§23.6, §24.9, §18.29 item
+// 268)
+// =========================================================================
+
+test("flat: a caller-supplied scoped value answers provided true", async () => {
+	// The flat door reads the caller's own KEYS, so §23.6's predicate is
+	// decidable there and keeps its answer: a field the caller wrote reports
+	// source `cli` and `provided()` true, exactly as the command line reports it
+	// for the same value. Item 253's `default` answer is the RECORD door's alone
+	// (§18.29 item 268).
+	const captured: Record<string, unknown> = {};
+	assert.equal(
+		await toolFor(scopedClosedSetApp(captured), "send").execute({
+			via: "email",
+			fmt: "json",
+			tags: ["a"],
+		}),
+		0,
+	);
+	const rec = captured.via as Record<string, unknown>;
+	assert.equal(provided(rec, "fmt"), true);
+	assert.equal(provided(rec, "tags"), true);
+	// A field the caller did not write is the declaration's.
+	assert.equal(provided(rec, "subject"), false);
+	// One level further down, through a nested selection.
+	const nested: Record<string, unknown> = {};
+	await toolFor(scopedClosedSetApp(nested), "send").execute({
+		via: "email",
+		lane: "right",
+	});
+	const speed = (nested.via as Record<string, unknown>).speed as Record<
+		string,
+		unknown
+	>;
+	assert.equal(provided(speed, "lane"), true);
+	// The command line answers the same about the same values.
+	const argv: Record<string, unknown> = {};
+	await scopedClosedSetApp(argv).test([
+		"send",
+		"--via",
+		"email",
+		"--fmt",
+		"json",
+	]);
+	assert.equal(provided(argv.via as Record<string, unknown>, "fmt"), true);
+	assert.equal(provided(argv.via as Record<string, unknown>, "subject"), false);
+});
+
+test("call: the record door's fields still report the declaration", async () => {
+	// The pin is the record door's alone, and it is untouched: a constructed
+	// scope fills its declared defaults before anything can look, so a field
+	// holding its default is indistinguishable from one the caller wrote
+	// (§18.26 item 253, scoped to that door by §18.29 item 268).
+	const captured: Record<string, unknown> = {};
+	await scopedClosedSetApp(captured).call("send", {
+		via: { choice: "email", fmt: "json" },
+	});
+	assert.equal(provided(captured.via as Record<string, unknown>, "fmt"), false);
 });

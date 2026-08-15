@@ -34,6 +34,7 @@ import {
 	type AnyCommand,
 	type AnyDecl,
 	type AnyFlag,
+	choiceValues,
 	flagOpts,
 	memberList,
 	type ScopeStep,
@@ -45,6 +46,7 @@ import {
 	type CallOptions,
 	commandClassification,
 	markDeclarationElected,
+	markSuppliedKeys,
 	paramToFlagName,
 	preTypedValueOutcome,
 	preTypedValueRefusal,
@@ -59,7 +61,11 @@ import {
 	recordValidateRefusal,
 	STAGE,
 } from "./scopeparse.js";
-import { formatChoices, formatValueForError } from "./values.js";
+import {
+	formatChoices,
+	formatValueForError,
+	validateChoices,
+} from "./values.js";
 
 /**
  * A descriptor for exposing one CLI command to tool-using LLM agents.
@@ -356,16 +362,20 @@ export function flatToCallKwargs(
 		return { ...kwargs };
 	}
 	const problems: ParseProblem[] = [];
-	// The custom callbacks the supplied scoped values earned, held until every
-	// type check in the sweep has been recorded. A value is coerced where it is
-	// read and `validate` runs in a LATER pass, so a coercion failure outranks a
-	// validate refusal here exactly as it does on the command line (§18.20 item
-	// 226). This door sets no command-line position on anything it records, so
-	// within the value stage recording order alone decides: running the callback
-	// where the value is read would let it outrank a coercion failure on a flag
-	// declared after it, which is an answer no command line produces.
-	const pendingValidations: { readonly f: AnyFlag; readonly value: unknown }[] =
-		[];
+	// The supplied scoped values whose declaration has more to say than its
+	// type: a closed set, a custom callback, or both. They are held until every
+	// type check in the sweep has been recorded, because a value is coerced
+	// where it is read and the other two halves run in a LATER pass -- so a
+	// coercion failure outranks both here exactly as it does on the command line
+	// (§18.20 item 226). This door sets no command-line position on anything it
+	// records, so within the value stage recording order alone decides: running
+	// either half where the value is read would let it outrank a coercion
+	// failure on a flag declared after it, which is an answer no command line
+	// produces.
+	const pendingDeclarationChecks: {
+		readonly f: AnyFlag;
+		readonly value: unknown;
+	}[] = [];
 	const elections = new Map<AnyChoiceFlag, Election>();
 	// Every property name a LIVE scope claims -- the flat counterpart of the
 	// parser's liveNames. A live name is consumed by the build pass; anything
@@ -666,6 +676,12 @@ export function flatToCallKwargs(
 	): Record<string, unknown> => {
 		const chosen = sel.choices[tag];
 		const record: Record<string, unknown> = { choice: tag };
+		// The keys of THIS record the caller wrote, collected as the record is
+		// built and carried on it, so `provided()` answers §23.6's question for
+		// each field once the conversion is through (§18.29 item 268). The two
+		// facts are separate: the ELECTION may be the declaration's while a field
+		// beside it is the caller's.
+		const suppliedKeys = new Set<string>();
 		// A selection the caller elected nothing of is the DECLARATION's, and
 		// materializing it here must not turn it into the call's. The record is
 		// built anyway, because a key of the elected scope supplied beside it has
@@ -673,19 +689,22 @@ export function flatToCallKwargs(
 		// `ctx.provided` answering `default`/false for the election and keeps
 		// §12.13's origin clause on whatever this scope's declarations refuse --
 		// exactly as the command line and the record door answer for the same
-		// declaration (§23.6, §24.5, §18.28 items 263 and 264). A field the caller
-		// DID supply is delivered and follows the record door's own rule, which
-		// labels every field it delivers the declaration's (§18.26 item 253).
+		// declaration (§23.6, §24.5, §18.28 items 263 and 264).
 		if (elections.get(sel)?.origin === errElectionOriginDefault) {
 			markDeclarationElected(record);
 		}
 		if (chosen === undefined) {
+			markSuppliedKeys(record, suppliedKeys);
 			return record;
 		}
 		if (chosen.value !== undefined) {
 			const payloadKey = flagParamName(tag);
 			if (Object.hasOwn(kwargs, payloadKey)) {
 				record.value = kwargs[payloadKey];
+				// The payload key is the token that elects the member on the command
+				// line, so supplying it is supplying the value -- provided, as the
+				// argv path records it for the same election.
+				suppliedKeys.add("value");
 				// The payload is declared by the member's own flag -- named by the
 				// member's token and required once the member is elected (§24.4) --
 				// so the value supplied for it is checked against that declaration.
@@ -712,21 +731,30 @@ export function flatToCallKwargs(
 		}
 		for (const [subKey, sub] of Object.entries(chosen.flags)) {
 			if (sub.kind === "choice-flag") {
-				const subTag = elections.get(sub)?.elected;
-				if (subTag !== undefined) {
-					record[subKey] = buildRecord(sub, subTag);
+				const subElection = elections.get(sub);
+				if (subElection?.elected !== undefined) {
+					record[subKey] = buildRecord(sub, subElection.elected);
+					// A nested election the CALLER made is a value the invocation caused,
+					// exactly as it is on the command line; one the declaration's default
+					// made is not (§23.6, §18.28 item 264).
+					if (subElection.origin === "") {
+						suppliedKeys.add(subKey);
+					}
 				}
 				continue;
 			}
 			const param = flagParamName(sub.name);
 			if (Object.hasOwn(kwargs, param)) {
 				record[subKey] = kwargs[param];
+				suppliedKeys.add(subKey);
 				// A key this door READ is a value the caller wrote, which is the
-				// distinction §23.5's callback turns on -- so a scoped value is checked
-				// against the WHOLE declaration here, not the type half alone.
+				// distinction §23.5's callback and its closed set turn on -- so a scoped
+				// value is checked against the WHOLE declaration here, not the type half
+				// alone, and it reports the call rather than the declaration.
 				checkSuppliedScopedValue(sub, kwargs[param]);
 			}
 		}
+		markSuppliedKeys(record, suppliedKeys);
 		return record;
 	};
 
@@ -747,19 +775,21 @@ export function flatToCallKwargs(
 	}
 
 	/**
-	 * A SCOPED value the caller supplied, against the whole declaration: the type
-	 * half now, and the custom callback held for the pass below.
+	 * A SCOPED value the caller supplied, against the WHOLE declaration: the
+	 * type half now, and the closed set plus the custom callback held for the
+	 * pass below (§18.29 item 267).
 	 *
-	 * `validate` is a property of a supplied value (§23.5), and this door knows
-	 * which values were supplied -- it reads the caller's own keys -- so the
-	 * callback runs for a scoped value exactly as it does for a root-scope one
-	 * and for a typed token. The RECORD door defers it instead (§18.26 item 254),
-	 * because a constructed scope fills its declared defaults before anything can
-	 * look and running the callback there would run it on values the declaration
-	 * decided; that limitation is that door's and does not travel to this one.
+	 * A closed set and a `validate` callback are both properties of a SUPPLIED
+	 * value (§23.5), and this door knows which values were supplied -- it reads
+	 * the caller's own keys -- so both run for a scoped value exactly as they do
+	 * for a root-scope one and for a typed token. The RECORD door defers them
+	 * instead (§18.26 item 254), because a constructed scope fills its declared
+	 * defaults before anything can look and running them there would run them on
+	 * values the declaration decided; that limitation is that door's and does not
+	 * travel to this one.
 	 *
-	 * A member's payload declares no callback at all (§24.4), so it takes the
-	 * type check alone through `checkValue`.
+	 * A member's payload declares neither (§24.4), so it takes the type check
+	 * alone through `checkValue`.
 	 */
 	function checkSuppliedScopedValue(f: AnyFlag, value: unknown): void {
 		const outcome = preTypedValueOutcome(f, value);
@@ -767,11 +797,12 @@ export function flatToCallKwargs(
 			problems.push({ stage: STAGE.value, message: outcome.message });
 			return;
 		}
-		if (flagOpts(f).validate !== undefined) {
-			// The callback runs on the value the HANDLER receives, which is the
-			// coerced one -- the command line runs it on the parsed value, never on
+		const o = flagOpts(f);
+		if (o.choices !== undefined || o.validate !== undefined) {
+			// Both halves see the value the HANDLER receives, which is the coerced
+			// one -- the command line matches and validates the parsed value, never
 			// the token text.
-			pendingValidations.push({ f, value: outcome.value });
+			pendingDeclarationChecks.push({ f, value: outcome.value });
 		}
 	}
 
@@ -806,11 +837,30 @@ export function flatToCallKwargs(
 		}
 		out[key] = value;
 	}
-	// The value stage's second pass: the custom callbacks, over the scoped values
-	// the sweep above accepted, in the declaration order it read them in. A
-	// root-scope value's callback belongs to the pipeline this conversion feeds,
-	// which never runs when anything above recorded a problem.
-	for (const { f, value } of pendingValidations) {
+	// The value stage's second pass: the closed set and then the custom callback,
+	// per flag, over the scoped values the sweep above accepted, in the
+	// declaration order it read them in. The two run in that order for one flag
+	// because that is the order the command line runs them in -- a value the
+	// closed set refused is never handed to the callback, so the caller is told
+	// about one refusal rather than two. A root-scope value's halves belong to
+	// the pipeline this conversion feeds, which never runs when anything above
+	// recorded a problem.
+	for (const { f, value } of pendingDeclarationChecks) {
+		const o = flagOpts(f);
+		if (o.choices !== undefined) {
+			try {
+				validateChoices(
+					f.name,
+					value,
+					f.schema.startsWith("list["),
+					choiceValues(o.choices),
+					false,
+				);
+			} catch (e) {
+				problems.push({ stage: STAGE.value, message: (e as Error).message });
+				continue;
+			}
+		}
 		recordValidateRefusal(f, value, problems);
 	}
 	const first = firstProblem(problems);
