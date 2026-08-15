@@ -557,3 +557,96 @@ def test_a_variadic_element_is_refused_under_the_variadic_own_name():
     assert _arg_refusal("mixed", head="h", rest=["a", 2]) == (
         "argument 'rest': expected string, got int"
     )
+
+
+# ---------------------------------------------------------------------------
+# A DASH-SPELLED key names nothing (§18.24 item 242)
+#
+# The key namespace at this boundary is the underscored delivery-name space --
+# the parameter name a handler receives, which is what the flat schema
+# publishes. A flag's dashed spelling is its command-line token, and there are
+# no tokens here, so a dashed key is an unknown property: a fact about the
+# object's shape, reported ahead of every other problem in the same object.
+# ---------------------------------------------------------------------------
+
+
+@choice("sms", help="a text message")
+class Sms:
+    phone_number: str = sub_flag(help="where to text", presence="required")
+
+
+def _dashed_app():
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @strictcli.flag(
+        "keep-going", type=bool, help="keep going", default=False,
+    )
+    @choice_flag(
+        "via", help="delivery channel", default=NoDelivery(),
+        elect_by="selector-token", choices=[NoDelivery, Sms],
+    )
+    @choice_flag(
+        "mode", help="which profiles", presence="required",
+        elect_by="member-flags", choices=[Profile, AllProfiles],
+    )
+    def run(
+        ctx, keep_going, via: NoDelivery | Sms, mode: Profile | AllProfiles,
+    ):
+        pass
+
+    return app
+
+
+def _dashed_refusal(**arguments):
+    with pytest.raises(strictcli.InvokeError) as exc:
+        _dashed_app()._call_with_kwargs(
+            "run", dict(arguments), approve_consequential=False, flat=True,
+        )
+    return str(exc.value)
+
+
+def test_a_dash_spelled_member_key_names_nothing():
+    assert _dashed_refusal(**{"all-profiles": False}) == (
+        "unknown parameter 'all-profiles' for command 'run'"
+    )
+
+
+def test_a_dash_spelled_root_flag_key_names_nothing():
+    assert _dashed_refusal(**{"keep-going": True, "all_profiles": True}) == (
+        "unknown parameter 'keep-going' for command 'run'"
+    )
+
+
+def test_a_dash_spelled_scoped_key_names_nothing():
+    """At every depth: the scoped parameter is published underscored too."""
+    assert _dashed_refusal(
+        **{"all_profiles": True, "via": "sms", "phone-number": "555"}
+    ) == "unknown parameter 'phone-number' for command 'run'"
+
+
+def test_a_dash_spelled_key_is_shape_and_outranks_an_election_refusal():
+    assert _dashed_refusal(
+        **{"mode": "profile", "profile": "work", "all-profiles": False}
+    ) == "unknown parameter 'all-profiles' for command 'run'"
+
+
+def test_the_underscored_spelling_is_the_one_that_works():
+    """Which is what makes the dashed one a mistake worth a sentence rather
+    than a second spelling of the same parameter."""
+    app = _dashed_app()
+    assert app._call_with_kwargs(
+        "run",
+        {"all_profiles": True, "keep_going": True, "via": "sms",
+         "phone_number": "555"},
+        approve_consequential=False, flat=True,
+    ) is None
+
+
+def test_the_dashed_spelling_is_the_command_lines_own():
+    """The token spelling is not wrong -- it is just not a key."""
+    r = _dashed_app().test(
+        ["run", "--all-profiles", "--keep-going", "--via", "sms",
+         "--phone-number", "555"],
+    )
+    assert r.exit_code == 0
