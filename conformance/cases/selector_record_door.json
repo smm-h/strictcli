@@ -10,7 +10,11 @@
           "command": "send",
           "kwargs": {
             "before": "nope",
-            "via": {"choice": "email", "subject": "hi", "retries": "nope"}
+            "via": {
+              "choice": "email",
+              "subject": "hi",
+              "retries": "nope"
+            }
           }
         }
       ],
@@ -21,7 +25,12 @@
           "effect": "read_only",
           "handler_prints": "via={via} before={before} after={after}",
           "flags": [
-            {"name": "before", "help": "a root flag declared before the selector", "type": "int", "presence": "optional"},
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional"
+            },
             {
               "name": "via",
               "help": "delivery channel",
@@ -32,26 +41,57 @@
                   "name": "email",
                   "help": "deliver the notification as an email message",
                   "flags": [
-                    {"name": "subject", "help": "subject line of the message", "type": "str", "presence": "required"},
-                    {"name": "retries", "help": "delivery attempts before giving up", "type": "int", "presence": "default", "default": 3}
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
                   ]
                 },
                 {
                   "name": "sms",
                   "help": "deliver the notification as a text message",
                   "flags": [
-                    {"name": "phone-number", "help": "destination number", "type": "str", "presence": "required"}
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
                   ]
                 }
               ]
             },
-            {"name": "after", "help": "a root flag declared after the selector", "type": "int", "presence": "optional"}
+            {
+              "name": "after",
+              "help": "a root flag declared after the selector",
+              "type": "int",
+              "presence": "optional"
+            }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -69,7 +109,11 @@
           "command": "send",
           "kwargs": {
             "after": "nope",
-            "via": {"choice": "email", "subject": "hi", "retries": "nope"}
+            "via": {
+              "choice": "email",
+              "subject": "hi",
+              "retries": "nope"
+            }
           }
         }
       ],
@@ -80,7 +124,12 @@
           "effect": "read_only",
           "handler_prints": "via={via} before={before} after={after}",
           "flags": [
-            {"name": "before", "help": "a root flag declared before the selector", "type": "int", "presence": "optional"},
+            {
+              "name": "before",
+              "help": "a root flag declared before the selector",
+              "type": "int",
+              "presence": "optional"
+            },
             {
               "name": "via",
               "help": "delivery channel",
@@ -91,26 +140,57 @@
                   "name": "email",
                   "help": "deliver the notification as an email message",
                   "flags": [
-                    {"name": "subject", "help": "subject line of the message", "type": "str", "presence": "required"},
-                    {"name": "retries", "help": "delivery attempts before giving up", "type": "int", "presence": "default", "default": 3}
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
                   ]
                 },
                 {
                   "name": "sms",
                   "help": "deliver the notification as a text message",
                   "flags": [
-                    {"name": "phone-number", "help": "destination number", "type": "str", "presence": "required"}
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
                   ]
                 }
               ]
             },
-            {"name": "after", "help": "a root flag declared after the selector", "type": "int", "presence": "optional"}
+            {
+              "name": "after",
+              "help": "a root flag declared after the selector",
+              "type": "int",
+              "presence": "optional"
+            }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -127,7 +207,14 @@
         {
           "command": "send",
           "kwargs": {
-            "mode": {"choice": "advanced", "via": {"choice": "email", "subject": "hi", "retries": "nope"}}
+            "mode": {
+              "choice": "advanced",
+              "via": {
+                "choice": "email",
+                "subject": "hi",
+                "retries": "nope"
+              }
+            }
           }
         }
       ],
@@ -158,30 +245,59 @@
                           "name": "email",
                           "help": "deliver the notification as an email message",
                           "flags": [
-                            {"name": "subject", "help": "subject line of the message", "type": "str", "presence": "required"},
-                            {"name": "retries", "help": "delivery attempts before giving up", "type": "int", "presence": "default", "default": 3}
+                            {
+                              "name": "subject",
+                              "help": "subject line of the message",
+                              "type": "str",
+                              "presence": "required"
+                            },
+                            {
+                              "name": "retries",
+                              "help": "delivery attempts before giving up",
+                              "type": "int",
+                              "presence": "default",
+                              "default": 3
+                            }
                           ]
                         },
                         {
                           "name": "sms",
                           "help": "deliver the notification as a text message",
                           "flags": [
-                            {"name": "phone-number", "help": "destination number", "type": "str", "presence": "required"}
+                            {
+                              "name": "phone-number",
+                              "help": "destination number",
+                              "type": "str",
+                              "presence": "required"
+                            }
                           ]
                         }
                       ]
                     }
                   ]
                 },
-                {"name": "simple", "help": "the mode that declares no channel of its own"}
+                {
+                  "name": "simple",
+                  "help": "the mode that declares no channel of its own"
+                }
               ]
             }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -198,7 +314,11 @@
         {
           "command": "send",
           "kwargs": {
-            "via": {"choice": "email", "subject": "hi", "note": null}
+            "via": {
+              "choice": "email",
+              "subject": "hi",
+              "note": null
+            }
           }
         }
       ],
@@ -219,25 +339,50 @@
                   "name": "email",
                   "help": "deliver the notification as an email message",
                   "flags": [
-                    {"name": "subject", "help": "subject line of the message", "type": "str", "presence": "required"},
-                    {"name": "note", "help": "an optional note carried with the message", "type": "str", "presence": "optional"}
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "note",
+                      "help": "an optional note carried with the message",
+                      "type": "str",
+                      "presence": "optional"
+                    }
                   ]
                 },
                 {
                   "name": "sms",
                   "help": "deliver the notification as a text message",
                   "flags": [
-                    {"name": "phone-number", "help": "destination number", "type": "str", "presence": "required"}
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
                   ]
                 }
               ]
             }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "via=email(subject=hi, note=None)\ncall ok: send\n",
@@ -254,7 +399,10 @@
         {
           "command": "send",
           "kwargs": {
-            "via": {"choice": "email", "subject": null}
+            "via": {
+              "choice": "email",
+              "subject": null
+            }
           }
         }
       ],
@@ -275,24 +423,44 @@
                   "name": "email",
                   "help": "deliver the notification as an email message",
                   "flags": [
-                    {"name": "subject", "help": "subject line of the message", "type": "str", "presence": "required"}
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
                   ]
                 },
                 {
                   "name": "sms",
                   "help": "deliver the notification as a text message",
                   "flags": [
-                    {"name": "phone-number", "help": "destination number", "type": "str", "presence": "required"}
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
                   ]
                 }
               ]
             }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -309,7 +477,10 @@
         {
           "command": "send",
           "kwargs": {
-            "via": {"choice": "email", "subject": "hi"}
+            "via": {
+              "choice": "email",
+              "subject": "hi"
+            }
           }
         }
       ],
@@ -330,24 +501,44 @@
                   "name": "email",
                   "help": "deliver the notification as an email message",
                   "flags": [
-                    {"name": "subject", "help": "subject line of the message", "type": "str", "presence": "required"}
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
                   ]
                 },
                 {
                   "name": "sms",
                   "help": "deliver the notification as a text message",
                   "flags": [
-                    {"name": "phone-number", "help": "destination number", "type": "str", "presence": "required"}
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
                   ]
                 }
               ]
             }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "subject=hi provided=false\ncall ok: send\n",
@@ -364,7 +555,11 @@
         {
           "command": "send",
           "kwargs": {
-            "via": {"choice": "email", "subject": "hi", "format": "loud"}
+            "via": {
+              "choice": "email",
+              "subject": "hi",
+              "format": "loud"
+            }
           }
         }
       ],
@@ -385,7 +580,12 @@
                   "name": "email",
                   "help": "deliver the notification as an email message",
                   "flags": [
-                    {"name": "subject", "help": "subject line of the message", "type": "str", "presence": "required"},
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
                     {
                       "name": "format",
                       "help": "how the message body is rendered",
@@ -393,8 +593,14 @@
                       "presence": "default",
                       "default": "plain",
                       "choices_str": [
-                        {"value": "plain", "help": "no markup at all"},
-                        {"value": "rich", "help": "the full markup set"}
+                        {
+                          "value": "plain",
+                          "help": "no markup at all"
+                        },
+                        {
+                          "value": "rich",
+                          "help": "the full markup set"
+                        }
                       ]
                     }
                   ]
@@ -403,17 +609,32 @@
                   "name": "sms",
                   "help": "deliver the notification as a text message",
                   "flags": [
-                    {"name": "phone-number", "help": "destination number", "type": "str", "presence": "required"}
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
                   ]
                 }
               ]
             }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "via=email(subject=hi, format=loud)\ncall ok: send\n",
@@ -422,7 +643,10 @@
   },
   {
     "name": "record door: a key the elected scope does not declare is an unknown parameter under that scope",
-    "targets": ["go", "typescript"],
+    "targets": [
+      "go",
+      "typescript"
+    ],
     "app": {
       "name": "myapp",
       "version": "1.0.0",
@@ -431,7 +655,11 @@
         {
           "command": "send",
           "kwargs": {
-            "via": {"choice": "email", "subject": "hi", "bogus": 1}
+            "via": {
+              "choice": "email",
+              "subject": "hi",
+              "bogus": 1
+            }
           }
         }
       ],
@@ -452,24 +680,44 @@
                   "name": "email",
                   "help": "deliver the notification as an email message",
                   "flags": [
-                    {"name": "subject", "help": "subject line of the message", "type": "str", "presence": "required"}
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    }
                   ]
                 },
                 {
                   "name": "sms",
                   "help": "deliver the notification as a text message",
                   "flags": [
-                    {"name": "phone-number", "help": "destination number", "type": "str", "presence": "required"}
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
                   ]
                 }
               ]
             }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -483,7 +731,12 @@
       "version": "1.0.0",
       "help": "test app",
       "pre_call": [
-        {"command": "run", "kwargs": {"count": 2}}
+        {
+          "command": "run",
+          "kwargs": {
+            "count": 2
+          }
+        }
       ],
       "commands": [
         {
@@ -492,14 +745,33 @@
           "effect": "read_only",
           "handler_prints": "label={label} count={count}",
           "args": [
-            {"name": "label", "help": "what to call this run", "presence": "optional"},
-            {"name": "count", "help": "how many times", "type": "int", "presence": "required"}
+            {
+              "name": "label",
+              "help": "what to call this run",
+              "presence": "optional"
+            },
+            {
+              "name": "count",
+              "help": "how many times",
+              "type": "int",
+              "presence": "required"
+            }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "label=None count=2\ncall ok: run\n",
@@ -513,7 +785,12 @@
       "version": "1.0.0",
       "help": "test app",
       "pre_call": [
-        {"command": "run", "kwargs": {"count": "5"}}
+        {
+          "command": "run",
+          "kwargs": {
+            "count": "5"
+          }
+        }
       ],
       "commands": [
         {
@@ -522,13 +799,28 @@
           "effect": "read_only",
           "handler_prints": "count={count}",
           "args": [
-            {"name": "count", "help": "how many times", "type": "int", "presence": "required"}
+            {
+              "name": "count",
+              "help": "how many times",
+              "type": "int",
+              "presence": "required"
+            }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -542,7 +834,12 @@
       "version": "1.0.0",
       "help": "test app",
       "pre_call": [
-        {"command": "run", "kwargs": {"label": 7}}
+        {
+          "command": "run",
+          "kwargs": {
+            "label": 7
+          }
+        }
       ],
       "commands": [
         {
@@ -551,13 +848,27 @@
           "effect": "read_only",
           "handler_prints": "label={label}",
           "args": [
-            {"name": "label", "help": "what to call this run", "presence": "required"}
+            {
+              "name": "label",
+              "help": "what to call this run",
+              "presence": "required"
+            }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -571,7 +882,12 @@
       "version": "1.0.0",
       "help": "test app",
       "pre_call": [
-        {"command": "run", "kwargs": {"count": "5"}}
+        {
+          "command": "run",
+          "kwargs": {
+            "count": "5"
+          }
+        }
       ],
       "commands": [
         {
@@ -580,16 +896,36 @@
           "effect": "read_only",
           "handler_prints": "target={target} count={count}",
           "flags": [
-            {"name": "target", "help": "where the job runs", "type": "str", "presence": "required"}
+            {
+              "name": "target",
+              "help": "where the job runs",
+              "type": "str",
+              "presence": "required"
+            }
           ],
           "args": [
-            {"name": "count", "help": "how many times", "type": "int", "presence": "required"}
+            {
+              "name": "count",
+              "help": "how many times",
+              "type": "int",
+              "presence": "required"
+            }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
@@ -603,7 +939,12 @@
       "version": "1.0.0",
       "help": "test app",
       "pre_call": [
-        {"command": "run", "kwargs": {"retries": "nope"}}
+        {
+          "command": "run",
+          "kwargs": {
+            "retries": "nope"
+          }
+        }
       ],
       "commands": [
         {
@@ -612,17 +953,309 @@
           "effect": "read_only",
           "handler_prints": "retries={retries}",
           "flags": [
-            {"name": "retries", "help": "attempts before giving up", "type": "int", "presence": "default", "default": 3}
+            {
+              "name": "retries",
+              "help": "attempts before giving up",
+              "type": "int",
+              "presence": "default",
+              "default": 3
+            }
           ]
         },
-        {"name": "noop", "help": "a command the case argv can run without output", "effect": "read_only", "handler_returns": {"kind": "exit", "code": 0}}
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
       ]
     },
-    "argv": ["noop"],
+    "argv": [
+      "noop"
+    ],
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
       "stderr_equals": "call error: --retries: expected integer, got str\n"
+    }
+  },
+  {
+    "name": "record door: a value problem in one record does not outrank another selector's election refusal",
+    "acknowledged_divergence": {
+      "reason": "The refusal this case pins the STAGE of is the record door's wrong-choice sentence, which contract \u00a718.25 item 251 acknowledges as a per-language spelling: a Go record holds a declared choice, a TypeScript record a string tag and a Python record a class instance, so each names what its runtime is holding. What the case asserts everywhere is the stage rather than the sentence -- the second selector's ELECTION refusal is what comes back, and the first record's value or presence problem is not mentioned.",
+      "streams": {
+        "stderr": [
+          "go",
+          "typescript"
+        ]
+      }
+    },
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "pre_call": [
+        {
+          "command": "send",
+          "kwargs": {
+            "via": {
+              "choice": "email",
+              "subject": "hi",
+              "retries": "nope"
+            },
+            "target": {
+              "choice": "simple"
+            }
+          }
+        }
+      ],
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "via={via} target={target}",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "operating mode",
+              "presence": "default",
+              "default": {
+                "choice": "simple"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "advanced",
+                  "help": "the mode that opens a rendering selection of its own"
+                },
+                {
+                  "name": "simple",
+                  "help": "the mode that declares no rendering of its own"
+                }
+              ]
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "one-profile",
+                  "help": "operate on a single profile"
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
+      ]
+    },
+    "argv": [
+      "noop"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_contains": "call error: ",
+      "stderr_not_contains": [
+        "expected integer",
+        "is required"
+      ]
+    }
+  },
+  {
+    "name": "record door: a presence problem in one record does not outrank it either",
+    "acknowledged_divergence": {
+      "reason": "The refusal this case pins the STAGE of is the record door's wrong-choice sentence, which contract \u00a718.25 item 251 acknowledges as a per-language spelling: a Go record holds a declared choice, a TypeScript record a string tag and a Python record a class instance, so each names what its runtime is holding. What the case asserts everywhere is the stage rather than the sentence -- the second selector's ELECTION refusal is what comes back, and the first record's value or presence problem is not mentioned.",
+      "streams": {
+        "stderr": [
+          "go",
+          "typescript"
+        ]
+      }
+    },
+    "targets": [
+      "go",
+      "typescript"
+    ],
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "pre_call": [
+        {
+          "command": "send",
+          "kwargs": {
+            "via": {
+              "choice": "email"
+            },
+            "target": {
+              "choice": "simple"
+            }
+          }
+        }
+      ],
+      "commands": [
+        {
+          "name": "send",
+          "help": "send one notification through exactly one channel",
+          "effect": "read_only",
+          "handler_prints": "via={via} target={target}",
+          "flags": [
+            {
+              "name": "mode",
+              "help": "operating mode",
+              "presence": "default",
+              "default": {
+                "choice": "simple"
+              },
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "advanced",
+                  "help": "the mode that opens a rendering selection of its own"
+                },
+                {
+                  "name": "simple",
+                  "help": "the mode that declares no rendering of its own"
+                }
+              ]
+            },
+            {
+              "name": "via",
+              "help": "delivery channel",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "email",
+                  "help": "deliver the notification as an email message",
+                  "flags": [
+                    {
+                      "name": "subject",
+                      "help": "subject line of the message",
+                      "type": "str",
+                      "presence": "required"
+                    },
+                    {
+                      "name": "retries",
+                      "help": "delivery attempts before giving up",
+                      "type": "int",
+                      "presence": "default",
+                      "default": 3
+                    }
+                  ]
+                },
+                {
+                  "name": "sms",
+                  "help": "deliver the notification as a text message",
+                  "flags": [
+                    {
+                      "name": "phone-number",
+                      "help": "destination number",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "target",
+              "help": "which profiles to operate on",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "one-profile",
+                  "help": "operate on a single profile"
+                },
+                {
+                  "name": "all-profiles",
+                  "help": "operate on every profile"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "noop",
+          "help": "a command the case argv can run without output",
+          "effect": "read_only",
+          "handler_returns": {
+            "kind": "exit",
+            "code": 0
+          }
+        }
+      ]
+    },
+    "argv": [
+      "noop"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_contains": "call error: ",
+      "stderr_not_contains": [
+        "expected integer",
+        "is required"
+      ]
     }
   }
 ]
