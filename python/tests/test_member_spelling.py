@@ -513,8 +513,14 @@ def test_a_decline_beside_an_election_is_the_redundant_negation_refusal():
 
 
 def test_the_selector_key_outranks_a_false_on_the_member_it_elects(capsys):
-    """The selector property naming a member IS an election of it, and a JSON
-    object has no order for a later key to win by, so the election stands."""
+    """§18.23 item 236: no command line spells this contradiction -- a
+    member-spelled selector has no token of its own -- so it exists only
+    because the flat object has two ways to name one member and no order
+    between them. The election stands and the decline is dropped, because a
+    payload-less member publishes no property of its own (§18.21 item 231):
+    the selector's property is the one thing the schema tells a caller to send
+    for electing it, and what the schema publishes outranks what it does
+    not."""
     _flat(_election_app(), mode="all-profiles", all_profiles=False)
     assert capsys.readouterr().out == "all\n"
 
