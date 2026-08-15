@@ -763,7 +763,7 @@ func TestSiblingScopesMayReuseAShort(t *testing.T) {
 // --- Constraints operate at root scope only (§24.8) ---
 
 func TestConstraintNamingAScopedFlagIsRefused(t *testing.T) {
-	expectPanic(t, `command "cmd": Requires references 'target', which is declared under '--mode a': dependency constraints operate at root scope only`, func() {
+	expectPanic(t, `command "cmd": constraint "target-needs-host" references 'target', which is declared under '--mode a': constraints operate at root scope only`, func() {
 		simpleApp("cmd", "a command", "ok",
 			WithFlags(
 				StringFlag("host", "the host", Optional()),
@@ -771,12 +771,12 @@ func TestConstraintNamingAScopedFlagIsRefused(t *testing.T) {
 					Choice("a", "choice a", StringFlag("target", "the target", Optional())),
 					Choice("b", "choice b")),
 			),
-			WithDependencies(Requires{Flag: "target", DependsOn: "host"}))
+			WithConstraints(Requires("target-needs-host", "target", "host")))
 	})
 }
 
-func TestCoRequiredNamingAScopedFlagIsRefused(t *testing.T) {
-	expectPanic(t, `command "cmd": CoRequired references 'target', which is declared under '--mode a': dependency constraints operate at root scope only`, func() {
+func TestAllOrNoneNamingAScopedFlagIsRefused(t *testing.T) {
+	expectPanic(t, `command "cmd": constraint "pair" references 'target', which is declared under '--mode a': constraints operate at root scope only`, func() {
 		simpleApp("cmd", "a command", "ok",
 			WithFlags(
 				StringFlag("host", "the host", Optional()),
@@ -784,7 +784,7 @@ func TestCoRequiredNamingAScopedFlagIsRefused(t *testing.T) {
 					Choice("a", "choice a", StringFlag("target", "the target", Optional())),
 					Choice("b", "choice b")),
 			),
-			WithDependencies(CoRequired{Flags: []string{"host", "target"}}))
+			WithConstraints(AllOrNone("pair", Member("host"), Member("target"))))
 	})
 }
 

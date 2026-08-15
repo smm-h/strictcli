@@ -40,11 +40,11 @@ func TestRequiresImpliedSourceCountsAsPresent(t *testing.T) {
 			BoolFlag("loud", "loud mode", Default(false)),
 			StringFlag("target", "deploy target", Required()),
 		),
-		WithDependencies(
+		WithConstraints(
 			// --all implies --loud=true
-			Implies{Flag: "all", Implies: "loud", Value: true},
+			Implies("all-is-loud", "all", "loud", true),
 			// --target requires --loud
-			Requires{Flag: "target", DependsOn: "loud"},
+			Requires("target-needs-loud", "target", "loud"),
 		), WithEffect(EffectReadOnly),
 	)
 
@@ -68,9 +68,9 @@ func TestRequiresDefaultSourceNotPresent(t *testing.T) {
 			StringFlag("target", "deploy target", Required()),
 			BoolFlag("loud", "loud mode", Default(false)),
 		),
-		WithDependencies(
+		WithConstraints(
 			// --target requires --loud
-			Requires{Flag: "target", DependsOn: "loud"},
+			Requires("target-needs-loud", "target", "loud"),
 		), WithEffect(EffectReadOnly),
 	)
 
@@ -127,8 +127,8 @@ func TestInvokeDefaultedNotPresentForRequires(t *testing.T) {
 			StringFlag("target", "deploy target", Required()),
 			BoolFlag("loud", "loud mode", Default(false)),
 		),
-		WithDependencies(
-			Requires{Flag: "target", DependsOn: "loud"},
+		WithConstraints(
+			Requires("target-needs-loud", "target", "loud"),
 		), WithEffect(EffectReadOnly),
 	)
 

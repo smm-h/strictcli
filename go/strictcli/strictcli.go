@@ -203,33 +203,10 @@ type FlagSet struct {
 	Flags []Flag
 }
 
-// CoRequired declares flags that must all appear together or none.
-type CoRequired struct {
-	Flags []string
-}
-
-// Requires declares that one flag depends on another being present.
-type Requires struct {
-	Flag      string
-	DependsOn string
-}
-
-// Implies declares that providing one bool flag automatically sets another bool flag to a value.
-// If the user explicitly provides a contradicting value for the target, it is a parse error.
-type Implies struct {
-	Flag    string
-	Implies string
-	Value   bool
-}
-
-// Dependency is either a CoRequired, Requires, or Implies constraint.
-type Dependency interface {
-	isDependency()
-}
-
-func (CoRequired) isDependency() {}
-func (Requires) isDependency()   {}
-func (Implies) isDependency()    {}
+// The constraint declarations -- AtLeastOne, AllOrNone, Requires and Implies --
+// are constructors over an unexported type and live in constraints.go
+// (contract §26.6). `CoRequired` is deleted: all-or-none absorbs it by rename,
+// with no alias and no deprecation period.
 
 // InfraRootPath is an opaque marker produced by RelativeToRoot. It represents a
 // filesystem path built from a declared infrastructure root (identified by its
@@ -325,10 +302,10 @@ type Command struct {
 	OwnsStdout   bool
 	Grants       []Grant
 	Forwarding   *Forwarding
-	flags        []Flag
-	args         []Arg
-	flagSets     []FlagSet
-	dependencies []Dependency
+	flags       []Flag
+	args        []Arg
+	flagSets    []FlagSet
+	constraints []constraintDecl
 	// index is the command's whole declaration tree flattened by name, built
 	// once at registration (contract §24). It is what makes tokenization,
 	// election, scope validation and help rendering see every depth.
@@ -1012,10 +989,15 @@ func WithFlagSets(flagSets ...FlagSet) CmdOption {
 	}
 }
 
-// WithDependencies adds dependency constraints to a command.
-func WithDependencies(deps ...Dependency) CmdOption {
+// WithConstraints adds declared constraints to a command: the two co-occurrence
+// families (AtLeastOne, AllOrNone) and the two one-way dependency rules
+// (Requires, Implies). The container is named for what it holds -- the schema
+// key has been `constraints` since v1 (contract §26.1).
+func WithConstraints(cs ...Constraint) CmdOption {
 	return func(c *Command) {
-		c.dependencies = append(c.dependencies, deps...)
+		for _, decl := range cs {
+			c.constraints = append(c.constraints, decl.(constraintDecl))
+		}
 	}
 }
 
@@ -3903,25 +3885,6 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 	cmd.index = buildFlagIndex(allFlags)
 	validateCommandScopes(name, cmd.index)
 
-	// A constraint naming a SCOPED flag is a registration error: the scope
-	// already IS the constraint, and expressing one fact in two mechanisms is
-	// how the two disagree later (§24.8). Checked BEFORE the unknown-flag
-	// guards below, which would otherwise report a scoped operand as unknown.
-	for _, dep := range cmd.dependencies {
-		switch d := dep.(type) {
-		case CoRequired:
-			for _, flagName := range d.Flags {
-				rejectScopedConstraintOperand(name, "CoRequired", flagName, cmd.index)
-			}
-		case Requires:
-			rejectScopedConstraintOperand(name, "Requires", d.Flag, cmd.index)
-			rejectScopedConstraintOperand(name, "Requires", d.DependsOn, cmd.index)
-		case Implies:
-			rejectScopedConstraintOperand(name, "Implies", d.Flag, cmd.index)
-			rejectScopedConstraintOperand(name, "Implies", d.Implies, cmd.index)
-		}
-	}
-
 	// Check duplicate flag names and collisions with global flags
 	globalFlagSet := make(map[string]bool)
 	for _, gf := range globalFlags {
@@ -3982,76 +3945,41 @@ func buildAndValidateCommand(name, help string, handler func(ctx *Context, kwarg
 		}
 	}
 
-	// Validate dependencies
-	for _, dep := range cmd.dependencies {
-		switch d := dep.(type) {
-		case CoRequired:
-			if len(d.Flags) < 2 {
-				panic(errCommandCoRequiredMinFlags(name, len(d.Flags)))
+	// Store the resolved allFlags on the command for parsing. The constraint
+	// passes below resolve member names against it and against cmd.args.
+	cmd.flags = allFlags
+
+	// Validate the constraint set, in §26.8's pinned pass order.
+	validateConstraints(name, cmd)
+
+	// `Implies` operands are bools on both sides. The rule is the family's own
+	// and predates this round; it runs after the shared passes because it is
+	// about the declaration the constraint names, not about the constraint.
+	for i := range cmd.constraints {
+		c := &cmd.constraints[i]
+		if c.family != familyImplies {
+			continue
+		}
+		var triggerType, targetType FlagType
+		for _, f := range allFlags {
+			if f.Name == c.flag {
+				triggerType = f.Type
 			}
-			seen := make(map[string]bool)
-			for _, flagName := range d.Flags {
-				if !seenFlags[flagName] {
-					panic(errCommandCoRequiredUnknownFlag(name, flagName))
-				}
-				if seen[flagName] {
-					panic(errCommandCoRequiredDuplicate(name, flagName))
-				}
-				seen[flagName] = true
-			}
-		case Requires:
-			if d.Flag == d.DependsOn {
-				panic(errCommandRequiresSameFlag(name, d.Flag))
-			}
-			if !seenFlags[d.Flag] {
-				panic(errCommandRequiresUnknownFlag(name, d.Flag))
-			}
-			if !seenFlags[d.DependsOn] {
-				panic(errCommandRequiresUnknownFlag(name, d.DependsOn))
-			}
-		case Implies:
-			if d.Flag == d.Implies {
-				panic(errCommandImpliesSameFlag(name, d.Flag))
-			}
-			if !seenFlags[d.Flag] {
-				panic(errCommandImpliesUnknownFlag(name, d.Flag))
-			}
-			if !seenFlags[d.Implies] {
-				panic(errCommandImpliesUnknownFlag(name, d.Implies))
-			}
-			// Both flags must be BoolFlag
-			var triggerType, targetType FlagType
-			for _, f := range allFlags {
-				if f.Name == d.Flag {
-					triggerType = f.Type
-				}
-				if f.Name == d.Implies {
-					targetType = f.Type
-				}
-			}
-			if triggerType != TypeBool {
-				panic(errCommandImpliesTriggerNotBool(name, d.Flag))
-			}
-			if targetType != TypeBool {
-				panic(errCommandImpliesTargetNotBool(name, d.Implies))
+			if f.Name == c.implies {
+				targetType = f.Type
 			}
 		}
+		if triggerType != TypeBool {
+			panic(errCommandImpliesTriggerNotBool(name, c.flag))
+		}
+		if targetType != TypeBool {
+			panic(errCommandImpliesTargetNotBool(name, c.implies))
+		}
 	}
-
-	// Store the resolved allFlags on the command for parsing
-	cmd.flags = allFlags
 
 	cmd.tags = mergeTags(inheritedTags, cmd.tags)
 
 	return cmd
-}
-
-// rejectScopedConstraintOperand refuses a dependency family operand that names a
-// flag declared inside a choice scope (contract §24.8).
-func rejectScopedConstraintOperand(cmdName, family, flagName string, idx *flagIndex) {
-	if path := idx.scopedFlagPath(flagName); path != nil {
-		panic(errConstraintReferencesScopedFlag(cmdName, family, flagName, renderScopePath(path)))
-	}
 }
 
 // withFrameworkInternal sets the private framework-internal marker. It is

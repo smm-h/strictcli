@@ -1391,15 +1391,15 @@ func TestEnvChoicesInvalid(t *testing.T) {
 	}
 }
 
-// --- CoRequired tests ---
+// --- all-or-none tests (contract §26) ---
 
-func TestCoRequiredBothProvided(t *testing.T) {
+func TestAllOrNoneBothProvided(t *testing.T) {
 	app := simpleApp("cmd", "a command", "user={user} pass={pass}",
 		WithFlags(
 			StringFlag("user", "username", Default("none")),
 			StringFlag("pass", "password", Default("none")),
 		),
-		WithDependencies(CoRequired{Flags: []string{"user", "pass"}}))
+		WithConstraints(AllOrNone("credentials", Member("user"), Member("pass"))))
 	r := app.Test([]string{"cmd", "--user", "admin", "--pass", "secret"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -1412,13 +1412,13 @@ func TestCoRequiredBothProvided(t *testing.T) {
 	}
 }
 
-func TestCoRequiredNeitherProvided(t *testing.T) {
+func TestAllOrNoneNeitherProvided(t *testing.T) {
 	app := simpleApp("cmd", "a command", "user={user} pass={pass}",
 		WithFlags(
 			StringFlag("user", "username", Default("none")),
 			StringFlag("pass", "password", Default("none")),
 		),
-		WithDependencies(CoRequired{Flags: []string{"user", "pass"}}))
+		WithConstraints(AllOrNone("credentials", Member("user"), Member("pass"))))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -1428,13 +1428,13 @@ func TestCoRequiredNeitherProvided(t *testing.T) {
 	}
 }
 
-func TestCoRequiredOneProvidedError(t *testing.T) {
+func TestAllOrNoneOneProvidedError(t *testing.T) {
 	app := simpleApp("cmd", "a command", "user={user} pass={pass}",
 		WithFlags(
 			StringFlag("user", "username", Default("none")),
 			StringFlag("pass", "password", Default("none")),
 		),
-		WithDependencies(CoRequired{Flags: []string{"user", "pass"}}))
+		WithConstraints(AllOrNone("credentials", Member("user"), Member("pass"))))
 	r := app.Test([]string{"cmd", "--user", "admin"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -1452,7 +1452,7 @@ func TestRequiresFlagWithDependsOn(t *testing.T) {
 			StringFlag("format", "output format", Default("text")),
 			StringFlag("output", "output file", Default("out.txt")),
 		),
-		WithDependencies(Requires{Flag: "output", DependsOn: "format"}))
+		WithConstraints(Requires("output-needs-format", "output", "format")))
 	r := app.Test([]string{"cmd", "--output", "file.txt", "--format", "json"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -1468,7 +1468,7 @@ func TestRequiresFlagNotProvided(t *testing.T) {
 			StringFlag("format", "output format", Default("text")),
 			StringFlag("output", "output file", Default("out.txt")),
 		),
-		WithDependencies(Requires{Flag: "output", DependsOn: "format"}))
+		WithConstraints(Requires("output-needs-format", "output", "format")))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -1481,7 +1481,7 @@ func TestRequiresDependsOnWithoutFlag(t *testing.T) {
 			StringFlag("format", "output format", Default("text")),
 			StringFlag("output", "output file", Default("out.txt")),
 		),
-		WithDependencies(Requires{Flag: "output", DependsOn: "format"}))
+		WithConstraints(Requires("output-needs-format", "output", "format")))
 	// Only --format provided (DependsOn), not --output (Flag) -- should be ok (unidirectional)
 	r := app.Test([]string{"cmd", "--format", "json"})
 	if r.ExitCode != 0 {
@@ -1495,7 +1495,7 @@ func TestRequiresFlagWithoutDependsOnError(t *testing.T) {
 			StringFlag("format", "output format", Default("text")),
 			StringFlag("output", "output file", Default("out.txt")),
 		),
-		WithDependencies(Requires{Flag: "output", DependsOn: "format"}))
+		WithConstraints(Requires("output-needs-format", "output", "format")))
 	r := app.Test([]string{"cmd", "--output", "file.txt"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
@@ -1507,40 +1507,22 @@ func TestRequiresFlagWithoutDependsOnError(t *testing.T) {
 
 // --- Dependency registration panic tests ---
 
-func TestCoRequiredLessThanTwoFlagsPanics(t *testing.T) {
+func TestAllOrNoneUnknownMemberPanics(t *testing.T) {
 	defer func() {
 		r := recover()
 		if r == nil {
-			t.Fatal("expected panic for CoRequired with <2 flags, got none")
+			t.Fatal("expected panic for an all-or-none naming an unknown member, got none")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "CoRequired must have at least 2 flags") {
-			t.Fatalf("panic message should mention at least 2 flags, got %q", msg)
+		if !strings.Contains(msg, `constraint "credentials" references unknown member "nonexistent"`) {
+			t.Fatalf("panic message should mention the unknown member, got %q", msg)
 		}
 	}()
 
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithFlags(StringFlag("user", "username", Default("none"))),
-		WithDependencies(CoRequired{Flags: []string{"user"}}), WithEffect(EffectReadOnly))
-}
-
-func TestCoRequiredUnknownFlagPanics(t *testing.T) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatal("expected panic for CoRequired with unknown flag, got none")
-		}
-		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "CoRequired references unknown flag") {
-			t.Fatalf("panic message should mention unknown flag, got %q", msg)
-		}
-	}()
-
-	app := NewApp("myapp", "1.0.0", "test app")
-	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
-		WithFlags(StringFlag("user", "username", Default("none"))),
-		WithDependencies(CoRequired{Flags: []string{"user", "nonexistent"}}), WithEffect(EffectReadOnly))
+		WithConstraints(AllOrNone("credentials", Member("user"), Member("nonexistent"))), WithEffect(EffectReadOnly))
 }
 
 func TestRequiresUnknownFlagPanics(t *testing.T) {
@@ -1550,7 +1532,7 @@ func TestRequiresUnknownFlagPanics(t *testing.T) {
 			t.Fatal("expected panic for Requires with unknown flag, got none")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "Requires references unknown flag") {
+		if !strings.Contains(msg, `constraint "user-needs-missing" references unknown flag "nonexistent"`) {
 			t.Fatalf("panic message should mention unknown flag, got %q", msg)
 		}
 	}()
@@ -1558,7 +1540,7 @@ func TestRequiresUnknownFlagPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithFlags(StringFlag("user", "username", Default("none"))),
-		WithDependencies(Requires{Flag: "user", DependsOn: "nonexistent"}), WithEffect(EffectReadOnly))
+		WithConstraints(Requires("user-needs-missing", "user", "nonexistent")), WithEffect(EffectReadOnly))
 }
 
 func TestRequiresSelfDependencyPanics(t *testing.T) {
@@ -1576,18 +1558,18 @@ func TestRequiresSelfDependencyPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithFlags(StringFlag("user", "username", Default("none"))),
-		WithDependencies(Requires{Flag: "user", DependsOn: "user"}), WithEffect(EffectReadOnly))
+		WithConstraints(Requires("self", "user", "user")), WithEffect(EffectReadOnly))
 }
 
-func TestCoRequiredDuplicateFlagPanics(t *testing.T) {
+func TestAllOrNoneDuplicateMemberPanics(t *testing.T) {
 	defer func() {
 		r := recover()
 		if r == nil {
-			t.Fatal("expected panic for CoRequired with duplicate flags, got none")
+			t.Fatal("expected panic for an all-or-none with a duplicate member, got none")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "duplicate") {
-			t.Fatalf("panic message should mention duplicate, got %q", msg)
+		if !strings.Contains(msg, `constraint "credentials" declares member "user" twice`) {
+			t.Fatalf("panic message should mention the duplicate member, got %q", msg)
 		}
 	}()
 
@@ -1597,7 +1579,7 @@ func TestCoRequiredDuplicateFlagPanics(t *testing.T) {
 			StringFlag("user", "username", Default("none")),
 			StringFlag("pass", "password", Default("none")),
 		),
-		WithDependencies(CoRequired{Flags: []string{"user", "user"}}), WithEffect(EffectReadOnly))
+		WithConstraints(AllOrNone("credentials", Member("user"), Member("user"))), WithEffect(EffectReadOnly))
 }
 
 // --- Implies tests ---
@@ -1608,7 +1590,7 @@ func TestImpliesTriggerSetsTarget(t *testing.T) {
 			BoolFlag("fast", "enable fast mode", Default(false)),
 			BoolFlag("embeddings", "enable embeddings", Default(false)),
 		),
-		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
+		WithConstraints(Implies("fast-declines-embeddings", "fast", "embeddings", false)))
 	r := app.Test([]string{"cmd", "--fast"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -1627,7 +1609,7 @@ func TestImpliesTriggerNotSetTargetGetsDefault(t *testing.T) {
 			BoolFlag("fast", "enable fast mode", Default(false)),
 			BoolFlag("embeddings", "enable embeddings", Default(false)),
 		),
-		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
+		WithConstraints(Implies("fast-declines-embeddings", "fast", "embeddings", false)))
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
@@ -1646,7 +1628,7 @@ func TestImpliesExplicitConflictError(t *testing.T) {
 			BoolFlag("fast", "enable fast mode", Default(false)),
 			BoolFlag("embeddings", "enable embeddings", Default(false)),
 		),
-		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
+		WithConstraints(Implies("fast-declines-embeddings", "fast", "embeddings", false)))
 	// --fast implies embeddings=false, but user explicitly sets --embeddings (true)
 	r := app.Test([]string{"cmd", "--fast", "--embeddings"})
 	if r.ExitCode != 1 {
@@ -1663,7 +1645,7 @@ func TestImpliesExplicitAgreementNoError(t *testing.T) {
 			BoolFlag("fast", "enable fast mode", Default(false)),
 			BoolFlag("embeddings", "enable embeddings", Default(false)),
 		),
-		WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}))
+		WithConstraints(Implies("fast-declines-embeddings", "fast", "embeddings", false)))
 	// --fast implies embeddings=false, and user explicitly sets --no-embeddings (false) -- agreement
 	r := app.Test([]string{"cmd", "--fast", "--no-embeddings"})
 	if r.ExitCode != 0 {
@@ -1684,7 +1666,7 @@ func TestImpliesUnknownTriggerFlagPanics(t *testing.T) {
 			t.Fatal("expected panic for Implies with unknown trigger flag, got none")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "Implies references unknown flag") || !strings.Contains(msg, "nonexistent") {
+		if !strings.Contains(msg, `constraint "bad" references unknown flag "nonexistent"`) {
 			t.Fatalf("panic message should mention unknown trigger flag, got %q", msg)
 		}
 	}()
@@ -1692,7 +1674,7 @@ func TestImpliesUnknownTriggerFlagPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithFlags(BoolFlag("embeddings", "enable embeddings", Default(false))),
-		WithDependencies(Implies{Flag: "nonexistent", Implies: "embeddings", Value: false}), WithEffect(EffectReadOnly))
+		WithConstraints(Implies("bad", "nonexistent", "embeddings", false)), WithEffect(EffectReadOnly))
 }
 
 func TestImpliesUnknownTargetFlagPanics(t *testing.T) {
@@ -1702,7 +1684,7 @@ func TestImpliesUnknownTargetFlagPanics(t *testing.T) {
 			t.Fatal("expected panic for Implies with unknown target flag, got none")
 		}
 		msg := fmt.Sprintf("%v", r)
-		if !strings.Contains(msg, "Implies references unknown flag") || !strings.Contains(msg, "nonexistent") {
+		if !strings.Contains(msg, `constraint "bad" references unknown flag "nonexistent"`) {
 			t.Fatalf("panic message should mention unknown target flag, got %q", msg)
 		}
 	}()
@@ -1710,7 +1692,7 @@ func TestImpliesUnknownTargetFlagPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithFlags(BoolFlag("fast", "enable fast mode", Default(false))),
-		WithDependencies(Implies{Flag: "fast", Implies: "nonexistent", Value: false}), WithEffect(EffectReadOnly))
+		WithConstraints(Implies("bad", "fast", "nonexistent", false)), WithEffect(EffectReadOnly))
 }
 
 func TestImpliesSelfImplicationPanics(t *testing.T) {
@@ -1728,7 +1710,7 @@ func TestImpliesSelfImplicationPanics(t *testing.T) {
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
 		WithFlags(BoolFlag("fast", "enable fast mode", Default(false))),
-		WithDependencies(Implies{Flag: "fast", Implies: "fast", Value: false}), WithEffect(EffectReadOnly))
+		WithConstraints(Implies("bad", "fast", "fast", false)), WithEffect(EffectReadOnly))
 }
 
 func TestImpliesTriggerNotBoolFlagPanics(t *testing.T) {
@@ -1749,7 +1731,7 @@ func TestImpliesTriggerNotBoolFlagPanics(t *testing.T) {
 			StringFlag("mode", "the mode", Default("fast")),
 			BoolFlag("embeddings", "enable embeddings", Default(false)),
 		),
-		WithDependencies(Implies{Flag: "mode", Implies: "embeddings", Value: false}), WithEffect(EffectReadOnly))
+		WithConstraints(Implies("bad", "mode", "embeddings", false)), WithEffect(EffectReadOnly))
 }
 
 func TestImpliesTargetNotBoolFlagPanics(t *testing.T) {
@@ -1770,7 +1752,7 @@ func TestImpliesTargetNotBoolFlagPanics(t *testing.T) {
 			BoolFlag("fast", "enable fast mode", Default(false)),
 			StringFlag("output", "output format", Default("text")),
 		),
-		WithDependencies(Implies{Flag: "fast", Implies: "output", Value: false}), WithEffect(EffectReadOnly))
+		WithConstraints(Implies("bad", "fast", "output", false)), WithEffect(EffectReadOnly))
 }
 
 // --- Deprecated command tests ---
@@ -1918,7 +1900,7 @@ func TestImpliesEnvTrigger(t *testing.T) {
 	}, WithFlags(
 		BoolFlag("fast", "enable fast mode", Env("MYAPP_FAST"), Default(false)),
 		BoolFlag("embeddings", "enable embeddings", Default(false)),
-	), WithDependencies(Implies{Flag: "fast", Implies: "embeddings", Value: false}), WithEffect(EffectReadOnly))
+	), WithConstraints(Implies("fast-declines-embeddings", "fast", "embeddings", false)), WithEffect(EffectReadOnly))
 
 	r := app.Test([]string{"cmd"})
 	if r.ExitCode != 0 {
@@ -6934,7 +6916,7 @@ func TestSchemaVersionInDefaults(t *testing.T) {
 // than a constraint. The selector's own dump encoding belongs to the schema-v2
 // amendment (§24.11, §24.15).
 
-func TestSchemaConstraintsCoRequired(t *testing.T) {
+func TestSchemaConstraintsAllOrNone(t *testing.T) {
 	chdirTemp(t)
 	app := NewApp("myapp", "1.0.0", "test app")
 	app.Command("cmd", "a command", func(ctx *Context, args map[string]interface{}) Outcome { return Exit(0) },
@@ -6942,7 +6924,7 @@ func TestSchemaConstraintsCoRequired(t *testing.T) {
 			StringFlag("username", "Username", Optional()),
 			StringFlag("password", "Password", Optional()),
 		),
-		WithDependencies(CoRequired{Flags: []string{"username", "password"}}), WithEffect(EffectReadOnly),
+		WithConstraints(AllOrNone("credentials", Member("username"), Member("password"))), WithEffect(EffectReadOnly),
 	)
 	schema, err := dumpSchema(app)
 	if err != nil {
@@ -6955,15 +6937,23 @@ func TestSchemaConstraintsCoRequired(t *testing.T) {
 		t.Fatalf("expected 1 constraint, got %d", len(constraints))
 	}
 	c := constraints[0].(map[string]interface{})
-	if c["type"] != "co_required" {
-		t.Fatalf("expected type 'co_required', got %v", c["type"])
+	if c["type"] != "all_or_none" {
+		t.Fatalf("expected type 'all_or_none', got %v", c["type"])
 	}
-	flags := c["flags"].([]interface{})
-	if len(flags) != 2 {
-		t.Fatalf("expected 2 flags, got %d", len(flags))
+	if c["name"] != "credentials" {
+		t.Fatalf("expected name 'credentials', got %v", c["name"])
 	}
-	if flags[0] != "username" || flags[1] != "password" {
-		t.Fatalf("expected flags [username, password], got %v", flags)
+	members := c["members"].([]interface{})
+	if len(members) != 2 {
+		t.Fatalf("expected 2 members, got %d", len(members))
+	}
+	first := members[0].(map[string]interface{})
+	if first["kind"] != "flag" || first["name"] != "username" || first["when"] != "present" {
+		t.Fatalf("unexpected first member %v", first)
+	}
+	second := members[1].(map[string]interface{})
+	if second["kind"] != "flag" || second["name"] != "password" || second["when"] != "present" {
+		t.Fatalf("unexpected second member %v", second)
 	}
 }
 
@@ -6975,7 +6965,7 @@ func TestSchemaConstraintsRequires(t *testing.T) {
 			StringFlag("format", "Output format", Optional()),
 			StringFlag("output", "Output file", Optional()),
 		),
-		WithDependencies(Requires{Flag: "output", DependsOn: "format"}), WithEffect(EffectReadOnly),
+		WithConstraints(Requires("output-needs-format", "output", "format")), WithEffect(EffectReadOnly),
 	)
 	schema, err := dumpSchema(app)
 	if err != nil {
@@ -6990,6 +6980,9 @@ func TestSchemaConstraintsRequires(t *testing.T) {
 	c := constraints[0].(map[string]interface{})
 	if c["type"] != "requires" {
 		t.Fatalf("expected type 'requires', got %v", c["type"])
+	}
+	if c["name"] != "output-needs-format" {
+		t.Fatalf("expected name 'output-needs-format', got %v", c["name"])
 	}
 	if c["flag"] != "output" {
 		t.Fatalf("expected flag 'output', got %v", c["flag"])
@@ -7007,7 +7000,7 @@ func TestSchemaConstraintsImplies(t *testing.T) {
 			BoolFlag("loud", "Loud output", Default(false)),
 			BoolFlag("debug", "Debug mode", Default(false)),
 		),
-		WithDependencies(Implies{Flag: "debug", Implies: "loud", Value: true}), WithEffect(EffectReadOnly),
+		WithConstraints(Implies("debug-is-loud", "debug", "loud", true)), WithEffect(EffectReadOnly),
 	)
 	schema, err := dumpSchema(app)
 	if err != nil {
@@ -7022,6 +7015,9 @@ func TestSchemaConstraintsImplies(t *testing.T) {
 	c := constraints[0].(map[string]interface{})
 	if c["type"] != "implies" {
 		t.Fatalf("expected type 'implies', got %v", c["type"])
+	}
+	if c["name"] != "debug-is-loud" {
+		t.Fatalf("expected name 'debug-is-loud', got %v", c["name"])
 	}
 	if c["flag"] != "debug" {
 		t.Fatalf("expected flag 'debug', got %v", c["flag"])
@@ -7044,10 +7040,10 @@ func TestSchemaConstraintsMixed(t *testing.T) {
 			BoolFlag("loud", "Loud output", Default(false)),
 			BoolFlag("debug", "Debug mode", Default(false)),
 		),
-		WithDependencies(
-			CoRequired{Flags: []string{"host", "port"}},
-			Requires{Flag: "port", DependsOn: "host"},
-			Implies{Flag: "debug", Implies: "loud", Value: true},
+		WithConstraints(
+			AllOrNone("endpoint", Member("host"), Member("port")),
+			Requires("port-needs-host", "port", "host"),
+			Implies("debug-is-loud", "debug", "loud", true),
 		), WithEffect(EffectReadOnly),
 	)
 	schema, err := dumpSchema(app)
@@ -7057,13 +7053,14 @@ func TestSchemaConstraintsMixed(t *testing.T) {
 	commands := schema["commands"].(map[string]interface{})
 	cmd := commands["cmd"].(map[string]interface{})
 	constraints := cmd["constraints"].([]interface{})
-	// 3 dependencies; the mutex entry is deleted with the construct.
+	// 3 constraints; the mutex and co_required entries are deleted with their
+	// constructs (§25.7's amendment).
 	if len(constraints) != 3 {
 		t.Fatalf("expected 3 constraints, got %d", len(constraints))
 	}
-	// co_required, requires, implies in declaration order
-	if constraints[0].(map[string]interface{})["type"] != "co_required" {
-		t.Fatalf("expected first constraint to be co_required, got %v", constraints[0])
+	// all_or_none, requires, implies in declaration order
+	if constraints[0].(map[string]interface{})["type"] != "all_or_none" {
+		t.Fatalf("expected first constraint to be all_or_none, got %v", constraints[0])
 	}
 	if constraints[1].(map[string]interface{})["type"] != "requires" {
 		t.Fatalf("expected second constraint to be requires, got %v", constraints[1])
@@ -8348,8 +8345,8 @@ func TestConfigConflictModeImpliedExcluded(t *testing.T) {
 	}, WithFlags(
 		BoolFlag("debug", "enable debug", Default(false)),
 		BoolFlag("loud", "be loud", Default(false)),
-	), WithDependencies(
-		Implies{Flag: "debug", Implies: "loud", Value: true},
+	), WithConstraints(
+		Implies("debug-is-loud", "debug", "loud", true),
 	), WithEffect(EffectReadOnly))
 
 	// Implied source should NOT trigger conflict with config

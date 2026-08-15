@@ -127,10 +127,10 @@ func TestCliOverride_NotInfra(t *testing.T) {
 // --- Infra defaults and the dependency presence predicate ---
 
 // An infra-resolved default is still a DECLARED default: it does not make the
-// flag provided, so it never counts as present for CoRequired or Requires
-// (contract §23.5's CoRequired/Requires rows, §23.6's source table).
+// flag provided, so it never engages an all-or-none member and never satisfies
+// a Requires (contract §23.5's amended rows, §23.6's source table, §26.4).
 
-func newInfraDepApp(deps ...Dependency) *App {
+func newInfraDepApp(cs ...Constraint) *App {
 	app := NewApp("myapp", "1.0.0", "test app",
 		WithInfraRoot("MYAPP_HOME", "/var/lib/myapp"))
 	app.Command("run", "run it", func(ctx *Context, kwargs map[string]interface{}) Outcome {
@@ -139,13 +139,13 @@ func newInfraDepApp(deps ...Dependency) *App {
 	}, WithFlags(
 		StringFlag("db", "db path", Default(RelativeToRoot("MYAPP_HOME", "db.sqlite"))),
 		StringFlag("cache", "cache path", Optional()),
-	), WithDependencies(deps...), WithEffect(EffectReadOnly))
+	), WithConstraints(cs...), WithEffect(EffectReadOnly))
 	return app
 }
 
-func TestInfraDefaultIsNotPresentForCoRequired(t *testing.T) {
+func TestInfraDefaultIsNotPresentForAllOrNone(t *testing.T) {
 	os.Unsetenv("MYAPP_HOME")
-	app := newInfraDepApp(CoRequired{Flags: []string{"db", "cache"}})
+	app := newInfraDepApp(AllOrNone("paths", Member("db"), Member("cache")))
 	// Neither member supplied: the infra default is not a supplied value, so
 	// the group is not half-filled and there is no violation.
 	r := app.Test([]string{"run"})
@@ -157,28 +157,28 @@ func TestInfraDefaultIsNotPresentForCoRequired(t *testing.T) {
 	}
 }
 
-func TestInfraDefaultDoesNotSatisfyCoRequired(t *testing.T) {
+func TestInfraDefaultDoesNotSatisfyAllOrNone(t *testing.T) {
 	os.Unsetenv("MYAPP_HOME")
-	app := newInfraDepApp(CoRequired{Flags: []string{"db", "cache"}})
+	app := newInfraDepApp(AllOrNone("paths", Member("db"), Member("cache")))
 	// The other member supplied alone: the infra default does not stand in for
 	// the missing one, so the group IS half-filled.
 	r := app.Test([]string{"run", "--cache", "/tmp/c"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
 	}
-	if !strings.Contains(r.Stderr, "flags --db, --cache must be used together") {
-		t.Fatalf("expected co-required error, got %q", r.Stderr)
+	if !strings.Contains(r.Stderr, `constraint "paths": --db, --cache must be used together`) {
+		t.Fatalf("expected all-or-none error, got %q", r.Stderr)
 	}
 }
 
 func TestInfraDefaultDoesNotSatisfyRequires(t *testing.T) {
 	os.Unsetenv("MYAPP_HOME")
-	app := newInfraDepApp(Requires{Flag: "cache", DependsOn: "db"})
+	app := newInfraDepApp(Requires("cache-needs-db", "cache", "db"))
 	r := app.Test([]string{"run", "--cache", "/tmp/c"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d: stdout=%q", r.ExitCode, r.Stdout)
 	}
-	if !strings.Contains(r.Stderr, "flag '--cache' requires '--db'") {
+	if !strings.Contains(r.Stderr, `constraint "cache-needs-db": flag '--cache' requires '--db'`) {
 		t.Fatalf("expected requires error, got %q", r.Stderr)
 	}
 }

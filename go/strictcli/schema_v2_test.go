@@ -989,7 +989,7 @@ func TestARichDeclarationMatchesTheSiblingImplementationsBytes(t *testing.T) {
 	app.Command("deploy", "Deploy it", noop,
 		WithEffect(EffectMutating), WithConsequential(), WithTags("release"),
 		WithGrants(Grant{Name: "write", Reason: "writes the release", Kind: "file_write"}),
-		WithDependencies(Requires{Flag: "region", DependsOn: "target"}),
+		WithConstraints(Requires("region-needs-target", "region", "target")),
 		WithFlags(
 			StringFlag("target", "Where to deploy", Short("t"), Default("prod"),
 				Env("MYAPP_TARGET"), Choices(Ch("prod", "production"), Ch("dev", ""))),
@@ -1021,6 +1021,11 @@ func TestARichDeclarationMatchesTheSiblingImplementationsBytes(t *testing.T) {
 
 // pythonRichDump is the Python implementation's dump of the same declaration,
 // captured verbatim from `project_id` onward.
+//
+// The `constraints` entry carries the mandatory `name` §25.7's amendment added
+// (§18.30 item 277): the key order is `type`, `name`, `flag`, `depends_on`, and
+// the sibling implementations converge on it in their own rounds of this
+// campaign phase.
 const pythonRichDump = `  "project_id": "testproject",
   "name": "testapp",
   "version": "1.0.0",
@@ -1200,6 +1205,7 @@ const pythonRichDump = `  "project_id": "testproject",
       "constraints": [
         {
           "type": "requires",
+          "name": "region-needs-target",
           "flag": "region",
           "depends_on": "target"
         }

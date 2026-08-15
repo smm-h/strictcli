@@ -651,60 +651,41 @@ func validateAndBuildKwargs(cmd *Command, store *sourcedStore, positionals posit
 	// now, and §21.4's three errors survive verbatim inside the election phase
 	// (contract §21's supersession box, §24.4).
 
-	// Resolve Implies dependencies (before general dependency validation).
-	// Implied values are stored with SourceImplied.
-	for _, dep := range cmd.dependencies {
-		if d, ok := dep.(Implies); ok {
-			if store.isPresentForDeps(d.Flag) {
-				if targetVal, targetSet := store.get(d.Implies); targetSet {
-					// Target was explicitly set -- check for conflict
-					if targetVal.(bool) != d.Value {
-						neg := ""
-						if !d.Value {
-							neg = "no-"
-						}
-						explicitNeg := ""
-						if d.Value {
-							explicitNeg = "no-"
-						}
-						return nil, nil, nil, errImpliesConflict(d.Flag, neg, d.Implies, explicitNeg)
-					}
-				} else {
-					// Target not set -- inject the implied value
-					store.set(d.Implies, d.Value, SourceImplied)
-				}
-			}
+	// Resolve `Implies` first, so an implied value can engage a constraint
+	// member. Implied values are stored with SourceImplied.
+	for i := range cmd.constraints {
+		d := &cmd.constraints[i]
+		if d.family != familyImplies {
+			continue
 		}
+		if !store.isPresentForDeps(d.flag) {
+			continue
+		}
+		if targetVal, targetSet := store.get(d.implies); targetSet {
+			// Target was explicitly set -- check for conflict
+			if targetVal.(bool) != d.value {
+				neg := ""
+				if !d.value {
+					neg = "no-"
+				}
+				explicitNeg := ""
+				if d.value {
+					explicitNeg = "no-"
+				}
+				return nil, nil, nil, errImpliesConflict(d.name, d.flag, neg, d.implies, explicitNeg)
+			}
+			continue
+		}
+		// Target not set -- inject the implied value
+		store.set(d.implies, d.value, SourceImplied)
 	}
 
-	// Enforce dependency constraints.
-	// isPresentForDeps: cli, env, config, implied count. Default does NOT.
-	for _, dep := range cmd.dependencies {
-		switch d := dep.(type) {
-		case CoRequired:
-			var setFlags []string
-			var unsetFlags []string
-			for _, flagName := range d.Flags {
-				if store.isPresentForDeps(flagName) {
-					setFlags = append(setFlags, "--"+flagName)
-				} else {
-					unsetFlags = append(unsetFlags, "--"+flagName)
-				}
-			}
-			if len(setFlags) > 0 && len(unsetFlags) > 0 {
-				names := make([]string, len(d.Flags))
-				for j, flagName := range d.Flags {
-					names[j] = "--" + flagName
-				}
-				return nil, nil, nil, errFlagsMustBeUsedTogether(strings.Join(names, ", "))
-			}
-		case Requires:
-			if store.isPresentForDeps(d.Flag) {
-				if !store.isPresentForDeps(d.DependsOn) {
-					return nil, nil, nil, errFlagRequiresFlag(d.Flag, d.DependsOn)
-				}
-			}
-		}
+	// Enforce the declared constraints, children before parents, siblings in
+	// declaration order (contract §26.4). It runs after `Implies` injection and
+	// BEFORE defaults are applied, so a declared default cannot engage a member:
+	// isPresentForDeps counts cli, env, config and implied, and never default.
+	if errMsg := evaluateConstraints(cmd, store, positionals, est); errMsg != "" {
+		return nil, nil, nil, errMsg
 	}
 
 	// Apply defaults (SourceDefault), and resolve every selector's elected

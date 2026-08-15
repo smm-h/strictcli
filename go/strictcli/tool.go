@@ -92,6 +92,11 @@ func buildJSONSchema(cmd *Command) map[string]interface{} {
 		"required":             required,
 		"additionalProperties": false,
 	}
+	// The constraint projection sits BESIDE properties and required on this one
+	// flat object schema (contract §26.12). Enforcement at call time is
+	// unchanged and total: the schema is advisory, the runtime refusal is the
+	// authority.
+	projectConstraints(cmd, schema)
 	return schema
 }
 
@@ -337,14 +342,23 @@ func scopedPropertySchema(f *Flag) map[string]interface{} {
 // space, using the property names the schema publishes rather than the flags a
 // CLI user types.
 func toolDescription(cmd *Command) string {
-	if cmd.index == nil || !cmd.index.hasSelectors {
-		return cmd.Help
+	out := cmd.Help
+	if cmd.index != nil && cmd.index.hasSelectors {
+		if lines := scopeDescriptionLines(cmd.flags, nil); len(lines) > 0 {
+			out += "\n\nScoped parameters (enforced at call time):\n  " + strings.Join(lines, "\n  ")
+		}
 	}
-	lines := scopeDescriptionLines(cmd.flags, nil)
-	if len(lines) == 0 {
-		return cmd.Help
+	// The constraint block, in the scope block's shape, appended after it when
+	// both exist and separated from it by a blank line (contract §26.12). A
+	// constraint is NEVER silently dropped from a tool schema: every kind has a
+	// line here, and a partial projection states its remainder in words.
+	if len(cmd.constraints) > 0 {
+		fidelities := projectConstraints(cmd, map[string]interface{}{})
+		if lines := constraintDescriptionLines(cmd, fidelities); len(lines) > 0 {
+			out += "\n\nConstraints (enforced at call time):\n  " + strings.Join(lines, "\n  ")
+		}
 	}
-	return cmd.Help + "\n\nScoped parameters (enforced at call time):\n  " + strings.Join(lines, "\n  ")
+	return out
 }
 
 // scopeDescriptionLines renders one line per scope, depth-first in declaration

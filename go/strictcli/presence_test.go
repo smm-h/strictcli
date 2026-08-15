@@ -524,7 +524,7 @@ func TestRequiredSatisfiedByImplication(t *testing.T) {
 			BoolFlag("loud", "loud mode", Default(false)),
 			BoolFlag("verbose-out", "verbose output", Required()),
 		),
-		WithDependencies(Implies{Flag: "loud", Implies: "verbose-out", Value: true}))
+		WithConstraints(Implies("loud-is-verbose", "loud", "verbose-out", true)))
 	// With the trigger, the injection satisfies requiredness.
 	r := app.Test([]string{"cmd", "--loud"})
 	if r.ExitCode != 0 {
@@ -543,42 +543,59 @@ func TestRequiredSatisfiedByImplication(t *testing.T) {
 	}
 }
 
-// §23.5's CoRequired row: a required member is always provided, so the group
-// then forces every other member to be provided in every invocation. The shape
-// is legal; these are the two errors it can reach.
-func TestCoRequiredWithARequiredMember(t *testing.T) {
-	newApp := func() *App {
-		return simpleApp("cmd", "a command", "cert={cert} key={key}",
+// §23.5's amended all-or-none row (§26.5, §18.30 item 274): a member that
+// declares requiredness is a REGISTRATION ERROR. The shipped contract called
+// the shape "legal, and stated because it is a surprising shape to write by
+// accident", and the surprise was the whole objection: it silently means "every
+// other member is required too", which already has a spelling.
+func TestAllOrNoneWithARequiredMemberIsRefused(t *testing.T) {
+	expectPanic(t, `command "cmd": constraint "identity" member '--cert' declares Required(): a member the invocation must always supply leaves the constraint nothing to decide`, func() {
+		simpleApp("cmd", "a command", "cert={cert} key={key}",
 			WithFlags(
 				StringFlag("cert", "the certificate", Required()),
 				StringFlag("key", "the private key", Optional()),
 			),
-			WithDependencies(CoRequired{Flags: []string{"cert", "key"}}))
+			WithConstraints(AllOrNone("identity", Member("cert"), Member("key"))))
+	})
+}
+
+// The at-least-one half of the same cell: a required member makes the
+// constraint satisfied in every invocation, so it could never fire at all.
+func TestAtLeastOneWithARequiredMemberIsRefused(t *testing.T) {
+	expectPanic(t, `command "cmd": constraint "selection" member '--cert' declares Required(): a member the invocation must always supply leaves the constraint nothing to decide`, func() {
+		simpleApp("cmd", "a command", "cert={cert} key={key}",
+			WithFlags(
+				StringFlag("cert", "the certificate", Required()),
+				StringFlag("key", "the private key", Optional()),
+			),
+			WithConstraints(AtLeastOne("selection", Member("cert"), Member("key"))))
+	})
+}
+
+// A DEFAULTED member stays legal, and its default never engages the constraint
+// on its own: a group whose members are all defaulted stays vacuous until
+// something supplies one (§26.5's `default` cells).
+func TestAllOrNoneWithADefaultedMemberStaysVacuous(t *testing.T) {
+	newApp := func() *App {
+		return simpleApp("cmd", "a command", "cert={cert} key={key}",
+			WithFlags(
+				StringFlag("cert", "the certificate", Default("c.pem")),
+				StringFlag("key", "the private key", Default("k.pem")),
+			),
+			WithConstraints(AllOrNone("identity", Member("cert"), Member("key"))))
 	}
-	r := newApp().Test([]string{"cmd", "--cert", "c.pem", "--key", "k.pem"})
+	r := newApp().Test([]string{"cmd"})
 	if r.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d; stderr=%q", r.ExitCode, r.Stderr)
 	}
 	if r.Stdout != "cert=c.pem key=k.pem" {
 		t.Fatalf("got %q", r.Stdout)
 	}
-	// Only the required member: the group is violated, because a required
-	// member cannot be absent to leave the group vacuously satisfied.
-	r = newApp().Test([]string{"cmd", "--cert", "c.pem"})
+	r = newApp().Test([]string{"cmd", "--cert", "mine.pem"})
 	if r.ExitCode != 1 {
 		t.Fatalf("expected exit 1, got %d", r.ExitCode)
 	}
-	want := "error: flags --cert, --key must be used together\ntry 'myapp cmd --help'\n"
-	if r.Stderr != want {
-		t.Fatalf("stderr = %q, want %q", r.Stderr, want)
-	}
-	// Neither: the dependency check sees an empty group and the required check
-	// is what fires.
-	r = newApp().Test([]string{"cmd"})
-	if r.ExitCode != 1 {
-		t.Fatalf("expected exit 1, got %d", r.ExitCode)
-	}
-	want = "error: flag '--cert' is required\ntry 'myapp cmd --help'\n"
+	want := "error: constraint \"identity\": --cert, --key must be used together\ntry 'myapp cmd --help'\n"
 	if r.Stderr != want {
 		t.Fatalf("stderr = %q, want %q", r.Stderr, want)
 	}
@@ -594,7 +611,7 @@ func TestImpliesTriggerNeverFiresFromItsOwnDefault(t *testing.T) {
 				BoolFlag("release", "release build", Default(true)),
 				BoolFlag("signed", "signed build", Optional()),
 			),
-			WithDependencies(Implies{Flag: "release", Implies: "signed", Value: true}))
+			WithConstraints(Implies("release-is-signed", "release", "signed", true)))
 	}
 	// Trigger defaulted (not supplied): no implication.
 	r := newApp().Test([]string{"cmd"})
@@ -659,7 +676,7 @@ func TestProvidedAcrossSources(t *testing.T) {
 		StringFlag("absent", "absent", Optional()),
 		BoolFlag("trigger", "trigger", Default(false)),
 		BoolFlag("implied-target", "implied", Optional()),
-	), WithDependencies(Implies{Flag: "trigger", Implies: "implied-target", Value: true}),
+	), WithConstraints(Implies("trigger-implies-target", "trigger", "implied-target", true)),
 		WithEffect(EffectReadOnly))
 
 	if r := app.Test([]string{"cmd", "--from-cli", "v", "--trigger"}); r.ExitCode != 0 {

@@ -38,7 +38,7 @@ func positionalStageApp(captured *map[string]interface{}) *App {
 				Choice("sms", "a text message", StringFlag("phone-number", "destination", Required())),
 			),
 		),
-		WithDependencies(CoRequired{Flags: []string{"alpha", "beta"}}),
+		WithConstraints(AllOrNone("halves", Member("alpha"), Member("beta"))),
 		WithArgs(NewArg("count", "how many", ArgType(TypeInt), ArgRequired())),
 		WithEffect(EffectReadOnly))
 	return app
@@ -83,7 +83,7 @@ func TestPositionalStageLosesToEveryStageAboveIt(t *testing.T) {
 			"a dependency violation",
 			map[string]interface{}{"name": "n", "via": "email", "retries": 1, "alpha": "a", "count": "7"},
 			[]string{"run", "--name", "n", "--via", "email", "--retries", "1", "--alpha", "a", "notanint"},
-			"flags --alpha, --beta must be used together",
+			`constraint "halves": --alpha, --beta must be used together`,
 		},
 		{
 			"a choices violation",

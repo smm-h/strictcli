@@ -341,6 +341,34 @@ func formatCommandHelp(app *App, cmd *Command, prefix string) string {
 		}
 	}
 
+	// The `Constraints:` section (contract §26.10), after the last of the
+	// Arguments/Flags blocks. A declared rule that decides whether an
+	// invocation is accepted must be visible in the help the operator already
+	// read -- and the declared NAME renders, in the position a flag name
+	// occupies, because that name is the identifier a violation prints.
+	//
+	// ONE alignment column computed across the constraint block alone: it never
+	// shares the flag block's column, which is §24.10's rule for `Arguments:`
+	// applied to a third section. Declaration order, one line per constraint
+	// INCLUDING nested ones -- a nested constraint is both a rule of its own and
+	// an operand, so it has its own line and appears inside its parent's.
+	if len(cmd.constraints) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "Constraints:")
+		maxSpec := 0
+		specs := make([]string, len(cmd.constraints))
+		for i := range cmd.constraints {
+			specs[i] = "  " + cmd.constraints[i].name
+			if len(specs[i]) > maxSpec {
+				maxSpec = len(specs[i])
+			}
+		}
+		for i := range cmd.constraints {
+			padding := maxSpec - len(specs[i]) + 4
+			lines = append(lines, specs[i]+strings.Repeat(" ", padding)+cmd.constraintHelpSentence(&cmd.constraints[i]))
+		}
+	}
+
 	// Global flags section
 	if len(app.globalFlags) > 0 {
 		lines = append(lines, "")

@@ -795,8 +795,8 @@ func TestInvokeImpliesDependency(t *testing.T) {
 				BoolFlag("all", "do everything", Default(false)),
 				BoolFlag("loud", "loud output", Default(false)),
 			),
-			WithDependencies(
-				Implies{Flag: "all", Implies: "loud", Value: true},
+			WithConstraints(
+				Implies("all-is-loud", "all", "loud", true),
 			), WithEffect(EffectReadOnly),
 		)
 		return app

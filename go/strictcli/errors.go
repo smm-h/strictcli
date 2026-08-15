@@ -486,32 +486,12 @@ func errCommandEnvVarPrefix(name string, envVar string, flagName string, expecte
 	)
 }
 
-func errCommandCoRequiredMinFlags(name string, count int) string {
-	return fmt.Sprintf("command %q: CoRequired must have at least 2 flags, got %d", name, count)
-}
-
-func errCommandCoRequiredUnknownFlag(name string, flagName string) string {
-	return fmt.Sprintf("command %q: CoRequired references unknown flag %q", name, flagName)
-}
-
-func errCommandCoRequiredDuplicate(name string, flagName string) string {
-	return fmt.Sprintf("command %q: CoRequired has duplicate flag %q", name, flagName)
-}
-
 func errCommandRequiresSameFlag(name string, flag string) string {
 	return fmt.Sprintf("command %q: Requires flag and depends_on cannot be the same (%q)", name, flag)
 }
 
-func errCommandRequiresUnknownFlag(name string, flagName string) string {
-	return fmt.Sprintf("command %q: Requires references unknown flag %q", name, flagName)
-}
-
 func errCommandImpliesSameFlag(name string, flag string) string {
 	return fmt.Sprintf("command %q: Implies flag and implies cannot be the same (%q)", name, flag)
-}
-
-func errCommandImpliesUnknownFlag(name string, flagName string) string {
-	return fmt.Sprintf("command %q: Implies references unknown flag %q", name, flagName)
 }
 
 func errCommandImpliesTriggerNotBool(name string, flagName string) string {
@@ -702,19 +682,36 @@ func errMutexDeclineClause(name string) string {
 	return fmt.Sprintf(" (--no-%s declines an option; it does not choose one)", name)
 }
 
-func errImpliesConflict(flag string, neg string, target string, explicitNeg string) string {
+// The four constraint violation sentences all carry the `constraint "<c>": `
+// prefix (§12.15): the declared name is the only identifier the reader can carry
+// back to the source. `Requires` and `Implies` keep their sentence byte for byte
+// after the prefix (§26.13).
+
+func errImpliesConflict(c string, flag string, neg string, target string, explicitNeg string) string {
 	return fmt.Sprintf(
-		"flag '--%s' implies '--%s%s', but '--%s%s' was explicitly provided",
-		flag, neg, target, explicitNeg, target,
+		"constraint %q: flag '--%s' implies '--%s%s', but '--%s%s' was explicitly provided",
+		c, flag, neg, target, explicitNeg, target,
 	)
 }
 
-func errFlagsMustBeUsedTogether(names string) string {
-	return fmt.Sprintf("flags %s must be used together", names)
+// errAtLeastOneRequired renders the whole member list by §12.15's rule, in
+// declaration order. `clause` is §21.4's decline clause verbatim, appended when
+// a bool member declaring WhenTrue() was provided as false -- a fact about a
+// negated bool, never a claim that this family is exclusivity.
+func errAtLeastOneRequired(c string, members string, clause string) string {
+	return fmt.Sprintf("constraint %q: at least one of %s is required%s", c, members, clause)
 }
 
-func errFlagRequiresFlag(flag string, dependsOn string) string {
-	return fmt.Sprintf("flag '--%s' requires '--%s'", flag, dependsOn)
+// errAllOrNoneTogether lists EVERY member, engaged or not, which is the shipped
+// message's behaviour carried over. The noun `flags` is gone: a member may be a
+// positional arg or a nested constraint, and the `--` and bare-name spellings
+// already say which kind each one is.
+func errAllOrNoneTogether(c string, members string) string {
+	return fmt.Sprintf("constraint %q: %s must be used together", c, members)
+}
+
+func errFlagRequiresFlag(c string, flag string, dependsOn string) string {
+	return fmt.Sprintf("constraint %q: flag '--%s' requires '--%s'", c, flag, dependsOn)
 }
 
 func errFlagValueError(flagName string, msg string) string {
@@ -1660,9 +1657,87 @@ func errShortOnAmbiguousElection(name, s, x string) string {
 }
 
 // --- A constraint naming a scoped flag (§12.13, §24.8) ---
+//
+// The sentence names the CONSTRAINT rather than the family (§12.13's amendment,
+// §18.30 item 270): `CoRequired` no longer exists and every constraint declares
+// a mandatory name, which identifies the declaration to fix better than the
+// family word ever did. The trailing clause drops `dependency` because after
+// §26 the noun for all four kinds is `constraint`.
 
-func errConstraintReferencesScopedFlag(name, family, x, path string) string {
-	return fmt.Sprintf("command %q: %s references '%s', which is declared under '%s': dependency constraints operate at root scope only", name, family, x, path)
+func errConstraintReferencesScopedFlag(name, c, x, path string) string {
+	return fmt.Sprintf("command %q: constraint %q references '%s', which is declared under '%s': constraints operate at root scope only", name, c, x, path)
+}
+
+// --- The constraint system's registration guards (§12.15, §26.8) ---
+//
+// Every one is registration-time and lives in the `command "<name>": ` prefix
+// family. `errConstraintMinMembers` and `errConstraintMemberNotRecord` are
+// Go-EXCLUDED by construction: the constructors take two named members before
+// the variadic tail, so a one-member constraint does not compile, and a member
+// is a typed value rather than a record-or-bare-name union.
+
+func errConstraintNameCharset(name, c string) string {
+	return fmt.Sprintf("command %q: constraint name %q must match [a-z][a-z0-9-]*", name, c)
+}
+
+func errConstraintNameDuplicate(name, c string) string {
+	return fmt.Sprintf("command %q: duplicate constraint name %q", name, c)
+}
+
+func errConstraintNameCollides(name, c string) string {
+	return fmt.Sprintf("command %q: constraint name %q is already a flag or arg name: a member reference resolves by name and would be ambiguous", name, c)
+}
+
+func errConstraintMemberUnknown(name, c, x string) string {
+	return fmt.Sprintf("command %q: constraint %q references unknown member %q", name, c, x)
+}
+
+func errConstraintMemberAmbiguous(name, c, x string) string {
+	return fmt.Sprintf("command %q: constraint %q references %q, which names both a flag and a positional arg", name, c, x)
+}
+
+func errConstraintMemberDuplicate(name, c, x string) string {
+	return fmt.Sprintf("command %q: constraint %q declares member %q twice", name, c, x)
+}
+
+// errConstraintMemberRequired takes the member RENDERED by §12.15's rule --
+// `--old-name` for a flag, bare `targets` for an arg -- and quotes it as the
+// single-member rule pins. One template with one substitution: its prefix names
+// the constraint rather than a surface, so §12.12's Flag/Arg twinning does not
+// apply and the spelling inside it is the flag one for both operand kinds.
+func errConstraintMemberRequired(name, c, x string) string {
+	return fmt.Sprintf("command %q: constraint %q member '%s' declares Required(): a member the invocation must always supply leaves the constraint nothing to decide", name, c, x)
+}
+
+func errConstraintMemberBoolWhen(name, c, x string) string {
+	return fmt.Sprintf("command %q: constraint %q member '%s' is a bool and must declare its election: WhenTrue() counts only a true value, WhenPresent() counts any", name, c, x)
+}
+
+func errConstraintWhenTrueNotBool(name, c, x, t string) string {
+	return fmt.Sprintf("command %q: constraint %q member '%s' declares WhenTrue(), which needs a bool; '%s' is a %s", name, c, x, x, t)
+}
+
+func errConstraintWhenNonEmptyNotSized(name, c, x, t string) string {
+	return fmt.Sprintf("command %q: constraint %q member '%s' declares WhenNonEmpty(), which needs a string or a collection; '%s' is a %s", name, c, x, x, t)
+}
+
+func errConstraintNestedWhen(name, c, x string) string {
+	return fmt.Sprintf("command %q: constraint %q member %q is a constraint and cannot declare an election: a nested constraint is engaged when its own members are", name, c, x)
+}
+
+func errConstraintNestedFamily(name, c, x string) string {
+	return fmt.Sprintf("command %q: constraint %q references constraint %q, which declares a one-way dependency rather than a co-occurrence rule: only at-least-one and all-or-none can be members of another constraint", name, c, x)
+}
+
+func errConstraintCycle(name, path string) string {
+	return fmt.Sprintf("command %q: constraints form a cycle: %s", name, path)
+}
+
+// errConstraintUnknownFlag is the unknown-name refusal for `Requires` and
+// `Implies`, whose operand vocabulary is flags only (§26.13), so the noun stays
+// `flag` where the member families say `member`.
+func errConstraintUnknownFlag(name, c, x string) string {
+	return fmt.Sprintf("command %q: constraint %q references unknown flag %q", name, c, x)
 }
 
 // --- Delivery-side panics (Go-only: Match is exhaustive at dispatch) ---
