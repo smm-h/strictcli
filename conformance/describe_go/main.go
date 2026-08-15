@@ -8,7 +8,9 @@
 // MORE than the regex (e.g. unexported fields, ConfigFieldOption constructors).
 //
 // Output is deterministic: files are processed in sorted order, and every list
-// is sorted before emission. The top-level object carries a schema_version.
+// is sorted before emission. The top-level object carries a schema_version,
+// which is 2 since `internal_structs` joined it -- unexported struct carriers,
+// kept apart from the public `structs` list because they are not surface.
 package main
 
 import (
@@ -25,7 +27,7 @@ import (
 	"strings"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 // sourceDir is the strictcli Go package relative to this program's directory.
 // The equivalence check runs the compiled binary with cwd set here.
@@ -67,6 +69,7 @@ type apiSurface struct {
 	Package            string       `json:"package"`
 	OptionTypes        []string     `json:"option_types"`
 	Structs            []structDecl `json:"structs"`
+	InternalStructs    []structDecl `json:"internal_structs"`
 	OptionConstructors []funcDecl   `json:"option_constructors"`
 	Functions          []funcDecl   `json:"functions"`
 	GenericFunctions   []funcDecl   `json:"generic_functions"`
@@ -146,6 +149,7 @@ func run() error {
 		Package:            pkgName,
 		OptionTypes:        []string{},
 		Structs:            []structDecl{},
+		InternalStructs:    []structDecl{},
 		OptionConstructors: []funcDecl{},
 		Functions:          []funcDecl{},
 		GenericFunctions:   []funcDecl{},
@@ -196,7 +200,7 @@ func collectGenDecl(fset *token.FileSet, gd *ast.GenDecl, api *apiSurface) {
 	case token.TYPE:
 		for _, spec := range gd.Specs {
 			ts, ok := spec.(*ast.TypeSpec)
-			if !ok || !ts.Name.IsExported() {
+			if !ok {
 				continue
 			}
 			st, ok := ts.Type.(*ast.StructType)
@@ -227,7 +231,17 @@ func collectGenDecl(fset *token.FileSet, gd *ast.GenDecl, api *apiSurface) {
 					}
 				}
 			}
-			api.Structs = append(api.Structs, sd)
+			// An UNEXPORTED struct is not part of the public surface and is
+			// kept in its own list: the constraint system declares all four
+			// kinds through constructors over one unexported carrier
+			// (contract §26.6), so a struct literal cannot declare a
+			// half-formed constraint -- and the surface check still needs to
+			// see that carrier's fields to compare them against the schema.
+			if ts.Name.IsExported() {
+				api.Structs = append(api.Structs, sd)
+			} else {
+				api.InternalStructs = append(api.InternalStructs, sd)
+			}
 		}
 	case token.CONST, token.VAR:
 		for _, spec := range gd.Specs {
@@ -377,6 +391,9 @@ func exprString(fset *token.FileSet, expr ast.Expr) string {
 
 func sortSurface(api *apiSurface) {
 	sort.Slice(api.Structs, func(i, j int) bool { return api.Structs[i].Name < api.Structs[j].Name })
+	sort.Slice(api.InternalStructs, func(i, j int) bool {
+		return api.InternalStructs[i].Name < api.InternalStructs[j].Name
+	})
 	// Struct fields retain declaration order (deterministic); do not sort them.
 	sortFuncs(api.OptionConstructors)
 	sortFuncs(api.Functions)

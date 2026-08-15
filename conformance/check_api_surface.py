@@ -84,10 +84,15 @@ def get_go_fields_from_api(api: dict) -> dict[str, set[str]]:
 def get_go_all_fields_from_api(api: dict) -> dict[str, dict[str, bool]]:
     """Extract {struct_name: {field_name: exported}} from describe_go JSON.
 
-    Includes both exported and unexported fields for schema-to-Go validation.
+    Includes both exported and unexported fields for schema-to-Go validation,
+    and the UNEXPORTED struct carriers alongside the public ones: the
+    constraint system declares its four kinds through constructors over one
+    unexported `constraintDecl` (contract §26.6), so the schema -> Go arm has
+    no exported struct to read. `structs` stays the public surface -- only
+    this map, which no surface list is built from, sees the internal ones.
     """
     result: dict[str, dict[str, bool]] = {}
-    for s in api["structs"]:
+    for s in api["structs"] + api["internal_structs"]:
         result[s["name"]] = {f["name"]: f["exported"] for f in s["fields"]}
     return result
 
@@ -105,7 +110,8 @@ def get_python_fields() -> dict[str, set[str]]:
     result: dict[str, set[str]] = {}
     for cls in [
         strictcli.Flag, strictcli.Arg, strictcli.FlagSet,
-        strictcli.CoRequired, strictcli.Requires,
+        strictcli.AtLeastOne, strictcli.AllOrNone, strictcli.Member,
+        strictcli.Requires, strictcli.Implies,
         strictcli.App, strictcli.Group,
         Command, _ChoiceDecl,
     ]:
@@ -539,25 +545,83 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "descriptor with; not a declared fact",
             },
         ),
+        # `members` is a GLOBAL impl exclusion -- it names the derived index a
+        # command builds from its scopes -- but on a co-occurrence constraint
+        # it is the declaration itself, so the two families drop the exclusion
+        # and let both arms compare it.
+        # The constraint system (contract §26). All four kinds share one Go
+        # representation -- `constraintDecl`, unexported behind the four
+        # constructors, which is why a struct literal cannot declare a
+        # half-formed constraint (§26.6) -- so every descriptor below names it
+        # and maps each schema key onto its own lowercase field. The Go ->
+        # schema arm reads EXPORTED fields only and therefore stays silent
+        # here; the schema -> Go arm reads describe_go's full field list and
+        # is what checks these.
         EntityDescriptor(
-            schema_def="co_required",
-            python_cls="CoRequired",
-            go_struct="CoRequired",
+            schema_def="constraint_member_record",
+            python_cls="Member",
+            go_struct="ConstraintMember",
             impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
             schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+            schema_to_go={"constraint_member_record.name": "name",
+                          "constraint_member_record.when": "when"},
+            # No ts_struct: TypeScript's member is a plain object literal
+            # `{ name, when? }` (§26.6), which describe.ts treats the way it
+            # treats the value-flag choice record it matches -- the dump's
+            # `structs` list carries the def-union carriers, not every option
+            # object. The interface's existence is pinned by
+            # KNOWN_TS_PUBLIC_NAMES instead.
+            ts_entity_exclusions=_SHARED_TS_EXCLUSIONS,
+        ),
+        EntityDescriptor(
+            schema_def="at_least_one",
+            python_cls="AtLeastOne",
+            go_struct="constraintDecl",
+            impl_exclusions={k: v for k, v in _GLOBAL_IMPL_EXCLUSIONS.items()
+                             if k != "members"},
+            schema_to_go={"at_least_one.name": "name",
+                          "at_least_one.members": "members"},
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
             schema_entity_exclusions={"type"},
-            ts_struct="CoRequired",
+            ts_struct="AtLeastOne",
+            ts_entity_exclusions=_SHARED_TS_EXCLUSIONS,
+        ),
+        EntityDescriptor(
+            schema_def="all_or_none",
+            python_cls="AllOrNone",
+            go_struct="constraintDecl",
+            impl_exclusions={k: v for k, v in _GLOBAL_IMPL_EXCLUSIONS.items()
+                             if k != "members"},
+            schema_to_go={"all_or_none.name": "name",
+                          "all_or_none.members": "members"},
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+            schema_entity_exclusions={"type"},
+            ts_struct="AllOrNone",
             ts_entity_exclusions=_SHARED_TS_EXCLUSIONS,
         ),
         EntityDescriptor(
             schema_def="requires",
             python_cls="Requires",
-            go_struct="Requires",
+            go_struct="constraintDecl",
             impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
-            schema_to_go=_SHARED_SCHEMA_TO_GO,
+            schema_to_go={"requires.name": "name", "requires.flag": "flag",
+                          "requires.depends_on": "dependsOn"},
             schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
             schema_entity_exclusions={"type"},
             ts_struct="Requires",
+            ts_entity_exclusions=_SHARED_TS_EXCLUSIONS,
+        ),
+        EntityDescriptor(
+            schema_def="implies",
+            python_cls="Implies",
+            go_struct="constraintDecl",
+            impl_exclusions=_GLOBAL_IMPL_EXCLUSIONS,
+            schema_to_go={"implies.name": "name", "implies.flag": "flag",
+                          "implies.implies": "implies",
+                          "implies.value": "value"},
+            schema_test_only=_GLOBAL_SCHEMA_TEST_ONLY,
+            schema_entity_exclusions={"type"},
+            ts_struct="Implies",
             ts_entity_exclusions=_SHARED_TS_EXCLUSIONS,
         ),
         EntityDescriptor(
@@ -575,7 +639,7 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "command.flags": "flags",
                 "command.args": "args",
                 "command.flag_sets": "flagSets",
-                "command.dependencies": "dependencies",
+                "command.constraints": "constraints",
                 "command.tags": "tags",
                 "command.config_fields": "configFields",
             },
@@ -932,7 +996,14 @@ KNOWN_OPTION_FUNCS: set[str] = {
     # FlagOptions and their ArgOption twins, where Default(v) / ArgDefault(v)
     # are the third spelling and were already catalogued above.
     "Required", "Optional", "ArgOptional",
-    "WithArgs", "WithFlags", "WithFlagSets", "WithMutex", "WithDependencies",
+    "WithArgs", "WithFlags", "WithFlagSets",
+    # The constraint system (contract §26.6). `WithMutex` and
+    # `WithDependencies` are DELETED with the constructs they carried -- the
+    # exactly-one family left for the selector (§24.14) and the container is
+    # named for what it holds (§26.1) -- and the three election selectors are
+    # MemberOption constructors, which describe_go classifies here because
+    # their result type is a func over a named type.
+    "WithConstraints", "WhenPresent", "WhenTrue", "WhenNonEmpty",
     "WithPassthrough", "WithEnvPrefix", "WithConfig",
     "WithConfigPath", "WithConfigFormat",
     "WithChecks", "WithChecksEmbed",
@@ -986,9 +1057,13 @@ def check_option_funcs_coverage(go_fields: dict[str, set[str]]) -> list[str]:
 # Must be updated when the TS public surface changes.
 KNOWN_TS_PUBLIC_NAMES: set[str] = {
     # Values: factories, functions, classes, constants
-    "arg", "coRequired", "createApp", "deprecated",
+    "arg", "createApp", "deprecated",
     "errorCheckSpec", "flag", "flagSet", "implies",
     "outcome", "relativeToRoot", "requires", "warnCheckSpec",
+    # The constraint system's two co-occurrence factories (contract §26.6).
+    # `coRequired` is DELETED by rename: all-or-none absorbed it, with no
+    # alias and no deprecation period (§26.1).
+    "allOrNone", "atLeastOne",
     # The scoped-selector construct (contract §24.12): the choice factory, the
     # two selector twins, the record's provided-ness accessor and the
     # exhaustiveness helper the derived union makes sound.
@@ -1014,8 +1089,15 @@ KNOWN_TS_PUBLIC_NAMES: set[str] = {
     "App", "AppSpec", "ArgDef", "ArgOpts", "CallOptions", "Carrier",
     "CheckContext", "CheckOutcome", "CheckProblem", "CheckSeverity",
     "ConnectionEnvReader",
-    "CheckStatus", "CoRequired", "CommandDef",
-    "ConfigFieldSpec", "ConflictMode", "Dependency", "DeprecatedDef",
+    "CheckStatus", "CommandDef",
+    # The constraint system's type-only exports (contract §26.6). `CoRequired`
+    # and `Dependency` are DELETED with the noun they carried: the union is
+    # named `Constraint` for the container it fills, `ConstraintMembers` is the
+    # `[M, M, ...M[]]` tuple that makes the two-member floor a COMPILE error,
+    # and `When` is the literal union that makes a selector typo one too.
+    "AllOrNone", "AtLeastOne", "Constraint", "ConstraintMember",
+    "ConstraintMembers", "When",
+    "ConfigFieldSpec", "ConflictMode", "DeprecatedDef",
     "DictSchema", "ElemSchema", "ElementOf", "ErrorCheckSpecInit",
     "FlagDef", "FlagMap", "FlagOpts", "FlagSet", "Group", "GroupSpec",
     "Handler", "HandlerArgs", "HandlerResult", "HandlerReturn",

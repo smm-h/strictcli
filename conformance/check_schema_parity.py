@@ -49,7 +49,7 @@ TARGET_NAMES = ["python", "go", "typescript"]
 # A rich app definition covering: all flag types, args, groups, nested groups,
 # deprecated commands, scoped selectors in both spellings and nested,
 # record-shaped choices on flags AND args, compound (list/dict) flags,
-# dependencies (CoRequired, Requires, Implies), repeatable flags, unique, env,
+# constraints (AllOrNone, Requires, Implies), repeatable flags, unique, env,
 # env_separator, passthrough commands, config, tags, flag_sets, optional args,
 # variadic args, negatable, prefixed, and short flags.
 #
@@ -324,10 +324,10 @@ RICH_APP = {
                 },
             ],
         },
-        # 4. Command with dependencies (CoRequired, Requires, Implies)
+        # 4. Command with constraints (AllOrNone, Requires)
         {
             "name": "deploy",
-            "help": "Test dependencies",
+            "help": "Test constraints",
             "effect": "mutating",
             # Consequential on its own (§8.1), with dry run left at the regime's
             # supported baseline: pairs with `notify` below so the schema
@@ -375,22 +375,27 @@ RICH_APP = {
                     "presence": "optional",
                 },
             ],
-            "dependencies": [
+            # Two of the four constraint kinds, each with the mandatory name
+            # §26.1 gives it, and the co-occurrence family carrying the member
+            # records §26.11 publishes as `{kind, name, when}`.
+            "constraints": [
                 {
-                    "type": "co_required",
-                    "flags": ["host", "port-num"],
+                    "type": "all_or_none",
+                    "name": "endpoint",
+                    "members": [{"name": "host"}, {"name": "port-num"}],
                 },
                 {
                     "type": "requires",
+                    "name": "cert-ssl",
                     "flag": "cert",
                     "depends_on": "ssl",
                 },
             ],
         },
-        # 5. Command with Implies dependency
+        # 5. Command with an Implies constraint
         {
             "name": "notify",
-            "help": "Test implies dependency",
+            "help": "Test the implies constraint",
             "effect": "mutating",
             # Both effects-regime declarations at once: `consequential` and the
             # `dry_run_supported=false` + reason pair. Every other mutating
@@ -416,9 +421,10 @@ RICH_APP = {
                     "presence": "required",
                 },
             ],
-            "dependencies": [
+            "constraints": [
                 {
                     "type": "implies",
+                    "name": "email-alert",
                     "flag": "email",
                     "implies": "alert",
                     "value": True,

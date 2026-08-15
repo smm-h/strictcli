@@ -1122,6 +1122,148 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         'typescript': "excluded:Python's scoped parse sites interpolate the scope and origin suffixes into the same template, so its signature carries the extra placeholders; the sentence is identical and cases/selector_scope.json asserts it on all three targets",
     },
 
+    # =======================================================================
+    # The constraint system (contract §12.15, §26; ledger §18.30, §18.31)
+    #
+    # The same three shapes of divergence the selector block above records,
+    # one construct over:
+    #
+    #   1. ONE SENTENCE, THREE SPELLINGS. The four member-naming guards write
+    #      a per-language spelling inside the sentence (§12.12's mechanism,
+    #      ratified for all four by §18.31 item 287), so each implementation
+    #      carries a signature its siblings genuinely do not. The parity
+    #      assertion is per target, in cases/constraint_registration.json.
+    #
+    #   2. ONE SENTENCE, ONE PARAMETERIZED PREFIX. Python and TypeScript carry
+    #      `constraint "<c>": ` as a template of its own and compose it; Go
+    #      inlines it into every sentence. Python additionally composes the
+    #      two dependency families' sentences at the call site, so neither
+    #      half is a template the extractor can see. cases/constraints.json
+    #      asserts the composed sentences on all three targets.
+    #
+    #   3. LANGUAGE-SPECIFIC TEMPLATES. `errConstraintMinMembers` and
+    #      `errConstraintMemberNotRecord` are Go-excluded by construction --
+    #      Go's constructors take two named members before the variadic tail
+    #      and its member is a typed value, so both states are compile errors
+    #      (§12.15's exclusion list, §18.31 item 288). Python authored three
+    #      more that only a keyword taking a string or an untyped sequence can
+    #      reach.
+    # =======================================================================
+
+    # -- (2) the prefix, and the two sentences composed around it --
+    'constraint *: ': {
+        'go': 'excluded:Python and TypeScript carry the `constraint "<c>": ` prefix as a template of its own; Go inlines it into each sentence, so there is no prefix template to extract',
+    },
+    'constraint *: * must be used together': {
+        'typescript': 'excluded:TypeScript composes the prefix through constraintPrefix(c), so its signature carries a leading interpolation where Python and Go carry the literal; cases/constraints.json asserts the composed sentence on all three targets',
+    },
+    '** must be used together': {
+        'python': 'excluded:TypeScript composes the prefix through constraintPrefix(c), so its signature carries a leading interpolation where Python and Go carry the literal; cases/constraints.json asserts the composed sentence on all three targets',
+        'go': 'excluded:TypeScript composes the prefix through constraintPrefix(c), so its signature carries a leading interpolation where Python and Go carry the literal; cases/constraints.json asserts the composed sentence on all three targets',
+    },
+    'constraint *: at least one of * is required*': {
+        'typescript': 'excluded:TypeScript composes the prefix through constraintPrefix(c), so its signature carries a leading interpolation where Python and Go carry the literal; cases/constraints.json asserts the composed sentence, decline clause included, on all three targets',
+    },
+    '*at least one of * is required*': {
+        'python': 'excluded:TypeScript composes the prefix through constraintPrefix(c), so its signature carries a leading interpolation where Python and Go carry the literal; cases/constraints.json asserts the composed sentence, decline clause included, on all three targets',
+        'go': 'excluded:TypeScript composes the prefix through constraintPrefix(c), so its signature carries a leading interpolation where Python and Go carry the literal; cases/constraints.json asserts the composed sentence, decline clause included, on all three targets',
+    },
+    "constraint *: flag '--*' requires '--*'": {
+        'python': "excluded:Python composes the prefix and this sentence at the CALL site (§26.13 leaves the sentence byte-identical after the prefix), so neither half is a template of its own; Go inlines the whole sentence and TypeScript composes its own prefix. cases/constraints.json asserts the composed sentence on all three targets",
+        'typescript': "excluded:TypeScript composes the prefix through constraintPrefix(c) where Go inlines it; cases/constraints.json asserts the composed sentence on all three targets",
+    },
+    "*flag '--*' requires '--*'": {
+        'python': "excluded:Python composes the prefix and this sentence at the CALL site, so neither half is a template of its own; cases/constraints.json asserts the composed sentence on all three targets",
+        'go': "excluded:TypeScript composes the prefix through constraintPrefix(c) where Go inlines it into the sentence; cases/constraints.json asserts the composed sentence on all three targets",
+    },
+    "constraint *: flag '--*' implies '--**', but '--**' was explicitly provided": {
+        'python': "excluded:Python composes the prefix and this sentence at the CALL site (§26.13 leaves the sentence byte-identical after the prefix), so neither half is a template of its own; cases/constraints.json asserts the composed sentence on all three targets",
+        'typescript': "excluded:TypeScript composes the prefix through constraintPrefix(c) where Go inlines it; cases/constraints.json asserts the composed sentence on all three targets",
+    },
+    "*flag '--*' implies '--**', but '--**' was explicitly provided": {
+        'python': "excluded:Python composes the prefix and this sentence at the CALL site, so neither half is a template of its own; cases/constraints.json asserts the composed sentence on all three targets",
+        'go': "excluded:TypeScript composes the prefix through constraintPrefix(c) where Go inlines it into the sentence; cases/constraints.json asserts the composed sentence on all three targets",
+    },
+
+    # -- (1) the four member-naming guards, one sentence per language --
+    'command *: constraint * member * declares *: a member the invocation must always supply leaves the constraint nothing to decide': {
+        'python': 'excluded:the constraint family pins ONE sentence in three spellings (§12.15, §18.31 item 287), and each implementation carries only its own; cases/constraint_registration.json asserts all three, per target',
+        'go': 'excluded:the constraint family pins ONE sentence in three spellings (§12.15, §18.31 item 287), and each implementation carries only its own; cases/constraint_registration.json asserts all three, per target',
+    },
+    'command *: constraint * member * declares Required(): a member the invocation must always supply leaves the constraint nothing to decide': {
+        'python': "excluded:Go's spelling. §18.31 item 287 records that Go prints the FLAG spelling Required() for an arg member too: the template's prefix names the constraint rather than a surface, so it never claims to quote the arg surface's own option. cases/constraint_registration.json asserts all three, per target",
+        'typescript': "excluded:Go's spelling; cases/constraint_registration.json asserts all three, per target",
+    },
+    'command *: constraint * member * declares presence="required": a member the invocation must always supply leaves the constraint nothing to decide': {
+        'go': "excluded:Python's spelling; cases/constraint_registration.json asserts all three, per target",
+        'typescript': "excluded:Python's spelling; cases/constraint_registration.json asserts all three, per target",
+    },
+    'command *: constraint * member * is a bool and must declare its election: * counts only a true value, * counts any': {
+        'python': "excluded:TypeScript's spelling, interpolated from its WHEN_* constants; cases/constraint_registration.json asserts all three, per target",
+        'go': "excluded:TypeScript's spelling, interpolated from its WHEN_* constants; cases/constraint_registration.json asserts all three, per target",
+    },
+    'command *: constraint * member * is a bool and must declare its election: WhenTrue() counts only a true value, WhenPresent() counts any': {
+        'python': "excluded:Go's spelling; cases/constraint_registration.json asserts all three, per target",
+        'typescript': "excluded:Go's spelling; cases/constraint_registration.json asserts all three, per target",
+    },
+    'command *: constraint * member * is a bool and must declare its election: when="true" counts only a true value, when="present" counts any': {
+        'go': "excluded:Python's spelling; cases/constraint_registration.json asserts all three, per target",
+        'typescript': "excluded:Python's spelling; cases/constraint_registration.json asserts all three, per target",
+    },
+    'command *: constraint * member * declares *, which needs a bool; * is a *': {
+        'python': "excluded:TypeScript's spelling; cases/constraint_registration.json asserts all three, per target, over the whole closed `<t>` vocabulary §18.31 item 289 pins",
+        'go': "excluded:TypeScript's spelling; cases/constraint_registration.json asserts all three, per target, over the whole closed `<t>` vocabulary §18.31 item 289 pins",
+    },
+    'command *: constraint * member * declares WhenTrue(), which needs a bool; * is a *': {
+        'python': "excluded:Go's spelling; cases/constraint_registration.json asserts all three, per target",
+        'typescript': "excluded:Go's spelling; cases/constraint_registration.json asserts all three, per target",
+    },
+    'command *: constraint * member * declares when="true", which needs a bool; * is a *': {
+        'go': "excluded:Python's spelling; cases/constraint_registration.json asserts all three, per target",
+        'typescript': "excluded:Python's spelling; cases/constraint_registration.json asserts all three, per target",
+    },
+    'command *: constraint * member * declares *, which needs a string or a collection; * is a *': {
+        'python': "excluded:TypeScript's spelling; cases/constraint_registration.json asserts all three, per target",
+        'go': "excluded:TypeScript's spelling; cases/constraint_registration.json asserts all three, per target",
+    },
+    'command *: constraint * member * declares WhenNonEmpty(), which needs a string or a collection; * is a *': {
+        'python': "excluded:Go's spelling; cases/constraint_registration.json asserts all three, per target",
+        'typescript': "excluded:Go's spelling; cases/constraint_registration.json asserts all three, per target",
+    },
+    'command *: constraint * member * declares when="non_empty", which needs a string or a collection; * is a *': {
+        'go': "excluded:Python's spelling; cases/constraint_registration.json asserts all three, per target",
+        'typescript': "excluded:Python's spelling; cases/constraint_registration.json asserts all three, per target",
+    },
+
+    # -- (3) the two Go-excluded guards, and Python's three record guards --
+    'command *: constraint * must declare at least two members, got *': {
+        'go': "excluded:Go-excluded by construction (§12.15, §18.30 item 275): AtLeastOne/AllOrNone take two named members before the variadic tail, so a one-member constraint does not COMPILE. cases/registration_errors.json asserts it on Python and TypeScript",
+    },
+    'command *: constraint * member * is a bare name: declare it as *': {
+        'python': "excluded:TypeScript's spelling, rendered with the placeholder literal `{ name: \"<x>\" }` (§18.31 item 288); cases/constraint_registration.json asserts both reachable targets",
+        'go': "excluded:Go-excluded by construction (§12.15): its member is a typed ConstraintMember, so a bare name does not COMPILE",
+    },
+    'command *: constraint * member * is a bare name: declare it as Member("<x>")': {
+        'go': "excluded:Go-excluded by construction (§12.15): its member is a typed ConstraintMember, so a bare name does not COMPILE",
+        'typescript': "excluded:Python's spelling, rendered with the placeholder literal (§18.31 item 288); cases/constraint_registration.json asserts both reachable targets",
+    },
+    'Member *: when must be "present", "true" or "non_empty", got *': {
+        'go': 'excluded:Python-only (§12.15, §18.31 item 288): only a string-taking keyword can reach it. Go declares the selector with WhenTrue()/WhenPresent()/WhenNonEmpty() and TypeScript with a literal union, so a typo is a compile error in both',
+        'typescript': 'excluded:Python-only (§12.15, §18.31 item 288): only a string-taking keyword can reach it. Go declares the selector with WhenTrue()/WhenPresent()/WhenNonEmpty() and TypeScript with a literal union, so a typo is a compile error in both',
+    },
+    'Member name must be a non-empty string': {
+        'go': "excluded:Python-only: Member is a frozen dataclass validating its own field where Go's Member(name string) and TypeScript's `{ name: string }` are checked by the type system, and an empty name reaches the shared errConstraintMemberUnknown there",
+        'typescript': "excluded:Python-only: Member is a frozen dataclass validating its own field where Go's Member(name string) and TypeScript's `{ name: string }` are checked by the type system, and an empty name reaches the shared errConstraintMemberUnknown there",
+    },
+    'command *: constraints must be AtLeastOne, AllOrNone, Requires or Implies declarations, got *': {
+        'go': "excluded:Python-only: Go's closed Constraint interface and TypeScript's Constraint union make a non-constraint entry a compile error",
+        'typescript': "excluded:Python-only: Go's closed Constraint interface and TypeScript's Constraint union make a non-constraint entry a compile error",
+    },
+    'constraint *: members must be a list of * records': {
+        'go': "excluded:Python-only: `members` is a typed variadic in Go and a `[M, M, ...M[]]` tuple in TypeScript, so a non-sequence does not compile",
+        'typescript': "excluded:Python-only: `members` is a typed variadic in Go and a `[M, M, ...M[]]` tuple in TypeScript, so a non-sequence does not compile",
+    },
+
 }
 
 
