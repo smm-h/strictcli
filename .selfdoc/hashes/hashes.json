@@ -256,7 +256,8 @@
   "en/typescript-src-update.md": {
     "content": "d17963b79960542f93be534a40fc0027df1e40299dcbc9699e16e5aeaee31eee",
     "description": "bad92d41687116437e2cd18132f69a093a6f83968fdf361471811a6e65f81ef2",
-    "seed_hash": "bad92d41687116437e2cd18132f69a093a6f83968fdf361471811a6e65f81ef2"
+    "seed_hash": "bad92d41687116437e2cd18132f69a093a6f83968fdf361471811a6e65f81ef2",
+    "source_docstring": "875481bfa066efa63e37763b3bd20ef507b8c7be06460cf8fe9972245d1a36cf"
   },
   "en/typescript-src-values.md": {
     "content": "dad736102f6ecb203744663f100131ba95889a2386dd3bc90f265a61a6d232ea",
