@@ -56,8 +56,8 @@ check, and any divergence in these areas blocks a release:
 
 ### JSON test cases
 
-The core of the suite is 98 JSON files in `conformance/cases/`, containing over
-a thousand individual test cases organized by feature area (flags, config,
+The core of the suite is 121 JSON files in `conformance/cases/`, containing 1437
+individual test cases organized by feature area (flags, config,
 checks, choice flags, groups, etc.). Each case is a self-contained JSON object specifying an app definition,
 argv input, optional environment variables, and expected output assertions
 including exit code, stdout content, and stderr content:
@@ -165,8 +165,8 @@ Restrictions exist wherever a mis-declaration is expressible in one language and
 not another -- the bad-return hard error, which Go's `Outcome` type makes
 unrepresentable; the per-language registration guards whose sentence carries that
 language's own spelling; an aborted-dispatch envelope case written twice, once
-for Go and once for the other two. Of the 1068 cases, Go runs 1025, and Python
-and TypeScript run 1029 each.
+for Go and once for the other two. Of the 1437 cases, Go runs 1312, Python runs
+1319 and TypeScript runs 1321.
 
 ### Differential argv fuzzing
 
@@ -333,6 +333,6 @@ If the new case has output that is legitimately language-specific, add an `ackno
 ## Architecture notes
 
 - The conformance suite is a `dev_node` in the monorepo's `workspace.toml`. It has no changelog, no JSONL entries, and cannot be released independently. It covers 3 target implementations with 12 automated checks.
-- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 1068 test cases across all 3 targets (1025 on Go and 1029 on each of Python and TypeScript, the difference being the target-restricted cases).
+- CI (`ci-router.yml`) runs the conformance checks on every push touching `conformance/**`, `python/**`, `go/**`, or `typescript/**`. A full conformance run exercises all 1437 test cases across all 3 targets (1312 on Go, 1319 on Python and 1321 on TypeScript, the difference being the target-restricted cases).
 - The conformance tool itself is built with strictcli (dogfooding the check system). Its checks are declared in `conformance/conformance_tool/.strictcli/checks.toml`.
 - Adding a new target to the suite is a data-entry task: register a new `Target` descriptor in `run.py` (one `_register_target(...)` call) and add corresponding entries in `check_api_surface.py`, `check_error_parity.py`, `check_schema_parity.py`, and `check_schema_fragments.py`. The orchestration, comparison, and reporting logic is fully target-agnostic.
