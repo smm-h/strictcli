@@ -53,9 +53,11 @@ import {
 } from "./config.js";
 import { confirmConsequential } from "./confirm.js";
 import {
+	attachUpdateState,
 	Context,
 	contextDiagnostics,
 	contextPayload,
+	contextWrites,
 	type DiagnosticRecord,
 	type InfraAccess,
 	type ReservedFlags,
@@ -135,6 +137,7 @@ import {
 	RESERVED_MACHINE_FLAG_NAME,
 	type ReadOnlyCommandSpec,
 	validateAndDedupTags,
+	validateUpdateAgainstGlobals,
 } from "./factories.js";
 import { formatAppHelp, formatCommandHelp, formatGroupHelp } from "./help.js";
 import {
@@ -152,6 +155,7 @@ import { doParse, flagParamName, formatParseErrorOutput } from "./parse.js";
 import { dumpSchemaCore, writeSchema } from "./schema.js";
 import { asToolsForApp, jsonSchemaForApp, type Tool } from "./tool.js";
 import type { HandlerReturn } from "./types.js";
+import type { WritesEnvelope } from "./update.js";
 
 // --- Public surface ---
 
@@ -665,6 +669,10 @@ function registerCommand(
 			);
 		}
 	}
+	// §27.11's step 8, app-level half: the minted `--unset-<prop>` against the
+	// app's own globals, which are recognized after the command name too -- so a
+	// global of the minted name would be unreachable behind the clear spelling.
+	validateUpdateAgainstGlobals(def, app.globalFlagNames);
 	if (app.envPrefix !== undefined) {
 		const expectedPrefix = `${app.envPrefix}_`;
 		for (const f of def.allFlags) {
@@ -1430,6 +1438,15 @@ export class AppImpl implements App {
 					outcome.cmd.name,
 					(outcome.cmd.def as AnyCommand).payloadSchema ?? null,
 				);
+				attachUpdateState(ctx, outcome.writes, outcome.unsets);
+				// The write set's human rendering: ONE unnumbered line between the
+				// log's header and its first effect, in dry mode only (contract
+				// §3.2's amendment, §27.5). It takes no sequence number -- the
+				// counter is contiguous over rendered EFFECTS, and a write set is
+				// not one -- and a live run's write set rides the envelope instead.
+				if (outcome.writes !== null && outcome.reserved.dryRun) {
+					this.effectLogState.writeSetLine = outcome.writes.logLine();
+				}
 				// Every conditional binding whose scope was not elected is named
 				// here, one line per binding in declaration order, at debug level
 				// -- hidden by default, shown by --verbose, and carried in machine
@@ -1592,11 +1609,13 @@ export class AppImpl implements App {
 		// else.
 		validateEmittedPayload(ctx);
 		const supplied = contextPayload(ctx);
+		const writes = contextWrites(ctx);
 		this.emitEnvelope(out, {
 			command: cmdPath,
 			exitCode,
 			dryRun,
 			payload: supplied.set ? supplied.value : null,
+			writes: writes === null ? null : writes.envelopeMember(),
 			preview: this.effectLogState.toList(),
 			previewError,
 			diagnostics: contextDiagnostics(ctx),
@@ -1619,6 +1638,13 @@ export class AppImpl implements App {
 			readonly exitCode: number;
 			readonly dryRun: boolean;
 			readonly payload: unknown;
+			/**
+			 * The write set of a command declaring `updateOf` (§27.5), and null
+			 * on every command that declares none. NEVER absent, and populated
+			 * in BOTH modes, for preview's reason: it is a function of the
+			 * declaration and the invocation, not of the mode.
+			 */
+			readonly writes?: WritesEnvelope | null;
 			readonly preview: readonly Record<string, unknown>[];
 			readonly previewError: PreviewError | null;
 			readonly diagnostics: readonly DiagnosticRecord[];
@@ -1632,6 +1658,8 @@ export class AppImpl implements App {
 			exit_code: parts.exitCode,
 			payload: parts.payload ?? null,
 			dry_run: parts.dryRun,
+			// What the run writes, beside the preview of how (§19.2's amendment).
+			writes: parts.writes ?? null,
 			preview: parts.preview.map((rec) => {
 				const sorted: Record<string, unknown> = {};
 				for (const key of Object.keys(rec).sort()) {
@@ -1798,7 +1826,14 @@ export class AppImpl implements App {
  * The envelope contract's own version (§19.2). Changed only by a later
  * amendment to that section.
  */
-const INTERFACE_VERSION = 1;
+/**
+ * The envelope contract's own version (§19.2). Changed only by a later
+ * amendment to that section -- and §18.33 item 313 is one: the key set grew a
+ * `writes` member that is never absent, so a consumer validating the
+ * envelope's key set against version 1 must be able to tell which document it
+ * holds.
+ */
+const INTERFACE_VERSION = 2;
 
 /**
  * The terminal condition of a preview that did not finish (§19.3). `brand` is

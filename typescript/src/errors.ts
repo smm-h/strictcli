@@ -2831,3 +2831,166 @@ export function errConstraintUnknownFlag(
 ): string {
 	return `command ${q(name)}: constraint ${q(c)} references unknown flag ${q(x)}`;
 }
+
+// ---------------------------------------------------------------------------
+// factories.ts / parse.ts / update.ts — the update-command construct
+// (contract §12.16, §27)
+//
+// The family splits across both parity categories: the two VIOLATION
+// templates are parse-time (stderr, exit 1); the fifteen DECLARATION GUARDS
+// are registration-time, in §12.10's and §12.12's class.
+//
+// `<decl>` is `flag '--<x>'` for a flag and `argument '<x>'` for a positional
+// arg. The presence spellings inside these sentences take the FLAG spelling
+// even when the subject is an arg -- TypeScript spells both operand kinds one
+// way already, so the distinction §18.31 item 287 records for Go costs nothing
+// here.
+//
+// The prefix is `command "<name>": ` on every registration guard, and
+// `update "<resource>": ` on the one violation the construct owns.
+// ---------------------------------------------------------------------------
+
+/** TypeScript's spelling of the clear declaration (§12.16's added row). */
+export const NULLABLE_SPELLING = "nullable: true";
+
+/**
+ * The ONLY guard in this family that fires on a command declaring no update at
+ * all: the ban keys on `effect: "mutating"` (§27.1), where the rest keys on
+ * `updateOf`. The value renders through the same formatter every other
+ * declaration guard uses (§12.12).
+ */
+export function errMutatingDefault(
+	name: string,
+	decl: string,
+	formattedValue: string,
+): string {
+	return `command ${q(name)}: ${decl} declares ${presenceSpellingDefault(formattedValue)} on a mutating command: absence would write a value the invocation never stated (declare ${PRESENCE_SPELLING_REQUIRED} or ${PRESENCE_SPELLING_OPTIONAL}, or apply the fallback in the handler and say so in its help)`;
+}
+
+export function errUpdateOnReadOnly(name: string): string {
+	return `command ${q(name)}: a read_only command cannot declare update_of (a command that changes nothing writes no properties)`;
+}
+
+/**
+ * Reachable in all three implementations, and the reachable inputs differ: in
+ * TypeScript it is a widened caller past the literal union (§12.13 item 213's
+ * treatment). The sentence is byte-identical in each because the value
+ * formatter is.
+ */
+export function errUpdateWriteModeInvalid(name: string, v: string): string {
+	return `command ${q(name)}: invalid write_mode ${q(v)}: must be "sparse" or "full_replace"`;
+}
+
+export function errUpdateResourceCharset(name: string, r: string): string {
+	return `command ${q(name)}: update resource ${q(r)} must match [a-z][a-z0-9-]*`;
+}
+
+export function errUpdatePropertiesEmpty(name: string, r: string): string {
+	return `command ${q(name)}: update of ${q(r)} declares no properties: an update with nothing to write is not an update`;
+}
+
+export function errUpdateNameUnknown(
+	name: string,
+	r: string,
+	x: string,
+): string {
+	return `command ${q(name)}: update of ${q(r)} references unknown name ${q(x)}`;
+}
+
+export function errUpdateNameAmbiguous(
+	name: string,
+	r: string,
+	x: string,
+): string {
+	return `command ${q(name)}: update of ${q(r)} references ${q(x)}, which names both a flag and a positional arg`;
+}
+
+export function errUpdateNameDuplicate(
+	name: string,
+	r: string,
+	x: string,
+): string {
+	return `command ${q(name)}: update of ${q(r)} declares ${q(x)} twice`;
+}
+
+export function errUpdateNameBothRoles(
+	name: string,
+	r: string,
+	x: string,
+): string {
+	return `command ${q(name)}: update of ${q(r)} declares ${q(x)} as both identity and property`;
+}
+
+export function errUpdateReferencesScopedFlag(
+	name: string,
+	r: string,
+	x: string,
+	path: string,
+): string {
+	return `command ${q(name)}: update of ${q(r)} references '${x}', which is declared under '${path}': an update's identity and properties are declared at root scope only`;
+}
+
+/**
+ * Covers `required` ONLY: a property declaring a default is refused by
+ * errMutatingDefault four steps earlier (§27.11's order), an update command
+ * being mutating by §27.2's own guard, so the two never compete.
+ */
+export function errUpdatePropertyPresence(
+	name: string,
+	r: string,
+	decl: string,
+): string {
+	return `command ${q(name)}: update of ${q(r)} property ${decl} declares ${PRESENCE_SPELLING_REQUIRED}: a property is absent exactly when it is not being written, and the presence declaration for that is ${PRESENCE_SPELLING_OPTIONAL}`;
+}
+
+export function errUpdatePropertyIsArg(
+	name: string,
+	r: string,
+	x: string,
+): string {
+	return `command ${q(name)}: update of ${q(r)} property ${q(x)} is a positional arg: a property must be individually omissible and clearable, and only a flag is`;
+}
+
+export function errUpdatePropertyIsChoiceFlag(
+	name: string,
+	r: string,
+	x: string,
+): string {
+	return `command ${q(name)}: update of ${q(r)} property '--${x}' is a choice flag: an elected record is a selection, not a property value`;
+}
+
+export function errNullableNotProperty(name: string, decl: string): string {
+	return `command ${q(name)}: ${decl} declares ${NULLABLE_SPELLING} but is not a property of an update: only a property can be cleared`;
+}
+
+export function errUnsetNameReserved(name: string, x: string): string {
+	return `command ${q(name)}: flag name "unset-${x}" is reserved: property '--${x}' declares ${NULLABLE_SPELLING}, which mints '--unset-${x}'`;
+}
+
+// --- The two violations (parse-time) ---
+
+/**
+ * Names EVERY declared property, whether or not it is nullable: naming only
+ * the ones a reader has not used would require the framework to guess which
+ * one was meant.
+ *
+ * There is deliberately NO decline clause. §12.15 appends §21.4's clause when
+ * a bool member was provided false; the analogous input here is the opposite
+ * fact, because inside an update command `--no-proxied` PROVIDES the property
+ * with the value false (§27.7), so it satisfies this rule rather than
+ * declining it and this sentence cannot fire in its presence.
+ */
+export function errUpdateNoProperty(
+	resource: string,
+	properties: string,
+): string {
+	return `update ${q(resource)}: at least one property is required: ${properties}`;
+}
+
+/**
+ * COMMAND LINE only: it is a collision between two tokens, and the machine
+ * doors have one key per property (§27.6), so no door can reach the state.
+ */
+export function errUpdateValueAndUnset(x: string): string {
+	return `--${x} and --unset-${x} are mutually exclusive: a property is either written or cleared`;
+}

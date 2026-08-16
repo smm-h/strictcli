@@ -326,6 +326,15 @@ export class EffectLog {
 	claimed = false;
 	handlerRendered = false;
 
+	/**
+	 * An update command's write-set line (contract §27.5), rendered between the
+	 * header and the first effect and taking NO sequence number -- the counter
+	 * is contiguous over rendered EFFECTS, and a write set is not one. Empty on
+	 * every command that declares no update, and set only for a dry run: a live
+	 * run's write set rides the envelope instead.
+	 */
+	writeSetLine = "";
+
 	/** True when the handler already produced the log's bytes (§19.7). */
 	seamSuppressed(): boolean {
 		return this.claimed && this.handlerRendered;
@@ -364,6 +373,9 @@ export class EffectLog {
 	/** Renders the would-do log. CACHE_WRITEs are never written to it. */
 	render(): string {
 		const lines = [DRY_RUN_HEADER];
+		if (this.writeSetLine !== "") {
+			lines.push(`  ${this.writeSetLine}`);
+		}
 		for (const rec of this.records) {
 			if (rec.kind === CACHE_WRITE) {
 				continue;

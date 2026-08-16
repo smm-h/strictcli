@@ -36,6 +36,7 @@ import {
 	flagOpts,
 	type Presence,
 	schemaKind,
+	unsetFlagName,
 } from "./factories.js";
 import { formatFloatCanonical } from "./float.js";
 import {
@@ -240,6 +241,14 @@ export function buildFlagSpec(f: AnyFlag): string {
 		spec += ` <key=${elemSchemaOf(f.carrier)}>`;
 	} else if (f.schema !== "bool") {
 		spec += ` <${f.schema}>`;
+	}
+	// A nullable property renders its minted clear spelling on the SAME line,
+	// exactly as a negatable bool renders `--x, --no-x` (contract §27.6): one
+	// line, one help text, and one presence part -- §23.8's invariant is
+	// untouched, because the minted spelling is a second way to write to one
+	// declaration rather than a second declaration.
+	if (o.nullable === true) {
+		spec += `, --${unsetFlagName(f.name)}`;
 	}
 	return spec;
 }

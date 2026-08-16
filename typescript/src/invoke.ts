@@ -16,6 +16,7 @@ import { recordCoverage } from "./checks/coverage.js";
 import { validateCheckRegistrations } from "./checks/framework.js";
 import { coerceConfigValueForFlag, widenJsonIntegers } from "./config.js";
 import {
+	attachUpdateState,
 	Context,
 	contextPayload,
 	NO_RESERVED_FLAGS,
@@ -47,6 +48,7 @@ import {
 	type AnyFlag,
 	CHOICE_TAG_KEY,
 	CHOICE_VALUE_KEY,
+	flagOpts,
 	memberList,
 	type PassthroughDef,
 	requiredFlagForm,
@@ -69,6 +71,7 @@ import {
 	STAGE,
 } from "./scopeparse.js";
 import { SourcedStore } from "./sources.js";
+import type { UpdateState } from "./update.js";
 import { formatChoices } from "./values.js";
 
 /** Sinks for invoke contexts: structured data flows back through the Outcome. */
@@ -486,7 +489,26 @@ export async function invokeApp(
 	// nothing (§21.4's reason, applied to this door). A selector whose election
 	// never settled is skipped: its refusal is already recorded, and there is
 	// no elected scope to read values from.
+	/**
+	 * The properties this call CLEARED, spelled `null` on the property's own
+	 * key at this door (contract §27.6).
+	 */
+	const unsets = new Set<string>();
 	const recordValue = (f: AnyFlag, value: unknown): void => {
+		// The one stated carve-out from "null is legal for nothing" (§24.11's
+		// amendment, §27.6): a NULLABLE PROPERTY is the one declaration for
+		// which null is a VALUE -- it means clear this property on the resource,
+		// which is a write. It delivers absence, reports provided() true, and is
+		// what ctx.unset answers true for. The carve-out is a property of the
+		// DECLARATION and never of the door: a null anywhere else is refused by
+		// the rule below, unchanged. TypeScript's `undefined` is not a second
+		// spelling of it -- absence has its own spelling at this door, an absent
+		// key, and a value the declaration names is not absence.
+		if (value === null && flagOpts(f).nullable === true) {
+			unsets.add(f.name);
+			store.set(f.name, undefined, "cli");
+			return;
+		}
 		const outcome = preTypedValueOutcome(f, value);
 		if (!outcome.ok) {
 			problems.push({ stage: STAGE.value, message: outcome.message });
@@ -556,6 +578,7 @@ export async function invokeApp(
 
 	let validated: Record<string, unknown>;
 	let sources: Record<string, string>;
+	let writes: UpdateState | null = null;
 	try {
 		const parsed = validateAndBuildKwargs(
 			cmd,
@@ -565,7 +588,10 @@ export async function invokeApp(
 			app.globalFlagNames,
 			app.infraRoots,
 			[...selectorByName.keys()],
+			[],
+			unsets,
 		);
+		writes = parsed.writes;
 		validated = { ...parsed.kwargs, ...parsed.postGlobalValues };
 		sources = { ...parsed.sources };
 	} catch (e) {
@@ -613,6 +639,7 @@ export async function invokeApp(
 		cmd.name,
 		def.payloadSchema ?? null,
 	);
+	attachUpdateState(ctx, writes, unsets);
 	const result = await def.handler(validated as never, ctx);
 	return interpretForCall(result, ctx);
 }

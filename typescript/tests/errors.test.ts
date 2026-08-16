@@ -113,7 +113,12 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // registration guards, the two family-specific unknown-flag templates that
 // collapse onto the constraint's own name, and `errFlagsMustBeUsedTogether`,
 // whose sentence is now `errAllOrNoneTogether`'s.
-const EXPECTED_TEMPLATE_COUNT = 369;
+// §12.16's update-command construct nets +17: fifteen registration guards --
+// the mutating-default ban, the eight name-and-record refusals, the three
+// property-role/presence refusals and the two clear-vocabulary ones -- plus the
+// two parse-time violations. `renderDeclFlag` and `renderDeclArg` are
+// renderers rather than templates and do not count.
+const EXPECTED_TEMPLATE_COUNT = 386;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

@@ -218,6 +218,7 @@ function envelopeText(
 	payload = "null",
 	opts: {
 		dryRun?: boolean;
+		writes?: string;
 		preview?: string;
 		previewError?: string;
 		diagnostics?: string;
@@ -225,9 +226,10 @@ function envelopeText(
 ): string {
 	const cmd = command === null ? "null" : JSON.stringify(command);
 	return (
-		`{"interface_version":1,"app":"a","app_version":"1","command":${cmd},` +
+		`{"interface_version":2,"app":"a","app_version":"1","command":${cmd},` +
 		`"exit_code":${exitCode},"payload":${payload},` +
-		`"dry_run":${opts.dryRun ?? false},"preview":${opts.preview ?? "[]"},` +
+		`"dry_run":${opts.dryRun ?? false},"writes":${opts.writes ?? "null"},` +
+		`"preview":${opts.preview ?? "[]"},` +
 		`"preview_error":${opts.previewError ?? "null"},` +
 		`"diagnostics":${opts.diagnostics ?? "[]"}}\n`
 	);

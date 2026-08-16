@@ -70,6 +70,7 @@ import {
 	recordValidateRefusal,
 	STAGE,
 } from "./scopeparse.js";
+import { updateAnyOfBranches, updateDescriptionBlock } from "./update.js";
 import {
 	formatChoices,
 	formatValueForError,
@@ -117,10 +118,22 @@ export function buildJSONSchema(
 	 * element, rather than at the property root, which would say the array
 	 * itself must equal one of the choices.
 	 */
-	const flagProperty = (f: AnyFlag): Record<string, unknown> => ({
-		...valueSchemaFragment(f),
-		description: flagOpts(f).help,
-	});
+	const flagProperty = (f: AnyFlag): Record<string, unknown> => {
+		const prop: Record<string, unknown> = {
+			...valueSchemaFragment(f),
+			description: flagOpts(f).help,
+		};
+		// A NULLABLE property publishes a type list including "null" (contract
+		// §27.10). This projection is not bound by §25.2's four-keyword subset
+		// -- it already emits anyOf and dependentRequired -- and here the null
+		// is a VALUE the declaration names rather than a spelling of absence,
+		// so publishing it in the type is publishing the declaration. A caller
+		// that cannot see it cannot clear anything.
+		if (flagOpts(f).nullable === true && prop.type !== undefined) {
+			prop.type = [prop.type, "null"];
+		}
+		return prop;
+	};
 
 	/**
 	 * The MCP projection is FLATTEN plus a description map (contract §24.11):
@@ -215,13 +228,28 @@ export function buildJSONSchema(
  * The runtime refusal is the authority; the schema is advisory.
  */
 function constraintKeywords(cmd: RegisteredCommand): Record<string, unknown> {
-	if (cmd.def.kind !== "command" || cmd.def.constraints.length === 0) {
+	if (cmd.def.kind !== "command") {
 		return {};
 	}
-	const resolved = resolveConstraints(cmd.def);
+	const def = cmd.def as AnyCommand;
+	if (def.constraints.length === 0 && def.updateOf === undefined) {
+		return {};
+	}
+	const resolved = resolveConstraints(def);
 	const index = constraintIndex(resolved);
 	const anyOfs: Record<string, unknown>[][] = [];
 	const dependentRequired: Record<string, string[]> = {};
+
+	// The at-least-one-property rule is NOT a constraint (contract §26.14's
+	// answer, §27.4) but it borrows this machinery, wrapping pin included: it
+	// counts as an `anyOf`-producing rule, and its branch comes FIRST, it being
+	// the command's own declaration rather than an entry in the constraint
+	// list. Merging it into a constraint's `anyOf` would be the silent
+	// weakening item 284 already refused.
+	const updateBranches = updateAnyOfBranches(def);
+	if (updateBranches.length > 0) {
+		anyOfs.push(updateBranches);
+	}
 
 	for (const c of resolved) {
 		if (c.kind === "at-least-one") {
@@ -371,6 +399,26 @@ export function constraintDescriptionBlock(cmd: RegisteredCommand): string {
 		return `  ${mcpSentence(c, index)}${reason === "" ? "" : ` -- not expressed in the schema: ${reason}`}`;
 	});
 	return `\n\nConstraints (enforced at call time):\n${lines.join("\n")}`;
+}
+
+/**
+ * The update block (§27.10), appended after the scope and constraint blocks
+ * when they exist and separated by a blank line -- the established order.
+ */
+function updateBlock(cmd: RegisteredCommand): string {
+	return cmd.def.kind === "command"
+		? updateDescriptionBlock(cmd.def as AnyCommand)
+		: "";
+}
+
+/**
+ * One command's tool description: its help, then the three blocks a flat
+ * object schema cannot carry, in their established order. Both publishers --
+ * the Tool descriptor and MCP's tools/list -- compose it here, so a block
+ * added to one can never be missing from the other.
+ */
+export function toolDescription(cmd: RegisteredCommand): string {
+	return `${cmd.help}${scopeDescriptionBlock(cmd)}${constraintDescriptionBlock(cmd)}${updateBlock(cmd)}`;
 }
 
 /**
@@ -1114,7 +1162,7 @@ function makeTool(
 ): Tool {
 	return {
 		name: commandPath,
-		description: `${cmd.help}${scopeDescriptionBlock(cmd)}${constraintDescriptionBlock(cmd)}`,
+		description: toolDescription(cmd),
 		parameters: buildJSONSchema(cmd),
 		...commandClassification(cmd),
 		// async so a conversion refusal reaches the caller as a REJECTED

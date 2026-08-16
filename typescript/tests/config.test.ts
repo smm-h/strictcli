@@ -517,10 +517,16 @@ test("config show env source attribution coerces the display value", async () =>
 
 test("config set: unknown key / bad int / bad bool errors", async () => {
 	freshXdg();
-	let r = await basicApp().test(["config", "set", "nonexistent", "value"]);
+	let r = await basicApp().test([
+		"config",
+		"set",
+		"nonexistent",
+		"--value",
+		"value",
+	]);
 	assert.equal(r.exitCode, 1);
 	assert.equal(r.stderr, "config set: unknown key 'nonexistent'\n");
-	r = await basicApp().test(["config", "set", "count", "abc"]);
+	r = await basicApp().test(["config", "set", "count", "--value", "abc"]);
 	assert.equal(r.exitCode, 1);
 	assert.match(r.stderr, /^config set: key 'count': /);
 	const app = createApp({
@@ -542,7 +548,7 @@ test("config set: unknown key / bad int / bad bool errors", async () => {
 			handler: () => 0,
 		}),
 	);
-	r = await app.test(["config", "set", "debug", "maybe"]);
+	r = await app.test(["config", "set", "debug", "--value", "maybe"]);
 	assert.equal(r.exitCode, 1);
 	assert.match(r.stderr, /^config set: key 'debug': /);
 });
@@ -1079,7 +1085,7 @@ test("config set: scalar value writes Python-shaped JSON (indent 2, trailing new
 	const { dir } = freshXdg();
 	const p = join(dir, "config.json");
 	writeFileSync(p, '{"count": 10}\n');
-	const r = await setApp().test(["config", "set", "count", "77"]);
+	const r = await setApp().test(["config", "set", "count", "--value", "77"]);
 	assert.equal(r.exitCode, 0);
 	assert.equal(readFileSync(p, "utf8"), '{\n  "count": 77\n}\n');
 });
@@ -1088,13 +1094,13 @@ test("config set: list value splits on comma; duplicate on unique flag errors", 
 	const { dir } = freshXdg();
 	const p = join(dir, "config.json");
 	writeFileSync(p, "{}");
-	let r = await setApp().test(["config", "set", "tags", "x,y"]);
+	let r = await setApp().test(["config", "set", "tags", "--value", "x,y"]);
 	assert.equal(r.exitCode, 0);
 	assert.equal(
 		readFileSync(p, "utf8"),
 		'{\n  "tags": [\n    "x",\n    "y"\n  ]\n}\n',
 	);
-	r = await setApp().test(["config", "set", "tags", "a,a"]);
+	r = await setApp().test(["config", "set", "tags", "--value", "a,a"]);
 	assert.equal(r.exitCode, 1);
 	assert.equal(r.stderr, "config set: key 'tags': duplicate value 'a'\n");
 });
@@ -1103,10 +1109,10 @@ test("config set: dict value takes a JSON object; bad JSON carries Python decode
 	const { dir } = freshXdg();
 	const p = join(dir, "config.json");
 	writeFileSync(p, "{}");
-	let r = await setApp().test(["config", "set", "meta", '{"a": 1}']);
+	let r = await setApp().test(["config", "set", "meta", "--value", '{"a": 1}']);
 	assert.equal(r.exitCode, 0);
 	assert.equal(readFileSync(p, "utf8"), '{\n  "meta": {\n    "a": 1\n  }\n}\n');
-	r = await setApp().test(["config", "set", "meta", "notjson"]);
+	r = await setApp().test(["config", "set", "meta", "--value", "notjson"]);
 	assert.equal(r.exitCode, 1);
 	assert.equal(
 		r.stderr,
@@ -1114,7 +1120,7 @@ test("config set: dict value takes a JSON object; bad JSON carries Python decode
 	);
 });
 
-test("config set: --clear, --default, and their combination errors", async () => {
+test("config set: --clear and --default", async () => {
 	const { dir } = freshXdg();
 	const p = join(dir, "config.json");
 	writeFileSync(p, '{"tags": ["x", "y"]}');
@@ -1131,16 +1137,45 @@ test("config set: --clear, --default, and their combination errors", async () =>
 	r = await setApp().test(["config", "set", "count", "--default"]);
 	assert.equal(r.exitCode, 1);
 	assert.equal(r.stderr, "config set: key 'count' not in config\n");
-	// Value combined with --clear / --default errors.
-	r = await setApp().test(["config", "set", "tags", "a,b", "--clear"]);
-	assert.equal(r.stderr, "config set: cannot provide a value with --clear\n");
-	r = await setApp().test(["config", "set", "count", "42", "--default"]);
-	assert.equal(r.stderr, "config set: cannot provide a value with --default\n");
+});
+
+// The write is an exactly-one selection over a value, a clear and a reset to
+// default (contract §27.1, §18.33 item 304). The hand-rolled guards that used
+// to police its illegal corners are gone with the two bools that made those
+// corners expressible: electing none and electing two are the framework's own
+// refusals now.
+test("config set: electing nothing is the framework's own refusal", async () => {
+	freshXdg();
+	const r = await setApp().test(["config", "set", "count"]);
+	assert.equal(r.exitCode, 1);
+	assert.match(r.stderr, /one of --value, --clear, --default is required/);
+});
+
+test("config set: electing two members is the framework's own refusal", async () => {
+	freshXdg();
+	let r = await setApp().test([
+		"config",
+		"set",
+		"tags",
+		"--value",
+		"a,b",
+		"--clear",
+	]);
+	assert.equal(r.exitCode, 1);
+	assert.match(r.stderr, /--value and --clear are mutually exclusive/);
+	r = await setApp().test([
+		"config",
+		"set",
+		"count",
+		"--value",
+		"42",
+		"--default",
+	]);
+	assert.equal(r.exitCode, 1);
+	assert.match(r.stderr, /--value and --default are mutually exclusive/);
 	r = await setApp().test(["config", "set", "tags", "--clear", "--default"]);
-	assert.equal(
-		r.stderr,
-		"config set: --clear and --default are mutually exclusive\n",
-	);
+	assert.equal(r.exitCode, 1);
+	assert.match(r.stderr, /--clear and --default are mutually exclusive/);
 });
 
 test("config set: --default removes the key (JSON and nested TOML)", async () => {
@@ -1193,13 +1228,13 @@ test("config set on TOML preserves comments and layout byte-exactly (tomlkit par
 		return app;
 	};
 	// GROUND TRUTH: bytes captured from Python tomlkit over the same document.
-	let r = await mk().test(["config", "set", "count", "42"]);
+	let r = await mk().test(["config", "set", "count", "--value", "42"]);
 	assert.equal(r.exitCode, 0);
 	assert.equal(
 		readFileSync(p, "utf8"),
 		'# top comment\ncount = 42  # trailing\n\n[server]\n# port doc\nport = 8080\nhost = "a"\n',
 	);
-	r = await mk().test(["config", "set", "server.port", "9090"]);
+	r = await mk().test(["config", "set", "server.port", "--value", "9090"]);
 	assert.equal(r.exitCode, 0);
 	assert.equal(
 		readFileSync(p, "utf8"),
@@ -1607,7 +1642,14 @@ test("config set: --dry-run records the write and changes nothing", async () => 
 	const path = join(dir, "config.json");
 	writeFileSync(path, '{\n  "opt": "before"\n}\n');
 	const app = dryConfigApp("dryset");
-	const r = await app.test(["--dry-run", "config", "set", "opt", "after"]);
+	const r = await app.test([
+		"--dry-run",
+		"config",
+		"set",
+		"opt",
+		"--value",
+		"after",
+	]);
 	assert.equal(r.exitCode, 0, r.stderr);
 	assert.equal(r.stdout, `${DRY_HEADER}  1. write: ${path} (21 bytes)\n`);
 	assert.equal(readFileSync(path, "utf8"), '{\n  "opt": "before"\n}\n');
@@ -1619,7 +1661,14 @@ test("config set: --dry-run previews the missing config directory", async () => 
 	const dir = join(xdg, "drymk");
 	const path = join(dir, "config.json");
 	const app = dryConfigApp("drymk");
-	const r = await app.test(["--dry-run", "config", "set", "opt", "v"]);
+	const r = await app.test([
+		"--dry-run",
+		"config",
+		"set",
+		"opt",
+		"--value",
+		"v",
+	]);
 	assert.equal(r.exitCode, 0, r.stderr);
 	assert.ok(
 		r.stdout.startsWith(
@@ -1635,7 +1684,14 @@ test("config set: --dry-run leaves a TOML config untouched", async () => {
 	const path = join(dir, "config.toml");
 	writeFileSync(path, '# a comment\nopt = "before"\n');
 	const app = dryConfigApp("drytoml", "toml");
-	const r = await app.test(["--dry-run", "config", "set", "opt", "after"]);
+	const r = await app.test([
+		"--dry-run",
+		"config",
+		"set",
+		"opt",
+		"--value",
+		"after",
+	]);
 	assert.equal(r.exitCode, 0, r.stderr);
 	assert.ok(r.stdout.includes(`1. write: ${path}`), r.stdout);
 	assert.equal(readFileSync(path, "utf8"), '# a comment\nopt = "before"\n');
@@ -1680,7 +1736,10 @@ test("config set/init still mutate in live mode", async () => {
 	const app = dryConfigApp("livecfg");
 	assert.equal((await app.test(["config", "init"])).exitCode, 0);
 	assert.equal(existsSync(path), true);
-	assert.equal((await app.test(["config", "set", "opt", "v"])).exitCode, 0);
+	assert.equal(
+		(await app.test(["config", "set", "opt", "--value", "v"])).exitCode,
+		0,
+	);
 	assert.ok(readFileSync(path, "utf8").includes('"opt"'));
 	const log = (app as unknown as AppImpl)
 		.effectLog()

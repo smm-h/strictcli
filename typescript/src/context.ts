@@ -19,6 +19,7 @@ import {
 } from "./errors.js";
 import { validatePayloadValue } from "./payload_schema.js";
 import { PROVIDED_SOURCES } from "./sources.js";
+import type { UpdateState } from "./update.js";
 
 /** Minimal sink for output streams (process.stdout/stderr or test captures). */
 export interface Writer {
@@ -126,6 +127,7 @@ interface ContextBase {
 	error(msg: string): void;
 	source(name: string): string;
 	provided(name: string): boolean;
+	unset(name: string): boolean;
 	infraValue(envVar: string): [value: string | undefined, isSet: boolean];
 	connectionEnvValue(
 		envVar: string,
@@ -171,6 +173,17 @@ export class Context implements MutatingContext {
 	 * mode the array stays empty and nothing changes.
 	 */
 	private readonly diagnosticRecords: DiagnosticRecord[] = [];
+	/**
+	 * The update-command construct's two per-dispatch facts (contract §27).
+	 * `writes` is the write set the would-do log's unnumbered line and the
+	 * envelope's `writes` member both render; `unsets` names the properties
+	 * this invocation CLEARED, which is what `unset` answers off -- the minted
+	 * `--unset-<prop>` delivers no key of its own. Both are attached by the
+	 * dispatch sites through attachUpdateState below.
+	 */
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: read via the widened cast in contextWrites
+	private writes: UpdateState | null = null;
+	private unsets: ReadonlySet<string> = new Set();
 
 	constructor(
 		stdout: Writer,
@@ -358,6 +371,26 @@ export class Context implements MutatingContext {
 	}
 
 	/**
+	 * Did this invocation CLEAR the named property of an update command
+	 * (contract §27.6)? True for `--unset-<prop>` on the command line, and for
+	 * `null` on the property's own key at a machine door.
+	 *
+	 * An unset property delivers absence -- the same `undefined` an untouched
+	 * property delivers -- and reports `provided` true, the invocation having
+	 * caused the write. This is what saves a handler from reconstructing that
+	 * boolean out of two facts, which is §23.6's own reason for existing.
+	 *
+	 * It accepts dashed or underscored names and throws on an unknown name with
+	 * the same message `source` and `provided` use: it reads the same per-parse
+	 * store, so a name with no source has no clear either.
+	 */
+	unset(name: string): boolean {
+		// The lookup is source()'s, for its refusal; the answer is the clear's.
+		this.source(name);
+		return this.unsets.has(name.replaceAll("_", "-"));
+	}
+
+	/**
 	 * Returns the value of a declared infrastructure env var as
 	 * [value, isSet]. For a declared root the value is the construction-time
 	 * resolution and isSet is always true; for a declared handshake var the
@@ -451,6 +484,34 @@ export function validateEmittedPayload(ctx: Context): void {
  * dispatch emitted, in emission order, read by the one exit step in app.ts when
  * it builds the envelope's `diagnostics` member (§19.2).
  */
+/**
+ * Package-internal (NOT re-exported from index.ts): attaches one dispatch's
+ * update facts to the Context (contract §27.5, §27.6). The dispatch sites call
+ * it once, exactly where they attach every other per-dispatch fact; the cast
+ * reaches the private slots without widening the handler-side surface.
+ */
+export function attachUpdateState(
+	ctx: Context,
+	writes: UpdateState | null,
+	unsets: ReadonlySet<string>,
+): void {
+	const c = ctx as unknown as {
+		writes: UpdateState | null;
+		unsets: ReadonlySet<string>;
+	};
+	c.writes = writes;
+	c.unsets = unsets;
+}
+
+/**
+ * Package-internal (NOT re-exported from index.ts): the write set this
+ * dispatch computed, which the envelope carries in both modes (§19.2's
+ * amendment, §27.5). Null on every command that declares no update.
+ */
+export function contextWrites(ctx: Context): UpdateState | null {
+	return (ctx as unknown as { writes: UpdateState | null }).writes;
+}
+
 export function contextDiagnostics(ctx: Context): readonly DiagnosticRecord[] {
 	return (ctx as unknown as { diagnosticRecords: DiagnosticRecord[] })
 		.diagnosticRecords;

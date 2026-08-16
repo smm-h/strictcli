@@ -75,7 +75,8 @@ const EXPECTED_JSON = `{
       "elect_by": null,
       "unique": false,
       "conflict_mode": null,
-      "negatable": null
+      "negatable": null,
+      "nullable": false
     },
     "arg": {
       "variadic": false,
@@ -91,6 +92,8 @@ const EXPECTED_JSON = `{
       "consequential": false,
       "dry_run_supported": true,
       "dry_run_unsupported_reason": null,
+      "update_of": null,
+      "write_mode": null,
       "payload_schema": null,
       "owns_stdout": false,
       "passthrough": false,
@@ -762,24 +765,34 @@ const EXPECTED_JSON = `{
           "effect": "mutating",
           "flags": [
             {
-              "name": "clear",
-              "help": "Clear a repeatable flag by setting its value to an empty list",
-              "value_schema": {
-                "type": "boolean"
-              },
-              "presence": "default",
-              "default": false,
-              "negatable": true
-            },
-            {
-              "name": "default",
-              "help": "Reset a key to its default value by removing it from the config file",
-              "value_schema": {
-                "type": "boolean"
-              },
-              "presence": "default",
-              "default": false,
-              "negatable": true
+              "name": "write",
+              "help": "What to write at the key: a value, a clear, or a reset to the declared default",
+              "presence": "required",
+              "choices": [
+                {
+                  "name": "value",
+                  "help": "Write a value at the key",
+                  "flags": [
+                    {
+                      "name": "value",
+                      "help": "Write this value at the key, coerced to the key's own type (comma-separated for a repeatable flag, backslash-escaping a literal comma; a JSON object for a dict flag)",
+                      "value_schema": {
+                        "type": "string"
+                      },
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "clear",
+                  "help": "Clear a repeatable flag"
+                },
+                {
+                  "name": "default",
+                  "help": "Reset the key to its declared default"
+                }
+              ],
+              "elect_by": "member-flags"
             }
           ],
           "args": [
@@ -790,14 +803,6 @@ const EXPECTED_JSON = `{
                 "type": "string"
               },
               "presence": "required"
-            },
-            {
-              "name": "value",
-              "help": "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
-              "value_schema": {
-                "type": "string"
-              },
-              "presence": "optional"
             }
           ],
           "forwarding": {

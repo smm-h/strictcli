@@ -403,6 +403,8 @@ const typeWitness: Record<TypeName, unknown> = {
 	PassthroughDef: witnessType<api.PassthroughDef<string>>(),
 	PassthroughHandler: witnessType<api.PassthroughHandler>(),
 	Requires: witnessType<api.Requires>(),
+	UpdateOf: witnessType<api.UpdateOf>(),
+	WriteMode: witnessType<api.WriteMode>(),
 	Result: witnessType<api.Result>(),
 	RunChecksOptions: witnessType<api.RunChecksOptions>(),
 	RunChecksResult: witnessType<api.RunChecksResult>(),

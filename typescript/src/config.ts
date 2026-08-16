@@ -60,10 +60,12 @@ import {
 	type AnyCommand,
 	type AnyFlag,
 	arg,
+	choice,
 	elemSchemaOf,
 	flag,
 	flagOpts,
 	flagParamName,
+	memberChoiceFlag,
 	type Presence,
 	pyRepr,
 	schemaKind,
@@ -1363,39 +1365,46 @@ function ensureConfigDir(path: string, ctx: Context): void {
 
 // --- config set handlers ---
 
+/**
+ * `config set`'s arguments: the key, and the elected member of its write
+ * selection (contract §27.1, §18.33 item 304).
+ *
+ * The write is an EXACTLY-ONE SELECTION over a value, a clear and a reset to
+ * default -- a member-spelled selector (§24.4). The shape it replaced was two
+ * bools declaring `default: false` plus an optional positional, with four
+ * hand-rolled guards holding its illegal corners shut, and §27.1's
+ * mutating-default ban refuses exactly that: a framework cannot ship a
+ * registration guard its own command does not pass, and an exemption for
+ * framework-owned commands would be the escape hatch this regime refuses
+ * everywhere else.
+ */
 interface ConfigSetArgs {
 	readonly key: string;
-	readonly value?: string;
-	readonly clear: boolean;
-	readonly default: boolean;
+	readonly write:
+		| { readonly choice: "value"; readonly value: string }
+		| { readonly choice: "clear" }
+		| { readonly choice: "default" };
 }
 
 /** `config set` for a config field (Python _config_set_field). */
 function configSetField(
 	app: AppImpl,
 	key: string,
-	value: string | undefined,
+	write: ConfigSetArgs["write"],
 	cf: ConfigFieldRt,
 	data: Record<string, unknown>,
 	path: string,
-	useClear: boolean,
-	useDefault: boolean,
 	ctx: Context,
 ): number {
-	const hasValue = value !== undefined;
-	if (useClear) {
+	// The elected member says what to write. The hand-rolled "exactly one of
+	// the three" guards are gone with the bools that made them expressible --
+	// electing none is the framework's own unsatisfied-selector refusal, and
+	// electing two is unrepresentable (§27.1).
+	if (write.choice === "clear") {
 		ctx.error("config set: --clear is only for repeatable flags");
 		return 1;
 	}
-	if (hasValue && useDefault) {
-		ctx.error("config set: cannot provide a value with --default");
-		return 1;
-	}
-	if (!hasValue && !useDefault) {
-		ctx.error("config set: provide a value or --default");
-		return 1;
-	}
-	if (useDefault) {
+	if (write.choice === "default") {
 		const r = writeConfigUnset(app, data, path, key, ctx);
 		if (r === "absent") {
 			ctx.error(`config set: key '${key}' not in config`);
@@ -1403,9 +1412,11 @@ function configSetField(
 		}
 		return r;
 	}
+	// The value member carries its payload under the reserved field name.
+	const value = write.value;
 	let typed: unknown;
 	try {
-		typed = coerceSetScalar(value as string, cf.schema);
+		typed = coerceSetScalar(value, cf.schema);
 	} catch (e) {
 		ctx.error(`config set: key '${key}': ${(e as Error).message}`);
 		return 1;
@@ -1433,36 +1444,21 @@ function coerceSetScalar(raw: string, schema: ScalarSchema): unknown {
 function configSetFlag(
 	app: AppImpl,
 	key: string,
-	value: string | undefined,
+	write: ConfigSetArgs["write"],
 	f: AnyFlag,
 	data: Record<string, unknown>,
 	path: string,
-	useClear: boolean,
-	useDefault: boolean,
 	ctx: Context,
 ): number {
-	const hasValue = value !== undefined;
-	if (useClear && useDefault) {
-		ctx.error("config set: --clear and --default are mutually exclusive");
-		return 1;
-	}
-	if (hasValue && useClear) {
-		ctx.error("config set: cannot provide a value with --clear");
-		return 1;
-	}
-	if (hasValue && useDefault) {
-		ctx.error("config set: cannot provide a value with --default");
-		return 1;
-	}
-	if (!hasValue && !useClear && !useDefault) {
-		ctx.error("config set: provide a value, --clear, or --default");
-		return 1;
-	}
-
 	const kind = schemaKind(f.schema);
 	const elem = elemSchemaOf(f.carrier);
 
-	if (useClear) {
+	// The elected member says what to write. "--clear and --default are
+	// mutually exclusive", "cannot provide a value with --clear" and "provide a
+	// value, --clear, or --default" are all unrepresentable now: exactly one
+	// member is elected, and electing none is the framework's own
+	// unsatisfied-selector refusal (§27.1).
+	if (write.choice === "clear") {
 		let cleared: unknown;
 		if (kind === "dict") {
 			cleared = Object.create(null) as Record<string, unknown>;
@@ -1475,7 +1471,7 @@ function configSetFlag(
 		return writeConfigSet(app, data, path, key, cleared, ctx);
 	}
 
-	if (useDefault) {
+	if (write.choice === "default") {
 		const r = writeConfigUnset(app, data, path, key, ctx);
 		if (r === "absent") {
 			ctx.error(`config set: key '${key}' not in config`);
@@ -1484,6 +1480,8 @@ function configSetFlag(
 		return r;
 	}
 
+	// The value member carries its payload under the reserved field name.
+	const value = write.value;
 	let typed: unknown;
 	if (kind === "dict") {
 		// Dict flags take a JSON object value (Python semantics).
@@ -1820,22 +1818,30 @@ export function registerConfigGroup(app: AppImpl): void {
 					help: "The config key to set, matching a registered flag name",
 					presence: "required",
 				}),
-				arg("value", t.str, {
-					help: "Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
-					presence: "optional",
-				}),
 			],
 			flags: {
-				clear: flag("clear", t.bool, {
-					help: "Clear a repeatable flag by setting its value to an empty list",
-					presence: "default",
-					default: false,
-				}),
-				default: flag("default", t.bool, {
-					help: "Reset a key to its default value by removing it from the config file",
-					presence: "default",
-					default: false,
-				}),
+				// The write selection (contract §27.1, §18.33 item 304): an
+				// exactly-one selection over a value, a clear and a reset to the
+				// declared default. The three illegal corners the old bools made
+				// expressible are unrepresentable now.
+				write: memberChoiceFlag(
+					"write",
+					{
+						value: choice({
+							help: "Write a value at the key",
+							value: {
+								carrier: t.str,
+								help: "Write this value at the key, coerced to the key's own type (comma-separated for a repeatable flag, backslash-escaping a literal comma; a JSON object for a dict flag)",
+							},
+						}),
+						clear: choice({ help: "Clear a repeatable flag" }),
+						default: choice({ help: "Reset the key to its declared default" }),
+					},
+					{
+						help: "What to write at the key: a value, a clear, or a reset to the declared default",
+						presence: "required",
+					},
+				),
 			},
 			handler: markFrameworkHandler((args: ConfigSetArgs, ctx: Context) =>
 				configSetDispatch(app, args, ctx),
@@ -1932,24 +1938,20 @@ function configSetDispatch(
 		return configSetField(
 			app,
 			key,
-			args.value,
+			args.write,
 			matchedField,
 			existing,
 			path,
-			args.clear,
-			args.default,
 			ctx,
 		);
 	}
 	return configSetFlag(
 		app,
 		key,
-		args.value,
+		args.write,
 		matchedFlag as AnyFlag,
 		existing,
 		path,
-		args.clear,
-		args.default,
 		ctx,
 	);
 }

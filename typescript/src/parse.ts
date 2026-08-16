@@ -48,6 +48,7 @@ import {
 	errMutexDeclineClause,
 	errUnexpectedArgument,
 	errUnknownFlag,
+	errUpdateValueAndUnset,
 	ParseError,
 } from "./errors.js";
 import {
@@ -65,6 +66,7 @@ import {
 	requiredFlagForm,
 	type ScopeIndexEntry,
 	schemaKind,
+	unsetFlagName,
 } from "./factories.js";
 import { isInfraRootPath, resolveInfraRootPath } from "./infra.js";
 import { resolveCommand } from "./routing.js";
@@ -79,6 +81,7 @@ import {
 	throwFirstProblem,
 } from "./scopeparse.js";
 import { SourcedStore, type SourceLabel } from "./sources.js";
+import { evaluateUpdate, type UpdateState } from "./update.js";
 import {
 	appendListValue,
 	coerceArgValue,
@@ -224,6 +227,13 @@ interface FlagLookups {
 	readonly long: Map<string, AnyFlag>;
 	readonly short: Map<string, AnyFlag>;
 	readonly negation: Map<string, AnyFlag>;
+	/**
+	 * The clear vocabulary's minted spelling (contract §27.6). It is
+	 * framework-owned and reaches the handler on the Context; it is NOT
+	 * negatable, so `--no-unset-<x>` names nothing and is refused by the
+	 * ordinary unknown-flag path.
+	 */
+	readonly unset: Map<string, AnyFlag>;
 }
 
 function isNegatableBool(f: AnyFlag): boolean {
@@ -240,6 +250,9 @@ function addToLookups(lookups: FlagLookups, flags: readonly AnyFlag[]): void {
 		if (isNegatableBool(f)) {
 			lookups.negation.set(`--no-${f.name}`, f);
 		}
+		if (flagOpts(f).nullable === true) {
+			lookups.unset.set(`--${unsetFlagName(f.name)}`, f);
+		}
 	}
 }
 
@@ -248,6 +261,7 @@ function newLookups(flags: readonly AnyFlag[]): FlagLookups {
 		long: new Map(),
 		short: new Map(),
 		negation: new Map(),
+		unset: new Map(),
 	};
 	addToLookups(lookups, flags);
 	return lookups;
@@ -457,6 +471,18 @@ export interface ParsedCommand {
 	 * the run continues, and they are shown only under --verbose.
 	 */
 	readonly skippedBindings: readonly string[];
+	/**
+	 * The write set of a command declaring `updateOf` (contract §27.5), and
+	 * null on every command that declares none. The would-do log's unnumbered
+	 * line and the envelope's `writes` member both render it.
+	 */
+	readonly writes: UpdateState | null;
+	/**
+	 * The properties this invocation CLEARED (§27.6): `--unset-<prop>` on the
+	 * command line, or `null` on the property's own key at a machine door.
+	 * `ctx.unset` answers off it.
+	 */
+	readonly unsets: ReadonlySet<string>;
 }
 
 /**
@@ -594,6 +620,8 @@ export function parseCommand(
 	 * 257), so the two kinds of occurrence must be positioned on one scale.
 	 */
 	let seq = 0;
+	/** The properties `--unset-<prop>` cleared, in command-line order (§27.6). */
+	const unsetOccs: string[] = [];
 	const pushRoot = (f: AnyFlag, raw: string | boolean): void => {
 		rootOccs.push({ f, raw, seq: seq++ });
 	};
@@ -659,6 +687,18 @@ export function parseCommand(
 		const scopedNegated = scoped.negation.get(tok);
 		if (scopedNegated !== undefined) {
 			pushScoped(scopedNegated.name, undefined);
+			i++;
+			continue;
+		}
+
+		// --unset-flag: the clear vocabulary's minted spelling. It carries no
+		// value of its own -- clearing is one act, not a value -- and it is
+		// checked against the property's own occurrences below. The `=` form
+		// above never consults this table: `--unset-x=v` names no declaration
+		// and takes the ordinary unknown-flag path.
+		const cleared = lookups.unset.get(tok);
+		if (cleared !== undefined) {
+			unsetOccs.push(cleared.name);
 			i++;
 			continue;
 		}
@@ -738,6 +778,27 @@ export function parseCommand(
 		i++;
 	}
 
+	// A property written AND cleared in one invocation is refused BEFORE either
+	// is read: the two tokens state opposite things about one property, and no
+	// order of application makes one of them true (§27.6). The refusal is a
+	// value-stage verdict that outranks every coercion -- position -1, since it
+	// is decided before the first token is coerced rather than at any one
+	// token's place in the line -- so a structural verdict still wins and an
+	// election or scope refusal still runs first.
+	const unsets = new Set(unsetOccs);
+	if (unsets.size > 0) {
+		for (const { f } of rootOccs) {
+			if (unsets.has(f.name)) {
+				problems.push({
+					stage: STAGE.value,
+					message: errUpdateValueAndUnset(f.name),
+					seq: -1,
+				});
+				break;
+			}
+		}
+	}
+
 	// The value pass over the root-scope occurrences. It runs after the whole
 	// scan, so a coercion failure can never outrank a structural verdict; each
 	// failure carries the position of the token that produced it, so the value
@@ -759,6 +820,15 @@ export function parseCommand(
 			}
 			throw e;
 		}
+	}
+
+	// A cleared property is SUPPLIED: the value it delivers is absence, the same
+	// undefined an untouched property delivers, and the two are told apart by
+	// `provided` -- true here, because the invocation caused the write -- and by
+	// `ctx.unset` (§27.6). Entering it in the map also stops env, config and the
+	// declared-default step from filling the gap the clear opened.
+	for (const name of unsets) {
+		cliSet.set(name, undefined);
 	}
 
 	// Phases 2-4: elections outermost first, scope-membership validation, then
@@ -835,6 +905,7 @@ export function parseCommand(
 		infraRoots,
 		[...scopeResult.records.keys()],
 		scopeResult.skippedBindings,
+		unsets,
 	);
 }
 
@@ -1198,6 +1269,7 @@ export function validateAndBuildKwargs(
 	infraRoots: ReadonlyMap<string, string>,
 	selectorNames: readonly string[] = [],
 	skippedBindings: readonly string[] = [],
+	unsets: ReadonlySet<string> = new Set(),
 ): ParsedCommand {
 	if (cmd.def.kind !== "command") {
 		throw new Error("internal: passthrough commands are not parsed");
@@ -1236,6 +1308,14 @@ export function validateAndBuildKwargs(
 	// default does not (§26.3, §23.6). Evaluated BEFORE defaults are applied,
 	// exactly where the dependency families ran.
 	evaluateConstraints(def, store, args, positionals);
+
+	// The at-least-one-property rule, and the write set it guarantees is never
+	// empty (contract §27.4, §27.5). It is the framework's own rule about a
+	// declared property set rather than a constraint the command wrote, so it
+	// is evaluated after every declared constraint has had its say -- and, like
+	// them, BEFORE defaults are applied, over the one provided-ness predicate
+	// with no source filter.
+	const writes = evaluateUpdate(def, store, unsets);
 
 	// Defaults. Every flag resolves from its own declared presence: the
 	// exemption that handed a mutex member an absent value its declaration
@@ -1361,7 +1441,7 @@ export function validateAndBuildKwargs(
 		}
 	}
 
-	return { kwargs, postGlobalValues, sources, skippedBindings };
+	return { kwargs, postGlobalValues, sources, skippedBindings, writes, unsets };
 }
 
 // --- Global flag extraction (pre-command phase) ---
@@ -1871,6 +1951,14 @@ export type ParseOutcome =
 			 * diagnostics whatever the human stream did.
 			 */
 			readonly skippedBindings: readonly string[];
+			/**
+			 * The write set of a command declaring `updateOf` (contract §27.5),
+			 * null on every command that declares none, and carried in both
+			 * modes: it is a function of the declaration and the invocation.
+			 */
+			readonly writes: UpdateState | null;
+			/** The properties this invocation CLEARED (§27.6). */
+			readonly unsets: ReadonlySet<string>;
 	  }
 	| {
 			readonly kind: "passthrough";
@@ -2160,6 +2248,8 @@ export function doParse(
 		hermetic: pre.hermetic,
 		reserved: reservedFlagsOf(pre),
 		skippedBindings: parsed.skippedBindings,
+		writes: parsed.writes,
+		unsets: parsed.unsets,
 	};
 }
 

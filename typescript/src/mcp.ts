@@ -30,9 +30,8 @@ import { jsonCompact } from "./outcome.js";
 import {
 	buildJSONSchema,
 	collectToolCommands,
-	constraintDescriptionBlock,
 	flatToCallKwargs,
-	scopeDescriptionBlock,
+	toolDescription,
 } from "./tool.js";
 
 /** Optional stream overrides for serveMcp (defaults: process stdin/stdout). */
@@ -419,7 +418,7 @@ function handleToolsList(
 			name: dottedPath,
 			// The scope structure the flattened schema cannot carry rides the
 			// description, exactly as it does on the Tool descriptor (§24.11).
-			description: `${cmd.help}${scopeDescriptionBlock(cmd)}${constraintDescriptionBlock(cmd)}`,
+			description: toolDescription(cmd),
 			effect,
 			inputSchema: buildJSONSchema(cmd),
 		};

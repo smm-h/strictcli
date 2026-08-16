@@ -52,10 +52,12 @@ import {
 	flagOpts,
 	scalarFragment,
 	schemaKind,
+	type UpdateOf,
 	valueSchemaFragment,
 } from "./factories.js";
 import { formatFloatCanonical } from "./float.js";
 import { isInfraRootPath, serializeInfraMarker } from "./infra.js";
+import { serializeUpdateOf } from "./update.js";
 
 // --- JSON writer (2-space indent, bigint/float machine-channel tokens) ---
 
@@ -226,6 +228,14 @@ function serializeFlag(f: AnyFlag): Record<string, unknown> {
 	// negatable: bool flags always emit it (null covers non-bools).
 	if (f.schema === "bool") {
 		d.negatable = o.negatable !== false;
+	}
+	// Emitted only when declared true; absence means the property cannot be
+	// cleared, which is the baseline. There is NO second flag entry for the
+	// minted `--unset-<prop>`: it is derived from this key exactly as
+	// `--no-<x>` is derived from `negatable`, and the dump publishes
+	// declarations (contract §13's amendment, §27.9).
+	if (o.nullable === true) {
+		d.nullable = true;
 	}
 	return d;
 }
@@ -435,6 +445,7 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 		readonly consequential?: boolean;
 		readonly dryRunSupported?: boolean;
 		readonly dryRunUnsupportedReason?: string;
+		readonly updateOf?: UpdateOf;
 		readonly payloadSchema?: Readonly<Record<string, unknown>>;
 		readonly ownsStdout?: boolean;
 		readonly grants?: readonly Grant[];
@@ -457,6 +468,16 @@ function serializeCommand(rc: RegisteredCommand): Record<string, unknown> {
 	if (carrier.dryRunSupported === false) {
 		d.dry_run_supported = false;
 		d.dry_run_unsupported_reason = carrier.dryRunUnsupportedReason;
+	}
+	// The update declaration, published as TWO command-entry keys where it is
+	// one nested record on the declaration surface (contract §13's amendment,
+	// §27.9): a consumer asking what write mode a command has should not have
+	// to descend, and a consumer WRITING a declaration must not be able to
+	// spell half of one. The pair is atomic by construction rather than by a
+	// guard -- the two facts are one declaration.
+	if (carrier.updateOf !== undefined) {
+		d.update_of = serializeUpdateOf(carrier.updateOf);
+		d.write_mode = carrier.updateOf.writeMode;
 	}
 	// The payload contract, published verbatim (contract §19.5): the inline
 	// literal is the sole canonical artifact, so the dump carries it as written
@@ -604,6 +625,7 @@ function buildSchemaDefaults(): Record<string, unknown> {
 			unique: false,
 			conflict_mode: null,
 			negatable: null,
+			nullable: false,
 		},
 		arg: {
 			variadic: false,
@@ -619,6 +641,8 @@ function buildSchemaDefaults(): Record<string, unknown> {
 			consequential: false,
 			dry_run_supported: true,
 			dry_run_unsupported_reason: null,
+			update_of: null,
+			write_mode: null,
 			payload_schema: null,
 			owns_stdout: false,
 			passthrough: false,

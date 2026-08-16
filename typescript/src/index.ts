@@ -102,8 +102,10 @@ export type {
 	PassthroughHandler,
 	ReadOnlyCommandSpec,
 	Requires,
+	UpdateOf,
 	ValueChoiceDef,
 	When,
+	WriteMode,
 } from "./factories.js";
 export {
 	allOrNone,

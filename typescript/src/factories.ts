@@ -116,6 +116,8 @@ import {
 	errMemberDefaultCarriesValue,
 	errMemberFlagPresence,
 	errMemberSelectorShort,
+	errMutatingDefault,
+	errNullableNotProperty,
 	errPayloadSchemaInvalid,
 	errScopedNameChoiceReserved,
 	errScopedNameCollidesRoot,
@@ -131,6 +133,19 @@ import {
 	errShortShapeMismatch,
 	errSiblingScopeShapeMismatch,
 	errTokenChoiceCarriesPayload,
+	errUnsetNameReserved,
+	errUpdateNameAmbiguous,
+	errUpdateNameBothRoles,
+	errUpdateNameDuplicate,
+	errUpdateNameUnknown,
+	errUpdateOnReadOnly,
+	errUpdatePropertiesEmpty,
+	errUpdatePropertyIsArg,
+	errUpdatePropertyIsChoiceFlag,
+	errUpdatePropertyPresence,
+	errUpdateReferencesScopedFlag,
+	errUpdateResourceCharset,
+	errUpdateWriteModeInvalid,
 	PRESENCE_SPELLING_OPTIONAL,
 	PRESENCE_SPELLING_REQUIRED,
 	presenceSpellingDefault,
@@ -350,6 +365,18 @@ interface FlagCommonOpts<Out, S extends Schema> {
 	readonly connectionUrl?: boolean;
 	/** The declared connection env (createApp connectionEnv) this flag binds to. */
 	readonly connectionEnv?: string;
+	/**
+	 * Declares that this PROPERTY of an update command can be CLEARED, minting
+	 * `--unset-<prop>` (contract §27.6). Legal only on a property of an update;
+	 * anywhere else it is a registration-time hard error.
+	 *
+	 * Every type may be nullable, the four scalars and the compounds alike:
+	 * clearing is a fact about the resource's field, not about the value's
+	 * shape. The minted flag delivers no key of its own -- an unset property
+	 * delivers absence, reports `ctx.provided` true, and is answered by
+	 * `ctx.unset(name)`.
+	 */
+	readonly nullable?: boolean;
 }
 
 /**
@@ -446,6 +473,8 @@ export interface FlagOptsView {
 	readonly connectionUrl?: boolean;
 	/** The declared connection env (createApp connectionEnv) this flag binds to. */
 	readonly connectionEnv?: string;
+	/** Marks a clearable property of an update command (contract §27.6). */
+	readonly nullable?: boolean;
 }
 
 /** Widened options of a flag descriptor, for runtime validation and parsing. */
@@ -1263,6 +1292,69 @@ export type Constraint = AtLeastOne | AllOrNone | Requires | Implies;
 
 /** The two co-occurrence families -- the only kinds that may be NESTED (§26.2). */
 export type CoOccurrence = AtLeastOne | AllOrNone;
+
+// --- The update-command construct (contract §27) ---
+
+/**
+ * What the handler does with the properties it did not receive (§27.2).
+ *
+ * - `sparse` sends only the provided properties; the resource's others are not
+ *   part of the request, and every surface renders
+ *   `(other properties unchanged)`;
+ * - `full_replace` sends the whole resource -- this invocation's properties
+ *   plus every other one read back and re-sent -- and every surface renders
+ *   `(other properties are re-sent as read)`.
+ *
+ * It carries no default, for the reason `effect` has none: the framework
+ * refuses to guess which of two writes a command performs. A preview that said
+ * "other properties unchanged" over a full-replace API would be a false
+ * statement about the most destructive thing the command does.
+ */
+export type WriteMode = "sparse" | "full_replace";
+
+/**
+ * What a command updates: one resource, one write mode, two name lists
+ * (contract §27.2).
+ *
+ * One option object on the command spec -- the shape `requires({...})` and
+ * `implies({...})` already have -- with the write mode declared INSIDE the
+ * record, which makes the half-declared state unrepresentable rather than
+ * guarded.
+ *
+ * `K` is the key union of the command's own declared NAMES, so the floor of
+ * one AND every name are checked by the compiler: a property naming a flag the
+ * command does not declare does not compile, and `errUpdateNameUnknown` stays
+ * reachable only through a widened or JSON-shaped caller -- §12.13 item 213's
+ * treatment. `identity` takes the same union without the floor. A payoff that
+ * reaches one language is a PRO (B9), and this is the round's.
+ */
+export interface UpdateOf<K extends string = string> {
+	/** The name of the thing being updated; `[a-z][a-z0-9-]*` (§27.2). */
+	readonly resource: string;
+	/** `"sparse"` or `"full_replace"` -- mandatory, no default (§27.2). */
+	readonly writeMode: WriteMode;
+	/** The declarations that name WHICH instance; possibly empty (§27.3). */
+	readonly identity?: readonly K[];
+	/** The flags that name WHAT changes; at least one, by the tuple (§27.3). */
+	readonly properties: readonly [K, ...K[]];
+}
+
+/**
+ * The declared names of one command: its flags and selectors (which a `const`
+ * flag map carries as literals) plus its positional args.
+ *
+ * Both roles resolve in this ONE namespace, which is what makes a property
+ * that names a positional arg -- `errUpdatePropertyIsArg` -- an expressible
+ * declaration rather than a guard no TypeScript caller could ever reach.
+ */
+export type DeclaredName<F extends FlagMap, A extends readonly AnyArg[]> =
+	| F[keyof F]["name"]
+	| A[number]["name"];
+
+/** The flag the framework mints for a nullable property (§27.6). */
+export function unsetFlagName(prop: string): string {
+	return `unset-${prop}`;
+}
 
 // --- Command carriers ---
 
@@ -2119,6 +2211,336 @@ function scopedFlagPathMap(
 	return out;
 }
 
+// --- The update declaration's registration (contract §27.11) ---
+
+/**
+ * §12.16's `<decl>`, the operand renderer these sentences share: a flag
+ * renders `flag '--<x>'` and a positional arg renders `argument '<x>'`. It
+ * lives beside the guards that use it rather than in the message catalog,
+ * exactly as its siblings' do -- it is a renderer, not a template.
+ */
+function renderDeclFlag(name: string): string {
+	return `flag '--${name}'`;
+}
+
+function renderDeclArg(name: string): string {
+	return `argument '${name}'`;
+}
+
+/**
+ * Whether a declared default is a TOOL-PICKED VALUE (§27.1).
+ *
+ * Every scalar is one, `""` and `0` included, and so is a NON-EMPTY list or
+ * dict: `default: ["a"]` is as tool-picked as `default: 300`, and the shape of
+ * the container changes nothing about what reaches the write.
+ *
+ * Two carve-outs, both derived from the ban's own reason (§18.33 item 301):
+ *
+ *   - an EMPTY collection declares no elements, so no value the framework
+ *     chose can reach a write through it, and §23.5 made this spelling the
+ *     explicit replacement for the framework's own silent `[]`;
+ *   - a relativeToRoot() default resolves a LOCATION under a declared
+ *     infrastructure root, deciding where a command writes and never what; its
+ *     source label is `infra` and `ctx.provided` answers false.
+ */
+function bannedDefault(value: unknown): boolean {
+	if (value === undefined || value === null) {
+		// `default: null` has its own refusal (§23.1) and never reaches a write.
+		return false;
+	}
+	if (isInfraRootPath(value)) {
+		return false;
+	}
+	if (Array.isArray(value)) {
+		return value.length > 0;
+	}
+	if (value instanceof Map) {
+		return value.size > 0;
+	}
+	if (value instanceof Set) {
+		return value.size > 0;
+	}
+	return true;
+}
+
+/**
+ * §27.1's ban: on a command declaring `effect: "mutating"`, a flag or a
+ * positional arg may not declare a value default.
+ *
+ * Absence must never resolve to a value the invocation did not state, because
+ * on a mutating command a value the framework picked is a value the framework
+ * WRITES.
+ *
+ * It is evaluated PER COMMAND, over the flags and args that command carries --
+ * its own, its flag sets' (already merged into `decls` here) and its
+ * selectors' scoped flags at every depth -- so a shared flag set carrying a
+ * default is legal and attaching it to a mutating command is not. App-level
+ * global flags are NOT reached: a global has no classification of its own, and
+ * there is no command at the point of its declaration to key on (§27.1's
+ * stated hole).
+ */
+function validateMutatingDefaults(
+	cmdName: string,
+	effect: Effect,
+	decls: readonly AnyDecl[],
+	args: readonly AnyArg[],
+): void {
+	if (effect !== "mutating") {
+		return;
+	}
+	const walk = (list: readonly AnyDecl[]): void => {
+		for (const d of list) {
+			// A SELECTOR's default names which scope is live rather than a value
+			// written to anything, and B2's own remedy for an absent selection is
+			// to name the choice -- which is what a default election does. The
+			// scope beneath it is another matter: those are ordinary flags of a
+			// mutating command, reached at every depth.
+			if (d.kind === "choice-flag") {
+				for (const c of Object.values(d.choices)) {
+					walk(Object.values(c.flags));
+				}
+				continue;
+			}
+			const o = flagOpts(d);
+			if (o.presence !== "default" || !bannedDefault(o.default)) {
+				continue;
+			}
+			throw new RegistrationError(
+				errMutatingDefault(
+					cmdName,
+					renderDeclFlag(d.name),
+					formatValueForError(o.default),
+				),
+			);
+		}
+	};
+	walk(decls);
+	for (const a of args) {
+		const o = a.opts as ArgOptsView;
+		if (o.presence !== "default" || !bannedDefault(o.default)) {
+			continue;
+		}
+		throw new RegistrationError(
+			errMutatingDefault(
+				cmdName,
+				renderDeclArg(a.name),
+				formatValueForError(o.default),
+			),
+		);
+	}
+}
+
+interface UpdateSetInput {
+	readonly commandName: string;
+	readonly effect: Effect;
+	readonly updateOf: UpdateOf | undefined;
+	readonly decls: readonly AnyDecl[];
+	readonly args: readonly AnyArg[];
+	readonly scopedFlagPaths: ReadonlyMap<string, string>;
+}
+
+/** The write modes, as a runtime set: a widened caller can miss the union. */
+const WRITE_MODES: ReadonlySet<string> = new Set<WriteMode>([
+	"sparse",
+	"full_replace",
+]);
+
+/** `[a-z][a-z0-9-]*`, the framework's one identifier charset (§27.2). */
+const RESOURCE_NAME_RE = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * Resolves and validates one command's update declaration (§27.11).
+ *
+ * The eight steps run in the pinned order over the WHOLE declaration, so three
+ * implementations report the same FIRST error for a declaration with two
+ * faults. The order runs from the command's own classification, through the
+ * record's identity, outward to the declarations it names -- §26.8's direction
+ * -- and each step crosses the whole declaration before the next begins, so a
+ * message never blames a name for a fault in the record that names it.
+ *
+ * Step 8's second half reads the flag namespace back; its APP-level half (the
+ * minted name against the app's globals) runs where an app is in scope, at
+ * command registration, exactly as the global-collision refusal already does.
+ */
+function validateUpdate(input: UpdateSetInput): void {
+	const {
+		commandName: cn,
+		effect,
+		updateOf: d,
+		decls,
+		args,
+		scopedFlagPaths,
+	} = input;
+
+	// Step 1: the mutating-default ban. It runs first because it is a fact
+	// about the command's CLASSIFICATION and is independent of whether an
+	// update is declared at all.
+	validateMutatingDefaults(cn, effect, decls, args);
+
+	// Step 2: classification legality.
+	if (d !== undefined && effect === "read_only") {
+		throw new RegistrationError(errUpdateOnReadOnly(cn));
+	}
+
+	const declByName = new Map(decls.map((x) => [x.name, x]));
+	const argByName = new Map(args.map((a) => [a.name, a]));
+	const properties = new Set<string>();
+
+	if (d !== undefined) {
+		// Step 3: record legality -- the resource name's charset, the write
+		// mode's vocabulary, at least one property.
+		if (typeof d.resource !== "string" || !RESOURCE_NAME_RE.test(d.resource)) {
+			throw new RegistrationError(
+				errUpdateResourceCharset(cn, String(d.resource)),
+			);
+		}
+		if (!WRITE_MODES.has(d.writeMode)) {
+			throw new RegistrationError(
+				errUpdateWriteModeInvalid(cn, String(d.writeMode ?? "")),
+			);
+		}
+		const props = (d.properties ?? []) as readonly string[];
+		if (props.length === 0) {
+			throw new RegistrationError(errUpdatePropertiesEmpty(cn, d.resource));
+		}
+
+		// Step 4: name resolution. Every name in either list resolves to exactly
+		// one flag or arg; unknown, ambiguous, duplicated and both-roles names
+		// refuse here.
+		const roles = new Map<string, boolean>();
+		const scoped: string[] = [];
+		const resolve = (x: string, isProperty: boolean): void => {
+			const isFlag = declByName.has(x);
+			const isArg = argByName.has(x);
+			if (isFlag && isArg) {
+				throw new RegistrationError(errUpdateNameAmbiguous(cn, d.resource, x));
+			}
+			if (!isFlag && !isArg) {
+				// A SCOPED flag resolves as a flag and is refused by the scope step
+				// below; reporting it as unknown would name the wrong fault (§24.8,
+				// §27.3).
+				if (!scopedFlagPaths.has(x)) {
+					throw new RegistrationError(errUpdateNameUnknown(cn, d.resource, x));
+				}
+				scoped.push(x);
+			}
+			const seen = roles.get(x);
+			if (seen !== undefined) {
+				throw new RegistrationError(
+					seen === isProperty
+						? errUpdateNameDuplicate(cn, d.resource, x)
+						: errUpdateNameBothRoles(cn, d.resource, x),
+				);
+			}
+			roles.set(x, isProperty);
+		};
+		for (const x of (d.identity ?? []) as readonly string[]) {
+			resolve(x, false);
+		}
+		for (const x of props) {
+			resolve(x, true);
+		}
+
+		// Step 5: scope. A property inside a scope would have a write-set
+		// membership the argv and flat doors could answer and the record door
+		// could not -- one rule with three answers (§27.3).
+		for (const x of scoped) {
+			throw new RegistrationError(
+				errUpdateReferencesScopedFlag(
+					cn,
+					d.resource,
+					x,
+					scopedFlagPaths.get(x) ?? "",
+				),
+			);
+		}
+
+		// Step 6: role legality -- a property that is a positional arg, then a
+		// property that is a choice flag.
+		for (const x of props) {
+			if (argByName.has(x)) {
+				throw new RegistrationError(errUpdatePropertyIsArg(cn, d.resource, x));
+			}
+		}
+		for (const x of props) {
+			if (declByName.get(x)?.kind === "choice-flag") {
+				throw new RegistrationError(
+					errUpdatePropertyIsChoiceFlag(cn, d.resource, x),
+				);
+			}
+		}
+
+		// Step 7: presence legality. A property the invocation must always supply
+		// is written in every invocation, which makes the at-least-one rule
+		// unfireable and turns a sparse update into a partial full replace under
+		// a name that denies it. A property declaring a DEFAULT was already
+		// refused by step 1's ban, an update command being mutating by step 2's
+		// own guard.
+		for (const x of props) {
+			if (flagOpts(declByName.get(x) as AnyFlag).presence === "required") {
+				throw new RegistrationError(
+					errUpdatePropertyPresence(cn, d.resource, renderDeclFlag(x)),
+				);
+			}
+		}
+		for (const x of props) {
+			properties.add(x);
+		}
+	}
+
+	// Step 8: the clear vocabulary. It runs LAST because the name reservation
+	// is the only step that reads the flag namespace back after the property
+	// set is known.
+	for (const x of decls) {
+		if (x.kind !== "flag") {
+			continue;
+		}
+		if (flagOpts(x).nullable === true && !properties.has(x.name)) {
+			throw new RegistrationError(
+				errNullableNotProperty(cn, renderDeclFlag(x.name)),
+			);
+		}
+	}
+	for (const x of properties) {
+		if (flagOpts(declByName.get(x) as AnyFlag).nullable !== true) {
+			continue;
+		}
+		const minted = unsetFlagName(x);
+		if (declByName.has(minted) || scopedFlagPaths.has(minted)) {
+			throw new RegistrationError(errUnsetNameReserved(cn, x));
+		}
+	}
+}
+
+/**
+ * The APP-level half of §27.11's step 8: the minted `--unset-<prop>` against
+ * the app's own globals, which are recognized after the command name too -- so
+ * a global of the minted name would be unreachable behind the clear spelling.
+ * It runs at command registration, where an app is finally in scope.
+ */
+export function validateUpdateAgainstGlobals(
+	def: AnyCommand,
+	globalFlagNames: ReadonlySet<string>,
+): void {
+	const d = def.updateOf;
+	if (d === undefined) {
+		return;
+	}
+	const byName = new Map(def.allDecls.map((x) => [x.name, x]));
+	for (const x of d.properties as readonly string[]) {
+		const decl = byName.get(x);
+		if (decl === undefined || decl.kind !== "flag") {
+			continue;
+		}
+		if (flagOpts(decl).nullable !== true) {
+			continue;
+		}
+		if (globalFlagNames.has(unsetFlagName(x))) {
+			throw new RegistrationError(errUnsetNameReserved(def.name, x));
+		}
+	}
+}
+
 // --- Constraint-set registration (contract §26.8) ---
 
 /** `[a-z][a-z0-9-]*`, the framework's one identifier charset. */
@@ -2618,6 +3040,12 @@ export interface CommandDef<
 	/** Mandatory when dryRunSupported is false; shown in help and the refusal. */
 	readonly dryRunUnsupportedReason: string | undefined;
 	/**
+	 * What this command updates (contract §27.2): the resource, the write mode,
+	 * and the declarations that name WHICH instance and WHAT changes. Absence
+	 * means the command is not an update.
+	 */
+	readonly updateOf: UpdateOf | undefined;
+	/**
 	 * The command's machine payload contract (contract §19.5): an inline JSON
 	 * Schema literal, registered as written. Absence means the command cannot
 	 * produce a payload -- ctx.payload is then a call-time hard error. The
@@ -2669,6 +3097,8 @@ export interface AnyCommand {
 	readonly consequential: boolean;
 	readonly dryRunSupported: boolean;
 	readonly dryRunUnsupportedReason: string | undefined;
+	/** What this command updates, or undefined when it is not an update (§27.2). */
+	readonly updateOf: UpdateOf | undefined;
 	readonly payloadSchema: Readonly<Record<string, unknown>> | undefined;
 	/**
 	 * Declares that this command's stdout IS the artifact (contract §19.6).
@@ -2726,6 +3156,13 @@ export interface ReadOnlyCommandSpec<
 	readonly dryRunSupported?: boolean;
 	readonly dryRunUnsupportedReason?: string;
 	/**
+	 * Declaring this on a read_only command is a registration-time hard error:
+	 * a command that changes nothing writes no properties (contract §27.2).
+	 * The member exists on this spec so that error is reachable rather than
+	 * silently dropped.
+	 */
+	readonly updateOf?: UpdateOf<DeclaredName<F, A>>;
+	/**
 	 * The command's machine payload contract (contract §19.5): the inline JSON
 	 * Schema literal a payload supplied through ctx.payload is registered
 	 * against. A command that declares none cannot produce a payload.
@@ -2775,6 +3212,14 @@ export interface MutatingCommandSpec<
 	readonly dryRunSupported?: boolean;
 	/** Mandatory when dryRunSupported is false; shown in help and the refusal. */
 	readonly dryRunUnsupportedReason?: string;
+	/**
+	 * What this command updates (contract §27.2): one resource, one write mode,
+	 * and the names that say WHICH instance and WHAT changes. Declaring it
+	 * makes the framework enforce that at least one property is supplied,
+	 * render the write set on every surface a run reports through, and mint
+	 * `--unset-<prop>` for every nullable property.
+	 */
+	readonly updateOf?: UpdateOf<DeclaredName<F, A>>;
 	/**
 	 * The command's machine payload contract (contract §19.5): the inline JSON
 	 * Schema literal a payload supplied through ctx.payload is registered
@@ -3025,6 +3470,20 @@ function buildCommandDef<
 		}
 	});
 
+	// The update declaration, in §27.11's pinned eight-step order. It runs
+	// BEFORE the constraint passes because its first step is the
+	// mutating-default ban, which is a fact about the command's own
+	// classification and is independent of every rule declared on top of it.
+	const updateOf = spec.updateOf as UpdateOf | undefined;
+	validateUpdate({
+		commandName: name,
+		effect,
+		updateOf,
+		decls: allDecls,
+		args,
+		scopedFlagPaths,
+	});
+
 	// The constraint set: name legality, member arity, member resolution,
 	// scope, nesting legality, election legality, presence legality -- in that
 	// pinned order (§26.8), so a message never blames a member for a fault in
@@ -3046,6 +3505,7 @@ function buildCommandDef<
 		consequential: spec.consequential ?? false,
 		dryRunSupported: spec.dryRunSupported ?? true,
 		dryRunUnsupportedReason: spec.dryRunUnsupportedReason,
+		updateOf: updateOf as UpdateOf | undefined,
 		payloadSchema: spec.payloadSchema,
 		ownsStdout: spec.ownsStdout ?? false,
 		flags,
@@ -3134,6 +3594,14 @@ export interface PassthroughDef<N extends string, C = MutatingContext> {
 	/** Declared exactly as on an ordinary command. */
 	readonly dryRunSupported: boolean;
 	readonly dryRunUnsupportedReason: string | undefined;
+	/**
+	 * CARRIED rather than dropped, exactly as Go and Python carry it: the
+	 * passthrough early-return sits ahead of §27.11's steps in all three, so a
+	 * passthrough that declares an update keeps the declaration and publishes
+	 * it. §27 authors no guard for a state a passthrough's own refusal already
+	 * makes unusable -- it can declare no flags, so it can name no property.
+	 */
+	readonly updateOf: UpdateOf | undefined;
 	/** Declared exactly as on an ordinary command (contract §19.5). */
 	readonly payloadSchema: Readonly<Record<string, unknown>> | undefined;
 	/**
@@ -3156,6 +3624,12 @@ interface PassthroughSpec<C> {
 	readonly consequential?: boolean;
 	readonly dryRunSupported?: boolean;
 	readonly dryRunUnsupportedReason?: string;
+	/**
+	 * Carried and published, never validated: a passthrough declares no flags
+	 * and no args, so there is no name for either list to resolve (§27.2).
+	 * The key union is therefore unconstrained here.
+	 */
+	readonly updateOf?: UpdateOf;
 	readonly payloadSchema?: Readonly<Record<string, unknown>>;
 	/**
 	 * Declares that this command's stdout IS the artifact (contract §19.6):
@@ -3196,6 +3670,7 @@ function buildPassthroughDef<N extends string, C>(
 		consequential: spec.consequential ?? false,
 		dryRunSupported: spec.dryRunSupported ?? true,
 		dryRunUnsupportedReason: spec.dryRunUnsupportedReason,
+		updateOf: spec.updateOf,
 		payloadSchema: spec.payloadSchema,
 		ownsStdout: spec.ownsStdout ?? false,
 		handler: spec.handler,
