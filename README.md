@@ -154,6 +154,7 @@ app.run(process.argv.slice(2));
 - Flag tags -- reusable bundles of flags shared across commands
 - Choice flags -- elect exactly one of a flag's declared choices, each choice owning a scope of flags legal only while it is elected, spelled as a token (`--via email`) or as the choices' own flags (`--profile work` / `--all-profiles`); the handler receives one tagged record consumed exhaustively, and recursion is unlimited
 - Constraints -- four named rules over a command's own flags and args: at-least-one, all-or-none, requires, and implies (auto-set a bool flag when another is provided; explicit contradictions are parse errors). A member is a reference by name to a flag, a positional arg, or another named constraint, nested to unlimited depth, carrying a declared election selector (`present` / `true` / `non_empty`) that says when it counts; every constraint renders in `--help`, publishes its members in `--dump-schema`, and projects into MCP tool schemas with any remainder stated in the tool description
+- Update commands -- a command declares what it changes (`update_of=UpdateOf(...)` / `WithUpdateOf(...)` / `updateOf: {...}`): the resource, a mandatory sparse-or-full-replace write mode, the flags and args that identify the instance, and the properties that carry the changes. Absence means untouched, so no flag or arg on a `mutating` command may declare a value default; the framework enforces at least one property per invocation, renders the write set on every surface a run reports through (one line in the would-do log, a `writes` member on the machine envelope), and a `nullable` property mints `--unset-<prop>` answered by `ctx.unset(name)`
 - Global flags (parsed before and after the command token)
 - Passthrough commands -- delegate unparsed args to another tool
 - Repeatable flags (accumulate values into a list)
@@ -162,7 +163,7 @@ app.run(process.argv.slice(2));
 - Auto-generated help at every level (app, group, command)
 - Built-in `--version` / `-v` support
 - Auto-version detection from package metadata (Python only)
-- Config file support (JSON or TOML) -- reads `~/.config/{name}/config.json` (or `.toml`), auto-registers `config show/set/path/edit/init` subcommands. Precedence: CLI > env > config > default.
+- Config file support (JSON or TOML) -- reads `~/.config/{name}/config.json` (or `.toml`), auto-registers `config show/set/path/edit/init` subcommands, where `config set <key> --value <v>` writes under a required selector over a value, a clear and a reset to the declared default. Precedence: CLI > env > config > default.
 - Mandatory effect classification -- every command declares `read_only` or `mutating` (`effect=` in Python, `WithEffect(...)` in Go, the twin factories `defineReadOnlyCommand` / `defineMutatingCommand` in TypeScript)
 - The effects regime -- `ctx.effects` mints recorded operations (`run`, `spawn`, `write`, `mkdir`, `remove`, `rename`, `chmod`, `http`); under `--dry-run` they are recorded rather than performed and rendered as a would-do log
 - The reserved flag quartet -- `--dry-run`, `--approve-consequential`, `--quiet` and `--verbose` are framework-owned names, banned at every declaration level and delivered on the handler context

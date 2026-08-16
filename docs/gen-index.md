@@ -51,5 +51,6 @@ order: 90
 - [typescript/src/tool](../typescript-src-tool/)
 - [typescript/src/trace](../typescript-src-trace/)
 - [typescript/src/types](../typescript-src-types/)
+- [typescript/src/update](../typescript-src-update/)
 - [typescript/src/values](../typescript-src-values/)
 - [typescript/src/version](../typescript-src-version/)

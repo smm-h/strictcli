@@ -53,6 +53,11 @@
           "anchor": "stage-5-dispatch"
         },
         {
+          "level": 3,
+          "text": "Machine mode and the envelope",
+          "anchor": "machine-mode-and-the-envelope"
+        },
+        {
           "level": 2,
           "text": "Source provenance",
           "anchor": "source-provenance"
@@ -91,6 +96,11 @@
           "level": 3,
           "text": "Choice-flag validation",
           "anchor": "choice-flag-validation"
+        },
+        {
+          "level": 3,
+          "text": "Update validation",
+          "anchor": "update-validation"
         },
         {
           "level": 3,
@@ -156,6 +166,11 @@
           "level": 3,
           "text": "Constraint serialization",
           "anchor": "constraint-serialization"
+        },
+        {
+          "level": 3,
+          "text": "Update serialization",
+          "anchor": "update-serialization"
         },
         {
           "level": 3,
@@ -718,6 +733,51 @@
         },
         {
           "level": 2,
+          "text": "Update commands",
+          "anchor": "update-commands"
+        },
+        {
+          "level": 3,
+          "text": "A mutating command may not default a value",
+          "anchor": "a-mutating-command-may-not-default-a-value"
+        },
+        {
+          "level": 3,
+          "text": "Declaring the update",
+          "anchor": "declaring-the-update"
+        },
+        {
+          "level": 3,
+          "text": "Identity and properties",
+          "anchor": "identity-and-properties"
+        },
+        {
+          "level": 3,
+          "text": "At least one property",
+          "anchor": "at-least-one-property"
+        },
+        {
+          "level": 3,
+          "text": "The write set, and its two renderings",
+          "anchor": "the-write-set-and-its-two-renderings"
+        },
+        {
+          "level": 3,
+          "text": "Clearing a property",
+          "anchor": "clearing-a-property"
+        },
+        {
+          "level": 3,
+          "text": "Bool properties, and the sub-verb pair convention",
+          "anchor": "bool-properties-and-the-sub-verb-pair-convention"
+        },
+        {
+          "level": 3,
+          "text": "On the machine boundaries",
+          "anchor": "on-the-machine-boundaries"
+        },
+        {
+          "level": 2,
           "text": "Help text is mandatory",
           "anchor": "help-text-is-mandatory"
         }
@@ -904,6 +964,11 @@
           "level": 3,
           "text": "Members",
           "anchor": "members"
+        },
+        {
+          "level": 2,
+          "text": "Update Commands",
+          "anchor": "update-commands"
         },
         {
           "level": 2,
@@ -1108,6 +1173,16 @@
           "level": 3,
           "text": "`TypeDictFloat`",
           "anchor": "typedictfloat"
+        },
+        {
+          "level": 3,
+          "text": "`WriteSparse`",
+          "anchor": "writesparse"
+        },
+        {
+          "level": 3,
+          "text": "`WriteFullReplace`",
+          "anchor": "writefullreplace"
         },
         {
           "level": 3,
@@ -1343,6 +1418,16 @@
           "level": 3,
           "text": "`Tool`",
           "anchor": "tool"
+        },
+        {
+          "level": 3,
+          "text": "`WriteMode`",
+          "anchor": "writemode"
+        },
+        {
+          "level": 3,
+          "text": "`UpdateOption`",
+          "anchor": "updateoption"
         },
         {
           "level": 3,
@@ -1876,6 +1961,26 @@
         },
         {
           "level": 3,
+          "text": "`Identity`",
+          "anchor": "identity"
+        },
+        {
+          "level": 3,
+          "text": "`Properties`",
+          "anchor": "properties"
+        },
+        {
+          "level": 3,
+          "text": "`WithUpdateOf`",
+          "anchor": "withupdateof"
+        },
+        {
+          "level": 3,
+          "text": "`Nullable`",
+          "anchor": "nullable"
+        },
+        {
+          "level": 3,
           "text": "`checkContextWithConn.ConnectionEnvValue`",
           "anchor": "checkcontextwithconnconnectionenvvalue"
         },
@@ -2023,6 +2128,11 @@
           "level": 3,
           "text": "`Context.Provided`",
           "anchor": "contextprovided"
+        },
+        {
+          "level": 3,
+          "text": "`Context.Unset`",
+          "anchor": "contextunset"
         },
         {
           "level": 3,
@@ -2352,6 +2462,11 @@
           "level": 2,
           "text": "A third case: the constraint member",
           "anchor": "a-third-case-the-constraint-member"
+        },
+        {
+          "level": 2,
+          "text": "A fourth case: the update declaration",
+          "anchor": "a-fourth-case-the-update-declaration"
         },
         {
           "level": 2,
@@ -2701,6 +2816,11 @@
         },
         {
           "level": 2,
+          "text": "Update Commands",
+          "anchor": "update-commands"
+        },
+        {
+          "level": 2,
           "text": "Flag Sets",
           "anchor": "flag-sets"
         },
@@ -2955,6 +3075,11 @@
           "level": 4,
           "text": "`provided`",
           "anchor": "provided"
+        },
+        {
+          "level": 4,
+          "text": "`unset`",
+          "anchor": "unset"
         },
         {
           "level": 4,
@@ -4163,6 +4288,111 @@
         },
         {
           "level": 3,
+          "text": "`UpdateOf`",
+          "anchor": "updateof"
+        },
+        {
+          "level": 3,
+          "text": "`_UnsetOccurrence`",
+          "anchor": "_unsetoccurrence"
+        },
+        {
+          "level": 3,
+          "text": "`_unset_flag_name`",
+          "anchor": "_unset_flag_name"
+        },
+        {
+          "level": 3,
+          "text": "`_render_decl_flag`",
+          "anchor": "_render_decl_flag"
+        },
+        {
+          "level": 3,
+          "text": "`_render_decl_arg`",
+          "anchor": "_render_decl_arg"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_mutating_default`",
+          "anchor": "_raise_mutating_default"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_update_property_presence`",
+          "anchor": "_raise_update_property_presence"
+        },
+        {
+          "level": 3,
+          "text": "`_msg_update_no_property`",
+          "anchor": "_msg_update_no_property"
+        },
+        {
+          "level": 3,
+          "text": "`_msg_update_value_and_unset`",
+          "anchor": "_msg_update_value_and_unset"
+        },
+        {
+          "level": 3,
+          "text": "`_banned_mutating_default`",
+          "anchor": "_banned_mutating_default"
+        },
+        {
+          "level": 3,
+          "text": "`_validate_mutating_defaults`",
+          "anchor": "_validate_mutating_defaults"
+        },
+        {
+          "level": 3,
+          "text": "`_validate_update`",
+          "anchor": "_validate_update"
+        },
+        {
+          "level": 3,
+          "text": "`_UpdateState`",
+          "anchor": "_updatestate"
+        },
+        {
+          "level": 4,
+          "text": "`paren`",
+          "anchor": "paren"
+        },
+        {
+          "level": 4,
+          "text": "`log_line`",
+          "anchor": "log_line"
+        },
+        {
+          "level": 4,
+          "text": "`envelope_member`",
+          "anchor": "envelope_member"
+        },
+        {
+          "level": 3,
+          "text": "`_render_property_tokens`",
+          "anchor": "_render_property_tokens"
+        },
+        {
+          "level": 3,
+          "text": "`_evaluate_update`",
+          "anchor": "_evaluate_update"
+        },
+        {
+          "level": 3,
+          "text": "`_update_any_of_branches`",
+          "anchor": "_update_any_of_branches"
+        },
+        {
+          "level": 3,
+          "text": "`_update_description_lines`",
+          "anchor": "_update_description_lines"
+        },
+        {
+          "level": 3,
+          "text": "`_serialize_update_of`",
+          "anchor": "_serialize_update_of"
+        },
+        {
+          "level": 3,
           "text": "`Passthrough`",
           "anchor": "passthrough"
         },
@@ -4795,6 +5025,16 @@
           "level": 3,
           "text": "`_constraint_keywords`",
           "anchor": "_constraint_keywords"
+        },
+        {
+          "level": 3,
+          "text": "`_constraint_mcp_sentence`",
+          "anchor": "_constraint_mcp_sentence"
+        },
+        {
+          "level": 3,
+          "text": "`_constraint_loss_reason`",
+          "anchor": "_constraint_loss_reason"
         },
         {
           "level": 3,
@@ -5715,6 +5955,11 @@
         },
         {
           "level": 2,
+          "text": "Update Commands",
+          "anchor": "update-commands"
+        },
+        {
+          "level": 2,
           "text": "Command Groups",
           "anchor": "command-groups"
         },
@@ -6576,21 +6821,6 @@
           "level": 3,
           "text": "`isEngaged`",
           "anchor": "isengaged"
-        },
-        {
-          "level": 3,
-          "text": "`isVacuous`",
-          "anchor": "isvacuous"
-        },
-        {
-          "level": 3,
-          "text": "`findFlagDecl`",
-          "anchor": "findflagdecl"
-        },
-        {
-          "level": 3,
-          "text": "`findArgDecl`",
-          "anchor": "findargdecl"
         }
       ]
     },
@@ -6668,6 +6898,16 @@
           "level": 3,
           "text": "`validateEmittedPayload`",
           "anchor": "validateemittedpayload"
+        },
+        {
+          "level": 3,
+          "text": "`attachUpdateState`",
+          "anchor": "attachupdatestate"
+        },
+        {
+          "level": 3,
+          "text": "`contextWrites`",
+          "anchor": "contextwrites"
         },
         {
           "level": 3,
@@ -8885,6 +9125,96 @@
           "level": 3,
           "text": "`errConstraintUnknownFlag`",
           "anchor": "errconstraintunknownflag"
+        },
+        {
+          "level": 3,
+          "text": "`NULLABLE_SPELLING`",
+          "anchor": "nullable_spelling"
+        },
+        {
+          "level": 3,
+          "text": "`errMutatingDefault`",
+          "anchor": "errmutatingdefault"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdateOnReadOnly`",
+          "anchor": "errupdateonreadonly"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdateWriteModeInvalid`",
+          "anchor": "errupdatewritemodeinvalid"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdateResourceCharset`",
+          "anchor": "errupdateresourcecharset"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdatePropertiesEmpty`",
+          "anchor": "errupdatepropertiesempty"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdateNameUnknown`",
+          "anchor": "errupdatenameunknown"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdateNameAmbiguous`",
+          "anchor": "errupdatenameambiguous"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdateNameDuplicate`",
+          "anchor": "errupdatenameduplicate"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdateNameBothRoles`",
+          "anchor": "errupdatenamebothroles"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdateReferencesScopedFlag`",
+          "anchor": "errupdatereferencesscopedflag"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdatePropertyPresence`",
+          "anchor": "errupdatepropertypresence"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdatePropertyIsArg`",
+          "anchor": "errupdatepropertyisarg"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdatePropertyIsChoiceFlag`",
+          "anchor": "errupdatepropertyischoiceflag"
+        },
+        {
+          "level": 3,
+          "text": "`errNullableNotProperty`",
+          "anchor": "errnullablenotproperty"
+        },
+        {
+          "level": 3,
+          "text": "`errUnsetNameReserved`",
+          "anchor": "errunsetnamereserved"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdateNoProperty`",
+          "anchor": "errupdatenoproperty"
+        },
+        {
+          "level": 3,
+          "text": "`errUpdateValueAndUnset`",
+          "anchor": "errupdatevalueandunset"
         }
       ]
     },
@@ -9140,6 +9470,26 @@
         },
         {
           "level": 3,
+          "text": "`WriteMode`",
+          "anchor": "writemode"
+        },
+        {
+          "level": 3,
+          "text": "`UpdateOf`",
+          "anchor": "updateof"
+        },
+        {
+          "level": 3,
+          "text": "`DeclaredName`",
+          "anchor": "declaredname"
+        },
+        {
+          "level": 3,
+          "text": "`unsetFlagName`",
+          "anchor": "unsetflagname"
+        },
+        {
+          "level": 3,
           "text": "`FlagMap`",
           "anchor": "flagmap"
         },
@@ -9287,6 +9637,11 @@
           "level": 3,
           "text": "`buildScopeIndex`",
           "anchor": "buildscopeindex"
+        },
+        {
+          "level": 3,
+          "text": "`validateUpdateAgainstGlobals`",
+          "anchor": "validateupdateagainstglobals"
         },
         {
           "level": 3,
@@ -10432,6 +10787,11 @@
         },
         {
           "level": 3,
+          "text": "`toolDescription`",
+          "anchor": "tooldescription"
+        },
+        {
+          "level": 3,
           "text": "`jsonSchemaForApp`",
           "anchor": "jsonschemaforapp"
         },
@@ -10602,6 +10962,53 @@
       ]
     },
     {
+      "path": "typescript-src-update.md",
+      "title": "typescript/src/update",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "typescript/src/update",
+          "anchor": "typescriptsrcupdate"
+        },
+        {
+          "level": 2,
+          "text": "`typescript/src/update`",
+          "anchor": "typescriptsrcupdate"
+        },
+        {
+          "level": 3,
+          "text": "`WritesEnvelope`",
+          "anchor": "writesenvelope"
+        },
+        {
+          "level": 3,
+          "text": "`UpdateState`",
+          "anchor": "updatestate"
+        },
+        {
+          "level": 3,
+          "text": "`evaluateUpdate`",
+          "anchor": "evaluateupdate"
+        },
+        {
+          "level": 3,
+          "text": "`updateAnyOfBranches`",
+          "anchor": "updateanyofbranches"
+        },
+        {
+          "level": 3,
+          "text": "`updateDescriptionBlock`",
+          "anchor": "updatedescriptionblock"
+        },
+        {
+          "level": 3,
+          "text": "`serializeUpdateOf`",
+          "anchor": "serializeupdateof"
+        }
+      ]
+    },
+    {
       "path": "typescript-src-values.md",
       "title": "typescript/src/values",
       "type": "doc",
@@ -10722,6 +11129,5 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-15T16:55:11.845176+00:00",
-  "theme": "minimal"
+  "last_gen": "2026-08-16T05:38:13.143158+00:00"
 }
