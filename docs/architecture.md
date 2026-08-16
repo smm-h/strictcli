@@ -260,6 +260,21 @@ first, so an implied value can engage a member; defaults are applied after, so a
 declared default cannot. See
 [the constraint system](flag-system.md#constraints) for the declaration surface.
 
+**An update command's at-least-one-property rule runs next**: after every
+declared constraint has been evaluated, and before defaults are applied. Two
+facts fix that position, each sufficient on its own. *After the constraints*,
+because this is the framework's own rule about a declared property set rather
+than a rule the command wrote, so a command with both faults reports the
+constraint it declared -- including an `AtLeastOne` over optional identity
+members. *Before defaults*, because it reads the **same** provided-ness predicate
+the constraint system reads, and that predicate only distinguishes anything while
+`default` and `infra` are still absent from the store; running it after would
+make every defaulted flag look supplied. There is one predicate, one call site
+and no source filter, so an env- or config-supplied property satisfies the rule
+and renders in the write set beside a typed one. The same pass computes the write
+set the run will publish. See
+[update commands](flag-system.md#update-commands) for the declaration surface.
+
 Finally, choices validation runs for any flag or arg with a declared set of
 allowed values.
 
@@ -292,6 +307,46 @@ through `ctx.payload(value)` / `ctx.Payload(value)` -- at most once per
 dispatch, and only on a command that declared a schema. The payload is printed
 only under the framework-owned `--json`; `Test()` / `test()` and `Call()` /
 `call()` capture it in either mode.
+
+### Machine mode and the envelope
+
+Under `--json` the framework's stdout carries exactly one document: the envelope,
+serialized as JSON and terminated by a single `\n`. Its `interface_version` is
+the envelope contract's own version and is currently **2**.
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `interface_version` | integer | The envelope contract's own version -- `2`. |
+| `app` / `app_version` | string | The app's declared name and version. |
+| `command` | string \| null | The dotted command path, `null` when the run ended before a command resolved. |
+| `exit_code` | integer | The process's exit status. |
+| `payload` | any \| null | The machine payload the handler supplied, validated against the declared schema. |
+| `dry_run` | boolean | Whether the run was in dry mode. |
+| `writes` | object \| null | The write set of a command declaring an update; `null` on every command that declares none. **Never absent**, and populated in **both** modes. |
+| `preview` | array | The structured effects; `[]` when nothing was recorded. |
+| `preview_error` | object \| null | The terminal condition of a preview that did not finish. |
+| `diagnostics` | array | Every diagnostic the run emitted, in emission order. |
+
+The `writes` member carries the resource, the write mode, and four arrays of
+**underscored parameter names** in declaration order that partition the declared
+property set exactly:
+
+```json
+{"interface_version":2,"app":"mytool","app_version":"0.1.0","command":"update-record",
+ "exit_code":0,"payload":null,"dry_run":true,
+ "writes":{"resource":"dns-record","write_mode":"sparse","written":["content"],
+           "cleared":["ttl"],"resent":[],"untouched":["proxied"]},
+ "preview":[],"preview_error":null,"diagnostics":[]}
+```
+
+`resent` and `untouched` are the two readings of "the rest", and exactly one of
+them is ever non-empty -- a consumer reads the write mode off the member it is
+describing rather than by subtracting arrays from a schema it would have to load.
+See [update commands](flag-system.md#update-commands).
+
+**No timing fields.** No duration, no timestamps, no clock-derived counters: this
+is a document three implementations must produce identically and the conformance
+suite compares structurally.
 
 ## Source provenance
 
@@ -493,6 +548,37 @@ root list is the construct's most likely correctness defect:
   claimed across every simultaneously live scope.
 - Positional args cannot be declared inside a scope.
 - Every `choices` entry is a value-plus-help record; a bare value is refused.
+
+### Update validation
+
+An [update command](flag-system.md#update-commands) is resolved and validated in
+a pinned order, because three implementations must report the same first error
+for a declaration with two faults. Each step runs across the whole declaration
+before the next begins, so a message never blames a name for a fault in the
+record that names it:
+
+1. **The mutating-default ban**, over every flag and arg the command carries, in
+   declaration order. It runs first because it is a fact about the command's
+   **classification** and is independent of whether an update is declared at all
+   -- it is the only step in this family that fires on a command declaring no
+   update.
+2. **Classification legality** -- an update on a `read_only` command.
+3. **Record legality** -- the resource name's charset, the write mode's
+   vocabulary, at least one property.
+4. **Name resolution** -- each name in either list resolves to exactly one flag
+   or arg; unknown, ambiguous, duplicated and both-roles names refuse here.
+5. **Scope** -- a resolved flag declared inside a choice scope refuses.
+6. **Role legality** -- a property that is a positional arg, then a property that
+   is a choice flag.
+7. **Presence legality** -- a property declaring `required`.
+8. **The clear vocabulary** -- `nullable` off a property, and the `unset-<x>` name
+   reservation, which runs last because it is the only step that reads the flag
+   namespace back after the property set is known.
+
+The order runs from the command's own classification, through the record's
+identity, outward to the declarations it names. The construct's one **parse-time**
+rule -- the at-least-one-property refusal and the write set it computes -- sits in
+[stage 4](#stage-4-command-parsing), after the constraints and before defaults.
 
 ### Global flag validation
 
@@ -786,11 +872,11 @@ implementations. No implementation sorts them at serialization time.
 | Entity | Key order |
 |---|---|
 | top level | `schema_version`, `defaults`, `project_id`, `name`, `version`, `help`, `env_prefix`, `config`, `config_format`, `config_path`, `config_conflict_mode`, `proc_observe_allowlist`, `global_flags`, `commands`, `groups`, `deprecated`, `tag_contracts`, `checks`, `config_fields`, `infra` |
-| flag entry | `name`, `help`, `value_schema`, `short`, `presence`, `default`, `env`, `env_separator`, `prefixed`, `choices`, `elect_by`, `unique`, `conflict_mode`, `negatable` |
+| flag entry | `name`, `help`, `value_schema`, `short`, `presence`, `default`, `env`, `env_separator`, `prefixed`, `choices`, `elect_by`, `unique`, `conflict_mode`, `negatable`, `nullable` |
 | arg entry | `name`, `help`, `value_schema`, `presence`, `default`, `variadic`, `choices` |
 | choice object | `name`, `help`, `flags` |
 | choice record | `value`, `help` |
-| command entry | `name`, `help`, `effect`, `consequential`, `dry_run_supported`, `dry_run_unsupported_reason`, `payload_schema`, `owns_stdout`, `passthrough`, `flags`, `flag_sets`, `args`, `tags`, `constraints`, `hidden`, `interactive`, `config_fields`, `grants`, `forwarding` |
+| command entry | `name`, `help`, `effect`, `consequential`, `dry_run_supported`, `dry_run_unsupported_reason`, `update_of`, `write_mode`, `payload_schema`, `owns_stdout`, `passthrough`, `flags`, `flag_sets`, `args`, `tags`, `constraints`, `hidden`, `interactive`, `config_fields`, `grants`, `forwarding` |
 | group entry | `name`, `help`, `commands`, `groups`, `deprecated`, `tags`, `hidden` |
 | config-field entry | `value_schema`, `help`, `required`, `default`, `bound_commands` |
 | check entry | `tags`, `severity`, `fast`, `pure`, `needs_network`, `depends_on`, `scope` |
@@ -869,13 +955,15 @@ entry that omits the key.
   },
   "flag": {
     "short": null, "env": null, "env_separator": null, "prefixed": true, "choices": null,
-    "elect_by": null, "unique": false, "conflict_mode": null, "negatable": null
+    "elect_by": null, "unique": false, "conflict_mode": null, "negatable": null,
+    "nullable": false
   },
   "arg": { "variadic": false, "choices": null },
   "choice": { "flags": [] },
   "choice_record": { "help": null },
   "command": {
     "consequential": false, "dry_run_supported": true, "dry_run_unsupported_reason": null,
+    "update_of": null, "write_mode": null,
     "payload_schema": null, "owns_stdout": false, "passthrough": false, "flags": [],
     "flag_sets": [], "args": [], "tags": [], "constraints": [], "hidden": false,
     "interactive": false, "config_fields": [], "grants": [], "forwarding": null
@@ -937,6 +1025,47 @@ encoded constraint is not a legal intermediate state.
   {"type": "implies", "name": "trace-debugs", "flag": "trace", "implies": "debug", "value": true}
 ]
 ```
+
+### Update serialization
+
+An [update command](flag-system.md#update-commands) publishes **two command-entry
+keys**, emitted exactly together and never alone: `update_of`, an object with
+`resource`, `identity` and `properties`; and `write_mode`, the string `"sparse"`
+or `"full_replace"`. Both baseline to `null`, so a command declaring no update
+emits neither.
+
+```json
+{
+  "name": "update-record",
+  "help": "change one DNS record in place",
+  "effect": "mutating",
+  "update_of": {
+    "resource": "dns-record",
+    "identity": ["zone", "record-id"],
+    "properties": ["content", "ttl", "proxied"]
+  },
+  "write_mode": "sparse"
+}
+```
+
+They are two keys in the dump where they are one nested record on every
+declaration surface, and that is the declaration-versus-published-fact
+distinction: a consumer reading a dump asks "what write mode does this command
+have", and a key it can read without descending is the answer; a consumer
+*writing* a declaration must not be able to spell half of one.
+
+Names are published in the **declared spelling** -- `record-id`, matching the
+flag entry's own `name` and the constraint catalogue's member names. The
+underscored spelling belongs to the machine doors, where a caller writes keys.
+`identity` is `[]` when the resource has none, and the encoding is complete
+rather than indicative, for the third time and the same reason: a partially
+encoded update is not a legal intermediate state.
+
+One state is carried rather than checked: a **passthrough** command's update
+declaration is stored and published, and none of registration's update checks run
+on it -- the passthrough early-return precedes them. It is unusable rather than
+guarded, because a passthrough can declare no flags, so it can name no property,
+and a passthrough bypasses parsing entirely.
 
 ### Config fields, check entries and behavioral completeness
 
@@ -1113,6 +1242,16 @@ external tools that consume the schema. Non-bool flags omit the key entirely
 because negation is not applicable to them; the schema defaults section
 specifies `null` as the default for `negatable`, which consumers interpret as
 "not applicable to this flag type."
+
+The `nullable` key follows the same shape one construct over: it is emitted on a
+flag entry only when the flag is a nullable property of an
+[update](flag-system.md#update-commands), it baselines to `false`, and the
+`--unset-<prop>` spelling the framework mints from it gets **no entry of its
+own** -- exactly as `negatable` publishes `--no-<x>`. The dump publishes
+declarations, and a spelling minted from one is not a second declaration. The
+`value_schema` fragment is unchanged by `nullable`: the fragment describes the
+shape of a value the declaration types, and whether the property can also be
+cleared is a different fact with its own key.
 
 ### Bool flags and the presence declaration
 
