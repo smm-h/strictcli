@@ -15118,6 +15118,13 @@ def _build_and_validate_command(
             consequential=consequential,
             dry_run_supported=dry_run_supported,
             dry_run_unsupported_reason=dry_run_unsupported_reason,
+            # Carried rather than dropped, exactly as Go carries it: the
+            # passthrough early-return sits ahead of §27.11's steps in both
+            # implementations, so a passthrough that declares an update keeps
+            # the declaration and publishes it (§27 authors no guard for a
+            # state a passthrough's own refusal already makes unusable -- it
+            # can declare no flags, so it can name no property).
+            update_of=update_of,
             payload_schema=payload_schema,
             owns_stdout=owns_stdout,
             passthrough=passthrough,
