@@ -300,6 +300,8 @@ class _ChoiceClassEmitter:
                 parts.append(f"env_separator={sub['env_separator']!r}")
             if "negatable" in sub and not sub["negatable"]:
                 parts.append("negatable=False")
+            if sub.get("nullable", False):
+                parts.append("nullable=True")
             parts.extend(_validate_part(sub))
             body.append(
                 f"    {field_name}: {_scalar_annotation(ftype)} = "
@@ -449,6 +451,11 @@ def _emit_flag(flag_def: dict, indent: str = "") -> str:
 
     if "negatable" in flag_def and not flag_def["negatable"]:
         parts.append("negatable=False")
+
+    # The clear vocabulary's declaration (contract §27.6): legal only on a
+    # property of an update, and what mints `--unset-<prop>`.
+    if flag_def.get("nullable", False):
+        parts.append("nullable=True")
 
     parts.extend(_validate_part(flag_def))
 
@@ -736,6 +743,22 @@ def _emit_classification(cmd_def: dict, indent: str) -> list[str]:
             f"{indent}dry_run_unsupported_reason="
             f"{cmd_def['dry_run_unsupported_reason']!r},"
         )
+    # The update-command construct (contract §27). The case schema follows the
+    # DECLARATION side -- ONE record carrying its write mode (§13's amendment)
+    # -- and Python's spelling is that record: a frozen keyword-only dataclass
+    # whose `write_mode` has no default, so an absent key reaches the
+    # constructor as the empty string and is the covering input for
+    # errUpdateWriteModeInvalid, which is why the case schema does not require
+    # the key.
+    if "update_of" in cmd_def:
+        _ud = cmd_def["update_of"]
+        _upd = [repr(_ud.get("resource", ""))]
+        _upd.append(f"write_mode={_ud.get('write_mode', '')!r}")
+        if "identity" in _ud:
+            _upd.append(f"identity={list(_ud['identity'])!r}")
+        if "properties" in _ud:
+            _upd.append(f"properties={list(_ud['properties'])!r}")
+        lines.append(f"{indent}update_of=strictcli.UpdateOf({', '.join(_upd)}),")
     # The machine payload's declared schema (§19.5). A handler_returns of kind
     # "data"/"exit_data" supplies a payload, and ctx.payload refuses to run on a
     # command that declares no schema -- so the harness declares the permissive
@@ -1087,6 +1110,10 @@ def _emit_command_registration(
             fd_parts.append(f"env_separator={f['env_separator']!r}")
         if "negatable" in f and not f["negatable"]:
             fd_parts.append("negatable=False")
+        # The clear vocabulary's declaration (contract §27.6): legal only on a
+        # property of an update, and what mints `--unset-<prop>`.
+        if f.get("nullable", False):
+            fd_parts.append("nullable=True")
         fd_parts.extend(_validate_part(f))
         flag_decorators.append(
             f"{indent}@strictcli.flag({', '.join(fd_parts)})"
