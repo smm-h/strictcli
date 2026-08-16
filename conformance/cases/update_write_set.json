@@ -1,0 +1,1239 @@
+[
+  {
+    "name": "update write set: writes one property",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  writes: content (other properties unchanged)\n  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update write set: writes two, in declaration order",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--ttl",
+      "60",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  writes: content, ttl (other properties unchanged)\n  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update write set: writes and clears, the two segments separated by a semicolon",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi",
+      "--unset-ttl"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  writes: content; clears: ttl (other properties unchanged)\n  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update write set: an empty writes segment is omitted entirely",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--unset-ttl"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  clears: ttl (other properties unchanged)\n  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update write set: the trailing parenthetical is a function of write_mode alone",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "full_replace",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  writes: content (other properties are re-sent as read)\n  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update write set: names render without the -- prefix and without underscoring",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi",
+      "--no-proxied"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  writes: content, proxied (other properties unchanged)\n  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update write set: the line takes no sequence number, so the effect counter still starts at 1",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_matches": "^DRY RUN — no changes were made\\. Would do:\n  writes: content \\(other properties unchanged\\)\n  1\\. net: ",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update write set: a command declaring no update carries no line at all",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "plain",
+          "help": "a plain mutating command",
+          "effect": "mutating",
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "plain"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update write set: the human line renders in dry mode only",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update write set: the envelope's writes member, key order pinned, in a live run",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": "",
+      "stdout_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"update-record\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"writes\":{\"resource\":\"dns-record\",\"write_mode\":\"sparse\",\"written\":[\"content\"],\"cleared\":[],\"resent\":[],\"untouched\":[\"ttl\",\"proxied\"]},\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
+  },
+  {
+    "name": "update write set: the same member in a dry run, with the clear in cleared",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "--dry-run",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi",
+      "--unset-ttl"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": "",
+      "stdout_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"update-record\",\"exit_code\":0,\"payload\":null,\"dry_run\":true,\"writes\":{\"resource\":\"dns-record\",\"write_mode\":\"sparse\",\"written\":[\"content\"],\"cleared\":[\"ttl\"],\"resent\":[],\"untouched\":[\"proxied\"]},\"preview\":[{\"detail\":\"PATCH https://api.example.com/zones/z1/dns_records/r7\",\"kind\":\"net_mutate\",\"recorded\":true,\"seq\":1,\"verb\":\"net\"}],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
+  },
+  {
+    "name": "update write set: under full_replace the rest is resent and untouched is empty",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "full_replace",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--ttl",
+      "1"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": "",
+      "stdout_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"update-record\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"writes\":{\"resource\":\"dns-record\",\"write_mode\":\"full_replace\",\"written\":[\"ttl\"],\"cleared\":[],\"resent\":[\"content\",\"proxied\"],\"untouched\":[]},\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
+  },
+  {
+    "name": "update write set: the envelope member is null on every command that declares no update",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "plain",
+          "help": "a plain mutating command",
+          "effect": "mutating",
+          "handler_returns": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "plain"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": "",
+      "stdout_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"plain\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"writes\":null,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
+  },
+  {
+    "name": "update write set: dry_run_supported false keeps the envelope member and never renders the line",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "the effects escape the effects handle"
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": "",
+      "stdout_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"update-record\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"writes\":{\"resource\":\"dns-record\",\"write_mode\":\"sparse\",\"written\":[\"content\"],\"cleared\":[],\"resent\":[],\"untouched\":[\"ttl\",\"proxied\"]},\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
+  },
+  {
+    "name": "update write set: an identity that is a member-spelled choice flag never joins the write set",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "target"
+            ],
+            "properties": [
+              "content",
+              "ttl"
+            ]
+          },
+          "flags": [
+            {
+              "name": "target",
+              "help": "which record to change",
+              "presence": "required",
+              "elect_by": "member-flags",
+              "choices": [
+                {
+                  "name": "by-id",
+                  "help": "address it by identifier",
+                  "value": {
+                    "type": "str",
+                    "help": "the record identifier"
+                  }
+                },
+                {
+                  "name": "all-records",
+                  "help": "every record in the zone"
+                }
+              ]
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "update-record",
+      "--by-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": "",
+      "stdout_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"update-record\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"writes\":{\"resource\":\"dns-record\",\"write_mode\":\"sparse\",\"written\":[\"content\"],\"cleared\":[],\"resent\":[],\"untouched\":[\"ttl\"]},\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
+  },
+  {
+    "name": "update write set: an env-supplied property renders beside a typed one, so a configured value cannot join a write invisibly",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str",
+              "env": "MYAPP_CONTENT"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--ttl",
+      "60"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  writes: content, ttl (other properties unchanged)\n  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7\n",
+      "stderr_equals": ""
+    },
+    "env": {
+      "MYAPP_CONTENT": "from-env"
+    }
+  }
+]
