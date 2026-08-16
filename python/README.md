@@ -179,8 +179,8 @@ Reusable bundles of flags shared across commands.
 auth_flags = strictcli.FlagSet(
     name="auth",
     flags=[
-        strictcli.Flag(name="token", type=str, help="Auth token", default=""),
-        strictcli.Flag(name="insecure", type=bool, default=False, help="Skip TLS verification"),
+        strictcli.Flag(name="token", type=str, help="Auth token", presence="required"),
+        strictcli.Flag(name="insecure", type=bool, presence="optional", help="Skip TLS verification"),
     ],
 )
 
@@ -294,6 +294,48 @@ root scope only, so the reserved quartet (`dry-run`, `approve-consequential`,
 `quiet`, `verbose`) can never appear in one and a scoped flag is a registration
 error.
 
+### Update commands
+
+A command that changes some properties of one resource and leaves the rest alone
+declares what it updates with `update_of=`. `UpdateOf` is a frozen, keyword-only
+record whose first field is the resource name:
+
+```python
+@app.command("update-record", help="Change one DNS record in place", effect="mutating",
+             update_of=strictcli.UpdateOf("dns-record", write_mode="sparse",
+                                          identity=["zone", "record-id"],
+                                          properties=["content", "ttl", "proxied"]))
+@strictcli.flag("zone", type=str, presence="required", help="Zone the record belongs to")
+@strictcli.flag("record-id", type=str, presence="required", help="Identifier of the record")
+@strictcli.flag("content", type=str, presence="optional", help="Record content")
+@strictcli.flag("ttl", type=int, presence="optional", nullable=True, help="Time to live in seconds")
+@strictcli.flag("proxied", type=bool, presence="optional", help="Whether the record is proxied")
+def update_record(ctx, zone, record_id, content, ttl, proxied): ...
+```
+
+`write_mode` is `"sparse"` or `"full_replace"` and carries no default. A property
+declares `presence="optional"` and nothing else -- absence *is* untouched -- and
+the framework refuses an invocation that supplies none of them:
+
+```
+error: update "dns-record": at least one property is required: --content, --ttl, --proxied
+```
+
+Because absence must never resolve to a value nobody stated, **no flag or arg on
+a `mutating` command may declare a value default** (`default=[]` and `default={}`
+stay legal, as does every default on a `read_only` command). Inside an update
+`--no-proxied` writes `False`; a `nullable` property mints `--unset-<prop>`,
+answered by `ctx.unset(name)`. Every run that reports what it does renders the
+write set -- one unnumbered line in the would-do log, and a `writes` member on
+the machine envelope:
+
+```
+$ mytool --dry-run update-record --zone z1 --record-id r7 --content hi --unset-ttl
+DRY RUN — no changes were made. Would do:
+  writes: content; clears: ttl (other properties unchanged)
+  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7
+```
+
 ### Global flags
 
 App-level flags available to all commands, parsed before and after the command token.
@@ -378,7 +420,7 @@ def internal_debug(ctx): ...
 
 ### JSON config file support
 
-Reads `~/.config/{name}/config.json` (or TOML). Auto-registers `config show/set/path/edit` subcommands.
+Reads `~/.config/{name}/config.json` (or TOML). Auto-registers `config show/set/path/edit` subcommands, where `config set <key> --value <v>` writes under a required selector over a value, a clear (`--clear`) and a reset to the declared default (`--default`).
 
 ```python
 app = strictcli.App("myapp", version="1.0.0", help="My app", config=True)
