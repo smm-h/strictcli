@@ -12205,8 +12205,12 @@ def _value_schema_fragment(decl: "Flag | Arg") -> dict:
     fragment and no type list, because presence is the sole authority on
     absence and a nullable fragment would be a second statement about it.
 
-    The same function feeds the MCP projection, so a tool schema's parameter
-    shape and the dumped one cannot disagree (§25.13).
+    The same function feeds the MCP projection, so an arity and an `enum`
+    placement cannot disagree between the two doors (§25.13's amendment). The
+    one fact the doors state differently is NULLABILITY: the projection folds
+    `"null"` into a nullable property's type list, which this subset cannot
+    express, and the dump carries it as the sibling `nullable` key instead
+    (§27.9, §27.10).
     """
     compound = getattr(decl, "compound", "scalar")
     if compound == "dict":
