@@ -201,6 +201,19 @@ problem is reported, a payload-carrying member elected with its payload absent t
 `false` -- and records one divergence against item 230's pinned charset-before-bans order that the
 fix round had reported as unobservable.
 
+The update-command round was **swept after its implementation** (2026-08-16), once Go and Python had
+shipped §27 and byte-agreed on it, with TypeScript in flight in parallel. §18.34 carries the sweep as
+items 320-327, continuing that round's numbering, and every amendment is marked in place with its
+item. **The sweep reverses no ruling and adds no section.** It pins the reshaped `config set` as the
+cross-language surface it turned out to be -- the selector's name, its three choice names, the argv,
+the help block and all three refusals, verbatim -- discharging §27.1's one flagged consequence; it
+pins the at-least-one-property rule's parse position (after the constraints, before defaults, over
+the one predicate); it records `--unset-<x>=<v>` taking the ordinary unknown-flag path as a decision
+rather than an accident; and it records four per-language readings the implementations produced.
+**One text is struck as false**: §12.16's claim that no template of the update family is excluded in
+any implementation, where four of them quote a declaration spelling and therefore take §12.12's
+`excluded:` mechanism -- the mechanism working, not a parity defect.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -3213,6 +3226,22 @@ classes in declaration order joined by ` | ` (plus nothing else -- a selector is
 §24.5), and `<written>` is the annotation as written, rendered by the same value formatter the rest
 of the family uses.
 
+> **Amendment (2026-08-16, update-command round -- implementation sweep, §18.34 item 324): when the
+> `**kwargs` refusal fires.** The sentence above is **unchanged**; what is pinned is its trigger,
+> which the round narrowed. It does not fire on every `**kwargs` handler of a command declaring a
+> selector: it fires exactly when **the elected value would fall into `**kwargs`** -- that is, when
+> the selector's parameter name is absent from the handler's named parameters. A handler that names
+> the parameter and annotates it has the annotation that makes `match` exhaustive, which is the whole
+> of what the guard protects, and the `**kwargs` beside it absorbs something else entirely.
+>
+> The narrowing is **forced**, not chosen: §10.4's framework-internal commands absorb the app's own
+> global flag values through declared forwarding (§12.3), so every one of them carries `**kwargs`,
+> and the reshaped `config set` (§27.1's box) is a framework-internal command that declares a
+> selector. A guard keyed on "declares a selector at all" would refuse the framework's own command --
+> the same shape §27.1's ban refused, one construct over. Nothing about §12.3's forwarding
+> declaration changes: the waiver still covers the signature cross-check only, and every flag and arg
+> is still declared and still parsed.
+
 **The language-specific families, ratified** *(added 2026-08-15, implementation round, §18.19 item
 220)*. Building the construct three times produced three sets of messages that name a
 mis-declaration only one language's spelling can express. They are **`excluded:` entries in
@@ -3656,10 +3685,42 @@ and the machine doors have one key per property (§27.6), so no door can reach t
 
 **Category and coverage.** The two violation templates are parse-time and take the covering
 conformance case every parse template takes. The guards are registration-time and are asserted **per
-target**, as `conformance/cases/presence_registration.json` asserts §12.12's. **No template in this
+target**, as `conformance/cases/presence_registration.json` asserts §12.12's. ~~**No template in this
 section is excluded in any implementation**, which is the difference between this construct and
 §12.15's: every guard here describes a declaration all three surfaces can express, because the
-declaration is a record of names rather than a shape a type system can close.
+declaration is a record of names rather than a shape a type system can close.~~ *(amended 2026-08-16,
+implementation sweep, §18.34 item 327 -- see the box below)*
+
+> **Amendment (2026-08-16, update-command round -- implementation sweep, §18.34 item 327): four of
+> these templates carry a per-language spelling, and take §12.12's `excluded:` mechanism.** The
+> struck sentence conflated two different things, and the implementations proved the difference. What
+> survives of it is true and is the intended claim: **no template in this section names a state only
+> one surface can reach**, which is the difference between this construct and §12.15's -- an update
+> declaration is a record of names rather than a shape a type system can close. What was false is the
+> conclusion drawn from it, because four templates quote a **declaration spelling** inside the
+> sentence, and the three languages spell those differently:
+>
+> | Template | The spelling it quotes |
+> |---|---|
+> | `errMutatingDefault` | `<default-spelling>`, plus `<required-spelling>` and `<optional-spelling>` in the remedy clause |
+> | `errUpdatePropertyPresence` | `<required-spelling>` and `<optional-spelling>` |
+> | `errNullableNotProperty` | `<nullable-spelling>` |
+> | `errUnsetNameReserved` | `<nullable-spelling>` |
+>
+> This is exactly §12.12's mechanism, which this section already invokes by reusing that section's
+> three rows and adding `<nullable-spelling>` to them: **the sentence is byte-identical and the
+> spellings inside it are each language's own.** `check_error_parity.py` compares literal strings and
+> has no substitution model, so each of the four appears in one implementation's extraction and not
+> in the siblings', and each therefore takes an `excluded:` entry in the other two -- with the
+> rationale §12.12's presence family already carries, and a conformance case asserting the whole line
+> **per target**. That is the contract anchor for those entries: they are the mechanism working, not
+> a parity defect and not a divergence to be closed by forcing one shared spelling.
+>
+> **The remaining thirteen templates in this section are cross-language and take no exclusion** --
+> eleven registration guards and both violations -- their sentences quoting only declared
+> identifiers, tokens and closed vocabularies. `errUpdateWriteModeInvalid` is the one to check
+> against by hand: its reachable *inputs* differ per language (the third note above), while its bytes
+> do not, so it stays cross-language.
 
 ---
 
@@ -9000,6 +9061,120 @@ answered).
      outside this file that the implementation round must carry are listed at the end of §27.14, and
      they include the framework's own `config set` (item 304).
 
+### 18.34 Readings pinned by the update-command implementations (2026-08-16)
+
+Eight items, continuing §18.33's numbering for the reason §18.14 gave: the same campaign's ledger.
+This section is written **after** implementation, where §18.33 was written before it, so it is the
+round's sweep rather than its authoring. **It reverses no ruling and adds no section**, and every
+item is marked in place in the section it amends.
+
+**What was read**, on disk, and probed as running code: Go's `go/strictcli/update.go`, `parse.go`,
+`config.go`, `errors.go` and `strictcli.go`; Python's `python/strictcli/__init__.py`; the two
+implementations' help output, `--dump-schema` output, human write-set line and machine envelope for
+the same declarations, compared byte for byte; and `conformance/check_error_parity.py`'s extraction
+over both. TypeScript's implementation is in flight in parallel and matches the surfaces pinned
+here; nothing below was read out of it.
+
+**Origin tags**, per §18.14's preamble: every item is **untagged** -- these are readings the
+implementations produced, each pinned with the reason it was the only available one, or recorded as
+the current state where no reason forces it.
+
+**Sites amended in place**: §12.13 (the `**kwargs` refusal's trigger); §12.16 (the parity-exclusion
+sentence, struck and replaced); §27.1 (the `config set` box); §27.4 (the parse position); §27.6 (the
+inline-value reading); §27.8 (the two per-language facts); §27.11 (the parse-time half of the order,
+and the passthrough); §27.12 (a passthrough row).
+
+320. **The `config set` reshape's exact spelling, and item 304's flag discharged (§27.1).** Both
+     implementations shipped the shape §27.1 named, and they byte-agree, so it is pinned as the
+     cross-language surface rather than as one language's choice: a member-spelled selector named
+     `write`, declaring `required`, over the three choices `value` (scope: one required `str` flag
+     `--value`), `clear` and `default`, beside the unchanged required positional `key`. The argv is
+     `config set <key> --value <v>`, and the help block and all three refusals are pinned verbatim in
+     §27.1's box. Two facts the box carries beyond the declaration: the three hand-rolled guard
+     sentences are **deleted** and their states unrepresentable, and the **unsatisfied-selector
+     refusal outranks the extra-positional error**, so an operator typing the old positional form is
+     told the vocabulary rather than that their value is a stray token. That ordering is the one a
+     migrating reader meets first, which is why it is pinned rather than left to the general
+     precedence rules.
+
+321. **The at-least-one-property rule is evaluated after the constraints and before defaults
+     (§27.4, §27.11).** The pre-implementation text pinned the predicate and left the position open,
+     and both implementations chose the same place for two reasons, each sufficient. **After the
+     constraints**, because this rule is the framework's own over a declared property set, not one
+     the command wrote, so a command with both faults reports the constraint it declared. **Before
+     defaults**, because it reads the *same* `isPresentForDeps` / `is_present_for_deps` predicate the
+     constraint system reads, and that predicate only distinguishes anything while `default` and
+     `infra` are still absent from the store. The second reason is worth stating even though §27.3
+     makes a defaulted property unreachable: the position must follow from the predicate, not from
+     the property set's declarations, or the next construct that shares the predicate inherits an
+     accident. No source filter, confirmed end to end -- an `env`-supplied property satisfies the
+     rule and renders in the write set.
+
+322. **`--unset-<x>=<v>` takes the ordinary unknown-flag path, and that is deliberate (§27.6).** The
+     minted flag carries no value, so the inline form is a state with a spelling; it produces
+     `error: unknown flag '--unset-<x>'` in both implementations, naming the flag part, because the
+     token scan's `=`-branch precedes the minted flag's branch and consults only the long-flag and
+     negation tables. **No template is added.** The asymmetry with `--no-<x>=<v>`, which has its own
+     sentence, is the reading rather than an oversight: a negation is a declared spelling of a
+     declared bool, so writing a value at it mis-uses a flag that exists, while `--unset-<x>=<v>`
+     names nothing at all once the `=` is written. A fourth sentence would be a template for a typo
+     the existing one already answers.
+
+323. **Python's payload-less choice class and Go's bool member flag are one construct, not a
+     divergence (§27.8).** `config set`'s `clear` and `default` are `@choice("clear")` classes with
+     empty bodies in Python and `MemberChoice(BoolFlag("clear", ...), ...)` in Go: a member-spelled
+     choice whose scope is empty, where the electing token *is* the member's own flag. Each language
+     leaves the other half implicit -- Python mints the electing flag from the choice name, Go reads
+     the empty scope off the absence of further options -- and the two are indistinguishable
+     downstream, the help block and the `--dump-schema` entry being byte-identical with no `flags`
+     key on either side. Recorded because the two declaration surfaces look least alike here of
+     anywhere in §24, and the equivalence is what stops a later reader filing it as a defect.
+
+324. **The `**kwargs`-with-selector refusal is narrowed to the state it names, with its sentence
+     unchanged (§12.13).** It fires exactly when **the elected value would fall into `**kwargs`** --
+     when the selector's parameter name is absent from the handler's named parameters -- rather than
+     on every `**kwargs` handler of a command declaring a selector. The narrowing is **forced**:
+     §10.4's framework-internal commands absorb the app's globals through declared forwarding, so
+     they all carry `**kwargs`, and the reshaped `config set` is a framework-internal command
+     declaring a selector. The broader guard would refuse the framework's own command -- the same
+     shape §27.1's ban refused one construct over, and the same answer, which is to fix the guard's
+     subject rather than to except the framework. What the guard protects is unchanged: the
+     annotation that makes `match` exhaustive, which a named parameter carries and `**kwargs` cannot.
+
+325. **The mutating-default ban reaches a Python-only state through the same template (§27.8,
+     §27.1).** §27.1 already says a defaulted choice's instance must pass no field values, and Python
+     is the only surface that can express a field value there. Python therefore checks the default
+     instance's fields as well as the sub-flags' declarations and reports the **same**
+     `errMutatingDefault`, with the offending field's flag as `<decl>` and the field's value through
+     the ordinary value formatter. This is a **parity-exclusion class** in §12.12's sense -- the
+     state is unconstructable in the sibling -- and not a parity defect; it adds no string to compare,
+     because it reuses a template §12.16 already carries. Recorded so that the wider reach reads as
+     one language's wider declaration surface rather than as an extra Python rule.
+
+326. **A passthrough command carries its update declaration: neither validated nor dropped
+     (§27.11, §27.12).** The **pre-existing passthrough early-return** in `buildAndValidateCommand`
+     (Go) and `_build_and_validate_command` (Python) -- the one that refuses flags, args and flag
+     sets and then returns -- sits ahead of §27.11's eight steps, so an `update_of` on a passthrough
+     is stored, published by `--dump-schema`, and checked for nothing: a resource name outside the
+     charset, an invalid write mode and an empty property list all register. This round authors **no
+     guard**, because the passthrough's own refusal already makes the declaration unusable -- it can
+     declare no flags, so it can name no property, and a passthrough bypasses parsing, so the
+     at-least-one rule can never run. Recorded as the **current state** rather than as a design, so a
+     later round that adds the guard is adding one rather than fixing an omission this text denied.
+
+327. **Four templates carry a per-language spelling and take §12.12's `excluded:` mechanism; §12.16's
+     no-exclusion sentence is struck (§12.16).** The sentence conflated two claims. The one that
+     survives is true and was the intended one: no template in §12.16 names a state only one surface
+     can reach. The one that was **false** is the conclusion -- `errMutatingDefault`,
+     `errUpdatePropertyPresence`, `errNullableNotProperty` and `errUnsetNameReserved` each quote a
+     declaration spelling (`<default-spelling>`, `<required-spelling>`, `<optional-spelling>`,
+     `<nullable-spelling>`), which is precisely the mechanism §12.16 invokes when it reuses §12.12's
+     rows and adds `<nullable-spelling>` to them. `check_error_parity.py` compares literal strings
+     and has no substitution model, so each of the four appears in one implementation's extraction
+     and takes an `excluded:` entry in the siblings, with §12.12's own rationale and a per-target
+     conformance assertion. The struck sentence is what a reader would otherwise have cited to call
+     those entries a defect; this item is their contract anchor.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -12926,6 +13101,48 @@ selection over *a value*, *clear* and *reset to default*, which is a **member-sp
 (§24.4), not three bools with two hand-rolled guards. **Flagged for the implementation round**: the
 framework cannot ship a registration guard its own command does not pass.
 
+> **Amendment (2026-08-16, update-command round -- implementation sweep, §18.34 item 320): the
+> reshape is real, and this is its spelling.** The paragraph above named a shape; Go and Python
+> shipped it and byte-agree, so the flagged mark is discharged and the surface is pinned here as the
+> cross-language one, which TypeScript's implementation is written against rather than consulted for.
+>
+> **The declaration.** One member-spelled selector named `write`, declaring `required`, carrying
+> three choices in this order: `value` (whose scope is the one required `str` flag `--value`),
+> `clear` and `default`. Both siblings' payload-less choices are the same construct under two
+> spellings (item 323): Go's `MemberChoice(BoolFlag("clear", ...), ...)` and Python's
+> `@choice("clear")` class with an empty body produce the same entry with no scope. The command's
+> one positional arg (`key`, required) is unchanged.
+>
+> **The argv.** `config set <key> --value <v>`, `config set <key> --clear`,
+> `config set <key> --default`. The old trailing positional value is gone: `config set <key> <v>`
+> now reaches the framework's own vocabulary refusal rather than a value.
+>
+> **The help block, verbatim** (two-space indent on the selector line, four on each member, and the
+> selector renders its name without a `--` prefix, §24.10):
+>
+> ```
+> Flags:
+>   write              What to write at the key: a value, a clear, or a reset to the declared default (exactly one of the following) [required]
+>     --value <str>    Write a value at the key [required]
+>     --clear          Clear a repeatable flag [required]
+>     --default        Reset the key to its declared default [required]
+> ```
+>
+> **The refusals, verbatim.** All three are the framework's own (§24.4, §21.4's surviving
+> vocabulary), and each replaces a hand-rolled guard that is now unrepresentable:
+>
+> ```
+> error: one of --value, --clear, --default is required
+> error: --value and --clear are mutually exclusive
+> error: --clear and --default are mutually exclusive
+> ```
+>
+> The three deleted sentences were `config set: --clear and --default are mutually exclusive`,
+> `config set: cannot provide a value with --clear` and `config set: provide a value, --clear, or
+> --default`. **The unsatisfied-selector refusal outranks the extra-positional error**: an operator
+> typing the old `config set <key> <v>` is told the vocabulary, not that `<v>` is a stray token, and
+> `error: unexpected argument '<v>'` appears only once a member has been elected beside it.
+
 ### 27.2 The update declaration
 
 An update command declares **one record**, in the registration-level family `effect`,
@@ -13052,6 +13269,29 @@ clause, and the two facts are the same fact.
 
 **An unset is a provision too** (§27.6): clearing a property is writing it.
 
+> **Amendment (2026-08-16, update-command round -- implementation sweep, §18.34 item 321): where in
+> the parse the rule is evaluated.** The section above pins the predicate and left the position
+> open; both implementations chose the same one and it is pinned here, because a rule that reads
+> provided-ness has exactly one correct place to stand.
+>
+> **After every declared constraint, and before defaults are applied.** The order inside the value
+> phase is: `Implies` injection, then §26's constraint evaluation, then this rule, then defaults and
+> the elected records, then choices, then `validate`. Two facts force it:
+>
+> - **after the constraints**, because this is the framework's own rule about a declared property
+>   set rather than a rule the command wrote, so every constraint a consumer named -- including an
+>   `AtLeastOne` over optional identity members (§27.3) -- has had its say first, and a command with
+>   both faults reports the one it declared;
+> - **before defaults**, for §26.4's reason unchanged: it reads the same
+>   `isPresentForDeps` / `is_present_for_deps` predicate the constraint system reads, so it must run
+>   while `default` and `infra` are still absent from the store. Running it after would make every
+>   defaulted flag look supplied -- and on an update command that state is unreachable anyway
+>   (§27.3 refuses a defaulted property), which is exactly why the position must be pinned rather
+>   than inferred from the property set.
+>
+> One predicate, one call site, no source filter (§27.4's paragraph above). §27.11's amendment box
+> states the same ordering from the registration side.
+
 ### 27.5 The write set and its two renderings
 
 **The write set of an invocation is the ordered pair of the properties it writes and the properties
@@ -13164,6 +13404,26 @@ property does the same:
 One line, one help text, and **one presence part** -- §23.8's invariant is untouched, because the
 minted spelling is a second way to write to one declaration rather than a second declaration.
 
+> **Amendment (2026-08-16, update-command round -- implementation sweep, §18.34 item 322):
+> `--unset-<x>=<v>` takes the ordinary unknown-flag path, deliberately.** The minted flag carries no
+> value of its own, so the state has a spelling and needed a reading; both implementations produce
+> the same bytes and **no template is added for it**:
+>
+> ```
+> error: unknown flag '--unset-<x>'
+> ```
+>
+> The token scan's `--<flag>=<value>` branch runs before the minted flag's own branch and consults
+> only the long-flag and negation tables, so the inline form never reaches the unset table and the
+> message names the **flag part**, not the whole token. That is the deliberate part: the asymmetry
+> with `--no-<x>=<v>`, which has its own sentence (`flag '--no-<x>' is a boolean negation and does
+> not take a value`), is not an oversight. A negation is a **declared** spelling of a declared bool,
+> so a reader who writes a value at it has mis-used a flag that exists; `--unset-<x>=<v>` names no
+> flag at all once the `=` is written, and minting a fourth sentence to say so would add a template
+> for a typo the existing one already answers. `--unset-<x> <v>` is the same story from the other
+> side: the clear consumes nothing, so `<v>` is an extra positional and takes
+> `error: unexpected argument '<v>'`.
+
 ### 27.7 Bool properties, and the sub-verb pair convention
 
 **A bool property inside an update command is a real tri-state**: `--proxied` writes true,
@@ -13267,6 +13527,32 @@ updateOf: {
   the floor. **A payoff reaching one language is a pro** (B9), and this is the round's;
 - `nullable: true` joins the flag's option object.
 
+> **Amendment (2026-08-16, update-command round -- implementation sweep, §18.34 items 323, 325): two
+> per-language facts the implementations produced, neither of them a divergence.**
+>
+> **A payload-less choice and a bool member flag are one construct** (item 323). The reshaped `config
+> set` (§27.1's box) declares `clear` and `default` as `@choice("clear")` classes with empty bodies
+> in Python and as `MemberChoice(BoolFlag("clear", ...), ...)` in Go. These are the same declaration:
+> a member-spelled choice whose scope is empty, where the electing token *is* the member's own flag.
+> Python's class body declares the scope and Go's `BoolFlag` declares the electing spelling, and each
+> language's other half is implicit -- Python mints the electing flag from the choice name, Go reads
+> the empty scope off the absence of further options. The evidence is that they are
+> indistinguishable downstream: the help block and the `--dump-schema` entry are byte-identical, and
+> the entry carries no `flags` key on either side. Nothing here is a parity exclusion; it is one
+> construct with two idiomatic spellings, §24.12's rule applied to the empty scope.
+>
+> **The mutating-default ban reaches a Python-only state, through the same template** (item 325).
+> §27.1's row for a defaulted choice's scope says Python's instance-shaped default must pass **no
+> field values**, and Python is the only surface that can express a field value there -- Go's
+> selector default names a choice and has no instance to carry one. Python therefore checks the
+> default instance's fields as well as the sub-flags' own declarations, and reports the **same**
+> `errMutatingDefault`, with the offending field's flag as `<decl>` and the field's value rendered by
+> the ordinary value formatter. No new template and no new sentence: one guard whose reach is wider
+> in one language because one language's declaration surface is wider. It is a **parity-exclusion
+> class** in §12.12's sense -- the state is unconstructable in the sibling -- rather than a parity
+> defect, and it adds no string for `check_error_parity.py` to compare, because it reuses a template
+> §12.16 already carries.
+
 ### 27.9 The schema encoding
 
 §13's amendment box pins the keys; this section pins what they mean and what they deliberately do not
@@ -13369,6 +13655,26 @@ The order runs from the command's own classification, through the record's ident
 declarations it names -- §26.8's direction, and each step runs across the whole declaration before
 the next begins, so a message never blames a name for a fault in the record that names it.
 
+> **Amendment (2026-08-16, update-command round -- implementation sweep, §18.34 items 321, 326): the
+> parse-time half of the order, and the one command none of these eight steps reaches.**
+>
+> **The parse-time position.** The eight steps above are registration's. The construct's one
+> parse-time rule -- §27.4's at-least-one-property refusal, and the write set it computes -- runs
+> **after every declared constraint has been evaluated and before defaults are applied**, over the
+> same provided-ness predicate the constraint system reads. §27.4's box carries the reasoning; it is
+> restated here because a reader looking for "when does what run" comes to this section first.
+>
+> **A passthrough command carries its update declaration, and nothing above runs on it** (item 326).
+> The passthrough early-return in both implementations sits **ahead** of these eight steps: a
+> passthrough is refused only for declaring flags, args or flag sets, and then returns. An
+> `update_of` on one is therefore **neither validated nor dropped** -- it is stored and it is
+> published by `--dump-schema`, resource charset, write mode and empty property list all unchecked.
+> This round authors **no guard** for it, because the passthrough's own refusal already makes the
+> declaration unusable: a passthrough can declare no flags, so it can name no property and no
+> identity member, and the at-least-one-property rule can never be evaluated for it -- a passthrough
+> bypasses parsing entirely. Recorded as the **current state** rather than as a design, so that a
+> later round adding the guard is adding one, not fixing an omission this text denied.
+
 ### 27.12 Composition
 
 Every cell is pinned; none is new behaviour left implicit.
@@ -13387,6 +13693,7 @@ Every cell is pinned; none is new behaviour left implicit.
 | **§1.1a `dry_run_supported`** | legal together; the human line then never renders and the envelope member still does |
 | **§8 `consequential`** | orthogonal. An update command may be consequential and prompts on exactly the same terms |
 | **§7 the reserved quartet** | untouched. `--unset-<prop>` is minted per nullable property and is never an app-wide reserved name |
+| **a passthrough command** | *(added 2026-08-16, implementation sweep, §18.34 item 326)* the declaration is carried and published, and §27.11's eight steps never run on it -- the passthrough early-return precedes them. Unusable rather than guarded: a passthrough declares no flags, so it can name no property |
 
 ### 27.13 Absence-semantics containment
 
