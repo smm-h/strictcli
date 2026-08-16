@@ -47,7 +47,7 @@
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}\n",
-      "stderr_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+      "stderr_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"writes\":null,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
     }
   },
   {
@@ -83,7 +83,7 @@
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}\n",
-      "stderr_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[{\"level\":\"info\",\"message\":\"wrote 3 rows\"},{\"level\":\"warn\",\"message\":\"schema is provisional\"}]}\n"
+      "stderr_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"writes\":null,\"preview\":[],\"preview_error\":null,\"diagnostics\":[{\"level\":\"info\",\"message\":\"wrote 3 rows\"},{\"level\":\"warn\",\"message\":\"schema is provisional\"}]}\n"
     }
   },
   {
@@ -117,7 +117,7 @@
     "expect": {
       "exit_code": 0,
       "stdout_equals": "{\"artifact\":\"v1\",\"rows\":[1,2,3]}\n",
-      "stderr_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":null,\"dry_run\":true,\"preview\":[{\"bytes\":1,\"detail\":\"out.sql (1 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"write\"}],\"preview_error\":null,\"diagnostics\":[]}\n"
+      "stderr_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":null,\"dry_run\":true,\"writes\":null,\"preview\":[{\"bytes\":1,\"detail\":\"out.sql (1 bytes)\",\"kind\":\"file_write\",\"recorded\":true,\"seq\":1,\"verb\":\"write\"}],\"preview_error\":null,\"diagnostics\":[]}\n"
     }
   },
   {
@@ -148,7 +148,7 @@
     "expect": {
       "exit_code": 0,
       "stdout_equals": "",
-      "stderr_equals": "{\"interface_version\":1,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":{\"rows\":3},\"dry_run\":false,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+      "stderr_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"dump\",\"exit_code\":0,\"payload\":{\"rows\":3},\"dry_run\":false,\"writes\":null,\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
     }
   },
   {
