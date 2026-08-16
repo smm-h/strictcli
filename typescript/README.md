@@ -54,9 +54,8 @@ app.command(
 				presence: "required",
 			}),
 			label: flag("label", t.str, {
-				help: "Build label",
-				presence: "default",
-				default: "dev",
+				help: "Build label; the handler uses dev when it is not supplied",
+				presence: "optional",
 			}),
 		},
 		args: [
@@ -67,8 +66,9 @@ app.command(
 			}),
 		],
 		handler: (args, ctx) => {
-			// Inferred: args.count is bigint, args.label is string, args.values is number[]
-			ctx.info(`building ${args.count} time(s) as ${args.label}`);
+			// Inferred: args.count is bigint, args.label is string | undefined,
+			//           args.values is number[]
+			ctx.info(`building ${args.count} time(s) as ${args.label ?? "dev"}`);
 			if (ctx.dryRun) {
 				ctx.info("(preview only)");
 			}
@@ -210,7 +210,9 @@ context as `ctx.dryRun`, `ctx.approveConsequential`, `ctx.quiet` and
   rather than a hang.
 - **Env var and JSON config file resolution** — explicit precedence:
   CLI > env > config > default, with auto-registered `config show/set/path/edit`
-  subcommands.
+  subcommands, where `config set <key> --value <v>` writes under a required
+  selector over a value, a clear (`--clear`) and a reset to the declared default
+  (`--default`).
 - **First-class check system** — TOML-declared checks with double-entry
   registration, tag DSL selection, DAG-ordered execution.
 - **MCP server integration** — expose commands as Model Context Protocol tools.
@@ -238,6 +240,18 @@ context as `ctx.dryRun`, `ctx.approveConsequential`, `ctx.quiet` and
   counts. Constraints render in `--help`, publish their members in
   `--dump-schema`, and project into MCP tool schemas with any remainder stated
   in the tool description.
+- **Update commands** — `updateOf: { resource, writeMode, identity, properties }`
+  declares what a command changes: which flags and args name the instance, which
+  flags carry the changes, and whether the write is sparse or a full replace.
+  `properties` is typed over the command's own declared names with a floor of
+  one, so a property naming a flag the command does not declare — and an empty
+  list — are compile errors. Because absence must never resolve to a value the
+  invocation did not state, no flag or arg on a mutating command may declare a
+  value default. The framework enforces at least one property per invocation,
+  renders the write set on every surface a run reports through (one line in the
+  would-do log, a `writes` member on the machine envelope), and publishes the
+  declaration in `--dump-schema` and in MCP tool schemas. A property declaring
+  `nullable: true` mints `--unset-<prop>`, answered by `ctx.unset(name)`.
 - **Groups, passthrough commands, deprecation notices** — the complete strictcli
   surface.
 
