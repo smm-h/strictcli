@@ -1,0 +1,223 @@
+[
+  {
+    "name": "update schema: the command entry carries update_of and write_mode, and the property carries nullable",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool",
+              "nullable": true
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_bytes_equal": "{\n  \"schema_version\": 2,\n  \"defaults\": {\n    \"schema_version\": 2,\n    \"app\": {\n      \"env_prefix\": null,\n      \"config\": false,\n      \"config_format\": \"json\",\n      \"config_path\": null,\n      \"config_conflict_mode\": \"cli-wins\",\n      \"proc_observe_allowlist\": [],\n      \"global_flags\": [],\n      \"commands\": {},\n      \"groups\": {},\n      \"deprecated\": {},\n      \"tag_contracts\": {},\n      \"checks\": {},\n      \"config_fields\": {},\n      \"infra\": {}\n    },\n    \"flag\": {\n      \"short\": null,\n      \"env\": null,\n      \"env_separator\": null,\n      \"prefixed\": true,\n      \"choices\": null,\n      \"elect_by\": null,\n      \"unique\": false,\n      \"conflict_mode\": null,\n      \"negatable\": null,\n      \"nullable\": false\n    },\n    \"arg\": {\n      \"variadic\": false,\n      \"choices\": null\n    },\n    \"choice\": {\n      \"flags\": []\n    },\n    \"choice_record\": {\n      \"help\": null\n    },\n    \"command\": {\n      \"consequential\": false,\n      \"dry_run_supported\": true,\n      \"dry_run_unsupported_reason\": null,\n      \"update_of\": null,\n      \"write_mode\": null,\n      \"payload_schema\": null,\n      \"owns_stdout\": false,\n      \"passthrough\": false,\n      \"flags\": [],\n      \"flag_sets\": [],\n      \"args\": [],\n      \"tags\": [],\n      \"constraints\": [],\n      \"hidden\": false,\n      \"interactive\": false,\n      \"config_fields\": [],\n      \"grants\": [],\n      \"forwarding\": null\n    },\n    \"group\": {\n      \"commands\": {},\n      \"groups\": {},\n      \"deprecated\": {},\n      \"tags\": [],\n      \"hidden\": false\n    },\n    \"config_field\": {\n      \"default\": null,\n      \"bound_commands\": []\n    },\n    \"check\": {\n      \"scope\": null\n    },\n    \"infra\": {\n      \"roots\": [],\n      \"handshakes\": [],\n      \"connections\": []\n    }\n  },\n  \"project_id\": \"myapp\",\n  \"name\": \"myapp\",\n  \"version\": \"1.0.0\",\n  \"help\": \"test app\",\n  \"commands\": {\n    \"update-record\": {\n      \"name\": \"update-record\",\n      \"help\": \"change one DNS record in place\",\n      \"effect\": \"mutating\",\n      \"update_of\": {\n        \"resource\": \"dns-record\",\n        \"identity\": [\n          \"zone\",\n          \"record-id\"\n        ],\n        \"properties\": [\n          \"content\",\n          \"ttl\",\n          \"proxied\"\n        ]\n      },\n      \"write_mode\": \"sparse\",\n      \"flags\": [\n        {\n          \"name\": \"zone\",\n          \"help\": \"zone the record belongs to\",\n          \"value_schema\": {\n            \"type\": \"string\"\n          },\n          \"presence\": \"required\"\n        },\n        {\n          \"name\": \"record-id\",\n          \"help\": \"identifier of the record to change\",\n          \"value_schema\": {\n            \"type\": \"string\"\n          },\n          \"presence\": \"required\"\n        },\n        {\n          \"name\": \"content\",\n          \"help\": \"record content\",\n          \"value_schema\": {\n            \"type\": \"string\"\n          },\n          \"presence\": \"optional\"\n        },\n        {\n          \"name\": \"ttl\",\n          \"help\": \"time to live in seconds\",\n          \"value_schema\": {\n            \"type\": \"integer\"\n          },\n          \"presence\": \"optional\",\n          \"nullable\": true\n        },\n        {\n          \"name\": \"proxied\",\n          \"help\": \"whether the record is proxied\",\n          \"value_schema\": {\n            \"type\": \"boolean\"\n          },\n          \"presence\": \"optional\",\n          \"negatable\": true,\n          \"nullable\": true\n        }\n      ]\n    }\n  }\n}\n"
+    }
+  },
+  {
+    "name": "update schema: a command declaring no update emits neither key",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "plain",
+          "help": "a plain mutating command",
+          "effect": "mutating",
+          "flags": [
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_command_absent_keys": {
+        "plain": [
+          "update_of",
+          "write_mode"
+        ]
+      },
+      "schema_command_keys": {
+        "plain": {
+          "name": "plain",
+          "effect": "mutating"
+        }
+      }
+    }
+  },
+  {
+    "name": "update schema: nullable is omitted when false, and the minted spelling gets no entry of its own",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "full_replace",
+            "identity": [],
+            "properties": [
+              "content",
+              "ttl"
+            ]
+          },
+          "flags": [
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_command_keys": {
+        "update-record": {
+          "update_of": {
+            "resource": "dns-record",
+            "identity": [],
+            "properties": [
+              "content",
+              "ttl"
+            ]
+          },
+          "write_mode": "full_replace",
+          "flags": [
+            {
+              "name": "content",
+              "help": "record content",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "value_schema": {
+                "type": "integer"
+              },
+              "presence": "optional",
+              "nullable": true
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "update schema: a passthrough carries its update declaration, validated for nothing (item 326)",
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "forward",
+          "help": "forward everything",
+          "effect": "mutating",
+          "passthrough": true,
+          "passthrough_handler_prints": "pt",
+          "update_of": {
+            "resource": "BAD NAME",
+            "write_mode": "nope",
+            "identity": [],
+            "properties": []
+          }
+        }
+      ]
+    },
+    "argv": [
+      "--dump-schema"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "schema_bytes_equal": "{\n  \"schema_version\": 2,\n  \"defaults\": {\n    \"schema_version\": 2,\n    \"app\": {\n      \"env_prefix\": null,\n      \"config\": false,\n      \"config_format\": \"json\",\n      \"config_path\": null,\n      \"config_conflict_mode\": \"cli-wins\",\n      \"proc_observe_allowlist\": [],\n      \"global_flags\": [],\n      \"commands\": {},\n      \"groups\": {},\n      \"deprecated\": {},\n      \"tag_contracts\": {},\n      \"checks\": {},\n      \"config_fields\": {},\n      \"infra\": {}\n    },\n    \"flag\": {\n      \"short\": null,\n      \"env\": null,\n      \"env_separator\": null,\n      \"prefixed\": true,\n      \"choices\": null,\n      \"elect_by\": null,\n      \"unique\": false,\n      \"conflict_mode\": null,\n      \"negatable\": null,\n      \"nullable\": false\n    },\n    \"arg\": {\n      \"variadic\": false,\n      \"choices\": null\n    },\n    \"choice\": {\n      \"flags\": []\n    },\n    \"choice_record\": {\n      \"help\": null\n    },\n    \"command\": {\n      \"consequential\": false,\n      \"dry_run_supported\": true,\n      \"dry_run_unsupported_reason\": null,\n      \"update_of\": null,\n      \"write_mode\": null,\n      \"payload_schema\": null,\n      \"owns_stdout\": false,\n      \"passthrough\": false,\n      \"flags\": [],\n      \"flag_sets\": [],\n      \"args\": [],\n      \"tags\": [],\n      \"constraints\": [],\n      \"hidden\": false,\n      \"interactive\": false,\n      \"config_fields\": [],\n      \"grants\": [],\n      \"forwarding\": null\n    },\n    \"group\": {\n      \"commands\": {},\n      \"groups\": {},\n      \"deprecated\": {},\n      \"tags\": [],\n      \"hidden\": false\n    },\n    \"config_field\": {\n      \"default\": null,\n      \"bound_commands\": []\n    },\n    \"check\": {\n      \"scope\": null\n    },\n    \"infra\": {\n      \"roots\": [],\n      \"handshakes\": [],\n      \"connections\": []\n    }\n  },\n  \"project_id\": \"myapp\",\n  \"name\": \"myapp\",\n  \"version\": \"1.0.0\",\n  \"help\": \"test app\",\n  \"commands\": {\n    \"forward\": {\n      \"name\": \"forward\",\n      \"help\": \"forward everything\",\n      \"effect\": \"mutating\",\n      \"update_of\": {\n        \"resource\": \"BAD NAME\",\n        \"identity\": [],\n        \"properties\": []\n      },\n      \"write_mode\": \"nope\",\n      \"passthrough\": true\n    }\n  }\n}\n"
+    }
+  }
+]

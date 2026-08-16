@@ -1,0 +1,124 @@
+[
+  {
+    "name": "update help: the minted spelling shares its property's line, with one presence part",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool",
+              "nullable": true
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": "",
+      "stdout_equals": "myapp update-record -- change one DNS record in place\n\nFlags:\n  --zone <str>                                zone the record belongs to [required]\n  --record-id <str>                           identifier of the record to change [required]\n  --content <str>                             record content [optional]\n  --ttl <int>, --unset-ttl                    time to live in seconds [optional]\n  --proxied, --no-proxied, --unset-proxied    whether the record is proxied [optional]\n"
+    }
+  },
+  {
+    "name": "update help: a nullable compound property renders its carrier annotation once",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [],
+            "properties": [
+              "tags",
+              "headers"
+            ]
+          },
+          "flags": [
+            {
+              "name": "tags",
+              "help": "the tags",
+              "presence": "optional",
+              "type": "list[str]",
+              "nullable": true
+            },
+            {
+              "name": "headers",
+              "help": "extra headers",
+              "presence": "optional",
+              "type": "dict[str,str]",
+              "nullable": true
+            }
+          ],
+          "handler_prints": "ok"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": "",
+      "stdout_equals": "myapp update-record -- change one DNS record in place\n\nFlags:\n  --tags <str>, --unset-tags              the tags [list] [optional]\n  --headers <key=str>, --unset-headers    extra headers [dict] [optional]\n"
+    }
+  }
+]
