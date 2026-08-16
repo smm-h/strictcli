@@ -140,6 +140,33 @@ test("negative types: the two-member floor and the `when` union are compile erro
 	);
 });
 
+test("negative types: an update's names, floor and write mode are compile errors", () => {
+	// §27.8's TypeScript payoff. `properties` is `readonly [K, ...K[]]` over the
+	// command's own declared names, so a property typo and an empty list are
+	// both compile errors -- which is what keeps errUpdateNameUnknown and
+	// errUpdatePropertiesEmpty reachable only through a widened caller (§12.13
+	// item 213) -- and `writeMode` is a literal union.
+	const d = diagnostics().filter((x) =>
+		x.file.endsWith("update_property_names.ts"),
+	);
+	assert.equal(d.length, 3, JSON.stringify(d));
+	assert.equal(d[0]?.code, "TS2322");
+	assert.equal(
+		d[0]?.text,
+		`Type '"contnet"' is not assignable to type '"content"'.`,
+	);
+	assert.equal(d[1]?.code, "TS2322");
+	assert.equal(
+		d[1]?.text,
+		`Type '[]' is not assignable to type 'readonly ["content", ..."content"[]]'.`,
+	);
+	assert.equal(d[2]?.code, "TS2322");
+	assert.equal(
+		d[2]?.text,
+		`Type '"patch"' is not assignable to type 'WriteMode'.`,
+	);
+});
+
 test("negative types: a selector default naming no choice does not compile", () => {
 	// Typed `keyof C & string`, so the mistake is a COMPILE error before it is
 	// a registration error (§24.12).
@@ -175,5 +202,5 @@ test("negative types: a sub-flag is not a top-level arg, and the switch is exhau
 });
 
 test("negative types: the fixture project produces exactly the pinned errors", () => {
-	assert.equal(diagnostics().length, 9, JSON.stringify(diagnostics()));
+	assert.equal(diagnostics().length, 12, JSON.stringify(diagnostics()));
 });
