@@ -27,7 +27,8 @@
       "elect_by": null,
       "unique": false,
       "conflict_mode": null,
-      "negatable": null
+      "negatable": null,
+      "nullable": false
     },
     "arg": {
       "variadic": false,
@@ -43,6 +44,8 @@
       "consequential": false,
       "dry_run_supported": true,
       "dry_run_unsupported_reason": null,
+      "update_of": null,
+      "write_mode": null,
       "payload_schema": null,
       "owns_stdout": false,
       "passthrough": false,
