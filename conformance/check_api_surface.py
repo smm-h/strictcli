@@ -642,6 +642,12 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "command.constraints": "constraints",
                 "command.tags": "tags",
                 "command.config_fields": "configFields",
+                # The update declaration (contract §27.2) is stored on an
+                # UNEXPORTED Go field for `presence`'s reason: WithUpdateOf is
+                # the only spelling, so a Command struct literal cannot declare
+                # half a record. describe_go dumps unexported fields too, which
+                # is why this maps to the lowercase name rather than excluding.
+                "command.update_of": "updateOf",
             },
             ts_struct="CommandDef",
             ts_to_schema=_SHARED_TS_TO_SCHEMA,
@@ -1036,6 +1042,13 @@ KNOWN_OPTION_FUNCS: set[str] = {
     # WITHOUT a With- prefix (§18.9 item 111), which is why they read unlike
     # their neighbours here.
     "PayloadSchema", "OwnsStdout",
+    # The update-command construct (contract §27.2, §27.8). WithUpdateOf is
+    # the ONE spelling: the write mode is a positional parameter of it, which
+    # is Go's spelling of mandatory, and the two name lists arrive as
+    # UpdateOptions (Identity, Properties) -- constructors over a named type
+    # of their own, which describe_go catalogues separately. `Nullable()`
+    # (contract §27.6) is an ordinary FlagOption beside Required/Optional.
+    "WithUpdateOf",
 }
 
 
@@ -1125,6 +1138,14 @@ KNOWN_TS_PUBLIC_NAMES: set[str] = {
     # arguments and Go positional ones.
     "schemaType", "schemaArray", "schemaObject", "schemaEnum", "schemaConst",
     "SchemaObjectOpts",
+    # The update-command construct's type-only exports (contract §27.2,
+    # §27.8). `UpdateOf` is the one option object a command spec carries --
+    # the write mode nests inside it, so a half-declared record is
+    # unrepresentable -- and `WriteMode` is the literal union
+    # "sparse" | "full_replace" that makes a typo a compile error. There is no
+    # exported type for the minted `--unset-<prop>`: it is derived from the
+    # flag's own `nullable: true` and reaches the handler on the Context.
+    "UpdateOf", "WriteMode",
 }
 
 # The payload-schema builders (contract §19.5, decision 14), one row per

@@ -1264,6 +1264,87 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         'typescript': "excluded:Python-only: `members` is a typed variadic in Go and a `[M, M, ...M[]]` tuple in TypeScript, so a non-sequence does not compile",
     },
 
+    # =======================================================================
+    # The update-command construct (contract §12.16, §27; ledger §18.33,
+    # §18.34 item 327)
+    #
+    # ONE SHAPE OF DIVERGENCE, AND ONLY ONE. Item 327 struck §12.16's original
+    # "no template in this section is excluded in any implementation" and
+    # replaced it with the claim that survives: no template here names a state
+    # only one surface can reach. What was false was the conclusion, because
+    # FOUR of the seventeen templates quote a DECLARATION SPELLING inside the
+    # sentence -- `errMutatingDefault` (<default-spelling>, plus
+    # <required-spelling> and <optional-spelling> in its remedy clause),
+    # `errUpdatePropertyPresence` (<required-spelling>, <optional-spelling>),
+    # `errNullableNotProperty` and `errUnsetNameReserved` (<nullable-spelling>).
+    #
+    # That is §12.12's mechanism, which §12.16 invokes by reusing that
+    # section's three rows and adding <nullable-spelling> to them: the
+    # sentence is byte-identical and the spellings inside it are each
+    # language's own. This checker compares literal strings and has no
+    # substitution model, so each spelling appears in one implementation's
+    # extraction and not in its siblings'. The parity assertion is per target,
+    # in cases/update_registration.json and
+    # cases/update_mutating_default_ban.json.
+    #
+    # Where Python and TypeScript interpolate their spelling from a constant
+    # they share a normalized signature, so only Go's literal needs an
+    # exclusion; where all three spell it differently, all three signatures
+    # appear. The remaining thirteen templates -- eleven registration guards
+    # and both parse-time violations -- are cross-language and take no
+    # exclusion at all.
+    # =======================================================================
+
+    # -- errMutatingDefault (§27.1), the one guard here that fires on a
+    #    command declaring no update at all --
+    'command *: * declares * on a mutating command: absence would write a value the invocation never stated (declare presence="required" or presence="optional", or apply the fallback in the handler and say so in its help)': {
+        'go': "excluded:Python's spelling (§12.16, §18.34 item 327); cases/update_mutating_default_ban.json asserts all three, per target",
+        'typescript': "excluded:Python's spelling (§12.16, §18.34 item 327); cases/update_mutating_default_ban.json asserts all three, per target",
+    },
+    'command *: * declares Default(*) on a mutating command: absence would write a value the invocation never stated (declare Required() or Optional(), or apply the fallback in the handler and say so in its help)': {
+        'python': "excluded:Go's spelling (§12.16, §18.34 item 327). §12.16 records that Go prints the FLAG spelling Default(<v>) for an arg too: the template's prefix names the command rather than a surface. cases/update_mutating_default_ban.json asserts all three, per target",
+        'typescript': "excluded:Go's spelling (§12.16, §18.34 item 327); cases/update_mutating_default_ban.json asserts all three, per target",
+    },
+    'command *: * declares * on a mutating command: absence would write a value the invocation never stated (declare * or *, or apply the fallback in the handler and say so in its help)': {
+        'python': "excluded:TypeScript's spelling, interpolated from its PRESENCE_SPELLING_* constants (§12.16, §18.34 item 327); cases/update_mutating_default_ban.json asserts all three, per target",
+        'go': "excluded:TypeScript's spelling, interpolated from its PRESENCE_SPELLING_* constants (§12.16, §18.34 item 327); cases/update_mutating_default_ban.json asserts all three, per target",
+    },
+
+    # -- errUpdatePropertyPresence (§27.3) --
+    'command *: update of * property * declares presence="required": a property is absent exactly when it is not being written, and the presence declaration for that is presence="optional"': {
+        'go': "excluded:Python's spelling (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+        'typescript': "excluded:Python's spelling (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+    },
+    'command *: update of * property * declares Required(): a property is absent exactly when it is not being written, and the presence declaration for that is Optional()': {
+        'python': "excluded:Go's spelling (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+        'typescript': "excluded:Go's spelling (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+    },
+    'command *: update of * property * declares *: a property is absent exactly when it is not being written, and the presence declaration for that is *': {
+        'python': "excluded:TypeScript's spelling, interpolated from its PRESENCE_SPELLING_* constants (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+        'go': "excluded:TypeScript's spelling, interpolated from its PRESENCE_SPELLING_* constants (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+    },
+
+    # -- errNullableNotProperty (§27.6). Python and TypeScript interpolate
+    #    their <nullable-spelling> from a constant, so they normalize to one
+    #    signature and only Go's literal Nullable() needs an exclusion. --
+    'command *: * declares * but is not a property of an update: only a property can be cleared': {
+        'go': "excluded:the Python and TypeScript spellings, each interpolated from that implementation's <nullable-spelling> constant (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+    },
+    'command *: * declares Nullable() but is not a property of an update: only a property can be cleared': {
+        'python': "excluded:Go's spelling (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+        'typescript': "excluded:Go's spelling (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+    },
+
+    # -- errUnsetNameReserved (§27.6), the step that runs last because it is
+    #    the only one reading the flag namespace back --
+    'command *: flag name "unset-*" is reserved: property \'--*\' declares *, which mints \'--unset-*\'': {
+        'go': "excluded:the Python and TypeScript spellings, each interpolated from that implementation's <nullable-spelling> constant (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+    },
+    'command *: flag name "unset-*" is reserved: property \'--*\' declares Nullable(), which mints \'--unset-*\'': {
+        'python': "excluded:Go's spelling (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+        'typescript': "excluded:Go's spelling (§12.16, §18.34 item 327); cases/update_registration.json asserts all three, per target",
+    },
+
 }
 
 
