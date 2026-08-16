@@ -510,6 +510,11 @@ function buildFlag(fd) {
 	if ("negatable" in fd && fd.negatable === false) {
 		opts.negatable = false;
 	}
+	// The clear vocabulary's declaration (contract §27.6): legal only on a
+	// property of an update, and what mints `--unset-<prop>`.
+	if (fd.nullable === true) {
+		opts.nullable = true;
+	}
 	// The corpus's one expressible validator shape (case-schema `validate`):
 	// a callable refusing named values with a fixed message. Comparison goes
 	// through each language's own default formatting of the value, so one
@@ -996,6 +1001,7 @@ function registerCommand(cmdDef, target, globalFlags) {
 		if (cmdDef.consequential === true) {
 			spec.consequential = true;
 		}
+		spliceUpdateOf(spec, cmdDef);
 		spliceDryRun(spec, cmdDef);
 		// Classification is spliced into the factory name (§1.2). The twins are
 		// the sole mint, so a missing or invalid classification is unreachable
@@ -1055,6 +1061,7 @@ function registerCommand(cmdDef, target, globalFlags) {
 	if (cmdDef.consequential === true) {
 		spec.consequential = true;
 	}
+	spliceUpdateOf(spec, cmdDef);
 	spliceDryRun(spec, cmdDef);
 	if ("forwarding" in cmdDef) {
 		spec.forwarding = cmdDef.forwarding;
@@ -1067,6 +1074,31 @@ function registerCommand(cmdDef, target, globalFlags) {
 			cmdDef,
 		),
 	);
+}
+
+/**
+ * Splices the update declaration onto a command spec (contract §27). The case
+ * schema follows the DECLARATION side -- ONE record carrying its write mode
+ * (§13's amendment) -- which is TypeScript's own shape, so the only conversion
+ * is the key spelling. An absent write_mode reaches the option object as
+ * `undefined` and is the covering input for errUpdateWriteModeInvalid, which
+ * renders it as the empty string exactly as its siblings do; an absent
+ * properties list is the covering input for errUpdatePropertiesEmpty, the
+ * declared tuple type putting a compile-time floor of one on every ordinary
+ * caller. A PASSTHROUGH carries the declaration rather than dropping it, as
+ * its siblings do.
+ */
+function spliceUpdateOf(spec, cmdDef) {
+	if (!("update_of" in cmdDef)) {
+		return;
+	}
+	const ud = cmdDef.update_of;
+	spec.updateOf = {
+		resource: ud.resource,
+		writeMode: ud.write_mode,
+		identity: ud.identity ?? [],
+		properties: ud.properties ?? [],
+	};
 }
 
 /**
