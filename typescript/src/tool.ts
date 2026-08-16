@@ -112,11 +112,13 @@ export function buildJSONSchema(
 
 	/**
 	 * One ordinary flag's property, at root scope or any depth. The parameter
-	 * schema is the SAME fragment the dump publishes (§25.13), so a tool
-	 * schema's shape and a dumped one cannot disagree -- and an `enum` on an
-	 * array-shaped parameter therefore sits inside `items`, describing the
+	 * schema is the SAME fragment the dump publishes (§25.13), so an arity and
+	 * an `enum` placement cannot disagree between the two doors -- an `enum` on
+	 * an array-shaped parameter therefore sits inside `items`, describing the
 	 * element, rather than at the property root, which would say the array
-	 * itself must equal one of the choices.
+	 * itself must equal one of the choices. The one fact the doors state
+	 * differently is nullability, folded into the type list below (§25.13's
+	 * amendment, §27.10).
 	 */
 	const flagProperty = (f: AnyFlag): Record<string, unknown> => {
 		const prop: Record<string, unknown> = {
