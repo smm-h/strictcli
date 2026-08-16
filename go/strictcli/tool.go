@@ -57,9 +57,11 @@ func buildJSONSchema(cmd *Command) map[string]interface{} {
 		}
 
 		// The parameter's shape is the SAME fragment the dumped `value_schema`
-		// publishes (contract §25.13), so a tool schema and a dumped schema
-		// cannot disagree about a value: the array rows carry their `enum`
-		// inside `items`, describing an element rather than the array.
+		// publishes (contract §25.13), so an arity and an `enum` placement
+		// cannot disagree between the two doors: the array rows carry their
+		// `enum` inside `items`, describing an element rather than the array.
+		// The one fact the doors state differently is nullability, folded into
+		// the type list immediately below (§25.13's amendment, §27.10).
 		prop := toPlain(flagValueSchema(f)).(map[string]interface{})
 		prop["description"] = f.Help
 		// A NULLABLE property publishes a type list including "null" (contract
