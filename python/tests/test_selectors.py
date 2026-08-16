@@ -61,9 +61,14 @@ def _notify(**selector_kwargs):
     kwargs.update(selector_kwargs)
     app = strictcli.App(name="notify", version="1.0.0", help="notifier")
 
+    # read_only: this fixture's scopes carry declared DEFAULTS (`retries=3`,
+    # and the defaulted selections below construct instances with field
+    # values), and §27.1's mutating-default ban refuses both on a mutating
+    # command. What these tests pin is the selector construct, not
+    # classification.
     @app.command(
         "send", help="send one notification through exactly one channel",
-        effect="mutating",
+        effect="read_only",
     )
     @choice_flag("via", **kwargs)
     @strictcli.flag("dry", type=bool, help="print what would be sent", default=False)
@@ -1958,7 +1963,9 @@ def test_hermetic_suppresses_a_scoped_env_binding(monkeypatch):
 def _precedence_notify():
     app = strictcli.App(name="notify", version="1.0.0", help="notifier")
 
-    @app.command("send", help="send one", effect="mutating")
+    # read_only for the reason `_notify` is: the shared Webhook scope declares
+    # `retries=3`, which §27.1's ban refuses on a mutating command.
+    @app.command("send", help="send one", effect="read_only")
     @choice_flag(
         "via", help="delivery channel", presence="required",
         elect_by="selector-token", choices=[Email, Sms, Webhook],

@@ -152,7 +152,7 @@ def test_config_set_creates_file(tmp_path, monkeypatch):
     config_home = str(tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
     app = _make_config_app(config=True)
-    r = app.test(["config", "set", "target", "new-value"])
+    r = app.test(["config", "set", "target", "--value", "new-value"])
     assert r.exit_code == 0
 
     # Verify the file was created
@@ -296,7 +296,7 @@ def test_config_set_updates_existing(tmp_path, monkeypatch):
     config_home = _write_config(tmp_path, "testapp", {"target": "old", "count": 5})
     monkeypatch.setenv("XDG_CONFIG_HOME", config_home)
     app = _make_config_app(config=True)
-    r = app.test(["config", "set", "target", "new"])
+    r = app.test(["config", "set", "target", "--value", "new"])
     assert r.exit_code == 0
 
     config_file = tmp_path / "testapp" / "config.json"
@@ -498,7 +498,7 @@ def test_custom_config_path_config_set(tmp_path):
     def run(ctx, target):
         print(f"target={target}")
 
-    r = app.test(["config", "set", "target", "written"])
+    r = app.test(["config", "set", "target", "--value", "written"])
     assert r.exit_code == 0
     assert config_file.exists()
     data = json.loads(config_file.read_text())
@@ -553,7 +553,7 @@ def test_toml_format_set_writes_correctly(tmp_path):
     def run(ctx, target):
         print(f"target={target}")
 
-    r = app.test(["config", "set", "target", "toml-written"])
+    r = app.test(["config", "set", "target", "--value", "toml-written"])
     assert r.exit_code == 0
     assert config_file.exists()
 
@@ -582,7 +582,7 @@ def test_toml_format_set_preserves_existing(tmp_path):
     def run(ctx, target):
         print(f"target={target}")
 
-    r = app.test(["config", "set", "target", "new-val"])
+    r = app.test(["config", "set", "target", "--value", "new-val"])
     assert r.exit_code == 0
 
     import tomllib
@@ -1141,7 +1141,7 @@ def test_config_set_repeatable_string(tmp_path, monkeypatch):
     """Config set writes a string array for a repeatable flag."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
-    r = app.test(["config", "set", "tags", "a,b,c"])
+    r = app.test(["config", "set", "tags", "--value", "a,b,c"])
     assert r.exit_code == 0
 
     config_file = tmp_path / "repapp" / "config.json"
@@ -1153,7 +1153,7 @@ def test_config_set_repeatable_int(tmp_path, monkeypatch):
     """Config set writes an int array for a repeatable flag."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
-    r = app.test(["config", "set", "counts", "1,2,3"])
+    r = app.test(["config", "set", "counts", "--value", "1,2,3"])
     assert r.exit_code == 0
 
     config_file = tmp_path / "repapp" / "config.json"
@@ -1165,7 +1165,7 @@ def test_config_set_repeatable_float(tmp_path, monkeypatch):
     """Config set writes a float array for a repeatable flag."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
-    r = app.test(["config", "set", "rates", "1.5,2.5,3.0"])
+    r = app.test(["config", "set", "rates", "--value", "1.5,2.5,3.0"])
     assert r.exit_code == 0
 
     config_file = tmp_path / "repapp" / "config.json"
@@ -1177,7 +1177,7 @@ def test_config_set_escaped_comma(tmp_path, monkeypatch):
     r"""Config set handles escaped commas: a\,b,c -> ["a,b", "c"]."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
-    r = app.test(["config", "set", "tags", "a\\,b,c"])
+    r = app.test(["config", "set", "tags", "--value", "a\\,b,c"])
     assert r.exit_code == 0
 
     config_file = tmp_path / "repapp" / "config.json"
@@ -1189,7 +1189,7 @@ def test_config_set_repeatable_unique_valid(tmp_path, monkeypatch):
     """Config set accepts distinct values for a unique repeatable flag."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
-    r = app.test(["config", "set", "ids", "1,2,3"])
+    r = app.test(["config", "set", "ids", "--value", "1,2,3"])
     assert r.exit_code == 0
 
     config_file = tmp_path / "repapp" / "config.json"
@@ -1201,7 +1201,7 @@ def test_config_set_repeatable_unique_duplicate(tmp_path, monkeypatch):
     """Config set rejects duplicate values for a unique repeatable flag."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
-    r = app.test(["config", "set", "ids", "1,2,1"])
+    r = app.test(["config", "set", "ids", "--value", "1,2,1"])
     assert r.exit_code == 1
     assert "config set: key 'ids': duplicate value '1'" in r.stderr
 
@@ -1210,7 +1210,7 @@ def test_config_set_round_trip_json(tmp_path, monkeypatch):
     """Config set then show --json round-trips an array correctly."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
-    r = app.test(["config", "set", "tags", "x,y"])
+    r = app.test(["config", "set", "tags", "--value", "x,y"])
     assert r.exit_code == 0
 
     r = app.test(["config", "show", "--json"])
@@ -1226,7 +1226,7 @@ def test_config_set_round_trip_toml(tmp_path):
     app = _make_config_set_app(
         config_path=str(config_file), config_format="toml",
     )
-    r = app.test(["config", "set", "tags", "a,b"])
+    r = app.test(["config", "set", "tags", "--value", "a,b"])
     assert r.exit_code == 0
     assert config_file.exists()
 
@@ -1284,40 +1284,45 @@ def test_config_set_default_nonexistent_key_error(tmp_path, monkeypatch):
     assert "config set: key 'name' not in config" in r.stderr
 
 
-def test_config_set_no_args_error(tmp_path, monkeypatch):
-    """No value, no --clear, no --default gives an error."""
+def test_config_set_electing_nothing_is_refused(tmp_path, monkeypatch):
+    """Electing no member is the framework's own unsatisfied-selector refusal.
+
+    The hand-rolled "provide a value, --clear, or --default" guard is gone with
+    the three bools that made its state expressible (contract §27.1, §18.33
+    item 304).
+    """
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
     r = app.test(["config", "set", "name"])
     assert r.exit_code == 1
-    assert "config set: provide a value, --clear, or --default" in r.stderr
+    assert "one of --value, --clear, --default is required" in r.stderr
 
 
 def test_config_set_value_with_clear_error(tmp_path, monkeypatch):
-    """Providing value + --clear is an error."""
+    """Electing two members is the framework's own refusal (§27.1)."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
-    r = app.test(["config", "set", "tags", "a,b", "--clear"])
+    r = app.test(["config", "set", "tags", "--value", "a,b", "--clear"])
     assert r.exit_code == 1
-    assert "config set: cannot provide a value with --clear" in r.stderr
+    assert "--value and --clear are mutually exclusive" in r.stderr
 
 
 def test_config_set_value_with_default_error(tmp_path, monkeypatch):
-    """Providing value + --default is an error."""
+    """Electing two members is the framework's own refusal (§27.1)."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
-    r = app.test(["config", "set", "name", "alice", "--default"])
+    r = app.test(["config", "set", "name", "--value", "alice", "--default"])
     assert r.exit_code == 1
-    assert "config set: cannot provide a value with --default" in r.stderr
+    assert "--value and --default are mutually exclusive" in r.stderr
 
 
 def test_config_set_clear_and_default_error(tmp_path, monkeypatch):
-    """--clear and --default together is an error."""
+    """Electing two members is the framework's own refusal (§27.1)."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     app = _make_config_set_app()
     r = app.test(["config", "set", "tags", "--clear", "--default"])
     assert r.exit_code == 1
-    assert "config set: --clear and --default are mutually exclusive" in r.stderr
+    assert "--clear and --default are mutually exclusive" in r.stderr
 
 
 # ---- Phase 1b: --config flag tests ----
@@ -1869,7 +1874,7 @@ def test_config_set_toml_preserves_comments_and_order(tmp_path):
     def run(ctx, zeta, alpha, beta):
         pass
 
-    r = app.test(["config", "set", "alpha", "42"])
+    r = app.test(["config", "set", "alpha", "--value", "42"])
     assert r.exit_code == 0
 
     text = config_file.read_text()
@@ -2002,7 +2007,7 @@ def test_config_set_dry_run_changes_nothing(tmp_path):
     config_file = tmp_path / "config.json"
     config_file.write_text('{"opt": "before"}\n')
     app = _dry_app(config_file)
-    r = app.test(["--dry-run", "config", "set", "opt", "after"])
+    r = app.test(["--dry-run", "config", "set", "opt", "--value", "after"])
     assert r.exit_code == 0
     assert r.stdout == (
         f"{_DRY_HEADER}  1. write: {config_file} (21 bytes)\n"
@@ -2023,7 +2028,7 @@ def test_config_set_default_dry_run_changes_nothing(tmp_path):
 def test_config_set_dry_run_previews_the_missing_directory(tmp_path):
     config_file = tmp_path / "nested" / "deeper" / "config.json"
     app = _dry_app(config_file)
-    r = app.test(["--dry-run", "config", "set", "opt", "v"])
+    r = app.test(["--dry-run", "config", "set", "opt", "--value", "v"])
     assert r.exit_code == 0
     assert r.stdout.startswith(
         f"{_DRY_HEADER}  1. mkdir: {config_file.parent}\n  2. write: {config_file} ("
@@ -2035,7 +2040,7 @@ def test_config_set_toml_dry_run_changes_nothing(tmp_path):
     config_file = tmp_path / "config.toml"
     config_file.write_text('# a comment\nopt = "before"\n')
     app = _dry_app(config_file, config_format="toml")
-    r = app.test(["--dry-run", "config", "set", "opt", "after"])
+    r = app.test(["--dry-run", "config", "set", "opt", "--value", "after"])
     assert r.exit_code == 0
     assert f"1. write: {config_file}" in r.stdout
     assert config_file.read_text() == '# a comment\nopt = "before"\n'
@@ -2076,7 +2081,7 @@ def test_config_commands_still_mutate_in_live_mode(tmp_path):
     app = _dry_app(config_file)
     assert app.test(["config", "init"]).exit_code == 0
     assert config_file.is_file()
-    assert app.test(["config", "set", "opt", "v"]).exit_code == 0
+    assert app.test(["config", "set", "opt", "--value", "v"]).exit_code == 0
     assert json.loads(config_file.read_text())["opt"] == "v"
 
 
@@ -2084,6 +2089,6 @@ def test_config_set_records_its_write_in_the_live_effect_log(tmp_path):
     config_file = tmp_path / "config.json"
     config_file.write_text("{}\n")
     app = _dry_app(config_file)
-    app.test(["config", "set", "opt", "v"])
+    app.test(["config", "set", "opt", "--value", "v"])
     log = [r for r in app.effect_log() if r["kind"] != "cache_write"]
     assert [(r["verb"], r["recorded"]) for r in log] == [("write", False)]

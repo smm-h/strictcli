@@ -283,7 +283,10 @@ def _arg_choices_app(entries, **arg_kwargs):
     kwargs.update(arg_kwargs)
     app = _app()
 
-    @app.command("push", effect="mutating", help="push something")
+    # read_only: the arg block below declares a positional DEFAULT in one
+    # case, and §27.1's ban refuses a value default on a mutating command.
+    # What these tests pin is the choices block's layout, not classification.
+    @app.command("push", effect="read_only", help="push something")
     @strictcli.arg("scope", choices=entries, **kwargs)
     def push(ctx, scope):
         print(f"scope={scope}")

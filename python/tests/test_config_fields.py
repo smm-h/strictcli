@@ -587,7 +587,7 @@ class TestConfigSubcommandExemption:
         def serve(ctx, **kw):
             pass
 
-        result = app.test(["config", "set", "db.url", "postgres://localhost/db"])
+        result = app.test(["config", "set", "db.url", "--value", "postgres://localhost/db"])
         assert result.exit_code == 0
 
     def test_config_init_works_with_missing_required(self, tmp_path):
@@ -682,7 +682,7 @@ class TestConfigSetWithFields:
         def serve(ctx, **kw):
             pass
 
-        result = app.test(["config", "set", "db.url", "postgres://localhost/db"])
+        result = app.test(["config", "set", "db.url", "--value", "postgres://localhost/db"])
         assert result.exit_code == 0
 
         # Verify the value was written
@@ -699,7 +699,7 @@ class TestConfigSetWithFields:
         def serve(ctx, **kw):
             pass
 
-        result = app.test(["config", "set", "cache.ttl", "300"])
+        result = app.test(["config", "set", "cache.ttl", "--value", "300"])
         assert result.exit_code == 0
 
         config_file = str(tmp_path / "config.json")
@@ -715,7 +715,7 @@ class TestConfigSetWithFields:
         def serve(ctx, **kw):
             pass
 
-        result = app.test(["config", "set", "debug", "true"])
+        result = app.test(["config", "set", "debug", "--value", "true"])
         assert result.exit_code == 0
 
         config_file = str(tmp_path / "config.json")
@@ -731,7 +731,7 @@ class TestConfigSetWithFields:
         def serve(ctx, **kw):
             pass
 
-        result = app.test(["config", "set", "rate", "1.5"])
+        result = app.test(["config", "set", "rate", "--value", "1.5"])
         assert result.exit_code == 0
 
         config_file = str(tmp_path / "config.json")
@@ -747,7 +747,7 @@ class TestConfigSetWithFields:
         def serve(ctx, **kw):
             pass
 
-        result = app.test(["config", "set", "unknown_key", "value"])
+        result = app.test(["config", "set", "unknown_key", "--value", "value"])
         assert result.exit_code == 1
         assert "unknown key" in result.stderr
 
@@ -759,7 +759,7 @@ class TestConfigSetWithFields:
         def serve(ctx, **kw):
             pass
 
-        result = app.test(["config", "set", "cache.ttl", "not_a_number"])
+        result = app.test(["config", "set", "cache.ttl", "--value", "not_a_number"])
         assert result.exit_code == 1
         assert "cache.ttl" in result.stderr
 

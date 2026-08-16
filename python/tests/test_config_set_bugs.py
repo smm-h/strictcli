@@ -36,13 +36,13 @@ def test_config_set_writes_typed_values(tmp_path):
     def run(ctx, count, loud, rate):
         pass
 
-    r = app.test(["config", "set", "count", "42"])
+    r = app.test(["config", "set", "count", "--value", "42"])
     assert r.exit_code == 0
 
-    r = app.test(["config", "set", "loud", "true"])
+    r = app.test(["config", "set", "loud", "--value", "true"])
     assert r.exit_code == 0
 
-    r = app.test(["config", "set", "rate", "3.14"])
+    r = app.test(["config", "set", "rate", "--value", "3.14"])
     assert r.exit_code == 0
 
     data = json.loads(config_file.read_text())
@@ -76,7 +76,7 @@ def test_config_set_rejects_unknown_key(tmp_path):
     def run(ctx, name):
         pass
 
-    r = app.test(["config", "set", "nonexistent", "value"])
+    r = app.test(["config", "set", "nonexistent", "--value", "value"])
     assert r.exit_code != 0, f"expected nonzero exit code, got {r.exit_code}"
     assert "nonexistent" in r.stderr, f"expected error about unknown key in stderr, got: {r.stderr!r}"
 
@@ -108,13 +108,13 @@ def test_config_set_typed_bool(tmp_path):
     app, config_file = _make_app(tmp_path)
 
     for true_val in ("true", "yes", "1", "True", "YES"):
-        r = app.test(["config", "set", "debug", true_val])
+        r = app.test(["config", "set", "debug", "--value", true_val])
         assert r.exit_code == 0, f"exit_code={r.exit_code} for '{true_val}': {r.stderr}"
         data = json.loads(config_file.read_text())
         assert data["debug"] is True, f"expected True for '{true_val}', got {data['debug']!r}"
 
     for false_val in ("false", "no", "0", "False", "NO"):
-        r = app.test(["config", "set", "debug", false_val])
+        r = app.test(["config", "set", "debug", "--value", false_val])
         assert r.exit_code == 0, f"exit_code={r.exit_code} for '{false_val}': {r.stderr}"
         data = json.loads(config_file.read_text())
         assert data["debug"] is False, f"expected False for '{false_val}', got {data['debug']!r}"
@@ -124,13 +124,13 @@ def test_config_set_typed_int(tmp_path):
     """config set coerces integer values and stores them as JSON integers."""
     app, config_file = _make_app(tmp_path)
 
-    r = app.test(["config", "set", "count", "42"])
+    r = app.test(["config", "set", "count", "--value", "42"])
     assert r.exit_code == 0
     data = json.loads(config_file.read_text())
     assert isinstance(data["count"], int)
     assert data["count"] == 42
 
-    r = app.test(["config", "set", "count", "0"])
+    r = app.test(["config", "set", "count", "--value", "0"])
     assert r.exit_code == 0
     data = json.loads(config_file.read_text())
     assert isinstance(data["count"], int)
@@ -141,14 +141,14 @@ def test_config_set_typed_float(tmp_path):
     """config set coerces float values and stores them as JSON floats."""
     app, config_file = _make_app(tmp_path)
 
-    r = app.test(["config", "set", "rate", "3.14"])
+    r = app.test(["config", "set", "rate", "--value", "3.14"])
     assert r.exit_code == 0
     data = json.loads(config_file.read_text())
     assert isinstance(data["rate"], float)
     assert data["rate"] == 3.14
 
     # Integer-like value stored as float when flag type is float
-    r = app.test(["config", "set", "rate", "3"])
+    r = app.test(["config", "set", "rate", "--value", "3"])
     assert r.exit_code == 0
     data = json.loads(config_file.read_text())
     assert isinstance(data["rate"], float)
@@ -160,27 +160,27 @@ def test_config_set_bad_value(tmp_path):
     app, _ = _make_app(tmp_path)
 
     # Bad int
-    r = app.test(["config", "set", "count", "abc"])
+    r = app.test(["config", "set", "count", "--value", "abc"])
     assert r.exit_code != 0
     assert "expected integer, got 'abc'" in r.stderr
 
     # Bad bool
-    r = app.test(["config", "set", "debug", "maybe"])
+    r = app.test(["config", "set", "debug", "--value", "maybe"])
     assert r.exit_code != 0
     assert "expected boolean, got 'maybe'" in r.stderr
 
     # Bad float
-    r = app.test(["config", "set", "rate", "xyz"])
+    r = app.test(["config", "set", "rate", "--value", "xyz"])
     assert r.exit_code != 0
     assert "expected float, got 'xyz'" in r.stderr
 
     # NaN rejected for float
-    r = app.test(["config", "set", "rate", "nan"])
+    r = app.test(["config", "set", "rate", "--value", "nan"])
     assert r.exit_code != 0
     assert "NaN is not allowed" in r.stderr
 
     # Inf rejected for float
-    r = app.test(["config", "set", "rate", "inf"])
+    r = app.test(["config", "set", "rate", "--value", "inf"])
     assert r.exit_code != 0
     assert "Inf is not allowed" in r.stderr
 
@@ -189,11 +189,11 @@ def test_config_set_unknown_key_error(tmp_path):
     """config set error format for unknown keys matches Go exactly."""
     app, _ = _make_app(tmp_path)
 
-    r = app.test(["config", "set", "xyz", "value"])
+    r = app.test(["config", "set", "xyz", "--value", "value"])
     assert r.exit_code == 1
     assert r.stderr.strip() == "config set: unknown key 'xyz'"
 
-    r = app.test(["config", "set", "nonexistent_flag", "42"])
+    r = app.test(["config", "set", "nonexistent_flag", "--value", "42"])
     assert r.exit_code == 1
     assert r.stderr.strip() == "config set: unknown key 'nonexistent_flag'"
 
@@ -202,7 +202,7 @@ def test_config_set_negative_int(tmp_path):
     """config set accepts negative integers like -7 as positional values."""
     app, config_file = _make_app(tmp_path)
 
-    r = app.test(["config", "set", "count", "-7"])
+    r = app.test(["config", "set", "count", "--value", "-7"])
     assert r.exit_code == 0, f"exit_code={r.exit_code}, stderr={r.stderr!r}"
 
     data = json.loads(config_file.read_text())
@@ -214,7 +214,7 @@ def test_config_set_negative_float(tmp_path):
     """config set accepts negative floats like -3.14 as positional values."""
     app, config_file = _make_app(tmp_path)
 
-    r = app.test(["config", "set", "rate", "-3.14"])
+    r = app.test(["config", "set", "rate", "--value", "-3.14"])
     assert r.exit_code == 0, f"exit_code={r.exit_code}, stderr={r.stderr!r}"
 
     data = json.loads(config_file.read_text())
@@ -226,10 +226,10 @@ def test_config_set_round_trip_typed(tmp_path):
     """Values set via config set are read back with correct types by a new app."""
     app, config_file = _make_app(tmp_path)
 
-    app.test(["config", "set", "debug", "true"])
-    app.test(["config", "set", "count", "42"])
-    app.test(["config", "set", "rate", "3.14"])
-    app.test(["config", "set", "name", "hello"])
+    app.test(["config", "set", "debug", "--value", "true"])
+    app.test(["config", "set", "count", "--value", "42"])
+    app.test(["config", "set", "rate", "--value", "3.14"])
+    app.test(["config", "set", "name", "--value", "hello"])
 
     # Create a fresh app pointing at the same config file
     app2 = strictcli.App(

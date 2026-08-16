@@ -150,9 +150,9 @@ def test_toml_config_set_writes_canonical_float(tmp_path):
     def run(ctx, big, tiny):
         pass
 
-    r = app.test(["config", "set", "big", "1e16"])
+    r = app.test(["config", "set", "big", "--value", "1e16"])
     assert r.exit_code == 0
-    r = app.test(["config", "set", "tiny", "1e-7"])
+    r = app.test(["config", "set", "tiny", "--value", "1e-7"])
     assert r.exit_code == 0
 
     text = config_file.read_text()

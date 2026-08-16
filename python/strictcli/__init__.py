@@ -8,6 +8,8 @@ __all__ = [
     "App", "Flag", "Arg", "FlagSet",
     # The constraint system (contract §26)
     "AtLeastOne", "AllOrNone", "Requires", "Implies", "Member",
+    # The update-command construct (contract §27)
+    "UpdateOf",
     "Passthrough", "Forwarding", "DeprecatedCommand", "Result",
     "InvokeError",
     # The scoped-selector construct (contract §24)
@@ -76,7 +78,7 @@ _MISSING = _MissingSentinel()
 
 # The envelope contract's own version (effects contract §19.2). Changed only by
 # a later amendment to that section.
-_INTERFACE_VERSION = 1
+_INTERFACE_VERSION = 2
 
 
 class RelativeToRoot:
@@ -297,10 +299,14 @@ class Context:
                  json: bool = False,
                  effects: "_Effects | None" = None,
                  command_name: str = "",
-                 payload_schema: object | None = None):
+                 payload_schema: object | None = None,
+                 unsets: set | None = None):
         self._stdout = stdout or sys.stdout
         self._stderr = stderr or sys.stderr
         self._sources = sources or {}  # flag-name -> source label (cli/env/config/default/implied/infra)
+        # The properties this invocation CLEARED (contract §27.6), keyed by
+        # DECLARED (dashed) name. `ctx.unset` answers off this set.
+        self._unsets = unsets or set()
         self._infra = infra  # _InfraAccess | None
         self._dry_run = dry_run
         self._approve_consequential = approve_consequential
@@ -458,6 +464,25 @@ class Context:
         :meth:`source` for an unknown name: one condition, one message.
         """
         return self.source(name) in _PROVIDED_SOURCES
+
+    def unset(self, name: str) -> bool:
+        """Return True when this invocation CLEARED the named property (§27.6).
+
+        ``--unset-<prop>`` on the command line, or ``null`` on the property's
+        own key at a machine door. An unset property delivers absence -- the
+        same ``None`` an untouched property delivers -- and reports
+        ``provided()`` true, the invocation having caused the write. This is
+        what saves a handler from reconstructing that boolean out of two facts,
+        which is §23.6's own reason for existing.
+
+        Accepts dashed or underscored names and raises the same ``KeyError`` as
+        :meth:`source` and :meth:`provided` for an unknown name: it reads the
+        same per-parse store, so a name with no source has no clear either.
+        """
+        key = name.replace("-", "_")
+        if key not in self._sources and name not in self._sources:
+            raise KeyError(f"no source info for flag {name!r}")
+        return name.replace("_", "-") in self._unsets
 
     def infra_value(self, env_var: str) -> tuple[str | None, bool]:
         """Return the value of a declared infrastructure env var.
@@ -763,7 +788,10 @@ class _EffectLog:
     get their own sequence instead, so every record still carries a ``seq``.
     """
 
-    __slots__ = ("records", "_rendered", "_cached", "claimed", "handler_rendered")
+    __slots__ = (
+        "records", "_rendered", "_cached", "claimed", "handler_rendered",
+        "write_set_line",
+    )
 
     def __init__(self) -> None:
         self.records: list[_EffectRecord] = []
@@ -777,6 +805,12 @@ class _EffectLog:
         # claim intact.
         self.claimed = False
         self.handler_rendered = False
+        # An update command's write-set line (contract §27.5), rendered between
+        # the header and the first effect and taking NO sequence number: the
+        # counter is contiguous over rendered EFFECTS, and a write set is not
+        # one. Empty on every command that declares no update, and set only for
+        # a dry run.
+        self.write_set_line = ""
 
     def append(self, rec: _EffectRecord) -> None:
         self.records.append(rec)
@@ -796,6 +830,8 @@ class _EffectLog:
     def render(self) -> str:
         """Render the would-do log. CACHE_WRITEs are never written to it."""
         lines = [_DRY_RUN_HEADER]
+        if self.write_set_line:
+            lines.append("  " + self.write_set_line)
         for rec in self.records:
             if rec.kind == CACHE_WRITE:
                 continue
@@ -3251,42 +3287,34 @@ def _check_config_field_type(cf: "ConfigField", value: object) -> str | None:
 def _config_set_field(
     effects: "_Effects",
     key: str,
-    value: str | None,
+    write: object,
     cf: "ConfigField",
     existing: dict,
     path: str,
     config_format: str,
-    kw: dict,
 ) -> int:
     """Handle 'config set' for a config field (not a flag).
 
+    ``write`` is the elected member of the command's write selection: a value,
+    a clear, or a reset to the declared default (contract §27.1, §18.33 item
+    304). The hand-rolled "exactly one of the three" guards are gone with the
+    three bools that made them expressible -- electing none is the framework's
+    own unsatisfied-selector refusal, and electing two is unrepresentable.
+
     Returns an exit code (0 = success, 1 = error).
     """
-    use_clear = kw.get("clear", False)
-    use_default = kw.get("default", False)
-    has_value = value is not None
-
-    if use_clear:
+    if isinstance(write, _ConfigSetClear):
         print("config set: --clear is only for repeatable flags", file=sys.stderr)
         return 1
-    if use_clear and use_default:
-        print("config set: --clear and --default are mutually exclusive",
-              file=sys.stderr)
-        return 1
-    if has_value and use_default:
-        print("config set: cannot provide a value with --default", file=sys.stderr)
-        return 1
-    if not has_value and not use_default:
-        print("config set: provide a value or --default", file=sys.stderr)
-        return 1
 
-    if use_default:
+    if isinstance(write, _ConfigSetDefault):
         if not _write_config_unset(effects, existing, path, config_format, key):
             print(f"config set: key '{key}' not in config", file=sys.stderr)
             return 1
         return 0
 
     # Coerce string value to the config field's type
+    value = write.value
     try:
         if cf.type is bool:
             typed_value = _strict_bool(value)
@@ -4719,6 +4747,12 @@ class Flag:
     compound: str = "scalar"  # "scalar", "list", or "dict"
     item_type: type | None = None  # for list[T]: the T
     value_type: type | None = None  # for dict[str, T]: the T
+    # The clear vocabulary's declaration (contract §27.6): this property of an
+    # update command can be CLEARED, which mints `--unset-<prop>`. Legal only
+    # on a property of an update (`errNullableNotProperty`). The minted flag
+    # delivers no kwarg of its own -- an unset property delivers absence,
+    # reports `provided()` true, and is answered by `ctx.unset(name)`.
+    nullable: bool = False
     # The declared `choices=` RECORDS (contract §24.2), kept beside the resolved
     # value list so per-entry help survives to help rendering. Set by
     # __post_init__ from `choices`, never by the caller.
@@ -5593,6 +5627,7 @@ def sub_flag(
     negatable: object = _MISSING,
     conflict_mode: object = _MISSING,
     validate: Callable | None = None,
+    nullable: bool = False,
 ):
     """Declare one flag of a choice's scope, inside the choice's class body.
 
@@ -5625,6 +5660,11 @@ def sub_flag(
         "negatable": negatable,
         "conflict_mode": conflict_mode,
         "validate": validate,
+        # Accepted here so the refusal it earns is the one that names the
+        # fault: a scoped flag can never be a property of an update (root
+        # scope only, §27.3), so `nullable` inside a scope is always
+        # `errNullableNotProperty`.
+        "nullable": nullable,
     }
     return _scope_field(payload, default)
 
@@ -5738,6 +5778,46 @@ def provided(record: object, name: str) -> bool:
     if name in sources:
         return sources[name] in _PROVIDED_SOURCES
     raise KeyError(f"no source info for flag {name!r}")
+
+
+# The `config set` write selection (contract §27.1, §18.33 item 304).
+#
+# The write is an EXACTLY-ONE SELECTION over a value, a clear and a reset to
+# default -- a member-spelled selector (§24.4). The shape it replaces was two
+# bools declaring `default=False` plus an optional positional, with three
+# hand-rolled guards holding its illegal corners shut, and §27.1's
+# mutating-default ban refuses exactly that: a framework cannot ship a
+# registration guard its own command does not pass, and an exemption for
+# framework-owned commands would be the escape hatch this regime refuses
+# everywhere else.
+#
+# The selection is what the guards used to say. "--clear and --default are
+# mutually exclusive", "cannot provide a value with --clear" and "provide a
+# value, --clear, or --default" are all unrepresentable now: exactly one member
+# is elected, and electing none is the framework's own unsatisfied-selector
+# refusal.
+
+
+@choice("value", help="Write a value at the key")
+class _ConfigSetValue:
+    value: str = member_value(
+        help="Write this value at the key, coerced to the key's own type "
+             "(comma-separated for a repeatable flag, backslash-escaping a "
+             "literal comma; a JSON object for a dict flag)",
+    )
+
+
+@choice("clear", help="Clear a repeatable flag")
+class _ConfigSetClear:
+    pass
+
+
+@choice("default", help="Reset the key to its declared default")
+class _ConfigSetDefault:
+    pass
+
+
+_ConfigSetWrite = "_ConfigSetValue | _ConfigSetClear | _ConfigSetDefault"
 
 
 # --- building the declaration ----------------------------------------------
@@ -6002,6 +6082,7 @@ def _build_choice_spec(
                 negatable=meta["negatable"],
                 conflict_mode=meta["conflict_mode"],
                 validate=meta["validate"],
+                nullable=meta["nullable"],
             ))
             continue
         nested = _make_selector(
@@ -6983,6 +7064,655 @@ def _enforce_constraints(
                 )
 
 
+# ---------------------------------------------------------------------------
+# The update-command construct (contract §27)
+#
+# An update command declares ONE record -- the resource it changes, the write
+# mode it changes it under, the declarations that name WHICH instance, and the
+# declarations that name WHAT changes -- and the framework derives from it the
+# mutating-default ban (§27.1), the at-least-one-property rule (§27.4), the
+# write set and its two renderings (§27.5), and the clear vocabulary (§27.6).
+#
+# Absence resolving to a VALUE is banned; absence BOUNDING SCOPE is what a
+# sparse update is (§27.13). The three properties that keep the second half
+# legitimate are enforced here rather than promised: the write set is derived
+# from ONE predicate (§23.6's provided, no source filter), it is never empty,
+# and it is never invisible.
+# ---------------------------------------------------------------------------
+
+_WRITE_SPARSE = "sparse"
+_WRITE_FULL_REPLACE = "full_replace"
+_WRITE_MODES = (_WRITE_SPARSE, _WRITE_FULL_REPLACE)
+
+# The two parentheticals the write set's human line carries, a function of the
+# write mode alone and always present (§27.5).
+_WRITE_MODE_PAREN = {
+    _WRITE_SPARSE: "(other properties unchanged)",
+    _WRITE_FULL_REPLACE: "(other properties are re-sent as read)",
+}
+
+# The two clauses the MCP description block's last line opens with -- the human
+# log's two parentheticals in the same words (§27.10).
+_WRITE_MODE_CLAUSE = {
+    _WRITE_SPARSE: "left unchanged",
+    _WRITE_FULL_REPLACE: "re-sent as read",
+}
+
+# The per-language noun phrase §12.16 pins for Python's clear declaration.
+_NULLABLE_SPELLING = "nullable=True"
+
+
+@dataclass(frozen=True)
+class UpdateOf:
+    """What a command updates: one resource, one write mode, two name lists.
+
+    A frozen, keyword-only record whose first field is ``resource``, joining
+    the CapWords family ``AtLeastOne`` / ``AllOrNone`` / ``Requires`` /
+    ``Implies`` established for declarations that name a rule (§27.8).
+
+    ``write_mode`` carries NO default, so omitting it is Python's own
+    ``TypeError`` at the declaration site: the framework refuses to guess which
+    of two writes a command performs, for the reason ``effect`` has no default
+    either (§27.2).
+
+    ``identity`` and ``properties`` are lists of DECLARED names, dashed exactly
+    as ``Member("old-name")`` takes them. There is no alternate underscored
+    spelling on the declaration surface.
+    """
+
+    resource: str
+    _: dataclasses.KW_ONLY
+    write_mode: str
+    identity: tuple = ()
+    properties: tuple = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "identity", tuple(self.identity))
+        object.__setattr__(self, "properties", tuple(self.properties))
+
+
+class _UnsetOccurrence:
+    """The token-scan marker for a `--unset-<prop>` occurrence (§27.6).
+
+    It is a marker rather than a value: the minted flag carries no value of its
+    own, so the value pass skips it and the clear is delivered as absence.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "<unset>"
+
+
+_UNSET_OCC = _UnsetOccurrence()
+
+
+def _unset_flag_name(prop: str) -> str:
+    """The flag the framework mints for a nullable property (§27.6)."""
+    return f"unset-{prop}"
+
+
+def _render_decl_flag(name: str) -> str:
+    """§12.16's ``<decl>`` for a flag."""
+    return f"flag '--{name}'"
+
+
+def _render_decl_arg(name: str) -> str:
+    """§12.16's ``<decl>`` for a positional arg."""
+    return f"argument '{name}'"
+
+
+# --- the registration guards (§12.16, §27.11) ------------------------------
+
+
+def _raise_mutating_default(name: str, decl: str, value: object):
+    """The ONLY guard in this family that fires on a command declaring no
+    update at all: the ban keys on ``effect="mutating"`` (§27.1), where the
+    rest keys on ``update_of``."""
+    raise ValueError(
+        f'command "{name}": {decl} declares {_default_spelling(value)} on a '
+        f"mutating command: absence would write a value the invocation never "
+        f'stated (declare presence="required" or presence="optional", or '
+        f"apply the fallback in the handler and say so in its help)"
+    )
+
+
+def _raise_update_on_read_only(name: str):
+    raise ValueError(
+        f'command "{name}": a read_only command cannot declare update_of '
+        f"(a command that changes nothing writes no properties)"
+    )
+
+
+def _raise_update_write_mode_invalid(name: str, value: object):
+    raise ValueError(
+        f'command "{name}": invalid write_mode "{value}": must be "sparse" '
+        f'or "full_replace"'
+    )
+
+
+def _raise_update_resource_charset(name: str, resource: object):
+    raise ValueError(
+        f'command "{name}": update resource "{resource}" must match '
+        f"[a-z][a-z0-9-]*"
+    )
+
+
+def _raise_update_properties_empty(name: str, resource: str):
+    raise ValueError(
+        f'command "{name}": update of "{resource}" declares no properties: '
+        f"an update with nothing to write is not an update"
+    )
+
+
+def _raise_update_name_unknown(name: str, resource: str, x: str):
+    raise ValueError(
+        f'command "{name}": update of "{resource}" references unknown '
+        f'name "{x}"'
+    )
+
+
+def _raise_update_name_ambiguous(name: str, resource: str, x: str):
+    raise ValueError(
+        f'command "{name}": update of "{resource}" references "{x}", which '
+        f"names both a flag and a positional arg"
+    )
+
+
+def _raise_update_name_duplicate(name: str, resource: str, x: str):
+    raise ValueError(
+        f'command "{name}": update of "{resource}" declares "{x}" twice'
+    )
+
+
+def _raise_update_name_both_roles(name: str, resource: str, x: str):
+    raise ValueError(
+        f'command "{name}": update of "{resource}" declares "{x}" as both '
+        f"identity and property"
+    )
+
+
+def _raise_update_references_scoped_flag(
+    name: str, resource: str, x: str, path: str,
+):
+    raise ValueError(
+        f'command "{name}": update of "{resource}" references \'{x}\', which '
+        f"is declared under '{path}': an update's identity and properties are "
+        f"declared at root scope only"
+    )
+
+
+def _raise_update_property_presence(name: str, resource: str, decl: str):
+    """Covers ``required`` ONLY: a property declaring a default is refused by
+    the ban four steps earlier (§27.11's order), an update command being
+    mutating by §27.2's own guard, so the two never compete."""
+    raise ValueError(
+        f'command "{name}": update of "{resource}" property {decl} declares '
+        f'presence="required": a property is absent exactly when it is not '
+        f"being written, and the presence declaration for that is "
+        f'presence="optional"'
+    )
+
+
+def _raise_update_property_is_arg(name: str, resource: str, x: str):
+    raise ValueError(
+        f'command "{name}": update of "{resource}" property "{x}" is a '
+        f"positional arg: a property must be individually omissible and "
+        f"clearable, and only a flag is"
+    )
+
+
+def _raise_update_property_is_choice_flag(name: str, resource: str, x: str):
+    raise ValueError(
+        f'command "{name}": update of "{resource}" property \'--{x}\' is a '
+        f"choice flag: an elected record is a selection, not a property value"
+    )
+
+
+def _raise_nullable_not_property(name: str, decl: str):
+    raise ValueError(
+        f'command "{name}": {decl} declares {_NULLABLE_SPELLING} but is not '
+        f"a property of an update: only a property can be cleared"
+    )
+
+
+def _raise_unset_name_reserved(name: str, x: str):
+    raise ValueError(
+        f'command "{name}": flag name "unset-{x}" is reserved: property '
+        f"'--{x}' declares {_NULLABLE_SPELLING}, which mints '--unset-{x}'"
+    )
+
+
+# --- the two violations (parse-time, §12.16) -------------------------------
+
+
+def _msg_update_no_property(resource: str, properties: str) -> str:
+    """Names EVERY declared property, whether or not it is nullable: naming
+    only the ones a reader has not used would require the framework to guess
+    which one was meant.
+
+    There is deliberately NO decline clause. §12.15 appends §21.4's clause when
+    a bool member was provided false; the analogous input here is the opposite
+    fact, because inside an update command ``--no-proxied`` PROVIDES the
+    property with the value false (§27.7), so it satisfies this rule rather
+    than declining it.
+    """
+    return f'update "{resource}": at least one property is required: {properties}'
+
+
+def _msg_update_value_and_unset(x: str) -> str:
+    """COMMAND LINE only: it is a collision between two tokens, and the machine
+    doors have one key per property (§27.6), so no door can reach the state."""
+    return (
+        f"--{x} and --unset-{x} are mutually exclusive: a property is either "
+        f"written or cleared"
+    )
+
+
+def _banned_mutating_default(value: object) -> bool:
+    """Whether a declared default is a TOOL-PICKED VALUE (§27.1).
+
+    Every scalar is one, ``""`` and ``0`` included, and so is a NON-EMPTY list
+    or dict. Two carve-outs, both derived from the ban's own reason (§18.33
+    item 301): an EMPTY collection declares no elements, so no value the
+    framework chose can reach a write through it; and a ``RelativeToRoot``
+    default resolves a LOCATION under a declared infrastructure root, deciding
+    where a command writes and never what.
+    """
+    if value is None:
+        # default=None has its own refusal (§23.1) and never reaches a write.
+        return False
+    if isinstance(value, RelativeToRoot):
+        return False
+    if isinstance(value, (list, dict, set, tuple)):
+        return len(value) > 0
+    return True
+
+
+def _validate_mutating_defaults(
+    name: str, effect: str, members: list, args: list,
+) -> None:
+    """§27.1's ban: on a command declaring ``effect="mutating"``, a flag or a
+    positional arg may not declare a value default.
+
+    Absence must never resolve to a value the invocation did not state, because
+    on a mutating command a value the framework picked is a value the framework
+    WRITES.
+
+    It is evaluated PER COMMAND, over the flags and args that command carries
+    -- its own, its flag sets' and its selectors' scoped flags at every depth
+    -- so a shared flag set carrying a default is legal and attaching it to a
+    mutating command is not. App-level global flags are NOT reached: a global
+    has no classification of its own, and there is no command at the point of
+    its declaration to key on (§27.1's stated hole).
+    """
+    if effect != EFFECT_MUTATING:
+        return
+
+    def walk(decls: Sequence) -> None:
+        for m in decls:
+            if isinstance(m, _Selector):
+                # A SELECTOR's default names which scope is live rather than a
+                # value written to anything (§18.33 item 303). The scope
+                # beneath it is another matter: those are ordinary flags of a
+                # mutating command, reached at every depth.
+                for c in m.choices:
+                    is_default_scope = (
+                        m.presence == _PRESENCE_DEFAULT
+                        and isinstance(m.default, c.cls)
+                    )
+                    for entry in c.members:
+                        if isinstance(entry, Flag):
+                            _check_mutating_default_flag(name, entry)
+                            if is_default_scope:
+                                # Python's instance-shaped default passes NO
+                                # field values: a field value written into the
+                                # default instance is a value default under
+                                # another spelling, and Python is the only
+                                # surface that can express it.
+                                _check_mutating_default_instance_field(
+                                    name, m.default, entry,
+                                )
+                    walk(c.members)
+                continue
+            _check_mutating_default_flag(name, m)
+
+    walk(members)
+    for a in args:
+        if a.presence != _PRESENCE_DEFAULT:
+            continue
+        if not _banned_mutating_default(a.default):
+            continue
+        _raise_mutating_default(name, _render_decl_arg(a.name), a.default)
+
+
+def _check_mutating_default_flag(name: str, f: "Flag") -> None:
+    if f.presence != _PRESENCE_DEFAULT:
+        return
+    if not _banned_mutating_default(f.default):
+        return
+    _raise_mutating_default(name, _render_decl_flag(f.name), f.default)
+
+
+def _check_mutating_default_instance_field(
+    name: str, record: object, f: "Flag",
+) -> None:
+    value = getattr(record, _flag_param_name(f.name), None)
+    if not _banned_mutating_default(value):
+        return
+    _raise_mutating_default(name, _render_decl_flag(f.name), value)
+
+
+def _validate_update(
+    name: str,
+    effect: str,
+    update_of: "UpdateOf | None",
+    members: list,
+    all_flags: list,
+    selectors: list,
+    all_args: list,
+    scoped_paths: dict,
+    scoped_names: set,
+    global_flags: list | None,
+) -> None:
+    """Resolve and validate one command's update declaration (§27.11).
+
+    The eight steps run in the pinned order over the whole declaration, so
+    three implementations report the same FIRST error for a declaration with
+    two faults. The order runs from the command's own classification, through
+    the record's identity, outward to the declarations it names -- §26.8's
+    direction -- and each step crosses the whole declaration before the next
+    begins, so a message never blames a name for a fault in the record that
+    names it.
+    """
+    # Step 1: the mutating-default ban. It runs first because it is a fact
+    # about the command's CLASSIFICATION and is independent of whether an
+    # update is declared at all.
+    _validate_mutating_defaults(name, effect, members, all_args)
+
+    d = update_of
+
+    # Step 2: classification legality.
+    if d is not None and effect == EFFECT_READ_ONLY:
+        _raise_update_on_read_only(name)
+
+    flags_by_name = {f.name: f for f in all_flags}
+    selectors_by_name = {s.name: s for s in selectors}
+    args_by_name = {a.name: a for a in all_args}
+    roles: dict[str, bool] = {}
+
+    if d is not None:
+        # Step 3: record legality -- the resource name's charset, the write
+        # mode's vocabulary, at least one property.
+        if not isinstance(d.resource, str) or not _IDENTIFIER_RE.fullmatch(
+            d.resource,
+        ):
+            _raise_update_resource_charset(name, d.resource)
+        if d.write_mode not in _WRITE_MODES:
+            _raise_update_write_mode_invalid(name, d.write_mode)
+        if not d.properties:
+            _raise_update_properties_empty(name, d.resource)
+
+        # Step 4: name resolution. Every name in either list resolves to
+        # exactly one flag or arg; unknown, ambiguous, duplicated and
+        # both-roles names refuse here.
+        scoped: list[str] = []
+
+        def resolve(x: str, is_property: bool) -> None:
+            is_flag = x in flags_by_name or x in selectors_by_name
+            is_arg = x in args_by_name
+            if is_flag and is_arg:
+                _raise_update_name_ambiguous(name, d.resource, x)
+            if not is_flag and not is_arg:
+                # A SCOPED flag resolves as a flag and is refused by the scope
+                # step below; reporting it as unknown would name the wrong
+                # fault (§24.8, §27.3).
+                if x not in scoped_names:
+                    _raise_update_name_unknown(name, d.resource, x)
+                scoped.append(x)
+            if x in roles:
+                if roles[x] == is_property:
+                    _raise_update_name_duplicate(name, d.resource, x)
+                _raise_update_name_both_roles(name, d.resource, x)
+            roles[x] = is_property
+
+        for x in d.identity:
+            resolve(x, False)
+        for x in d.properties:
+            resolve(x, True)
+
+        # Step 5: scope. A property inside a scope would have a write-set
+        # membership the argv and flat doors could answer and the record door
+        # could not -- one rule with three answers (§27.3).
+        for x in scoped:
+            _raise_update_references_scoped_flag(
+                name, d.resource, x, scoped_paths.get(x, ""),
+            )
+
+        # Step 6: role legality -- a property that is a positional arg, then a
+        # property that is a choice flag.
+        for x in d.properties:
+            if x in args_by_name:
+                _raise_update_property_is_arg(name, d.resource, x)
+        for x in d.properties:
+            if x in selectors_by_name:
+                _raise_update_property_is_choice_flag(name, d.resource, x)
+
+        # Step 7: presence legality. A property the invocation must always
+        # supply is written in every invocation, which makes the at-least-one
+        # rule unfireable and turns a sparse update into a partial full replace
+        # under a name that denies it.
+        for x in d.properties:
+            if flags_by_name[x].presence == _PRESENCE_REQUIRED:
+                _raise_update_property_presence(
+                    name, d.resource, _render_decl_flag(x),
+                )
+
+    # Step 8: the clear vocabulary. It runs LAST because the name reservation
+    # is the only step that reads the flag namespace back after the property
+    # set is known.
+    properties = set(d.properties) if d is not None else set()
+    for f in all_flags:
+        if f.nullable and f.name not in properties:
+            _raise_nullable_not_property(name, _render_decl_flag(f.name))
+    if d is None:
+        return
+    for x in d.properties:
+        if not flags_by_name[x].nullable:
+            continue
+        minted = _unset_flag_name(x)
+        # The whole flag namespace this command's tokenizer reads, which
+        # includes the app's globals: they are recognized after the command
+        # name too, so a global of the minted name would be unreachable.
+        if (
+            minted in flags_by_name
+            or minted in selectors_by_name
+            or minted in scoped_names
+            or any(gf.name == minted for gf in (global_flags or ()))
+        ):
+            _raise_unset_name_reserved(name, x)
+
+
+# --- the write set (§27.5) -------------------------------------------------
+
+
+class _UpdateState:
+    """One invocation's answer to an update declaration: the ordered pair of
+    the properties it writes and the properties it clears, plus the two
+    readings of "the rest".
+
+    Computed at parse time from §27.4's predicate and rendered wherever a run
+    reports what it does.
+    """
+
+    __slots__ = ("decl", "written", "cleared", "resent", "untouched")
+
+    def __init__(self, decl: UpdateOf) -> None:
+        self.decl = decl
+        self.written: list[str] = []
+        self.cleared: list[str] = []
+        self.resent: list[str] = []
+        self.untouched: list[str] = []
+
+    def paren(self) -> str:
+        """The trailing parenthetical: a function of the write mode alone, and
+        always present in both segment shapes."""
+        return _WRITE_MODE_PAREN[self.decl.write_mode]
+
+    def log_line(self) -> str:
+        """The would-do log's unnumbered write-set line (§27.5), without the
+        two-space indent the log adds.
+
+        Two segments, ``writes:`` first, separated by ``"; "``, with an empty
+        segment omitted entirely -- §27.4's rule guarantees at least one
+        survives, so the line is never empty and never has to say that it is.
+        Names are the properties' DECLARED names without the ``--`` prefix: the
+        log is the human surface, where the reader knows a declaration by the
+        name they type, and the write set is data.
+        """
+        segments: list[str] = []
+        if self.written:
+            segments.append("writes: " + ", ".join(self.written))
+        if self.cleared:
+            segments.append("clears: " + ", ".join(self.cleared))
+        return "; ".join(segments) + " " + self.paren()
+
+    def envelope_member(self) -> dict:
+        """The machine rendering (§19.2's amendment, §27.5).
+
+        The four arrays hold UNDERSCORED parameter names in declaration order
+        and partition the declared property set exactly: every property appears
+        in exactly one of them. ``resent`` and ``untouched`` are the two
+        readings of "the rest", and exactly one of them is ever non-empty.
+        """
+        return {
+            "resource": self.decl.resource,
+            "write_mode": self.decl.write_mode,
+            "written": [_flag_param_name(n) for n in self.written],
+            "cleared": [_flag_param_name(n) for n in self.cleared],
+            "resent": [_flag_param_name(n) for n in self.resent],
+            "untouched": [_flag_param_name(n) for n in self.untouched],
+        }
+
+
+def _render_property_tokens(names: Sequence) -> str:
+    """Every declared property as a CLI token, unquoted and joined by ", " in
+    declaration order (§12.16's list rule)."""
+    return ", ".join(f"--{n}" for n in names)
+
+
+def _evaluate_update(
+    cmd: "Command", store: "_SourcedStore", unsets: set,
+) -> "_UpdateState | None":
+    """Enforce the at-least-one-property rule and compute the write set.
+
+    A property is provided exactly when §23.6's predicate says so, and there is
+    no source filter: a value from env, from config or injected by an
+    ``Implies`` is a provision. A negated bool property is a provision too --
+    inside an update command ``--no-proxied`` WRITES false -- and so is an
+    unset, clearing being writing (§27.4).
+    """
+    d = cmd.update_of
+    if d is None:
+        return None
+    st = _UpdateState(d)
+    for x in d.properties:
+        if x in unsets:
+            st.cleared.append(x)
+        elif store.is_present_for_deps(x):
+            st.written.append(x)
+        elif d.write_mode == _WRITE_FULL_REPLACE:
+            # A full-replace write touches every property, so nothing is
+            # untouched: the rest is read back and re-sent.
+            st.resent.append(x)
+        else:
+            st.untouched.append(x)
+    if not st.written and not st.cleared:
+        raise _ParseError(_msg_update_no_property(
+            d.resource, _render_property_tokens(d.properties),
+        ))
+    return st
+
+
+# --- the MCP projection (§27.10) -------------------------------------------
+
+
+def _update_any_of_branches(cmd: "Command") -> list[dict]:
+    """The at-least-one-property rule as one ``required`` branch per property,
+    in declaration order.
+
+    Its fidelity is EXACT: the rule IS provision at this door -- a supplied key
+    is a provided property, a null is a supplied key and a clear, a false is a
+    supplied key and a write -- so ``required`` states the whole rule with
+    nothing left over.
+    """
+    if cmd.update_of is None:
+        return []
+    return [
+        {"required": [_flag_param_name(x)]}
+        for x in cmd.update_of.properties
+    ]
+
+
+def _update_description_lines(cmd: "Command") -> list[str]:
+    """The tool description's update block (§27.10), in the shape §24.11's
+    scope block and §26.12's constraint block already established.
+
+    Members render in PROPERTY names, like every other member in this block:
+    the caller writes keys, not argv.
+    """
+    d = cmd.update_of
+    if d is None:
+        return []
+    lines = [
+        f'Update of "{d.resource}" (write mode: {d.write_mode}):'
+    ]
+    # The `identifies:` line is omitted when the resource declares no identity
+    # members.
+    if d.identity:
+        lines.append(
+            "  identifies: "
+            + ", ".join(_flag_param_name(x) for x in d.identity)
+        )
+    lines.append(
+        "  writes: "
+        + ", ".join(_flag_param_name(x) for x in d.properties)
+        + " -- at least one is required"
+    )
+    last = (
+        "  a property that is not supplied is "
+        + _WRITE_MODE_CLAUSE[d.write_mode]
+    )
+    # The `; null clears <list>` clause appears only when at least one property
+    # is nullable, naming them in declaration order.
+    by_name = {f.name: f for f in cmd.flags}
+    nullable = [
+        _flag_param_name(x) for x in d.properties
+        if by_name[x].nullable
+    ]
+    if nullable:
+        last += "; null clears " + ", ".join(nullable)
+    lines.append(last)
+    return lines
+
+
+# --- the schema encoding (§27.9) -------------------------------------------
+
+
+def _serialize_update_of(d: UpdateOf) -> dict:
+    """Publish the declaration COMPLETELY rather than indicatively: a consumer
+    reconstructs the rule without re-reading the declaration.
+
+    Names are published in the DECLARED spelling, matching the flag entry's own
+    ``name``; the underscored spelling belongs to the machine doors.
+    """
+    return {
+        "resource": d.resource,
+        "identity": list(d.identity),
+        "properties": list(d.properties),
+    }
+
+
 @dataclass
 class Passthrough:
     """Marks a command as passthrough -- all tokens after the command name are
@@ -7191,6 +7921,13 @@ class Command:
     # The reason is mandatory and is shown in help and in the refusal.
     dry_run_supported: bool = True
     dry_run_unsupported_reason: str | None = None
+    # The update declaration (contract §27.2): the resource this command
+    # changes, the write mode it changes it under, and the two name lists that
+    # say which instance and what changes. Absence means the command is not an
+    # update. An update command is ALWAYS mutating -- `update_of` on a
+    # read_only command is a registration error -- which is what makes §27.1's
+    # ban apply to every one of its declarations without a second rule.
+    update_of: "UpdateOf | None" = None
     # The command's machine payload contract (contract §19.5): an inline JSON
     # Schema literal, registered as written. Absence means the command cannot
     # produce a payload -- ctx.payload is then a call-time hard error. The
@@ -7334,6 +8071,7 @@ class Group:
         consequential: bool = False,
         dry_run_supported: bool = True,
         dry_run_unsupported_reason: str | None = None,
+        update_of: "UpdateOf | None" = None,
         payload_schema: dict | None = None,
         owns_stdout: bool = False,
         args: list[Arg] | None = None,
@@ -7360,6 +8098,7 @@ class Group:
                 consequential=consequential,
                 dry_run_supported=dry_run_supported,
                 dry_run_unsupported_reason=dry_run_unsupported_reason,
+                update_of=update_of,
                 payload_schema=payload_schema,
                 owns_stdout=owns_stdout,
                 handler=func, args=args, flag_sets=flag_sets,
@@ -7972,6 +8711,11 @@ class App:
         self._global_flags: list[Flag] = list(self.flags)
         self._last_global_values: dict[str, object] = {}
         self._last_sources: dict[str, str] = {}
+        # The update construct's per-dispatch state (contract §27). `writes` is
+        # this invocation's write set, None on every command that declares no
+        # update; `unsets` names the properties it CLEARED.
+        self._last_writes: "_UpdateState | None" = None
+        self._last_unsets: set = set()
         self._last_hermetic: bool = False
         # Framework-owned reserved quartet, extracted by the pre-scan and
         # delivered on the Context (never as handler kwargs).
@@ -9074,6 +9818,7 @@ class App:
         consequential: bool = False,
         dry_run_supported: bool = True,
         dry_run_unsupported_reason: str | None = None,
+        update_of: "UpdateOf | None" = None,
         payload_schema: dict | None = None,
         owns_stdout: bool = False,
         args: list[Arg] | None = None,
@@ -9098,6 +9843,7 @@ class App:
                 consequential=consequential,
                 dry_run_supported=dry_run_supported,
                 dry_run_unsupported_reason=dry_run_unsupported_reason,
+                update_of=update_of,
                 payload_schema=payload_schema,
                 owns_stdout=owns_stdout,
                 handler=func,
@@ -9574,7 +10320,11 @@ class App:
         )
 
         # config set
-        def _config_set_handler(ctx, key, value=None, **_kw) -> int:
+        def _config_set_handler(
+            ctx, key,
+            write: "_ConfigSetValue | _ConfigSetClear | _ConfigSetDefault",
+            **_kw,
+        ) -> int:
             path = _config_path(
                 app_ref.name,
                 override=app_ref.config_path,
@@ -9607,34 +10357,14 @@ class App:
             # Config field path: simpler handling (no repeatable, no mutex)
             if matched_config_field is not None:
                 return _config_set_field(
-                    effects, key, value, matched_config_field, existing, path,
-                    app_ref.config_format, _kw,
+                    effects, key, write, matched_config_field, existing, path,
+                    app_ref.config_format,
                 )
 
-            use_clear = _kw.get("clear", False)
-            use_default = _kw.get("default", False)
-
-            # Validate: exactly one of (value, --clear, --default)
-            has_value = value is not None
-            if use_clear and use_default:
-                print("config set: --clear and --default are mutually exclusive",
-                      file=sys.stderr)
-                return 1
-            if has_value and use_clear:
-                print("config set: cannot provide a value with --clear",
-                      file=sys.stderr)
-                return 1
-            if has_value and use_default:
-                print("config set: cannot provide a value with --default",
-                      file=sys.stderr)
-                return 1
-            if not has_value and not use_clear and not use_default:
-                print("config set: provide a value, --clear, or --default",
-                      file=sys.stderr)
-                return 1
-
+            # The elected member says what to write. The three illegal corners
+            # the old bools made expressible are unrepresentable now (§27.1).
             # --clear: repeatable/dict flags only
-            if use_clear:
+            if isinstance(write, _ConfigSetClear):
                 if matched_flag.compound == "dict":
                     cleared: object = {}
                 elif matched_flag.repeatable:
@@ -9647,12 +10377,16 @@ class App:
                 return 0
 
             # --default: remove the key from config
-            if use_default:
+            if isinstance(write, _ConfigSetDefault):
                 if not _write_config_unset(effects, existing, path, app_ref.config_format, key):
                     print(f"config set: key '{key}' not in config",
                           file=sys.stderr)
                     return 1
                 return 0
+
+            # The value member carries its payload under the reserved field
+            # name.
+            value = write.value
 
             # Coerce the string value to the flag's type
             if matched_flag.compound == "dict":
@@ -9740,6 +10474,17 @@ class App:
             _write_config_set(effects, existing, path, app_ref.config_format, key, typed_value)
             return 0
 
+        # The write selection is attached the way every selector is: to the
+        # handler, in declaration order. `_build_framework_command` builds
+        # through the one validated registration path, which reads it back off
+        # the handler exactly as it does for a consumer command.
+        _config_set_handler = choice_flag(
+            "write",
+            help="What to write at the key: a value, a clear, or a reset to the declared default",
+            choices=[_ConfigSetValue, _ConfigSetClear, _ConfigSetDefault],
+            elect_by=_ELECT_MEMBER_FLAGS,
+            presence="required",
+        )(_config_set_handler)
         config_grp.commands["set"] = self._build_framework_command(
             "set",
             help="Write a persistent value into the config file so it overrides a flag's declared default on every later run. The value is coerced to the flag's own type and rejected if it does not fit: repeatable flags take a comma-separated list (backslash-escape a literal comma) and are checked for duplicates, dict flags take a JSON object. Use --default to drop a key back to its default, and --clear to empty a repeatable flag.",
@@ -9748,15 +10493,6 @@ class App:
             args=[
                 Arg(name="key", help="The config key to set, matching a registered flag name",
                     presence="required"),
-                Arg(name="value",
-                    help="Value to set (comma-separated for repeatable flags, use backslash to escape commas)",
-                    presence="optional"),
-            ],
-            extra_flags=[
-                Flag(name="clear", type=bool, default=False,
-                     help="Clear a repeatable flag by setting its value to an empty list"),
-                Flag(name="default", type=bool, default=False,
-                     help="Reset a key to its default value by removing it from the config file"),
             ],
         )
 
@@ -10183,7 +10919,9 @@ class App:
         stdin_state: list[str | None] = [self._stdin_consumed_by]
         self._last_selector_diagnostics = []
         try:
-            cmd, kwargs, post_global, sources = _parse_command(
+            (
+                cmd, kwargs, post_global, sources, writes, unsets,
+            ) = _parse_command(
                 cmd, rest, self._global_flags, config_data=self._config_data,
                 stdin_consumed_by=stdin_state,
                 conflict_mode=self.config_conflict_mode,
@@ -10195,6 +10933,11 @@ class App:
             prefix_parts = [self.name] + path + [cmd.name]
             e.command_prefix = " ".join(prefix_parts)
             raise
+        # This invocation's write set and the properties it cleared (§27.5,
+        # §27.6): the envelope's `writes` member, the would-do log's write-set
+        # line and `ctx.unset` all read them off here.
+        self._last_writes = writes
+        self._last_unsets = unsets
 
         # Step 4: merge global flag values into kwargs
         # Post-command global flags override pre-command ones
@@ -10619,6 +11362,10 @@ class App:
         # machine mode at all -- they are app-definition errors, not run
         # results, and they emit no envelope.
         self._last_json = False
+        # A previous dispatch's write set must never decide what this one
+        # reports, on any exit path.
+        self._last_writes = None
+        self._last_unsets = set()
 
         check_err = self._validate_check_registrations()
         if check_err:
@@ -10694,7 +11441,13 @@ class App:
             ),
             command_name=cmd.name,
             payload_schema=cmd.payload_schema,
+            unsets=self._last_unsets,
         )
+        # The would-do log's unnumbered write-set line (contract §27.5, §3.2).
+        # It renders in DRY MODE ONLY, immediately after the header and before
+        # line `1.`: a live run's write set rides the envelope instead.
+        if self._last_writes is not None and self._last_dry_run:
+            self._effect_log.write_set_line = self._last_writes.log_line()
         # Every ambient binding a non-elected scope skipped is NAMED, one line
         # per binding, in declaration order, at debug level -- hidden by
         # default, shown by --verbose, and carried in machine mode's
@@ -10784,6 +11537,10 @@ class App:
                     cmd_path, ctx._dry_run, truncated, aborted,
                 ),
                 diagnostics=ctx._diagnostics,
+                writes=(
+                    self._last_writes.envelope_member()
+                    if self._last_writes is not None else None
+                ),
             )
             return _DispatchResult(exit_code, ctx._payload_value)
         if truncated is not None:
@@ -10849,7 +11606,7 @@ class App:
     def _emit_envelope(
         self, out, *, command: str | None, exit_code: int, dry_run: bool,
         payload: object, preview: list[dict], preview_error: dict | None,
-        diagnostics: list[dict],
+        diagnostics: list[dict], writes: dict | None = None,
     ) -> None:
         """Write the envelope, machine mode's sole stdout document (§19.2).
 
@@ -10870,6 +11627,11 @@ class App:
             "exit_code": exit_code,
             "payload": None if payload is _MISSING else payload,
             "dry_run": dry_run,
+            # The write set of a command declaring `update_of` (§19.2's
+            # amendment, §27.5). Null on every command that declares none,
+            # NEVER absent, and populated in BOTH modes: it is a function of
+            # the declaration and the invocation, not of the mode.
+            "writes": writes,
             "preview": [
                 {key: rec[key] for key in sorted(rec)} for rec in preview
             ],
@@ -11057,6 +11819,9 @@ class App:
         # reason). Supplied values are marked _Source.CLI; absent flags get
         # _Source.DEFAULT when _validate_and_build_kwargs applies defaults.
         store = _SourcedStore()
+        # The properties this call CLEARED, spelled `null` on the property's
+        # own key at this door (§27.6).
+        unsets: set[str] = set()
         for m in cmd.members:
             if isinstance(m, _Selector):
                 if door is not None:
@@ -11064,6 +11829,18 @@ class App:
                 continue
             key = _flag_param_name(m.name)
             if key in kwargs:
+                # The one stated carve-out from "null is legal for nothing"
+                # (§24.11's amendment, §27.6): a NULLABLE PROPERTY is the one
+                # declaration for which null is a VALUE -- it means clear this
+                # property on the resource, which is a write. It delivers
+                # absence, reports `provided()` true, and is what `ctx.unset`
+                # answers true for. The carve-out is a property of the
+                # DECLARATION and never of the door: a null anywhere else is
+                # refused by the rule below, unchanged.
+                if kwargs[key] is None and m.nullable:
+                    unsets.add(m.name)
+                    store.set(m.name, None, _Source.CLI)
+                    continue
                 store.set(
                     m.name,
                     _check_pre_typed_value(m, kwargs[key], machine_boundary=flat),
@@ -11094,12 +11871,17 @@ class App:
         supplied_args = {a.name: kwargs[a.name] for a in cmd.args if a.name in kwargs}
 
         # Validate and build final kwargs via the shared validation pipeline
-        _cmd, final_kwargs, _global_cli_set, invoke_sources = _validate_and_build_kwargs(
+        (
+            _cmd, final_kwargs, _global_cli_set, invoke_sources, writes,
+        ) = _validate_and_build_kwargs(
             cmd, store, [], global_flag_names, self._infra_roots,
             selector_result=selector_result,
             pre_typed_args=supplied_args,
             machine_boundary=flat,
+            unsets=unsets,
         )
+        self._last_writes = writes
+        self._last_unsets = unsets
 
         # Merge global flag values into final kwargs
         for gf in self._global_flags:
@@ -11126,6 +11908,7 @@ class App:
             effects=self._arm_effects(cmd, command_path, dry_run=False),
             command_name=cmd.name,
             payload_schema=cmd.payload_schema,
+            unsets=unsets,
         )
         result = cmd.handler(ctx, **final_kwargs)
         _interpret_handler_return(result)  # validate return type
@@ -11452,6 +12235,14 @@ def _build_json_schema(cmd: Command) -> dict:
         param_name = _flag_param_name(f.name)
         prop: dict = _value_schema_fragment(f)
         prop["description"] = f.help
+        # A NULLABLE property publishes a type list including "null" (contract
+        # §27.10). This projection is not bound by §25.2's four-keyword subset
+        # -- it already emits anyOf and dependentRequired -- and here the null
+        # is a VALUE the declaration names rather than a spelling of absence,
+        # so publishing it in the type is publishing the declaration. A caller
+        # that cannot see it cannot clear anything.
+        if f.nullable and "type" in prop:
+            prop["type"] = [prop["type"], "null"]
 
         properties[param_name] = prop
 
@@ -11603,11 +12394,18 @@ def _constraint_keywords(cmd: Command) -> dict:
     equivalent: it is a map, so every all-or-none and every `requires` merges
     into the one key by name, deduplicated and in declaration order.
     """
-    if not cmd.constraints:
+    update_branches = _update_any_of_branches(cmd)
+    if not cmd.constraints and not update_branches:
         return {}
     kinds, by_name = _constraint_index(cmd)
     any_ofs: list[list[dict]] = []
     dependent_required: dict[str, list[str]] = {}
+    # The at-least-one-property rule is NOT a constraint (§26.14's answer,
+    # §27.4) but it borrows this machinery, wrapping pin included: it counts as
+    # an `anyOf`-producing rule, and its branch comes FIRST, it being the
+    # command's own declaration rather than an entry in the constraint list.
+    if update_branches:
+        any_ofs.append(update_branches)
 
     def add_dependency(key: str, values: list[str]) -> None:
         bucket = dependent_required.setdefault(key, [])
@@ -11749,6 +12547,11 @@ def _tool_description(cmd: Command, help_text: str) -> str:
     constraint_lines = _constraint_description_block(cmd)
     if constraint_lines:
         blocks.append("\n".join(constraint_lines))
+    # The update block, appended after both when they exist and separated by a
+    # blank line -- the established order (contract §27.10).
+    update_lines = _update_description_lines(cmd)
+    if update_lines:
+        blocks.append("\n".join(update_lines))
     if not blocks:
         return help_text
     return help_text + "\n\n" + "\n\n".join(blocks)
@@ -11879,7 +12682,11 @@ def _validate_and_build_kwargs(
     selector_result: "_SelectorResult | None" = None,
     pre_typed_args: dict[str, object] | None = None,
     machine_boundary: bool = False,
-) -> tuple[Command, dict[str, object], dict[str, object], dict[str, str]]:
+    unsets: set | None = None,
+) -> tuple[
+    Command, dict[str, object], dict[str, object], dict[str, str],
+    "_UpdateState | None",
+]:
     """Validate parsed values and build the kwargs dict for the command handler.
 
     This is the second half of command parsing: implies resolution, dependency
@@ -11905,8 +12712,15 @@ def _validate_and_build_kwargs(
     door does not (§24.11 item 247). It says nothing on the argv path, where
     every positional is a token that has yet to be parsed.
 
-    Returns (cmd, kwargs, global_cli_set, sources) where sources maps
-    flag param names to source labels (cli/env/config/default/implied).
+    ``unsets`` names the properties this invocation CLEARED (§27.6):
+    ``--unset-<prop>`` on the command line, or ``null`` on the property's own
+    key at a machine door. A cleared property is a provision, so it satisfies
+    the at-least-one-property rule and joins the write set.
+
+    Returns (cmd, kwargs, global_cli_set, sources, writes) where sources maps
+    flag param names to source labels (cli/env/config/default/implied) and
+    writes is this invocation's write set, None on every command that declares
+    no update.
     """
     # Step 4.55: resolve Implies injections (before the co-occurrence families,
     # so an implied value can engage a member -- §26.4's pipeline position).
@@ -11942,6 +12756,14 @@ def _validate_and_build_kwargs(
         cmd, store, _arg_engagement_inputs(cmd, positionals, pre_typed_args),
         selector_engaged,
     )
+
+    # The at-least-one-property rule, and the write set it guarantees is never
+    # empty (contract §27.4, §27.5). It is the framework's own rule about a
+    # declared property set rather than a constraint the command wrote, so it
+    # is evaluated after every declared constraint has had its say -- and, like
+    # them, BEFORE defaults are applied, over the one provided-ness predicate
+    # with no source filter.
+    writes = _evaluate_update(cmd, store, unsets or set())
 
     # Step 5: apply the declared presence (contract §23.1). Nothing is derived
     # here any more: no empty-collection default for compound flags, no
@@ -12102,7 +12924,7 @@ def _validate_and_build_kwargs(
     if selector_result is not None:
         sources.update(selector_result.sources)
 
-    return cmd, kwargs, global_cli_set, sources
+    return cmd, kwargs, global_cli_set, sources, writes
 
 
 # ---------------------------------------------------------------------------
@@ -13743,12 +14565,20 @@ def _parse_command(
     short_lookup: dict[str, Flag] = {}  # -x -> Flag
     negation_lookup: dict[str, Flag] = {}  # --no-flag-name -> Flag
 
+    # The clear vocabulary's minted spelling (§27.6). It is framework-owned and
+    # reaches the handler on the Context; it is NOT negatable, so
+    # `--no-unset-<x>` names nothing and is refused by the ordinary
+    # unknown-flag path.
+    unset_lookup: dict[str, Flag] = {}  # --unset-flag-name -> Flag
+
     for f in cmd.flags:
         long_lookup[f"--{f.name}"] = f
         if f.short:
             short_lookup[f"-{f.short}"] = f
         if f.type is bool and f.negatable:
             negation_lookup[f"--no-{f.name}"] = f
+        if f.nullable:
+            unset_lookup[f"--{_unset_flag_name(f.name)}"] = f
 
     # Also include global flags in the lookup tables so they are recognized
     # when placed after the command name
@@ -13906,6 +14736,14 @@ def _parse_command(
             i += 1
             continue
 
+        # --unset-flag: the clear vocabulary's minted spelling. It carries no
+        # value of its own -- clearing is one act, not a value -- and it is
+        # checked against the property's own occurrences below.
+        if tok in unset_lookup:
+            root_occs.append((i, unset_lookup[tok], _UNSET_OCC))
+            i += 1
+            continue
+
         # --flag (long form without =)
         if tok.startswith("--"):
             if tok in long_lookup:
@@ -13962,6 +14800,16 @@ def _parse_command(
     # later pass, so every coercion failure outranks every callback refusal
     # (§18.20 item 226).
     scoped_cli: dict[str, object] = {}
+    # A property written AND cleared in one invocation is refused before either
+    # is read: the two tokens state opposite things about one property, and no
+    # order of application makes one of them true (§27.6).
+    unsets: set[str] = {
+        f.name for _, f, raw in root_occs if raw is _UNSET_OCC
+    }
+    if unsets:
+        for _, f, raw in root_occs:
+            if raw is not _UNSET_OCC and f.name in unsets:
+                raise _ParseError(_msg_update_value_and_unset(f.name))
     merged = [(seq, True, (f, raw)) for seq, f, raw in root_occs]
     merged.extend((o.seq, False, o) for o in scoped_occs)
     merged.sort(key=lambda entry: entry[0])
@@ -13977,6 +14825,8 @@ def _parse_command(
             _coerce_scoped_occurrence(site, item, scoped_cli, stdin_consumed_by)
             continue
         f, raw = item
+        if raw is _UNSET_OCC:
+            continue
         if raw is True or raw is False:
             cli_set[f.name] = raw
         elif f.compound == "dict":
@@ -13996,6 +14846,14 @@ def _parse_command(
                 f.name, raw, stdin_consumed_by[0],
             )
             _store_value(f, resolved)
+
+    # A cleared property is SUPPLIED: the value it delivers is absence, the
+    # same None an untouched property delivers, and the two are told apart by
+    # `provided()` -- true here, because the invocation caused the write -- and
+    # by `ctx.unset` (§27.6). Entering it in the store also stops env, config
+    # and the declared-default step from filling the gap the clear opened.
+    for _name in unsets:
+        cli_set[_name] = None
 
     # Track which flag names are set by env vs config (for source attribution).
     env_names: set[str] = set()
@@ -14117,10 +14975,11 @@ def _parse_command(
         if out_diagnostics is not None:
             out_diagnostics.extend(selector_result.diagnostics)
 
-    return _validate_and_build_kwargs(
+    cmd, kwargs, global_cli_set, sources, writes = _validate_and_build_kwargs(
         cmd, store, positionals, global_flag_names, infra_roots,
-        selector_result=selector_result,
+        selector_result=selector_result, unsets=unsets,
     )
+    return cmd, kwargs, global_cli_set, sources, writes, unsets
 
 
 def _flag_param_name(flag_name: str) -> str:
@@ -14143,6 +15002,7 @@ def _build_and_validate_command(
     consequential: bool = False,
     dry_run_supported: bool = True,
     dry_run_unsupported_reason: str | None = None,
+    update_of: "UpdateOf | None" = None,
     payload_schema: dict | None = None,
     owns_stdout: bool = False,
     handler: Callable,
@@ -14442,7 +15302,15 @@ def _build_and_validate_command(
     # elected value must reach a named, ANNOTATED parameter, because the
     # annotation is what makes the handler's `match` exhaustive (§12.13, S11).
     if has_var_keyword and selectors:
-        _raise_handler_kwargs_with_selector(name)
+        for s in selectors:
+            # The refusal is about the elected value FALLING INTO **kwargs: a
+            # handler that names the parameter and annotates it has the
+            # annotation that makes `match` exhaustive, which is the whole of
+            # what this guard protects. The framework's own `config set` is
+            # exactly that shape -- it names `write` and absorbs the app's
+            # globals through **kwargs (§10.4's forwarding).
+            if _flag_param_name(s.name) not in param_names:
+                _raise_handler_kwargs_with_selector(name)
 
     if not has_var_keyword:
         # Check each selector has a matching parameter
@@ -14545,6 +15413,15 @@ def _build_and_validate_command(
                 _scoped_paths[_site.name] = _render_scope_path(
                     _path, _member_spelled,
                 )
+    # The update declaration, in §27.11's pinned eight-step order. It runs
+    # BEFORE the constraint passes because its first step is the
+    # mutating-default ban, which is a fact about the command's own
+    # classification and is independent of every rule declared on top of it.
+    _validate_update(
+        name, effect, update_of, all_members, all_flags, selectors, all_args,
+        _scoped_paths, {s.name for s in site_list}, global_flags,
+    )
+
     _validate_constraint_set(
         name, resolved_constraints, all_flags, all_args, _scoped_paths,
         selectors,
@@ -14572,6 +15449,7 @@ def _build_and_validate_command(
         consequential=consequential,
         dry_run_supported=dry_run_supported,
         dry_run_unsupported_reason=dry_run_unsupported_reason,
+        update_of=update_of,
         payload_schema=payload_schema,
         owns_stdout=owns_stdout,
         flags=tuple(all_flags),
@@ -14611,6 +15489,7 @@ def flag(
     conflict_mode: object = _MISSING,
     connection_url: bool = False,
     connection_env: str | None = None,
+    nullable: bool = False,
 ) -> Callable[[F], F]:
     """Module-level decorator to attach a Flag to a command handler."""
 
@@ -14633,6 +15512,7 @@ def flag(
             conflict_mode=conflict_mode,
             connection_url=connection_url,
             connection_env=connection_env,
+            nullable=nullable,
         )
         if not hasattr(func, "_strictcli_flags"):
             func._strictcli_flags = []
@@ -14841,6 +15721,13 @@ def _build_flag_spec(f: Flag) -> str:
         spec += " <int>"
     elif f.type is float:
         spec += " <float>"
+    # A nullable property renders its minted clear spelling on the SAME line,
+    # exactly as a negatable bool renders `--x, --no-x` (contract §27.6): one
+    # line, one help text, and one presence part -- §23.8's invariant is
+    # untouched, because the minted spelling is a second way to write to one
+    # declaration rather than a second declaration.
+    if f.nullable:
+        spec += ", --" + _unset_flag_name(f.name)
     return spec
 
 
@@ -15857,6 +16744,13 @@ def _serialize_flag(f: Flag) -> dict:
     negatable = f.negatable if f.type is bool and f.compound == "scalar" else None
     if negatable is not None:
         d["negatable"] = negatable
+    # Emitted only when declared true; absence means the property cannot be
+    # cleared, which is the baseline. There is NO second flag entry for the
+    # minted `--unset-<prop>`: it is derived from this key exactly as
+    # `--no-<x>` is derived from `negatable`, and the dump publishes
+    # declarations (§27.9, §13's amendment).
+    if f.nullable:
+        d["nullable"] = True
     return d
 
 
@@ -16001,6 +16895,14 @@ def _serialize_command(cmd: Command) -> dict:
     if not cmd.dry_run_supported:
         d["dry_run_supported"] = False
         d["dry_run_unsupported_reason"] = cmd.dry_run_unsupported_reason
+    # The update declaration, published as TWO command-entry keys where it is
+    # one nested record on the declaration surface: a consumer asking what
+    # write mode a command has should not have to descend (§27.9, §13's
+    # amendment). Omitted together when the command declares no update, and the
+    # pair is atomic by construction.
+    if cmd.update_of is not None:
+        d["update_of"] = _serialize_update_of(cmd.update_of)
+        d["write_mode"] = cmd.update_of.write_mode
     # The payload contract, published verbatim (contract §19.5): the inline
     # literal is the sole canonical artifact, so the dump carries it as
     # written rather than a re-rendering of it.
@@ -16172,6 +17074,7 @@ def _build_schema_defaults() -> dict:
             "unique": False,
             "conflict_mode": None,
             "negatable": None,
+            "nullable": False,
         },
         "arg": {
             "variadic": False,
@@ -16187,6 +17090,8 @@ def _build_schema_defaults() -> dict:
             "consequential": False,
             "dry_run_supported": True,
             "dry_run_unsupported_reason": None,
+            "update_of": None,
+            "write_mode": None,
             "payload_schema": None,
             "owns_stdout": False,
             "passthrough": False,

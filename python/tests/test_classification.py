@@ -128,7 +128,7 @@ class TestFrameworkInternalClassification:
         def _run(ctx, target):
             return 0
 
-        r = app.test(["config", "set", "target", "b"])
+        r = app.test(["config", "set", "target", "--value", "b"])
         assert r.exit_code == 0
         assert '"target": "b"' in cfg.read_text()
 
