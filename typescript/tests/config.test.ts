@@ -1144,6 +1144,36 @@ test("config set: --clear and --default", async () => {
 // to police its illegal corners are gone with the two bools that made those
 // corners expressible: electing none and electing two are the framework's own
 // refusals now.
+// The reshape's cross-language surface, pinned verbatim by §27.1's box
+// (§18.34 item 320): the selector renders its name without a `--` prefix and
+// its members indent under it, and the old trailing positional is gone.
+test("config set's write selection renders the pinned help block", async () => {
+	freshXdg();
+	const r = await setApp().test(["config", "set", "--help"]);
+	assert.ok(
+		r.stdout.endsWith(
+			"Flags:\n" +
+				"  write              What to write at the key: a value, a clear, or a reset to the declared default (exactly one of the following) [required]\n" +
+				"    --value <str>    Write a value at the key [required]\n" +
+				"    --clear          Clear a repeatable flag [required]\n" +
+				"    --default        Reset the key to its declared default [required]\n",
+		),
+		r.stdout,
+	);
+});
+
+test("the unsatisfied-selector refusal outranks the extra-positional error", async () => {
+	// An operator typing the old `config set <key> <v>` is told the vocabulary,
+	// not that <v> is a stray token (§27.1's box).
+	freshXdg();
+	const r = await setApp().test(["config", "set", "count", "77"]);
+	assert.equal(r.exitCode, 1);
+	assert.equal(
+		r.stderr,
+		"error: one of --value, --clear, --default is required\ntry 'myapp config set --help'\n",
+	);
+});
+
 test("config set: electing nothing is the framework's own refusal", async () => {
 	freshXdg();
 	const r = await setApp().test(["config", "set", "count"]);
