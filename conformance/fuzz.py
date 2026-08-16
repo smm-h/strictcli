@@ -283,6 +283,96 @@ def _gen_constraint_app(rng: random.Random) -> dict:
         "commands": [command],
     }
 
+
+# ---------------------------------------------------------------------------
+# The update app is GENERATED per iteration (contract §27)
+# ---------------------------------------------------------------------------
+#
+# Same reason as the constraint family: what has to be fuzzed is the
+# interaction between a random declaration and a random invocation -- which
+# flags are properties, which of them are nullable, whether the resource has
+# identity members, which write mode it declares, and which of all that the
+# argv supplies, clears or negates. A fixed app would fuzz only the second
+# half.
+#
+# The FILTERED-STATE discipline, and the rule that filters each state:
+#
+#   - the command declares `effect="mutating"`, because update_of on a
+#     read_only command is a registration error (§27.2) -- so §27.1's ban
+#     applies, and NO declaration the generator emits carries a value default;
+#   - every property is an optional root-scope FLAG, never an arg, never a
+#     choice flag, never required (§27.3);
+#   - at least one property is always declared (§27.2's errUpdatePropertiesEmpty);
+#   - identity members are ordinary flags, required or optional, and never
+#     nullable (§27.6's errNullableNotProperty);
+#   - `nullable` is emitted only on a property, and flag names are `p<i>` /
+#     `id<i>`, so `unset-<prop>` can never collide with a declared flag
+#     (§27.6's errUnsetNameReserved);
+#   - the resource name is `dns-record` and the write mode is one of the two
+#     legal words, so neither charset nor vocabulary guard can fire.
+#
+# What is left for the fuzzer to disagree about is therefore parse-time and
+# rendering-time only: the at-least-one-property refusal, the value-and-unset
+# collision, the write set's two renderings, and the tri-state bool property.
+
+_UPDATE_PROPERTY_TYPES = ["str", "bool", "int", "float", "list[str]", "dict[str,str]"]
+
+
+def _gen_update_app(rng: random.Random) -> dict:
+    """Generate one app whose command declares a random legal update."""
+    flags: list[dict] = []
+    properties: list[str] = []
+    identity: list[str] = []
+
+    for i in range(rng.randint(1, 4)):
+        name = f"p{i}"
+        flags.append({
+            "name": name,
+            "type": rng.choice(_UPDATE_PROPERTY_TYPES),
+            "help": f"property {i}",
+            "presence": "optional",
+            **({"nullable": True} if rng.random() < 0.5 else {}),
+        })
+        properties.append(name)
+
+    for i in range(rng.randint(0, 2)):
+        name = f"id{i}"
+        flags.append({
+            "name": name,
+            "type": "str",
+            "help": f"identity {i}",
+            "presence": rng.choice(["required", "optional"]),
+        })
+        identity.append(name)
+
+    if rng.random() < 0.3:
+        # A flag named in NEITHER list is neither, and that is legal and
+        # ordinary (§27.3) -- it must never join the write set.
+        flags.append({"name": "format", "type": "str", "help": "how to render",
+                      "presence": "optional"})
+
+    printed = [f["name"] for f in flags]
+    command = {
+        "name": "update-record",
+        "help": "change one record in place",
+        "effect": "mutating",
+        "update_of": {
+            "resource": "dns-record",
+            "write_mode": rng.choice(["sparse", "full_replace"]),
+            "identity": identity,
+            "properties": properties,
+        },
+        "flags": flags,
+        "handler_prints": " ".join(f"{n}={{{n}}}" for n in printed),
+    }
+    return {
+        "name": "fuzzapp",
+        "version": "4.0.0",
+        "help": "a generated app for update fuzzing",
+        "commands": [command],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Execution (through run.py's runtime-harness target machinery)
 # ---------------------------------------------------------------------------
@@ -622,6 +712,53 @@ def _gen_argv_constraints(rng: random.Random, app_def: dict) -> list[str]:
     return tokens
 
 
+def _gen_argv_update(rng: random.Random, app_def: dict) -> list[str]:
+    """Generate a random argv for a generated update app."""
+    command = app_def["commands"][0]
+    flags = command["flags"]
+    properties = set(command["update_of"]["properties"])
+    nullable = {f["name"] for f in flags if f.get("nullable")}
+
+    strategy = rng.choice([
+        "write_none", "write_some", "write_all", "clear_some",
+        "value_and_clear", "decline_bools", "inline_unset", "unset_negation",
+    ])
+    mode = rng.choice([[], ["--dry-run"], ["--json"], ["--json", "--dry-run"]])
+    tokens = [*mode, "update-record"]
+
+    for flag in flags:
+        name = flag["name"]
+        if name not in properties:
+            # Identity and the unclassified flag: supply a required one always,
+            # the rest sometimes.
+            if flag.get("presence") == "required" or rng.random() < 0.5:
+                tokens.extend(_supply_tokens(rng, flag))
+            continue
+        if strategy == "write_none":
+            continue
+        if strategy == "write_all":
+            supply = True
+        else:
+            supply = rng.random() < 0.5
+        if not supply:
+            continue
+        if strategy == "decline_bools" and flag.get("type") == "bool":
+            tokens.append(f"--no-{name}")
+        elif strategy == "clear_some" and name in nullable:
+            tokens.append(f"--unset-{name}")
+        elif strategy == "value_and_clear" and name in nullable:
+            tokens.extend(_supply_tokens(rng, flag))
+            tokens.append(f"--unset-{name}")
+        elif strategy == "inline_unset" and name in nullable:
+            tokens.append(f"--unset-{name}=x")
+        elif strategy == "unset_negation" and name in nullable:
+            tokens.append(f"--no-unset-{name}")
+        else:
+            tokens.extend(_supply_tokens(rng, flag))
+
+    return tokens
+
+
 def _case_simple(rng: random.Random) -> tuple[dict, list[str]]:
     return SIMPLE_APP, _gen_argv_simple(rng)
 
@@ -635,13 +772,19 @@ def _case_constraints(rng: random.Random) -> tuple[dict, list[str]]:
     return app_def, _gen_argv_constraints(rng, app_def)
 
 
+def _case_update(rng: random.Random) -> tuple[dict, list[str]]:
+    app_def = _gen_update_app(rng)
+    return app_def, _gen_argv_update(rng, app_def)
+
+
 # One entry per fuzzed family: the label, and the factory producing this
 # iteration's (app definition, argv) pair. The first two families reuse a fixed
-# app; the constraint family generates its declaration too.
+# app; the constraint and update families generate their declarations too.
 FAMILIES: list[tuple[str, Callable[[random.Random], tuple[dict, list[str]]]]] = [
     ("simple", _case_simple),
     ("complex", _case_complex),
     ("constraints", _case_constraints),
+    ("update", _case_update),
 ]
 
 
