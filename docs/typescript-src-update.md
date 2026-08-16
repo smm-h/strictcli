@@ -1,8 +1,7 @@
 ---
 title: typescript/src/update
-description: "The update-command construct after registration (contract §27)."
+description: "The update construct after registration (contract §27): the at-least-one-property rule, the write set and its two renderings, and the MCP and schema forms."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 39
 ---

@@ -1,8 +1,7 @@
 ---
 title: typescript/src/elected
-description: "The delivered elected record: the tagged value a selector hands a handler, plus the two helpers a handler uses to consume it (contract §24.1, §24.9)."
+description: "The elected record a selector hands a handler (contract §24.1): its flat tagged object form, per-field provided-ness, and the exhaustiveness helper."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 17
 ---

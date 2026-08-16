@@ -117,8 +117,7 @@
   },
   "en/typescript-src-constraints.md": {
     "content": "65f1edcd8a7d79d1992d31914bb0bd020c3416698ef202b5c9d80e64667d2c92",
-    "description": "7693a72e89600a4eb4a57a94d7c09a6a3e93f67d89aca6a0dce2925a2e8cc69a",
-    "seed_hash": "7693a72e89600a4eb4a57a94d7c09a6a3e93f67d89aca6a0dce2925a2e8cc69a",
+    "description": "fa1afbb421991ad5f556c8e5aa83d0a8d8f739630d343ec1de9627d22425afea",
     "source_docstring": "477fd9285d4e118d5aa76fc959773eaa7aed33ac4496c0d871bb4d2bca36f63e"
   },
   "en/typescript-src-context.md": {
@@ -143,8 +142,7 @@
   },
   "en/typescript-src-elected.md": {
     "content": "5b2759c226947d688c9a407310362c473a128a0cddc79cd321274fc6a4eab644",
-    "description": "7dceb5b0ef9b92d072f7eb57c4284e6d21a520cb2bf6c8ab452920df92b86718",
-    "seed_hash": "7dceb5b0ef9b92d072f7eb57c4284e6d21a520cb2bf6c8ab452920df92b86718",
+    "description": "45dcc8adc5730b63f5db053cd4e578bc71bfca84c2374bfaa15a5a41f0e2813b",
     "source_docstring": "f92f90a335ecd00fe9727d593f2e6f53d16c996fd89a881e23db2d5339b6d191"
   },
   "en/typescript-src-env.md": {
@@ -224,8 +222,7 @@
   },
   "en/typescript-src-scopeparse.md": {
     "content": "5abb34e54f1b65bc3a08fd480dfeded04bd0be23a032262e4e4e2e076da19d70",
-    "description": "d43b4c2bfb5f94d4e0d017746e3b7a243cdaad3d9424053b4e5819d00c64504b",
-    "seed_hash": "d43b4c2bfb5f94d4e0d017746e3b7a243cdaad3d9424053b4e5819d00c64504b",
+    "description": "48820856433ae2a0b646ae1282e77c981458fd87386f1fadaa5c26028994e172",
     "source_docstring": "08014525171d5231995c078ac5c6d1ae316d64fadee925afe8ed5a753486b5f2"
   },
   "en/typescript-src-sources.md": {
@@ -255,8 +252,7 @@
   },
   "en/typescript-src-update.md": {
     "content": "d17963b79960542f93be534a40fc0027df1e40299dcbc9699e16e5aeaee31eee",
-    "description": "bad92d41687116437e2cd18132f69a093a6f83968fdf361471811a6e65f81ef2",
-    "seed_hash": "bad92d41687116437e2cd18132f69a093a6f83968fdf361471811a6e65f81ef2",
+    "description": "0d3ac1423b7f118f5b5a6bb1693723a054cc52d696a86ad4124f0be09b994a40",
     "source_docstring": "875481bfa066efa63e37763b3bd20ef507b8c7be06460cf8fe9972245d1a36cf"
   },
   "en/typescript-src-values.md": {

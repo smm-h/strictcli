@@ -1,8 +1,7 @@
 ---
 title: typescript/src/scopeparse
-description: "The scoped-selector parser (contract §24.3): elections, scope-membership validation, and per-scope value resolution."
+description: "The scoped-selector parser (contract §24.3): phased election resolution, scope-membership validation, per-scope value resolution, pinned error precedence."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 33
 ---

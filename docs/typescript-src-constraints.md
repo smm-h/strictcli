@@ -1,8 +1,7 @@
 ---
 title: typescript/src/constraints
-description: "The constraint system (contract §26): the two co-occurrence families resolved against their command, rendered for every surface that publishes them, and evaluated at parse time."
+description: "The constraint system (contract §26): the two co-occurrence families resolved, rendered for help, the schema and MCP, and enforced at parse time."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 12
 ---
