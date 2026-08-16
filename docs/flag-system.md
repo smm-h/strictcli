@@ -18,12 +18,12 @@ are available for repeatable and key-value flags. The type determines how values
 are parsed from CLI tokens, environment variables, and config files.
 
 ```python
-@app.command("deploy", help="deploy the application", effect="mutating")
+@app.command("report", help="summarize the last deployment", effect="read_only")
 @strictcli.flag("target", type=str, presence="required", help="deployment target")
-@strictcli.flag("cache", type=bool, default=True, help="reuse the build cache")
-@strictcli.flag("replicas", type=int, default=3, help="number of replicas")
+@strictcli.flag("cache", type=bool, default=True, help="include cache statistics")
+@strictcli.flag("replicas", type=int, default=3, help="replicas to summarize")
 @strictcli.flag("threshold", type=float, default=0.95, help="success threshold")
-def deploy(ctx, target, cache, replicas, threshold):
+def report(ctx, target, cache, replicas, threshold):
     ...
 ```
 
@@ -34,7 +34,10 @@ on the other three is the same declaration in its value-carrying form. See
 
 Every command declares its `effect` -- `"read_only"` or `"mutating"` -- and the
 declaration is mandatory. See the [Python quickstart](python-quickstart.md#command-classification)
-for what classification buys.
+for what classification buys. The command above is `read_only`, which is why the
+three `default=` declarations are legal: on a `mutating` command **none** of them
+would be, because a value the framework picked is a value the framework writes.
+See [A mutating command may not default a value](#a-mutating-command-may-not-default-a-value).
 
 ### String flags
 
@@ -762,7 +765,7 @@ auth_flags = strictcli.FlagSet(
     name="auth",
     flags=[
         strictcli.Flag(name="token", type=str, presence="required", help="API token", env="MYAPP_TOKEN"),
-        strictcli.Flag(name="region", type=str, default="us-east-1", help="AWS region"),
+        strictcli.Flag(name="region", type=str, presence="optional", help="AWS region"),
     ],
 )
 
@@ -774,6 +777,11 @@ def deploy(ctx, token, region):
 def status(ctx, token, region):
     ...
 ```
+
+The [mutating-default ban](#a-mutating-command-may-not-default-a-value) is
+evaluated over the flags a command actually carries, its flag sets' included, so
+a flag set is legal on its own and attaching it decides the verdict: a set
+carrying `default="us-east-1"` attaches to `status` and is refused on `deploy`.
 
 ## Choice flags: a choice is a declaration scope
 
@@ -840,7 +848,8 @@ A member-spelled choice is its own flag, carrying its own payload:
 @strictcli.choice("profile", help="use the named profile")
 class NamedProfile:
     value: str = strictcli.member_value(help="profile name")
-    create_missing: bool = strictcli.sub_flag(help="create the profile if it does not exist", default=False)
+    create_missing: bool = strictcli.sub_flag(help="create the profile if it does not exist",
+                                              presence="optional")
 
 
 @strictcli.choice("all-profiles", help="apply to every profile")
@@ -1277,10 +1286,14 @@ registration error in both families:
 - in an **all-or-none**, a required member turns the rule into "every other
   member is required too", which already has a spelling: declare them required.
 
-A **default** is legal and is the ordinary bool shape -- a default is not
-*provided*, so it never engages the constraint by itself, and `default=False`
-with `when="true"` engages exactly when someone types `--all`. `optional` is
-legal and is the ordinary case.
+A **default** is legal and is the ordinary bool shape on a `read_only` command --
+a default is not *provided*, so it never engages the constraint by itself, and
+`default=False` with `when="true"` engages exactly when someone types `--all`. On
+a `mutating` command that same declaration is refused by the
+[mutating-default ban](#a-mutating-command-may-not-default-a-value), and the
+member declares `optional` instead: an optional bool is a real tri-state, so
+`when="true"` still engages exactly when the flag resolves true. `optional` is
+legal everywhere and is the ordinary case.
 
 The consequence runs the other way too: **membership never makes a flag
 required, and never exempts it from being required.** An at-least-one over three
@@ -1377,6 +1390,341 @@ Enforcement at call time is unchanged and total: every constraint is evaluated a
 the machine doors exactly as at the argv door, and a violation returns the same
 sentence the CLI parser gives, on the framework's ordinary tool-result error
 channel. The runtime refusal is the authority; the schema is advisory.
+
+## Update commands
+
+An **update command** changes some properties of one resource instance and
+leaves the rest alone. strictcli makes that a declaration rather than a
+convention: the command names the resource, states which flags and args identify
+the instance, which flags carry the changes, and whether the write is sparse or a
+full replace. The framework then refuses an invocation that supplies no property,
+renders the resulting **write set** on every surface a run reports through, and
+publishes the declaration in `--dump-schema` and in MCP tool schemas.
+
+### A mutating command may not default a value
+
+**On a command declaring `effect="mutating"`, no flag and no positional arg may
+declare a value default.** It is a registration-time hard error in all three
+implementations:
+
+```
+command "update-record": flag '--ttl' declares default=300 on a mutating command: absence would write a value the invocation never stated (declare presence="required" or presence="optional", or apply the fallback in the handler and say so in its help)
+```
+
+The rule follows from one sentence, and every cell below is derived from it:
+**absence must never resolve to a value the invocation did not state, because on
+a mutating command a value the framework picked is a value the framework
+writes.** A record-updating command that declares `default=300` for a TTL resets
+a record's TTL to 300 whenever the operator changes something else and does not
+restate it -- a number nobody typed replacing a number nobody read.
+
+| Declaration, on a `mutating` command | Verdict |
+|---|---|
+| `default=<str>` / `<int>` / `<float>`, any value, `""` and `0` included | **registration error** -- `""` is a value like any other, and a declaration that means *absent* is `optional` |
+| `default=True` / `default=False` on a bool | **registration error** -- the same class with two values |
+| a **non-empty** `list` or `dict` default | **registration error** -- `default=["a"]` is as tool-picked as `default=300` |
+| `default=[]` / `default={}` | **legal** -- an empty collection declares *no elements*, so no framework-chosen value reaches a write through it |
+| a `RelativeToRoot` default | **legal** -- it resolves a *location* under a declared infrastructure root, deciding where a command writes and never what it writes |
+| any default on a `read_only` command | **legal, untouched** -- the ban keys on classification exactly as dry-mode participation does |
+| a **choice flag's** own default | **legal** -- electing a choice names which scope is live; it is not a value written to anything |
+| the flags **inside** a choice's scope | **reached, at every depth** -- they are ordinary flags of a mutating command, so on a mutating command every scoped flag is `required` or `optional` |
+| a **flag set's** flag | **reached per attaching command** -- a shared flag set carrying a default is legal, and attaching it to a mutating command is not |
+| an **app-level global** flag's default | **not reached** -- a global has no classification of its own and reaches read-only and mutating commands alike |
+| an `Implies` injection | **not a default** -- it exists only because the invocation contained the trigger (`provided()` is true, source `implied`) |
+| an `env` or `config` value | **not a default** -- the operator supplied it |
+
+A site the ban refuses has three remedies, and the error names all three: make
+the declaration `required`, make it `optional`, or apply the fallback in the
+handler **and say so in the flag's help**. The third is legal only where the
+fallback is not itself a write -- a handler that substitutes `300` and then sends
+it has moved the defect one layer down, where no registration guard can see it.
+For an update command that door is closed by construction: a property has no
+default and absence means untouched.
+
+### Declaring the update
+
+An update command carries one record, in the same registration-level family
+`effect`, `consequential` and `dry_run_supported` belong to.
+
+| Fact | What it says |
+|---|---|
+| `resource` | the **name** of the thing being updated -- mandatory, matching `[a-z][a-z0-9-]*` |
+| `write_mode` | `"sparse"` or `"full_replace"` -- mandatory, no default |
+| `identity` | the flags and args that name **which** instance -- possibly empty |
+| `properties` | the flags that name **what changes** -- at least one |
+
+**Python** -- a frozen, keyword-only record joining the `AtLeastOne` / `AllOrNone`
+/ `Requires` / `Implies` family of declarations that name a rule:
+
+```python
+@app.command("update-record", help="change one DNS record in place", effect="mutating",
+             update_of=strictcli.UpdateOf("dns-record", write_mode="sparse",
+                                          identity=["zone", "record-id"],
+                                          properties=["content", "ttl", "proxied"]))
+@strictcli.flag("zone", type=str, help="zone the record belongs to", presence="required")
+@strictcli.flag("record-id", type=str, help="identifier of the record to change", presence="required")
+@strictcli.flag("content", type=str, help="record content", presence="optional")
+@strictcli.flag("ttl", type=int, help="time to live in seconds", presence="optional", nullable=True)
+@strictcli.flag("proxied", type=bool, help="whether the record is proxied", presence="optional")
+def update_record(ctx, zone, record_id, content, ttl, proxied):
+    ...
+```
+
+**Go** -- a constructor plus functional options, with the mode as a positional
+parameter because that is Go's spelling of mandatory:
+
+```go
+sc.WithUpdateOf("dns-record", sc.WriteSparse,
+    sc.Identity("zone", "record-id"),
+    sc.Properties("content", "ttl", "proxied"),
+)
+```
+
+`Properties(first string, rest ...string)` puts a **compile-time floor of one**
+on the property list, and `Nullable()` is an ordinary `FlagOption` beside
+`Required()` / `Optional()` / `Default(v)`.
+
+**TypeScript** -- one option object on the command spec, the shape
+`requires({...})` and `implies({...})` already have:
+
+```ts
+updateOf: {
+    resource: "dns-record",
+    writeMode: "sparse",
+    identity: ["zone", "record-id"],
+    properties: ["content", "ttl", "proxied"],
+},
+```
+
+`writeMode` is the literal union `"sparse" | "full_replace"`, so a typo is a
+compile error. `properties` is typed `readonly [K, ...K[]]` where `K` is the key
+union of the command's own declarations, so the floor of one *and* every name are
+checked by the compiler. `nullable: true` joins the flag's option object.
+
+**`update_of` on a `read_only` command is a registration error** -- a command that
+changes nothing writes no properties -- so an update command is always
+`mutating`, which is what makes the ban above apply to every one of its
+declarations without a second rule. `dry_run_supported=False` composes with an
+update declaration and is legal: the human write-set line then never renders,
+there being no dry run to render it in, and the machine envelope's member still
+does.
+
+### Identity and properties
+
+Both are references by name, resolved at registration, **at root scope only**. A
+name is looked up among the command's flags and its positional args; unknown,
+ambiguous, duplicated and both-roles names are registration errors, and a name
+that resolves to a flag declared inside a choice scope is refused with the
+sentence that names the actual fault. Root scope is what makes the write set
+decidable at every door, including the programmatic one where a constructed scope
+record cannot tell a field the caller wrote from one the declaration filled.
+
+| | `required` | a value `default` | `optional` |
+|---|---|---|---|
+| **property** | **registration error** -- a property the invocation must always supply is written in every invocation, which makes the at-least-one rule unfireable | **registration error**, already, by the ban -- an update command is mutating | **the only legal declaration**; absence *is* untouched |
+| **identity** | **legal**, and the ordinary case | **registration error** by the ban | **legal**, for alternative addressing: two optional identity members plus an `AtLeastOne` over them is how *by name or by id* is declared |
+
+**A property is a flag; an identity member may be a flag or a positional arg.** A
+sparse update needs every property to be individually omissible, and positional
+syntax cannot deliver that past the last arg; the clear vocabulary has no
+positional spelling either. Identity has neither problem, so
+`myapp update-record <record-id>` stays the ordinary CLI shape.
+
+**A property may not be a choice flag** -- an elected record is a selection rather
+than a property value. **An identity member may be one**, token- or
+member-spelled, which is how a resource with two addressing modes names itself.
+
+**A flag named in neither list is neither**, and that is ordinary. `--format`,
+`--wait`, `--timeout`: a flag that is not part of the resource is not a fact
+about the resource. What is refused is a name in **both** lists.
+
+### At least one property
+
+**The framework enforces that at least one property is provided.** All properties
+absent is a parse-time hard error naming every declared property -- never a silent
+no-op and never a request that writes nothing:
+
+```
+error: update "dns-record": at least one property is required: --content, --ttl, --proxied
+try 'mytool update-record --help'
+```
+
+A property is provided exactly when [`ctx.provided`](#was-this-supplied-ctxprovided)
+says so, **with no source filter**: a value from `env`, from `config`, or injected
+by an `Implies` is a provision, and a configured value cannot join a write
+invisibly because it renders in the write set beside a typed one. The rule is
+evaluated **after every declared constraint and before defaults are applied**, so
+a command with both faults reports the constraint it declared.
+
+**A negated bool property is a provision, not a decline.** Inside an update
+command `--no-proxied` **writes `false`**: the write set is what the invocation
+states, and stating `false` is stating a value. This inverts the member-election
+reading on purpose -- there `--no-x` chooses nothing, because a false member is
+not a selection; here false is a value with the same standing as any other. The
+at-least-one refusal carries no decline clause for exactly that reason.
+
+**An unset is a provision too**: clearing a property is writing it.
+
+### The write set, and its two renderings
+
+The write set of an invocation is the ordered pair of the properties it **writes**
+and the properties it **clears**, in declaration order.
+
+**The human rendering is one unnumbered line in the would-do log**, sitting
+immediately after the header and before line `1.`, taking no sequence number and
+rendering in dry mode only:
+
+```
+DRY RUN — no changes were made. Would do:
+  writes: content; clears: ttl (other properties unchanged)
+  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7
+```
+
+Two segments, `writes:` first, separated by `; `. An empty segment is omitted
+entirely and the at-least-one rule guarantees one survives, so the line is never
+empty:
+
+```
+  writes: content (other properties unchanged)
+  writes: content, ttl (other properties unchanged)
+  writes: content; clears: ttl (other properties unchanged)
+  clears: ttl (other properties unchanged)
+  writes: content (other properties are re-sent as read)
+```
+
+Names are the properties' declared names **without** the `--` prefix and without
+underscoring -- `phone-number`, never `--phone-number` and never `phone_number` --
+because the log is the human surface and the write set is data. The trailing
+parenthetical is a function of `write_mode` alone and is always present:
+`sparse` sends only the provided properties, so the rest is unchanged;
+`full_replace` sends the whole resource, so the rest is re-sent as read. A
+preview that said "other properties unchanged" over a full-replace API would be a
+false statement about the most destructive thing the command does, which is why
+the mode has no default.
+
+**The machine rendering is the envelope's `writes` member**, present in both
+modes because it is a function of the declaration and the invocation, not of the
+mode:
+
+```json
+"writes": {
+  "resource": "dns-record",
+  "write_mode": "sparse",
+  "written": ["content"],
+  "cleared": ["ttl"],
+  "resent": [],
+  "untouched": ["proxied"]
+}
+```
+
+The four arrays hold **underscored parameter names** in declaration order and
+partition the declared property set exactly: every property appears in exactly
+one of them. `written` and `cleared` are the two halves of the write set and are
+disjoint. `resent` and `untouched` are the two readings of "the rest", and
+exactly one of them is ever non-empty -- under `sparse` the rest is untouched and
+`resent` is `[]`; under `full_replace` the rest is re-sent and `untouched` is
+`[]`. The member is `null` on every command that declares no update, and the
+envelope's `interface_version` is `2`.
+
+### Clearing a property
+
+**A property declaring `nullable` mints `--unset-<prop>`.** The vocabulary is
+modeled on `config set`'s value / `--clear` / `--default`, with the third case
+deliberately absent: a property has no default, so there is nothing to reset it
+to, and the vocabulary is complete at two.
+
+- **`""` is an ordinary value.** `--content ""` writes an empty string. Separating
+  the sentinel from the value is the whole point.
+- **The minted flag is framework-owned and reaches the handler on the Context.**
+  It delivers no kwarg of its own: `ctx.unset(name)` / `ctx.Unset(name)` answers
+  it. An unset property delivers absence -- `None` / `nil` / `undefined`, the same
+  value an untouched property delivers -- and reports `provided()` true; `ctx.unset`
+  is what saves a handler from reconstructing the boolean out of two facts.
+- **Value and unset together is a parse error**, command line only, because the
+  machine doors have one key per property:
+
+  ```
+  error: --ttl and --unset-ttl are mutually exclusive: a property is either written or cleared
+  ```
+
+- **The minted flag is not negatable**, and it takes no value. `--no-unset-content`
+  names nothing, and `--unset-ttl=5` takes the ordinary unknown-flag path
+  (`error: unknown flag '--unset-ttl'`): once the `=` is written the token names
+  no flag at all. `--unset-ttl 5` leaves `5` as an extra positional.
+- **The machine doors spell the clear as `null` on the property's own key.** One
+  key per property at every door, and no minted parameter name to collide with a
+  declared flag.
+- **`nullable` on anything that is not a property is a registration error**, and
+  `unset-<x>` is a **reserved flag name** on a command whose `<x>` is a nullable
+  property.
+- **Every type may be nullable**, the four scalars and the compounds alike:
+  clearing is a fact about the resource's field, not about the value's shape.
+
+Help rendering follows negation's precedent exactly -- one line, one help text,
+one presence part, because the minted spelling is a second way to write to one
+declaration rather than a second declaration:
+
+```
+myapp update-record -- change one DNS record in place
+
+Flags:
+  --zone <str>                                zone the record belongs to [required]
+  --record-id <str>                           identifier of the record to change [required]
+  --content <str>                             record content [optional]
+  --ttl <int>, --unset-ttl                    time to live in seconds [optional]
+  --proxied, --no-proxied, --unset-proxied    whether the record is proxied [optional]
+```
+
+### Bool properties, and the sub-verb pair convention
+
+**A bool property inside an update command is a real tri-state**: `--proxied`
+writes true, `--no-proxied` writes false, absent leaves it alone. That is the
+optional-bool row read over a property, and it removes the class of commands that
+force an operator to restate `--enable` / `--disable` on every edit, so that
+changing a mail route's destination re-decides whether the route is live.
+
+**A standalone single-property toggle keeps the sub-verb pair convention.**
+`enable` and `disable` as two commands remain the right shape when the toggle
+*is* the operation. Both rules are stated here so neither reads as a violation of
+the other: a sub-verb pair is a **command** whose whole purpose is one property, a
+tri-state bool is a **property** of a command that updates several. The test is
+whether the command has anything else to write.
+
+### On the machine boundaries
+
+**In the schema**, the command entry carries two keys -- `update_of` (an object
+with `resource`, `identity` and `properties`, names in the declared spelling) and
+`write_mode` -- emitted exactly together and never alone. `nullable` is a key on
+the property's own flag entry, and the minted `--unset-<prop>` gets no entry of
+its own, exactly as `negatable` publishes `--no-<x>`. The encoding is complete
+rather than indicative: a consumer reconstructs the rule without re-reading the
+declaration.
+
+**In MCP tool schemas**, properties are ordinary optional properties and never
+appear in `required` -- their requiredness *is* the at-least-one rule, which
+`required` cannot express. The rule projects instead as `anyOf`, one branch per
+property, at **exact** fidelity: a supplied key is a provided property at that
+door, a `null` is a supplied key and a clear, a `false` is a supplied key and a
+write, so `required` states the whole rule with nothing left over. A command with
+both an update and an at-least-one constraint emits
+`allOf: [{anyOf: <update>}, {anyOf: <constraint>}]`, the update's branch first. A
+nullable property's schema is a type list including `"null"`, because a caller
+that cannot see the null cannot clear anything.
+
+```
+Update of "dns-record" (write mode: sparse):
+  identifies: zone, record_id
+  writes: content, ttl, proxied -- at least one is required
+  a property that is not supplied is left unchanged; null clears ttl
+```
+
+Members render in property names (underscored), like every other member in the
+description block: the caller writes keys, not argv. The `identifies:` line is
+omitted when the resource declares no identity members; the last line's first
+clause is `left unchanged` under `sparse` and `re-sent as read` under
+`full_replace`; the `; null clears <list>` clause appears only when at least one
+property is nullable. Enforcement at call time is unchanged and total -- every
+rule is evaluated at the machine doors exactly as at the argv door.
 
 ## Help text is mandatory
 
