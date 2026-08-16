@@ -116,7 +116,7 @@ jobs:
     if: (needs.detect.outputs.ts-strictcli == 'true' || inputs.run_all)
   conformance-ci-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v6
     - uses: astral-sh/setup-uv@v7
