@@ -1111,6 +1111,165 @@
     }
   },
   {
+    "name": "update registration: the minted unset name is reserved against an app global (python)",
+    "targets": [
+      "python"
+    ],
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "unset-ttl",
+          "help": "an app global that wants the minted name",
+          "presence": "optional",
+          "type": "str"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "mutating",
+          "handler_prints": "ok",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [],
+            "properties": [
+              "ttl"
+            ]
+          },
+          "flags": [
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": flag name \"unset-ttl\" is reserved: property '--ttl' declares nullable=True, which mints '--unset-ttl'\n"
+    }
+  },
+  {
+    "name": "update registration: the minted unset name is reserved against an app global (go)",
+    "targets": [
+      "go"
+    ],
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "unset-ttl",
+          "help": "an app global that wants the minted name",
+          "presence": "optional",
+          "type": "str"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "mutating",
+          "handler_prints": "ok",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [],
+            "properties": [
+              "ttl"
+            ]
+          },
+          "flags": [
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": flag name \"unset-ttl\" is reserved: property '--ttl' declares Nullable(), which mints '--unset-ttl'\n"
+    }
+  },
+  {
+    "name": "update registration: the minted unset name is reserved against an app global (typescript)",
+    "targets": [
+      "typescript"
+    ],
+    "skip_schema_validation": true,
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "global_flags": [
+        {
+          "name": "unset-ttl",
+          "help": "an app global that wants the minted name",
+          "presence": "optional",
+          "type": "str"
+        }
+      ],
+      "commands": [
+        {
+          "name": "cmd",
+          "help": "a command",
+          "effect": "mutating",
+          "handler_prints": "ok",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [],
+            "properties": [
+              "ttl"
+            ]
+          },
+          "flags": [
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "cmd"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: command \"cmd\": flag name \"unset-ttl\" is reserved: property '--ttl' declares nullable: true, which mints '--unset-ttl'\n"
+    }
+  },
+  {
     "name": "update registration order: the ban runs ahead of every update step (python)",
     "targets": [
       "python"
