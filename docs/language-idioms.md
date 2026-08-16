@@ -41,11 +41,11 @@ That is one semantic, pinned once. Here is what you write.
 `default=` it has always had:
 
 ```python
-@app.command("deploy", help="Deploy the app", effect="mutating")
+@app.command("report", help="Summarize the last deploy", effect="read_only")
 @strictcli.flag("target", type=str, presence="required", help="Where to deploy")
 @strictcli.flag("tag", type=str, presence="optional", help="Optional release tag")
-@strictcli.flag("cache", type=bool, default=True, help="Reuse the build cache")
-def deploy(ctx, target, tag=None, cache=True):
+@strictcli.flag("cache", type=bool, default=True, help="Include cache statistics")
+def report(ctx, target, tag=None, cache=True):
     ...
 ```
 
@@ -56,7 +56,7 @@ package takes:
 strictcli.WithFlags(
     strictcli.StringFlag("target", "Where to deploy", strictcli.Required()),
     strictcli.StringFlag("tag", "Optional release tag", strictcli.Optional()),
-    strictcli.BoolFlag("cache", "Reuse the build cache", strictcli.Default(true)),
+    strictcli.BoolFlag("cache", "Include cache statistics", strictcli.Default(true)),
 )
 ```
 
@@ -71,7 +71,7 @@ flags: {
     target: flag("target", t.str, { help: "Where to deploy", presence: "required" }),
     tag: flag("tag", t.str, { help: "Optional release tag", presence: "optional" }),
     cache: flag("cache", t.bool, {
-        help: "Reuse the build cache",
+        help: "Include cache statistics",
         presence: "default",
         default: true,
     }),
@@ -211,6 +211,86 @@ the covering input they can only reach through a widened or JSON-shaped caller.
 Nothing was weakened to keep the three in step: the runtime refusal exists in
 all three, and two of them simply refuse earlier.
 
+## A fourth case: the update declaration
+
+The [update-command construct](flag-system.md#update-commands) is the pattern's
+newest instance, and its three surfaces sit further apart than any of the three
+above.
+
+One semantic: a command that changes some properties of one resource declares
+**one record** naming the resource, a mandatory write mode, the flags and args
+that identify the instance, and the flags that carry the changes -- at least one
+of them. The write mode is declared **inside** the record in all three, because a
+write mode without an update has nothing to describe, and nesting it makes the
+half-declared state unrepresentable rather than guarded.
+
+**Python** -- a frozen, keyword-only dataclass whose first field is `resource`,
+joining the CapWords family `AtLeastOne` / `AllOrNone` / `Requires` / `Implies`
+established for declarations that name a rule:
+
+```python
+update_of=strictcli.UpdateOf("dns-record", write_mode="sparse",
+                             identity=["zone", "record-id"],
+                             properties=["content", "ttl", "proxied"])
+```
+
+**Go** -- a constructor plus functional options, with the mode as a **positional
+parameter**, which is Go's spelling of mandatory: there is no option to forget
+and no zero-valued struct field to fill in silently:
+
+```go
+sc.WithUpdateOf("dns-record", sc.WriteSparse,
+    sc.Identity("zone", "record-id"),
+    sc.Properties("content", "ttl", "proxied"),
+)
+```
+
+**TypeScript** -- one option object on the command spec, the shape
+`requires({...})` and `implies({...})` already have:
+
+```ts
+updateOf: {
+    resource: "dns-record",
+    writeMode: "sparse",
+    identity: ["zone", "record-id"],
+    properties: ["content", "ttl", "proxied"],
+},
+```
+
+Each surface bought something the other two cannot express, and once again the
+payoffs are unequal. Go's `Properties(first string, rest ...string)` puts a
+**compile-time floor of one** on the property list -- the same two-named-plus-
+variadic idiom its constraint constructors use, at the arity this construct
+needs -- so an update with nothing to write does not compile; the registration
+guard survives for the caller that omits the option entirely. Its `WriteMode` is
+string-based rather than an integer enum, so the zero value renders `""` in the
+invalid-mode message and the sentence stays byte-identical with its siblings'.
+
+TypeScript's is the round's biggest, and it is a **type over the command's own
+declarations**: `properties` is `readonly [K, ...K[]]` where `K` is the key union
+of the names that command declares. The floor of one *and* every property name
+are therefore checked by the compiler -- a property naming a flag the command
+does not declare does not compile, and `writeMode` is a literal union, so a typo
+does not either:
+
+```
+Type '"contnet"' is not assignable to type '"content"'.
+Type '[]' is not assignable to type 'readonly ["content", ..."content"[]]'.
+Type '"patch"' is not assignable to type 'WriteMode'.
+```
+
+Python's record has neither floor -- a list takes any length and a keyword takes
+any string -- so Python is where the empty-property and unknown-name refusals are
+reachable at all, and the other two record the covering input they can only reach
+through a widened or JSON-shaped caller. Its own payoff is elsewhere: `write_mode=`
+carries **no default**, so omitting it is Python's own `TypeError` at the
+declaration site, before strictcli sees anything, for the same reason `effect=`
+has no default.
+
+Nothing was weakened to keep the three in step. The framework's refusals exist in
+all three; two of them simply refuse earlier, in different places, for reasons
+their own languages supply.
+
 ## What each surface bought
 
 The divergence is not merely tolerated for style. In every case the language's
@@ -343,8 +423,15 @@ command "send": handler parameter 'via' is bound to choice flag '--via' and must
 ```
 
 Without it a developer could annotate `via: Email` and silently skip two
-branches with the type checker's blessing. `**kwargs` handlers are banned
-outright on a command that declares a choice flag. Go and TypeScript reach the
+branches with the type checker's blessing. The companion refusal fires exactly
+when **the elected value would fall into `**kwargs`** -- when the selector's
+parameter name is absent from the handler's named parameters -- rather than on
+every `**kwargs` handler of a command declaring a choice flag. The narrowing is
+forced: the framework's own internal commands absorb the app's globals through
+declared forwarding, so they all carry `**kwargs`, and the reshaped `config set`
+is one of them. What the guard protects is unchanged -- the annotation that makes
+`assert_never` exhaustive, which a named parameter carries and `**kwargs` cannot.
+Go and TypeScript reach the
 same exhaustiveness by other routes -- `Match` against the declaration, and a
 `switch` the compiler narrows -- so neither has a parameter annotation to check.
 
