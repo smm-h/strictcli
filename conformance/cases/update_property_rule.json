@@ -1,0 +1,820 @@
+[
+  {
+    "name": "update rule: every property absent is a hard error naming all of them",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} ttl={ttl} proxied={proxied} provided_content={provided:content} provided_proxied={provided:proxied}"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: update \"dns-record\": at least one property is required: --content, --ttl, --proxied\ntry 'myapp update-record --help'\n"
+    }
+  },
+  {
+    "name": "update rule: the sentence names every declared property, nullable or not",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} ttl={ttl} proxied={proxied} provided_content={provided:content} provided_proxied={provided:proxied}"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: update \"dns-record\": at least one property is required: --content, --ttl, --proxied\ntry 'myapp update-record --help'\n"
+    }
+  },
+  {
+    "name": "update rule: one supplied property satisfies it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} ttl={ttl} proxied={proxied} provided_content={provided:content} provided_proxied={provided:proxied}"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "content=hi ttl=None proxied=None provided_content=true provided_proxied=false\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update rule A1 inverted: a negated bool property WRITES false and satisfies the rule",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} ttl={ttl} proxied={proxied} provided_content={provided:content} provided_proxied={provided:proxied}"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1",
+      "--no-proxied"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "content=None ttl=None proxied=false provided_content=false provided_proxied=true\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update rule: a true bool property writes true",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} ttl={ttl} proxied={proxied} provided_content={provided:content} provided_proxied={provided:proxied}"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1",
+      "--proxied"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "content=None ttl=None proxied=true provided_content=false provided_proxied=true\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update rule: the empty string is an ordinary value and satisfies the rule",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} ttl={ttl} proxied={proxied} provided_content={provided:content} provided_proxied={provided:proxied}"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1",
+      "--content",
+      ""
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "content= ttl=None proxied=None provided_content=true provided_proxied=false\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update rule: an env-supplied property is a provision, with no source filter",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str",
+              "env": "MYAPP_CONTENT"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} source={source:content} provided={provided:content}"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "content=from-env source=env provided=true\n",
+      "stderr_equals": ""
+    },
+    "env": {
+      "MYAPP_CONTENT": "from-env"
+    }
+  },
+  {
+    "name": "update rule: a config-supplied property is a provision too",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} source={source:content} provided={provided:content}"
+        }
+      ],
+      "config": true,
+      "config_content": "{\"content\": \"from-config\"}"
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "content=from-config source=config provided=true\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update rule: an implied property is a provision, the injection being caused by the invocation",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "trigger",
+              "help": "the trigger",
+              "presence": "optional",
+              "type": "bool"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "proxied={proxied} source={source:proxied} provided={provided:proxied}",
+          "constraints": [
+            {
+              "type": "implies",
+              "name": "trigger-writes-proxied",
+              "flag": "trigger",
+              "implies": "proxied",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1",
+      "--trigger"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "proxied=true source=implied provided=true\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update rule: it runs AFTER every declared constraint, so a command with both faults reports the constraint",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            },
+            {
+              "name": "trace-id",
+              "help": "a trace identifier",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "sampled",
+              "help": "whether this run is sampled",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} ttl={ttl} proxied={proxied} provided_content={provided:content} provided_proxied={provided:proxied}",
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "tracing-pair",
+              "members": [
+                {
+                  "name": "trace-id"
+                },
+                {
+                  "name": "sampled",
+                  "when": "present"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1",
+      "--trace-id",
+      "t1"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: constraint \"tracing-pair\": --trace-id, --sampled must be used together\ntry 'myapp update-record --help'\n"
+    }
+  },
+  {
+    "name": "update rule: it runs BEFORE defaults, so a defaulted non-property flag does not satisfy it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} ttl={ttl} proxied={proxied} provided_content={provided:content} provided_proxied={provided:proxied}"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: update \"dns-record\": at least one property is required: --content, --ttl, --proxied\ntry 'myapp update-record --help'\n"
+    }
+  },
+  {
+    "name": "update rule: it is not a constraint, so it never joins the Constraints: help block",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "the zone",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_prints": "content={content} ttl={ttl} proxied={proxied} provided_content={provided:content} provided_proxied={provided:proxied}"
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_not_contains": "Constraints:",
+      "stderr_equals": ""
+    }
+  }
+]
