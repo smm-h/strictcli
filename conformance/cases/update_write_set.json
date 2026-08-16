@@ -1235,5 +1235,260 @@
     "env": {
       "MYAPP_CONTENT": "from-env"
     }
+  },
+  {
+    "name": "update write set: a consequential update prompts on exactly the same terms and still renders its line",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "consequential": true,
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/zones/z1/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "--approve-consequential",
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "DRY RUN — no changes were made. Would do:\n  writes: content (other properties unchanged)\n  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7\n",
+      "stderr_equals": ""
+    }
+  },
+  {
+    "name": "update write set: an unconsented consequential update is refused before anything renders",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          },
+          "consequential": true
+        }
+      ]
+    },
+    "argv": [
+      "update-record",
+      "--zone",
+      "z1",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stdout_equals": "",
+      "stderr_equals": "error: stdin is not interactive; a consequential command must be confirmed at a terminal\n"
+    }
+  },
+  {
+    "name": "update write set: the minted --unset-<prop> is per command and never an app-wide reserved name",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "zone",
+              "record-id"
+            ],
+            "properties": [
+              "content",
+              "ttl",
+              "proxied"
+            ]
+          },
+          "flags": [
+            {
+              "name": "zone",
+              "help": "zone the record belongs to",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "record-id",
+              "help": "identifier of the record to change",
+              "presence": "required",
+              "type": "str"
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int",
+              "nullable": true
+            },
+            {
+              "name": "proxied",
+              "help": "whether the record is proxied",
+              "presence": "optional",
+              "type": "bool"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          }
+        },
+        {
+          "name": "other",
+          "help": "a command of its own",
+          "effect": "read_only",
+          "flags": [
+            {
+              "name": "unset-ttl",
+              "help": "a flag of its own name",
+              "presence": "optional",
+              "type": "str"
+            }
+          ],
+          "handler_prints": "other={unset-ttl}"
+        }
+      ]
+    },
+    "argv": [
+      "other",
+      "--unset-ttl",
+      "x"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_equals": "other=x\n",
+      "stderr_equals": ""
+    }
   }
 ]
