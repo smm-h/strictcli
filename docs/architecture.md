@@ -154,8 +154,9 @@ The remaining tokens (after the command name was consumed by routing) are parsed
 against the resolved command's declared flags and positional arguments. The
 parser builds three lookup tables from the command's flags (long form, short
 form, and negation form), then consumes tokens left-to-right. After CLI tokens
-are processed, the value resolution cascade applies env vars, config values, and
-defaults in that order, followed by constraint validation.
+are processed, the value resolution cascade applies env vars and config values,
+then runs constraint validation and an update command's at-least-one-property
+rule, and only then applies defaults.
 
 **Parsing is phased**, and the phase order is what makes order independence, the
 distinct out-of-scope error and that error's priority over a missing required
@@ -215,8 +216,8 @@ For non-bool flags, value coercion happens immediately at parse time:
 - **float**: strict float parsing in strictcli canonical form (SCF) -- NaN and
   Inf are rejected, the shortest round-trip representation is used.
 
-After CLI tokens are consumed, the value resolution cascade runs (each step
-skipped under `--hermetic`):
+After CLI tokens are consumed, the value resolution cascade runs (the env and
+config steps are the two skipped under `--hermetic`):
 
 1. **Env vars**: for each flag not set by CLI, check its declared env var. Bool
    env vars accept `1|true|yes` / `0|false|no` (case-insensitive). Repeatable
@@ -224,19 +225,27 @@ skipped under `--hermetic`):
    env value as JSON.
 2. **Config file**: for each flag not set by CLI or env, check the loaded config
    data. Config values are coerced to the flag's type.
-3. **Presence resolution**: for each flag still unset, act on its declared
+3. **Constraint validation**: `implies` injection first, then every declared
+   constraint, children before parents. It runs here -- over the values CLI, env,
+   config and `implies` supplied, and before any default exists -- because the
+   engagement predicate only distinguishes anything while `default` and `infra`
+   are still absent from the store.
+4. **The at-least-one-property rule** of an update command, evaluated after every
+   declared constraint has had its say and, like them, before defaults, over the
+   same provided-ness predicate. The same pass computes the write set.
+5. **Presence resolution**: for each flag still unset, act on its declared
    presence. A `default` declaration supplies its value (source `default`); an
    `optional` declaration delivers absence -- `None` / `nil` / `undefined` as a
    present key, also labelled `default`, since the declaration is what decided;
    a `required` declaration with no value from any source produces a "missing
    required flag" error. There is no silent empty-collection default: a
    repeatable or dict flag that wants `[]` / `{}` declares it.
-4. **InfraRootPath resolution**: if a flag's default is a `RelativeToRoot`
+6. **InfraRootPath resolution**: if a flag's default is a `RelativeToRoot`
    marker, it is resolved against the declared infrastructure roots at this
    point, and its source is labeled "infra" instead of "default."
 
-After all values are resolved, constraint validation runs. Exactly-one selection
-is **not** among the constraints: it is a choice flag, resolved in the election
+Step 3's constraint validation covers four kinds. Exactly-one selection
+is **not** among them: it is a choice flag, resolved in the election
 phase above, and a constraint naming a scoped flag is a
 registration-time error -- the scope already is the constraint.
 
