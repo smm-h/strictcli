@@ -214,6 +214,13 @@ rather than an accident; and it records four per-language readings the implement
 any implementation, where four of them quote a declaration spelling and therefore take §12.12's
 `excluded:` mechanism -- the mechanism working, not a parity defect.
 
+That round's **release audit**, with all three implementations shipped, adds §18.35 as items 328-329
+on the same numbering. It strikes one more text as false -- §25.13's claim that a flag's tool-schema
+shape and its dumped shape *cannot* disagree, which §27.10's nullable type list falsifies at a site
+three code comments restated it verbatim -- and pins one probed reading: an env- or config-supplied
+property value beside a CLI `--unset-<prop>` resolves to the clear, by ordinary CLI-wins precedence,
+in all three.
+
 Placement note: this file uses the `docs/history/_*.md` convention established by
 `docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
 selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
@@ -9175,6 +9182,52 @@ and the passthrough); §27.12 (a passthrough row).
      conformance assertion. The struck sentence is what a reader would otherwise have cited to call
      those entries a defect; this item is their contract anchor.
 
+### 18.35 Readings pinned at the update round's release audit (2026-08-16)
+
+Two items, continuing §18.34's numbering for the reason §18.14 gave: the same campaign's ledger.
+§18.34 was written from the two implementations that had shipped; this section is written at the
+release audit, with all three shipped and probed. **It reverses no ruling and adds no section**, and
+each item is marked in place in the section it amends.
+
+**What was read**, on disk, and probed as running code: `python/strictcli/__init__.py`,
+`go/strictcli/tool.go` and `go/strictcli/parse.go`, `typescript/src/tool.ts`,
+`typescript/src/factories.ts` and `typescript/src/parse.ts`; and one running probe per behavior,
+comparing a property supplied by env against the same property cleared beside that env value.
+
+**Origin tags**, per §18.14's preamble: both items are **untagged** -- one strikes a text the
+implementations falsified, the other records a behavior all three already agree on.
+
+**Sites amended in place**: §25.13 (the cannot-disagree sentence, struck and replaced).
+
+328. **§25.13's "cannot disagree" is struck: a nullable property's two doors state the same fact in
+     two vocabularies (§25.13, §27.10, §25.2).** The sentence claimed that after the arity round a
+     flag's tool-schema shape and its dumped shape *cannot* disagree. The shared-derivation half is
+     true and unchanged -- one function computes the fragment, the MCP projection reads it, so arity
+     and `enum` placement can never diverge. The absolute is false, and §27.10 -- authored in the same
+     campaign, pinned at §18.34 item 317 -- is what falsifies it: a nullable property publishes
+     `{"type": ["<t>", "null"]}` at the MCP door and the plain type in `value_schema`, because
+     §25.2's closed subset admits neither a type list nor a `null` while the projection is not bound
+     by it. The dump carries the fact as the sibling `nullable` key (§18.34 item 316) instead. Both
+     doors publish the whole declaration; only the vocabulary differs. Recorded because three code
+     comments beside the folding sites restated the struck sentence verbatim
+     (`python/strictcli/__init__.py`, `go/strictcli/tool.go`, `typescript/src/tool.ts` and
+     `typescript/src/factories.ts`), so a reader met the false absolute at the exact site that
+     violates it; the same pass corrects them.
+
+329. **An env- or config-supplied property value beside a CLI `--unset-<prop>` resolves to the
+     CLEAR, in all three (§27.6, §27.4).** All three implementations enter the cleared property into
+     the **CLI-set** map before env, config and the declared-default step run
+     (`cliSet[name] = nil` in Go's `parseCommand`, the same entry in TypeScript's `parseCommand`, the
+     unset marker consumed by Python's token scan), so the clear occupies the slot those steps would
+     have filled and the ordinary CLI-wins precedence decides it -- no special case, and no
+     value-and-unset conflict, which §27.6 already refuses only when both name the *command line*.
+     The probe: a property carrying `env=`, the env var set, and `--unset-<prop>` typed. The result
+     is the clear in every implementation -- the handler receives absence, `provided()` is true,
+     `ctx.unset()` is true, the source reads `cli`, and the write set renders `clears: <prop>` with
+     no `writes:` segment. Pinned as a **reading**, not a new rule: it is what precedence and §27.4's
+     one predicate already require, and it is recorded so the conformance corpus can case it rather
+     than leave the interaction of the two sources untested.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -12252,8 +12305,23 @@ precisely the erasure-shaped divergence the round exists to end:
   Go reads `a.IsVariadic` and TypeScript reads `a.opts.variadic` and both project an array.
 
 After this round, all three MCP projections derive the parameter schema from the **same arity rule**
-the `value_schema` fragment states, so a flag's tool-schema shape and its dumped shape cannot
-disagree.
+the `value_schema` fragment states, ~~so a flag's tool-schema shape and its dumped shape cannot
+disagree~~ *(amended 2026-08-16, release audit, §18.35 item 328 -- see the box below)*.
+
+> **Amendment (2026-08-16, release audit, §18.35 item 328): the shared arity rule holds; "cannot
+> disagree" does not, and §27.10's nullable property is the one place they differ.** What survives is
+> the claim this section was making: **one function computes the fragment and the MCP projection
+> reads it**, so an arity or an `enum` placement can never diverge between the two doors -- that is
+> what the round fixed and it is unchanged.
+>
+> What was false is the absolute. A **nullable** property (§27.6, §27.10) publishes
+> `{"type": ["<t>", "null"]}` at the MCP door and the **plain** `{"type": "<t>"}` in the dumped
+> `value_schema`, because §25.2's closed four-keyword subset admits no type list and no `null`, while
+> the MCP projection is not bound by it. The two doors state the same declaration in the vocabulary
+> each can speak: the dump carries nullability as the sibling **`nullable` flag-entry key** (§27.9,
+> §18.34 item 316), the projection folds it into the type because a caller that cannot see the null
+> cannot clear anything (§18.34 item 317). Nothing is lost at either door and neither is a defect --
+> which is why the correct statement is the narrow one, not the absolute one this sentence made.
 
 ### 25.14 Consumer ordering, and the release boundary
 
