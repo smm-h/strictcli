@@ -339,11 +339,11 @@ applies **exactly one** presence option -- `ArgRequired()`, `ArgOptional()`, or
 a required arg the implicit default, and spelled one fact across two options.
 
 ```go
-app.Command("deploy", "Deploy to an environment", handler,
-    strictcli.WithEffect(strictcli.EffectMutating),
+app.Command("show", "Show what is deployed to an environment", handler,
+    strictcli.WithEffect(strictcli.EffectReadOnly),
     strictcli.WithArgs(
         strictcli.NewArg("environment", "Target environment", strictcli.ArgRequired()),
-        strictcli.NewArg("version", "Version to deploy", strictcli.ArgDefault("latest")),
+        strictcli.NewArg("version", "Version to inspect", strictcli.ArgDefault("latest")),
         strictcli.NewArg("note", "An optional note", strictcli.ArgOptional()),
     ),
 )
@@ -351,6 +351,12 @@ app.Command("deploy", "Deploy to an environment", handler,
 
 An optional arg delivers absence as a **present kwargs key** holding `nil`,
 exactly as an optional flag does -- the key is never omitted.
+
+A positional arg is reached by the
+[mutating-default ban](flag-system.md#a-mutating-command-may-not-default-a-value)
+exactly as a flag is, which is why the command above is `EffectReadOnly`: on a
+mutating command, `ArgDefault("latest")` is a registration-time panic and the arg
+declares `ArgRequired()` or `ArgOptional()` instead.
 
 Arg options:
 
@@ -672,7 +678,8 @@ var (
     )
     ViaWebhook = strictcli.Choice("webhook", "post the notification to a URL",
         strictcli.StringFlag("url", "endpoint to post to", strictcli.Required()),
-        strictcli.IntFlag("retries", "delivery attempts before giving up", strictcli.Default(3)),
+        strictcli.IntFlag("retries", "delivery attempts before giving up; 3 when omitted",
+            strictcli.Optional()),
     )
 )
 
@@ -688,8 +695,12 @@ app.Command("send", "Send one notification through exactly one channel",
                 return "texting " + strictcli.Get[string](f, "phone_number")
             }),
             strictcli.When(ViaWebhook, func(f strictcli.Fields) string {
+                retries, provided := strictcli.GetOpt[int](f, "retries")
+                if !provided {
+                    retries = 3
+                }
                 return fmt.Sprintf("posting to %s (%d retries)",
-                    strictcli.Get[string](f, "url"), strictcli.Get[int](f, "retries"))
+                    strictcli.Get[string](f, "url"), retries)
             }),
         )
         ctx.Info(line)
@@ -778,7 +789,7 @@ var (
         strictcli.StringFlag("profile", "use the named profile", strictcli.Required()),
         "use the named profile",
         strictcli.BoolFlag("create-missing", "create the profile if it does not exist",
-            strictcli.Default(false)),
+            strictcli.Optional()),
     )
     EveryProfile = strictcli.MemberChoice(
         strictcli.BoolFlag("all-profiles", "apply to every profile", strictcli.Required()),
@@ -791,8 +802,9 @@ app.Command("sync", "Synchronize profiles",
         scope := strictcli.GetElected(kwargs, "scope")
         ctx.Info(strictcli.Match(scope,
             strictcli.When(OneProfile, func(f strictcli.Fields) string {
+                create, _ := strictcli.GetOpt[bool](f, "create_missing")
                 return fmt.Sprintf("syncing %s (create=%v)",
-                    strictcli.Get[string](f, "value"), strictcli.Get[bool](f, "create_missing"))
+                    strictcli.Get[string](f, "value"), create)
             }),
             strictcli.When(EveryProfile, func(f strictcli.Fields) string {
                 return "syncing every profile"
@@ -813,7 +825,7 @@ myapp sync -- Synchronize profiles
 Flags:
   scope                                        What to synchronize (exactly one of the following) [required]
     --profile <str>                            use the named profile [required]
-      --create-missing, --no-create-missing    create the profile if it does not exist [default: false]
+      --create-missing, --no-create-missing    create the profile if it does not exist [optional]
     --all-profiles                             apply to every profile [required]
 
 $ myapp sync --profile work --create-missing
@@ -902,9 +914,9 @@ app.Command("deploy", "Deploy the app", handler,
     strictcli.WithFlags(
         strictcli.StringFlag("target", "Deploy target", strictcli.Optional()),
         strictcli.StringFlag("region", "Target region", strictcli.Optional()),
-        strictcli.BoolFlag("staged", "Roll out in stages", strictcli.Default(false)),
+        strictcli.BoolFlag("staged", "Roll out in stages", strictcli.Optional()),
         strictcli.IntFlag("batch-size", "Instances per batch", strictcli.Optional()),
-        strictcli.BoolFlag("wait", "Block until the rollout settles", strictcli.Default(false)),
+        strictcli.BoolFlag("wait", "Block until the rollout settles", strictcli.Optional()),
     ),
     strictcli.WithConstraints(
         // --target and --region must both appear or neither
@@ -1007,6 +1019,112 @@ source label: it is still the declaration deciding. Every constraint renders in
 `dependentRequired`) with anything a JSON Schema keyword cannot carry stated in
 the tool description instead.
 
+## Update Commands
+
+A command that changes some properties of one resource and leaves the rest alone
+declares what it updates with `WithUpdateOf(...)`. The write mode is a
+**positional parameter**, which is Go's spelling of mandatory: there is no option
+to forget and no zero-valued struct field to fill in silently.
+
+```go
+app.Command("update-record", "change one DNS record in place",
+    func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+        zone := strictcli.Get[string](kwargs, "zone")
+        recordID := strictcli.Get[string](kwargs, "record_id")
+        body := map[string]interface{}{}
+        if ctx.Provided("content") {
+            body["content"] = kwargs["content"]
+        }
+        if ctx.Unset("ttl") {
+            body["ttl"] = nil
+        } else if ctx.Provided("ttl") {
+            body["ttl"] = kwargs["ttl"]
+        }
+        _, _ = ctx.Effects().HTTP("PATCH",
+            fmt.Sprintf("https://api.example.com/zones/%s/dns_records/%s", zone, recordID))
+        return strictcli.Exit(0)
+    },
+    strictcli.WithEffect(strictcli.EffectMutating),
+    strictcli.WithUpdateOf("dns-record", strictcli.WriteSparse,
+        strictcli.Identity("zone", "record-id"),
+        strictcli.Properties("content", "ttl", "proxied"),
+    ),
+    strictcli.WithFlags(
+        strictcli.StringFlag("zone", "zone the record belongs to", strictcli.Required()),
+        strictcli.StringFlag("record-id", "identifier of the record to change", strictcli.Required()),
+        strictcli.StringFlag("content", "record content", strictcli.Optional()),
+        strictcli.IntFlag("ttl", "time to live in seconds", strictcli.Optional(), strictcli.Nullable()),
+        strictcli.BoolFlag("proxied", "whether the record is proxied", strictcli.Optional()),
+    ),
+)
+```
+
+The surface:
+
+```go
+type WriteMode string
+
+const (
+    WriteSparse      WriteMode = "sparse"
+    WriteFullReplace WriteMode = "full_replace"
+)
+
+func WithUpdateOf(resource string, mode WriteMode, opts ...UpdateOption) CmdOption
+func Identity(names ...string) UpdateOption
+func Properties(first string, rest ...string) UpdateOption
+func Nullable() FlagOption
+```
+
+`Properties(first string, rest ...string)` puts a **compile-time floor of one** on
+the property list -- the two-named-plus-variadic idiom `AllOrNone` and
+`AtLeastOne` already use, at the arity this construct needs. `WriteMode` is
+string-based so its zero value renders `""` in the invalid-mode panic and the
+sentence stays byte-identical with its siblings'. `Nullable()` is an ordinary
+`FlagOption` beside `Required()` / `Optional()` / `Default(v)`.
+
+A **property applies `Optional()` and nothing else**: absence *is* untouched.
+`Required()` on a property is a registration panic, and `Default(v)` is refused
+twice over -- an update command is always mutating, so
+[the ban](flag-system.md#a-mutating-command-may-not-default-a-value) reaches it
+first. An **identity member** may be `Required()` or `Optional()`, and may be a
+positional arg where a property may not.
+
+The framework refuses an invocation that supplies no property, naming every
+declared one, and a nullable property mints `--unset-<prop>`, answered by
+`ctx.Unset(name)`:
+
+```
+$ mytool update-record --zone z1 --record-id r7
+error: update "dns-record": at least one property is required: --content, --ttl, --proxied
+try 'mytool update-record --help'
+
+$ mytool update-record --help
+mytool update-record -- change one DNS record in place
+
+Flags:
+  --zone <str>                zone the record belongs to [required]
+  --record-id <str>           identifier of the record to change [required]
+  --content <str>             record content [optional]
+  --ttl <int>, --unset-ttl    time to live in seconds [optional]
+  --proxied, --no-proxied     whether the record is proxied [optional]
+```
+
+Inside an update command `--no-proxied` **writes false** -- stating false is
+stating a value -- and every run that reports what it does renders the write set.
+In dry mode it is one unnumbered line before the first effect; under `--json` it
+is the envelope's `writes` member, in both modes:
+
+```
+$ mytool --dry-run update-record --zone z1 --record-id r7 --content hi --unset-ttl
+DRY RUN — no changes were made. Would do:
+  writes: content; clears: ttl (other properties unchanged)
+  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7
+```
+
+See [Update commands](flag-system.md#update-commands) for the full rules: the
+write set's two renderings, the clear vocabulary at every door, and the schema
+and MCP projections.
+
 ## WithConfig -- Config File Support
 
 `WithConfig()` enables automatic config file loading from the XDG config
@@ -1055,10 +1173,35 @@ inspection, editor integration, and initialization of the config file with
 default values:
 
 - `mytool config show` -- display current config with value sources
-- `mytool config set <key> <value>` -- set a config value
+- `mytool config set <key> --value <v>` -- write a value at a key
 - `mytool config path` -- print the config file path
 - `mytool config edit` -- open the config file in `$EDITOR`
 - `mytool config init` -- create the config file with defaults
+
+`config set` takes its write under a **required, member-spelled selector** named
+`write`, over exactly three choices -- a value, a clear, and a reset to the
+declared default:
+
+```
+Flags:
+  write              What to write at the key: a value, a clear, or a reset to the declared default (exactly one of the following) [required]
+    --value <str>    Write a value at the key [required]
+    --clear          Clear a repeatable flag [required]
+    --default        Reset the key to its declared default [required]
+```
+
+Supplying none or two of the three is refused by the framework itself rather than
+by the command, so all three sentences are the ordinary selector vocabulary:
+
+```
+error: one of --value, --clear, --default is required
+error: --value and --clear are mutually exclusive
+error: --clear and --default are mutually exclusive
+```
+
+There is no trailing positional value: `config set <key> <v>` now reaches the
+first of those refusals rather than a value, because the unsatisfied-selector
+refusal outranks the extra-positional error.
 
 ### Config path override
 
@@ -1200,13 +1343,18 @@ func main() {
     svc := app.Group("service", "Service management")
     svc.Command("restart", "Restart a service", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
         name := strictcli.Get[string](kwargs, "name")
-        timeout := strictcli.Get[int](kwargs, "timeout")
+        timeout, provided := strictcli.GetOpt[int](kwargs, "timeout")
+        if !provided {
+            timeout = 30
+        }
         ctx.Info(fmt.Sprintf("Restarting %s (timeout: %ds)", name, timeout))
         return strictcli.Exit(0)
     }, strictcli.WithEffect(strictcli.EffectMutating), strictcli.WithConsequential(),
         strictcli.WithFlags(
             strictcli.StringFlag("name", "Service name", strictcli.Required()),
-            strictcli.IntFlag("timeout", "Shutdown timeout in seconds", strictcli.Default(30)),
+            strictcli.IntFlag("timeout",
+                "Shutdown timeout in seconds; the handler uses 30 when it is not supplied",
+                strictcli.Optional()),
         ))
 
     app.Run()

@@ -185,24 +185,29 @@ key-value flags.
 ```python
 @app.command("build", help="Build the project", effect="mutating")
 @strictcli.flag("output", type=str, presence="required", help="Output file path")
-@strictcli.flag("format", type=str, default="json", help="Output format")
+@strictcli.flag("format", type=str, presence="optional",
+                help="Output format; the handler uses json when it is not supplied")
 def build(ctx, output, format):
-    ctx.info(f"Building to {output} as {format}")
+    ctx.info(f"Building to {output} as {format or 'json'}")
 ```
 
 `presence="required"` means some source -- a CLI token, a bound env var, a config
-entry, or an `Implies` injection -- must supply a value.
+entry, or an `Implies` injection -- must supply a value. `format` would read more
+naturally as `default="json"`, and on a `read_only` command it would be written
+that way; `build` is `mutating`, where
+[no declaration may carry a value default](flag-system.md#a-mutating-command-may-not-default-a-value),
+so the fallback moves into the handler and the flag's help says so.
 
 ### Bool Flags
 
 ```python
-@app.command("deploy", help="Deploy the app", effect="mutating")
-@strictcli.flag("cache", type=bool, default=True, help="Reuse the build cache")
+@app.command("report", help="Summarize the last build", effect="read_only")
+@strictcli.flag("cache", type=bool, default=True, help="Include cache statistics")
 @strictcli.flag("watch", type=bool, presence="required", help="Watch for changes")
 @strictcli.flag("color", type=bool, presence="optional", help="Colorize output")
-def deploy(ctx, cache, watch, color):
+def report(ctx, cache, watch, color):
     if not cache:
-        ctx.info("Cache disabled")
+        ctx.info("Cache statistics omitted")
     if color is None:
         ctx.info("Color decision inherited from the environment")
 ```
@@ -210,7 +215,10 @@ def deploy(ctx, cache, watch, color):
 Bool flags are negatable by default: `--cache` sets `True`, `--no-cache` sets
 `False`. A `presence="required"` bool must be answered -- the user passes either
 `--flag` or `--no-flag`. A `presence="optional"` bool is a real tri-state:
-`--flag` is `True`, `--no-flag` is `False`, and absence arrives as `None`.
+`--flag` is `True`, `--no-flag` is `False`, and absence arrives as `None`. The
+command above is `read_only`, which is what makes `default=True` legal on it;
+`default=True` and `default=False` are both refused on a `mutating` command, so
+a mutating command's bools are `required` or `optional`.
 
 Note that `verbose` and `quiet` are **not** available as flag names: they belong
 to the [reserved quartet](#the-reserved-flag-quartet) and arrive on `ctx`
@@ -436,17 +444,23 @@ positional, so the order is the list's order:
 
 ```python
 @app.command(
-    "deploy",
-    help="Deploy to an environment",
-    effect="mutating",
+    "show",
+    help="Show what is deployed to an environment",
+    effect="read_only",
     args=[
         strictcli.Arg(name="environment", help="Target environment", presence="required"),
-        strictcli.Arg(name="version", help="Version to deploy", default="latest"),
+        strictcli.Arg(name="version", help="Version to inspect", default="latest"),
     ],
 )
-def deploy(ctx, environment, version):
-    ctx.info(f"Deploying {version} to {environment}")
+def show(ctx, environment, version):
+    ctx.info(f"Showing {version} in {environment}")
 ```
+
+A positional arg is reached by the
+[mutating-default ban](flag-system.md#a-mutating-command-may-not-default-a-value)
+exactly as a flag is, which is why the command above is `read_only`: on a
+`mutating` one, `default="latest"` is a registration error and the arg declares
+`presence="required"` or `presence="optional"` instead.
 
 An optional arg delivers absence as a present keyword argument (`None`), exactly as an
 optional flag does:
@@ -810,7 +824,8 @@ class Sms:
 @strictcli.choice("webhook", help="post the notification to a URL")
 class Webhook:
     url: str = strictcli.sub_flag(help="endpoint to post to", presence="required")
-    retries: int = strictcli.sub_flag(help="delivery attempts before giving up", default=3)
+    retries: int = strictcli.sub_flag(help="delivery attempts before giving up; 3 when omitted",
+                                      presence="optional")
 
 
 @app.command("send", help="Send one notification through exactly one channel", effect="mutating")
@@ -899,7 +914,7 @@ member supplies it.
 class NamedProfile:
     value: str = strictcli.member_value(help="profile name")
     create_missing: bool = strictcli.sub_flag(help="create the profile if it does not exist",
-                                              default=False)
+                                              presence="optional")
 
 
 @strictcli.choice("all-profiles", help="apply to every profile")
@@ -928,7 +943,7 @@ myapp sync -- Synchronize profiles
 Flags:
   scope                                        What to synchronize (exactly one of the following) [required]
     --profile <str>                            use the named profile [required]
-      --create-missing, --no-create-missing    create the profile if it does not exist [default: false]
+      --create-missing, --no-create-missing    create the profile if it does not exist [optional]
     --all-profiles                             apply to every profile [required]
 
 $ myapp sync --profile work --create-missing
@@ -1025,9 +1040,9 @@ what lets one constraint be a member of another.
 ])
 @strictcli.flag("target", type=str, presence="optional", help="Deploy target")
 @strictcli.flag("region", type=str, presence="optional", help="Target region")
-@strictcli.flag("staged", type=bool, default=False, help="Roll out in stages")
+@strictcli.flag("staged", type=bool, presence="optional", help="Roll out in stages")
 @strictcli.flag("batch-size", type=int, presence="optional", help="Instances per batch")
-@strictcli.flag("wait", type=bool, default=False, help="Block until the rollout settles")
+@strictcli.flag("wait", type=bool, presence="optional", help="Block until the rollout settles")
 def deploy(ctx, target, region, staged, batch_size, wait):
     ctx.info(f"Deploying to {target} in {region}")
 ```
@@ -1113,6 +1128,94 @@ section, publishes its members in `--dump-schema`, and projects into MCP tool
 schemas (`anyOf` / `dependentRequired`) with anything a JSON Schema keyword
 cannot carry stated in the tool description instead.
 
+## Update Commands
+
+A command that changes some properties of one resource and leaves the rest alone
+declares what it updates with `update_of=`. `UpdateOf` is a frozen, keyword-only
+record whose first field is the resource name, joining the `AtLeastOne` /
+`AllOrNone` / `Requires` / `Implies` family of declarations that name a rule:
+
+```python
+@app.command("update-record", help="change one DNS record in place", effect="mutating",
+             update_of=strictcli.UpdateOf("dns-record", write_mode="sparse",
+                                          identity=["zone", "record-id"],
+                                          properties=["content", "ttl", "proxied"]))
+@strictcli.flag("zone", type=str, help="zone the record belongs to", presence="required")
+@strictcli.flag("record-id", type=str, help="identifier of the record to change", presence="required")
+@strictcli.flag("content", type=str, help="record content", presence="optional")
+@strictcli.flag("ttl", type=int, help="time to live in seconds", presence="optional", nullable=True)
+@strictcli.flag("proxied", type=bool, help="whether the record is proxied", presence="optional")
+def update_record(ctx, zone, record_id, content, ttl, proxied):
+    body = {}
+    if ctx.provided("content"):
+        body["content"] = content
+    if ctx.unset("ttl"):
+        body["ttl"] = None
+    elif ctx.provided("ttl"):
+        body["ttl"] = ttl
+    if ctx.provided("proxied"):
+        body["proxied"] = proxied
+    ctx.effects.http("PATCH", f"https://api.example.com/zones/{zone}/dns_records/{record_id}")
+    return 0
+```
+
+`write_mode=` is a keyword taking a closed string vocabulary, which is how Python
+spells `effect=`, `presence=` and `elect_by=`, and it carries **no default** --
+omitting it is Python's own `TypeError` at the declaration site. `identity=` and
+`properties=` are lists of **declared names**, dashed exactly as
+`Member("old-name")` takes them; there is no alternate underscored spelling on
+the declaration surface. `nullable=True` sits on the flag, beside `presence=`.
+
+A **property declares `presence="optional"` and nothing else**: absence *is*
+untouched. `presence="required"` is a registration error, and a value default is
+refused twice over -- an update command is always `mutating`, so
+[the ban](flag-system.md#a-mutating-command-may-not-default-a-value) reaches it
+first. An **identity member** declares `required` or `optional`, and may be a
+positional arg where a property may not.
+
+The framework refuses an invocation that supplies no property, naming every
+declared one:
+
+```
+$ mytool update-record --zone z1 --record-id r7
+error: update "dns-record": at least one property is required: --content, --ttl, --proxied
+try 'mytool update-record --help'
+```
+
+A nullable property mints `--unset-<prop>`, which shares its property's help line
+the way `--no-<x>` shares a bool's, and is answered by `ctx.unset(name)`:
+
+```
+$ mytool update-record --help
+mytool update-record -- change one DNS record in place
+
+Flags:
+  --zone <str>                zone the record belongs to [required]
+  --record-id <str>           identifier of the record to change [required]
+  --content <str>             record content [optional]
+  --ttl <int>, --unset-ttl    time to live in seconds [optional]
+  --proxied, --no-proxied     whether the record is proxied [optional]
+
+$ mytool update-record --zone z1 --record-id r7 --ttl 60 --unset-ttl
+error: --ttl and --unset-ttl are mutually exclusive: a property is either written or cleared
+```
+
+Inside an update command `--no-proxied` **writes `False`** -- stating false is
+stating a value -- and every run that reports what it does renders the write set.
+In dry mode it is one unnumbered line before the first effect; under `--json` it
+is the envelope's `writes` member, in both modes:
+
+```
+$ mytool --dry-run update-record --zone z1 --record-id r7 --content hi --unset-ttl
+DRY RUN — no changes were made. Would do:
+  writes: content; clears: ttl (other properties unchanged)
+  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7
+```
+
+See [Update commands](flag-system.md#update-commands) for the full rules: the
+write set's two renderings, the clear vocabulary at every door, and the schema
+and MCP projections.
+
 ## Flag Sets
 
 Reuse the same set of flags across multiple commands by grouping them into a
@@ -1123,7 +1226,7 @@ binding, and constraint validation:
 ```python
 auth_flags = strictcli.FlagSet(name="auth", flags=[
     strictcli.Flag(name="token", type=str, presence="required", env="MYTOOL_TOKEN", help="API token"),
-    strictcli.Flag(name="region", type=str, default="us-east", help="API region"),
+    strictcli.Flag(name="region", type=str, presence="optional", help="API region"),
 ])
 
 @app.command("list", help="List resources", effect="read_only", flag_sets=[auth_flags])
@@ -1188,10 +1291,35 @@ provenance sources, in-place modification, path inspection, editor integration,
 and initialization of the config file with default values:
 
 - `mytool config show` -- display current config with value sources
-- `mytool config set <key> <value>` -- set a config value
+- `mytool config set <key> --value <v>` -- write a value at a key
 - `mytool config path` -- print the config file path
 - `mytool config edit` -- open the config file in `$EDITOR`
 - `mytool config init` -- create the config file with defaults
+
+`config set` takes its write under a **required, member-spelled selector** named
+`write`, over exactly three choices -- a value, a clear, and a reset to the
+declared default:
+
+```
+Flags:
+  write              What to write at the key: a value, a clear, or a reset to the declared default (exactly one of the following) [required]
+    --value <str>    Write a value at the key [required]
+    --clear          Clear a repeatable flag [required]
+    --default        Reset the key to its declared default [required]
+```
+
+Supplying none or two of the three is refused by the framework itself rather than
+by the command, so all three sentences are the ordinary selector vocabulary:
+
+```
+error: one of --value, --clear, --default is required
+error: --value and --clear are mutually exclusive
+error: --clear and --default are mutually exclusive
+```
+
+There is no trailing positional value: `config set <key> <v>` now reaches the
+first of those refusals rather than a value, because the unsatisfied-selector
+refusal outranks the extra-positional error.
 
 ### Config path override
 
@@ -1381,12 +1509,21 @@ svc = app.group("service", help="Service management")
 
 @svc.command("restart", help="Restart a service", effect="mutating", consequential=True)
 @strictcli.flag("name", type=str, presence="required", help="Service name")
-@strictcli.flag("timeout", type=int, default=30, help="Shutdown timeout in seconds")
+@strictcli.flag("timeout", type=int, presence="optional",
+                help="Shutdown timeout in seconds; the handler uses 30 when it is not supplied")
 def restart(ctx, color, name, timeout):
-    ctx.info(f"Restarting {name} (timeout: {timeout}s)")
+    seconds = 30 if timeout is None else timeout
+    ctx.info(f"Restarting {name} (timeout: {seconds}s)")
 
 app.run()
 ```
+
+`restart` is `mutating`, so `--timeout` cannot declare `default=30`: it declares
+`presence="optional"` and the handler applies the fallback, which the flag's help
+states. `status` is `read_only`, which is why its `--environment` keeps
+`default="production"`, and `--color` is an app-level global, which the ban does
+not reach. See
+[A mutating command may not default a value](flag-system.md#a-mutating-command-may-not-default-a-value).
 
 Usage:
 

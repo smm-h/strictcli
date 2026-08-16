@@ -421,8 +421,7 @@ app.command(
       target: flag("target", t.str, {
         help: "Deploy target",
         env: "MYTOOL_TARGET",
-        presence: "default",
-        default: "staging",
+        presence: "required",
       }),
     },
     handler: (args, ctx) => {
@@ -592,9 +591,8 @@ app.command(
                 presence: "required",
               }),
               retries: flag("retries", t.int, {
-                help: "delivery attempts before giving up",
-                presence: "default",
-                default: 3n,
+                help: "delivery attempts before giving up; 3 when omitted",
+                presence: "optional",
               }),
             },
           }),
@@ -712,8 +710,7 @@ app.command(
             flags: {
               create_missing: flag("create-missing", t.bool, {
                 help: "create the profile if it does not exist",
-                presence: "default",
-                default: false,
+                presence: "optional",
               }),
             },
           }),
@@ -745,7 +742,7 @@ myapp sync -- Synchronize profiles
 Flags:
   scope                                        What to synchronize (exactly one of the following) [required]
     --profile <str>                            use the named profile [required]
-      --create-missing, --no-create-missing    create the profile if it does not exist [default: false]
+      --create-missing, --no-create-missing    create the profile if it does not exist [optional]
     --all-profiles                             apply to every profile [required]
 
 $ myapp sync --profile work --create-missing
@@ -826,8 +823,7 @@ app.command(
       region: flag("region", t.str, { help: "AWS region", presence: "optional" }),
       staged: flag("staged", t.bool, {
         help: "Roll out in stages",
-        presence: "default",
-        default: false,
+        presence: "optional",
       }),
       batch_size: flag("batch-size", t.int, {
         help: "Instances per batch",
@@ -835,8 +831,7 @@ app.command(
       }),
       wait: flag("wait", t.bool, {
         help: "Block until settled",
-        presence: "default",
-        default: false,
+        presence: "optional",
       }),
     },
     constraints: [
@@ -936,6 +931,113 @@ source label: it is still the declaration deciding. Every constraint renders in
 `--dump-schema`, and projects into MCP tool schemas (`anyOf` /
 `dependentRequired`) with anything a JSON Schema keyword cannot carry stated in
 the tool description instead.
+
+## Update Commands
+
+A command that changes some properties of one resource and leaves the rest alone
+declares what it updates with `updateOf` -- one option object on the command
+spec, the shape `requires({...})` and `implies({...})` already have:
+
+```typescript
+app.command(
+  defineMutatingCommand("update-record", {
+    help: "change one DNS record in place",
+    updateOf: {
+      resource: "dns-record",
+      writeMode: "sparse",
+      identity: ["zone", "record-id"],
+      properties: ["content", "ttl", "proxied"],
+    },
+    flags: {
+      zone: flag("zone", t.str, {
+        help: "zone the record belongs to",
+        presence: "required",
+      }),
+      record_id: flag("record-id", t.str, {
+        help: "identifier of the record to change",
+        presence: "required",
+      }),
+      content: flag("content", t.str, {
+        help: "record content",
+        presence: "optional",
+      }),
+      ttl: flag("ttl", t.int, {
+        help: "time to live in seconds",
+        presence: "optional",
+        nullable: true,
+      }),
+      proxied: flag("proxied", t.bool, {
+        help: "whether the record is proxied",
+        presence: "optional",
+      }),
+    },
+    handler: (args, ctx) => {
+      const body: Record<string, unknown> = {};
+      if (ctx.provided("content")) body.content = args.content;
+      if (ctx.unset("ttl")) body.ttl = null;
+      else if (ctx.provided("ttl")) body.ttl = args.ttl;
+      if (ctx.provided("proxied")) body.proxied = args.proxied;
+      ctx.effects.http(
+        "PATCH",
+        `https://api.example.com/zones/${args.zone}/dns_records/${args.record_id}`,
+      );
+      return 0;
+    },
+  }),
+);
+```
+
+Two of the declaration's rules are the compiler's here rather than the
+framework's. `writeMode` is the literal union `"sparse" | "full_replace"`, so a
+typo does not compile. `properties` is typed `readonly [K, ...K[]]` where `K` is
+the **key union of the command's own declared names**, so the floor of one *and*
+every name are checked at compile time -- a property naming a flag the command
+does not declare does not compile, and the framework's unknown-name refusal stays
+reachable only through a widened or JSON-shaped caller. `identity` takes the same
+key union without the floor, and `nullable: true` joins the flag's option object.
+
+A **property declares `presence: "optional"` and nothing else**: absence *is*
+untouched. `presence: "required"` is a registration error, and a value default is
+refused twice over -- an update command is always mutating, so
+[the ban](flag-system.md#a-mutating-command-may-not-default-a-value) reaches it
+first. An **identity member** declares `required` or `optional`, and may be a
+positional arg where a property may not.
+
+The framework refuses an invocation that supplies no property, naming every
+declared one, and a nullable property mints `--unset-<prop>`, answered by
+`ctx.unset(name)`:
+
+```
+$ mytool update-record --zone z1 --record-id r7
+error: update "dns-record": at least one property is required: --content, --ttl, --proxied
+try 'mytool update-record --help'
+
+$ mytool update-record --help
+mytool update-record -- change one DNS record in place
+
+Flags:
+  --zone <str>                zone the record belongs to [required]
+  --record-id <str>           identifier of the record to change [required]
+  --content <str>             record content [optional]
+  --ttl <int>, --unset-ttl    time to live in seconds [optional]
+  --proxied, --no-proxied     whether the record is proxied [optional]
+```
+
+Inside an update command `--no-proxied` **writes `false`** -- stating false is
+stating a value -- and every run that reports what it does renders the write set.
+In dry mode it is one unnumbered line before the first effect; under `--json` it
+is the envelope's `writes` member, in both modes:
+
+```
+$ mytool --dry-run update-record --zone z1 --record-id r7 --content hi --unset-ttl
+DRY RUN — no changes were made. Would do:
+  writes: content; clears: ttl (other properties unchanged)
+  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7
+```
+
+See [Update commands](flag-system.md#update-commands) for the full rules: the
+write set's two renderings, the clear vocabulary at every door, and the schema
+and MCP projections.
 
 ## Command Groups
 
@@ -1348,9 +1450,8 @@ app.command(
       target: flag("target", t.str, { help: "Deploy target", presence: "required" }),
       replicas: flag("replicas", t.int, { help: "Replica count", presence: "required" }),
       canary: flag("canary", t.bool, {
-        help: "Canary first",
-        presence: "default",
-        default: false,
+        help: "Roll out to one instance first",
+        presence: "optional",
       }),
       tag: flag("tag", t.str, { help: "Tag", presence: "optional" }),
     },
@@ -1359,7 +1460,7 @@ app.command(
       // TypeScript knows the exact type of args:
       //   args.target    -> string         (presence: "required")
       //   args.replicas  -> bigint         (presence: "required")
-      //   args.canary    -> boolean        (presence: "default")
+      //   args.canary    -> boolean | undefined  (presence: "optional")
       //   args.tag       -> string | undefined  (presence: "optional")
       //   args.service   -> string         (positional arg, presence: "required")
     },
@@ -1437,9 +1538,8 @@ app.command(
     help: "Deploy a service",
     flags: {
       replicas: flag("replicas", t.int, {
-        help: "Number of replicas",
-        presence: "default",
-        default: 1n,
+        help: "Number of replicas; the handler uses 1 when it is not supplied",
+        presence: "optional",
       }),
       tag: flag("tag", t.list(t.str), {
         help: "Tags for the deployment",
@@ -1452,11 +1552,11 @@ app.command(
     payloadSchema: { type: "object" },
     handler: (args, ctx) => {
       ctx.info(`Deploying ${args.service} to ${args.region}`);
-      ctx.info(`Replicas: ${args.replicas}`);
+      ctx.info(`Replicas: ${args.replicas ?? 1n}`);
       if (args.tag.length > 0) {
         ctx.info(`Tags: ${args.tag.join(", ")}`);
       }
-      ctx.payload({ service: args.service, replicas: args.replicas });
+      ctx.payload({ service: args.service, replicas: args.replicas ?? 1n });
       return outcome(0);
     },
   }),
