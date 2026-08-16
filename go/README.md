@@ -206,8 +206,8 @@ Reusable bundles of flags shared across commands.
 authFlags := strictcli.FlagSet{
     Name: "auth",
     Flags: []strictcli.Flag{
-        strictcli.StringFlag("token", "Auth token", strictcli.Default("")),
-        strictcli.BoolFlag("insecure", "Skip TLS verification", strictcli.Default(false)),
+        strictcli.StringFlag("token", "Auth token", strictcli.Required()),
+        strictcli.BoolFlag("insecure", "Skip TLS verification", strictcli.Optional()),
     },
 }
 
@@ -295,7 +295,7 @@ app.Command("purge", "Purge archived items", handler,
     strictcli.WithFlags(
         strictcli.StringFlag("older-than", "Purge items older than duration", strictcli.Optional()),
         strictcli.StringFlag("larger-than", "Only purge items larger than this size", strictcli.Optional()),
-        strictcli.BoolFlag("all", "Select all archived items", strictcli.Default(false)),
+        strictcli.BoolFlag("all", "Select all archived items", strictcli.Optional()),
     ),
     strictcli.WithArgs(
         strictcli.NewArg("targets", "Record UUIDs or numeric database IDs",
@@ -338,6 +338,52 @@ keyword cannot carry stated in the tool description.
 Constraints can only reference flags and args you declared, so the reserved
 quartet (`dry-run`, `approve-consequential`, `quiet`, `verbose`) can never
 appear in one.
+
+### Update commands
+
+A command that changes some properties of one resource and leaves the rest alone
+declares what it updates with `WithUpdateOf(...)`. The write mode is a positional
+parameter, which is Go's spelling of mandatory:
+
+```go
+app.Command("update-record", "Change one DNS record in place", handler,
+    strictcli.WithEffect(strictcli.EffectMutating),
+    strictcli.WithUpdateOf("dns-record", strictcli.WriteSparse,
+        strictcli.Identity("zone", "record-id"),
+        strictcli.Properties("content", "ttl", "proxied"),
+    ),
+    strictcli.WithFlags(
+        strictcli.StringFlag("zone", "Zone the record belongs to", strictcli.Required()),
+        strictcli.StringFlag("record-id", "Identifier of the record", strictcli.Required()),
+        strictcli.StringFlag("content", "Record content", strictcli.Optional()),
+        strictcli.IntFlag("ttl", "Time to live in seconds", strictcli.Optional(), strictcli.Nullable()),
+        strictcli.BoolFlag("proxied", "Whether the record is proxied", strictcli.Optional()),
+    ),
+)
+```
+
+`Properties(first string, rest ...string)` puts a compile-time floor of one on
+the property list. A property applies `Optional()` and nothing else -- absence
+*is* untouched -- and the framework refuses an invocation that supplies none:
+
+```
+error: update "dns-record": at least one property is required: --content, --ttl, --proxied
+```
+
+Because absence must never resolve to a value nobody stated, **no flag or arg on
+a mutating command may apply `Default(v)`** (empty collection defaults and every
+default on a read-only command stay legal). Inside an update `--no-proxied`
+writes false; a `Nullable()` property mints `--unset-<prop>`, answered by
+`ctx.Unset(name)`. Every run that reports what it does renders the write set --
+one unnumbered line in the would-do log, and a `writes` member on the machine
+envelope:
+
+```
+$ mytool --dry-run update-record --zone z1 --record-id r7 --content hi --unset-ttl
+DRY RUN — no changes were made. Would do:
+  writes: content; clears: ttl (other properties unchanged)
+  1. net: PATCH https://api.example.com/zones/z1/dns_records/r7
+```
 
 ### Global flags
 
@@ -433,7 +479,7 @@ app.Command("internal-debug", "Debug internals", handler,
 
 ### JSON config file support
 
-Reads `~/.config/{name}/config.json` (or TOML). Auto-registers `config show/set/path/edit` subcommands.
+Reads `~/.config/{name}/config.json` (or TOML). Auto-registers `config show/set/path/edit` subcommands, where `config set <key> --value <v>` writes under a required selector over a value, a clear (`--clear`) and a reset to the declared default (`--default`).
 
 ```go
 app := strictcli.NewApp("myapp", "1.0.0", "My app", strictcli.WithConfig())
