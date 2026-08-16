@@ -1,6 +1,6 @@
 ---
 title: Language Idioms
-description: "Why strictcli's three declaration surfaces differ on purpose: the presence declaration, the choice flag and the constraint member, and what parity binds."
+description: "Why strictcli's three declaration surfaces differ on purpose: presence, the choice flag, the constraint member, the update record, and what parity binds."
 nav_group: "Guides"
 nav_order: 5
 ---

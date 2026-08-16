@@ -1,6 +1,6 @@
 ---
 title: Go Quickstart
-description: "Build Go CLIs with strictcli: WithEffect classification, the Required/Optional/Default presence declaration, choice flags with Match, and constraints."
+description: "Build Go CLIs with strictcli: WithEffect classification, Required/Optional/Default presence, choice flags with Match, constraints and update commands."
 nav_group: "Guides"
 nav_order: 1
 ---

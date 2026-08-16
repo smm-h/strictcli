@@ -1,6 +1,6 @@
 ---
 title: Flag System
-description: "strictcli's flags and args: the three-way presence declaration, four types, boolean tri-state, choice flags and their scopes, and named constraints."
+description: "strictcli's flags and args: the three-way presence declaration, four types, bool tri-state, choice flags, named constraints and update commands."
 nav_group: "Guides"
 nav_order: 3
 ---
@@ -1521,7 +1521,7 @@ record cannot tell a field the caller wrote from one the declaration filled.
 
 | | `required` | a value `default` | `optional` |
 |---|---|---|---|
-| **property** | **registration error** -- a property the invocation must always supply is written in every invocation, which makes the at-least-one rule unfireable | **registration error**, already, by the ban -- an update command is mutating | **the only legal declaration**; absence *is* untouched |
+| **property** | **registration error** -- a property the invocation must always supply is written in every invocation, which leaves the at-least-one rule nothing to fire on | **registration error**, already, by the ban -- an update command is mutating | **the only legal declaration**; absence *is* untouched |
 | **identity** | **legal**, and the ordinary case | **registration error** by the ban | **legal**, for alternative addressing: two optional identity members plus an `AtLeastOne` over them is how *by name or by id* is declared |
 
 **A property is a flag; an identity member may be a flag or a positional arg.** A
@@ -1636,7 +1636,7 @@ to, and the vocabulary is complete at two.
 - **`""` is an ordinary value.** `--content ""` writes an empty string. Separating
   the sentinel from the value is the whole point.
 - **The minted flag is framework-owned and reaches the handler on the Context.**
-  It delivers no kwarg of its own: `ctx.unset(name)` / `ctx.Unset(name)` answers
+  It delivers no keyword argument of its own: `ctx.unset(name)` / `ctx.Unset(name)` answers
   it. An unset property delivers absence -- `None` / `nil` / `undefined`, the same
   value an untouched property delivers -- and reports `provided()` true; `ctx.unset`
   is what saves a handler from reconstructing the boolean out of two facts.
@@ -1701,7 +1701,7 @@ rather than indicative: a consumer reconstructs the rule without re-reading the
 declaration.
 
 **In MCP tool schemas**, properties are ordinary optional properties and never
-appear in `required` -- their requiredness *is* the at-least-one rule, which
+appear in `required` -- what makes them required *is* the at-least-one rule, which
 `required` cannot express. The rule projects instead as `anyOf`, one branch per
 property, at **exact** fidelity: a supplied key is a provided property at that
 door, a `null` is a supplied key and a clear, a `false` is a supplied key and a

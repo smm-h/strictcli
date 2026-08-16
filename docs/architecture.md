@@ -1,6 +1,6 @@
 ---
 title: Architecture and Internals
-description: "strictcli internals: the parse pipeline and its four phases, election, presence and constraint resolution, registration checks, and the v2 schema format."
+description: "strictcli internals: the parse pipeline's four phases, presence, constraint and update resolution, registration checks, the v2 schema and the envelope."
 nav_group: "Guides"
 nav_order: 10
 ---
