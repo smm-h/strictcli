@@ -44,6 +44,7 @@
       "config",
       "set",
       "alpha",
+      "--value",
       "42"
     ],
     "expect": {

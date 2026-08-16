@@ -329,6 +329,7 @@
       "config",
       "set",
       "nonexistent",
+      "--value",
       "value"
     ],
     "expect": {
@@ -367,6 +368,7 @@
       "config",
       "set",
       "count",
+      "--value",
       "abc"
     ],
     "expect": {
@@ -405,6 +407,7 @@
       "config",
       "set",
       "debug",
+      "--value",
       "maybe"
     ],
     "expect": {

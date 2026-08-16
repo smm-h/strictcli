@@ -30,6 +30,7 @@
       "config",
       "set",
       "tags",
+      "--value",
       "a,a"
     ],
     "expect": {
@@ -179,12 +180,13 @@
       "config",
       "set",
       "tags",
+      "--value",
       "a,b",
       "--clear"
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "config set: cannot provide a value with --clear"
+      "stderr_equals": "error: --value and --clear are mutually exclusive\ntry 'myapp config set --help'\n"
     }
   },
   {
@@ -217,12 +219,13 @@
       "config",
       "set",
       "count",
+      "--value",
       "42",
       "--default"
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "config set: cannot provide a value with --default"
+      "stderr_equals": "error: --value and --default are mutually exclusive\ntry 'myapp config set --help'\n"
     }
   },
   {
@@ -261,7 +264,162 @@
     ],
     "expect": {
       "exit_code": 1,
-      "stderr_contains": "config set: --clear and --default are mutually exclusive"
+      "stderr_equals": "error: --clear and --default are mutually exclusive\ntry 'myapp config set --help'\n"
+    }
+  },
+  {
+    "name": "config set: none of the three members is the framework's own vocabulary refusal",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "tags",
+              "help": "the tags",
+              "presence": "required",
+              "type": "str",
+              "repeatable": true,
+              "unique": false
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "config",
+      "set",
+      "tags"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: one of --value, --clear, --default is required\ntry 'myapp config set --help'\n"
+    }
+  },
+  {
+    "name": "config set: the old trailing-positional form is told the vocabulary, not that its value is a stray token",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "tags",
+              "help": "the tags",
+              "presence": "required",
+              "type": "str",
+              "repeatable": true,
+              "unique": false
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "config",
+      "set",
+      "tags",
+      "a,b"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: one of --value, --clear, --default is required\ntry 'myapp config set --help'\n"
+    }
+  },
+  {
+    "name": "config set: the extra-positional error appears once a member has been elected beside it",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "tags",
+              "help": "the tags",
+              "presence": "required",
+              "type": "str",
+              "repeatable": true,
+              "unique": false
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "config",
+      "set",
+      "tags",
+      "--value",
+      "a,b",
+      "stray"
+    ],
+    "expect": {
+      "exit_code": 1,
+      "stderr_equals": "error: unexpected argument 'stray'\ntry 'myapp config set --help'\n"
+    }
+  },
+  {
+    "name": "config set: the reshaped write selector's help block, verbatim",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "config": true,
+      "config_content": "{}",
+      "commands": [
+        {
+          "name": "run",
+          "help": "run command",
+          "effect": "read_only",
+          "handler_prints": "ok",
+          "flags": [
+            {
+              "name": "tags",
+              "help": "the tags",
+              "presence": "required",
+              "type": "str",
+              "repeatable": true,
+              "unique": false
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "config",
+      "set",
+      "--help"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "Arguments:\n  key    The config key to set, matching a registered flag name [required]\n",
+        "Flags:\n  write              What to write at the key: a value, a clear, or a reset to the declared default (exactly one of the following) [required]\n    --value <str>    Write a value at the key [required]\n    --clear          Clear a repeatable flag [required]\n    --default        Reset the key to its declared default [required]\n"
+      ]
     }
   }
 ]
