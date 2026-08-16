@@ -1822,6 +1822,15 @@ func makeHandler(cmdDef map[string]interface{}, globalFlags []map[string]interfa
 			out = strings.ReplaceAll(
 				out, "{provided:"+name+"}", strconv.FormatBool(ctx.Provided(name)))
 		}
+		// {unset:name} is the clear vocabulary's own accessor (contract §27.6).
+		// The minted --unset-<prop> delivers no kwarg, so this is the only way
+		// a handler learns that a property was CLEARED rather than left
+		// untouched: both deliver absence, and Provided() is true for the
+		// clear alone.
+		for _, name := range templateRefs(out, "unset:") {
+			out = strings.ReplaceAll(
+				out, "{unset:"+name+"}", strconv.FormatBool(ctx.Unset(name)))
+		}
 
 		// Substitute flags.
 		for _, fd := range allFlags {

@@ -894,6 +894,14 @@ function makeHandler(cmdDef, globalFlags) {
 		for (const name of templateRefs(out, "provided:")) {
 			out = subst(out, `{provided:${name}}`, ctx.provided(name) ? "true" : "false");
 		}
+		// {unset:name} is the clear vocabulary's own accessor (contract §27.6).
+		// The minted --unset-<prop> delivers no key of its own, so this is the
+		// only way a handler learns that a property was CLEARED rather than
+		// left untouched: both deliver absence, and provided() is true for the
+		// clear alone.
+		for (const name of templateRefs(out, "unset:")) {
+			out = subst(out, `{unset:${name}}`, ctx.unset(name) ? "true" : "false");
+		}
 
 		// Flags: values arrive under the underscore key (globals included).
 		for (const fd of allFlags) {
@@ -1455,7 +1463,7 @@ async function main() {
 	// Programmatic calls: the app.call() channel, which argv cannot reach.
 	for (const spec of appDef.pre_call ?? []) {
 		try {
-			await app.call(spec.command, spec.kwargs ?? {}, {
+			await app.call(spec.command, undefinedSentinels(spec.kwargs ?? {}), {
 				approveConsequential: spec.approve_consequential === true,
 			});
 			process.stdout.write(`call ok: ${spec.command}\n`);
@@ -1477,6 +1485,35 @@ async function main() {
 	}
 
 	await app.run();
+}
+
+/**
+ * Rewrites the corpus's `"$undefined"` sentinel to a real `undefined` VALUE at
+ * a present key, at every depth of a pre_call kwargs object.
+ *
+ * JSON has no `undefined`, and TypeScript is the only implementation that has
+ * the value at all -- so this is the corpus's only way to spell the state
+ * §27.6 rules on: `undefined` is NOT a second spelling of the clear. Absence
+ * has its own spelling at this door (an absent key), and a value the
+ * declaration names is not absence, so `{ttl: undefined}` earns the ordinary
+ * value refusal where `{ttl: null}` clears. The sentinel reaches no sibling
+ * harness, which is why the case that uses it declares targets: ["typescript"].
+ */
+function undefinedSentinels(value) {
+	if (value === "$undefined") {
+		return undefined;
+	}
+	if (Array.isArray(value)) {
+		return value.map(undefinedSentinels);
+	}
+	if (value !== null && typeof value === "object") {
+		const out = {};
+		for (const [k, v] of Object.entries(value)) {
+			out[k] = undefinedSentinels(v);
+		}
+		return out;
+	}
+	return value;
 }
 
 /** Compact JSON with sorted object keys, matching the sibling harnesses. */

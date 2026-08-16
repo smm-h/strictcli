@@ -577,6 +577,12 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
     # accessor (contract §23.6).
     source_refs = sorted(set(re.findall(r"\{source:([^}]+)\}", template)))
     provided_refs = sorted(set(re.findall(r"\{provided:([^}]+)\}", template)))
+    # {unset:name} -> ctx.unset(name), the clear vocabulary's own accessor
+    # (contract §27.6). The minted --unset-<prop> delivers no kwarg, so this is
+    # the only way a handler learns that a property was CLEARED rather than
+    # left untouched: both deliver absence, and provided() is true for the
+    # clear alone.
+    unset_refs = sorted(set(re.findall(r"\{unset:([^}]+)\}", template)))
     # Scoped references reach INTO a delivered record (contract §24.1, §24.9):
     # `{via.subject}` is a field, `{via.choice}` is the tag, and
     # `{provided:via.subject}` is the record's own provided-ness accessor --
@@ -594,7 +600,7 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
     # Build a format expression
     params = _collect_params(cmd_def, global_flags)
     if (not params and not source_refs and not provided_refs
-            and not scoped_refs and not scoped_provided):
+            and not unset_refs and not scoped_refs and not scoped_provided):
         return f"    print({template!r})"
 
     # We build the output using string concatenation to handle type formatting
@@ -606,6 +612,11 @@ def _emit_handler_body(cmd_def: dict, global_flags: list[dict] | None = None) ->
         lines.append(
             f"    _parts[{('provided:' + name)!r}] = "
             f"'true' if ctx.provided({name!r}) else 'false'"
+        )
+    for name in unset_refs:
+        lines.append(
+            f"    _parts[{('unset:' + name)!r}] = "
+            f"'true' if ctx.unset({name!r}) else 'false'"
         )
     for ref in scoped_provided:
         head, *rest = ref.split(".")

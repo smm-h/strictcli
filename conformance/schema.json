@@ -722,6 +722,38 @@
           "minLength": 1,
           "description": "Why a dry run of this command would misrepresent the real run. Mandatory when dry_run_supported is false, and illegal without it. Shown in the command's help and repeated in the parse-time refusal."
         },
+        "update_of": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resource"
+          ],
+          "description": "The update declaration (contract §27.2), in the registration-level family effect / consequential / dry_run_supported belong to. The case schema follows the DECLARATION side -- ONE record carrying its write mode (§13's amendment box) -- where --dump-schema publishes the two command-entry keys `update_of` and `write_mode`. Declaring it on a read_only command is a registration-time hard error, so an update command is always mutating and §27.1's mutating-default ban reaches every declaration it carries.",
+          "properties": {
+            "resource": {
+              "type": "string",
+              "description": "The name of the thing being updated. Mandatory, matching [a-z][a-z0-9-]* (the constraint-name charset). It is the identifier the at-least-one-property violation prints, and the corpus a later resource round reads. NOT constrained by pattern here: a resource name outside the charset is the covering input for errUpdateResourceCharset."
+            },
+            "write_mode": {
+              "type": "string",
+              "description": "\"sparse\" (only the provided properties are sent; the rest is untouched) or \"full_replace\" (the whole resource is re-sent, the provided properties from this invocation and every other read back). Mandatory on every declaration surface and carrying no default, because a preview must not lie about the most destructive thing the command does. Deliberately typed as a bare string and NOT required here: an absent or out-of-vocabulary write_mode is the covering input for errUpdateWriteModeInvalid, and a case schema that cannot spell the refused declaration cannot test the refusal."
+            },
+            "identity": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The declared names of the flags and args that name WHICH resource instance is being changed, in declaration order and in the declared (dashed) spelling. Possibly empty. An identity member declares required or optional, may be a positional arg, and may be a token- or member-spelled choice flag; root scope only."
+            },
+            "properties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The declared names of the flags that name WHAT changes, in declaration order and in the declared (dashed) spelling. At least one -- an empty or absent list is the covering input for errUpdatePropertiesEmpty. A property is a flag (never an arg), never a choice flag, declares presence \"optional\" and nothing else, and lives at root scope: absence IS untouched, and the framework refuses an invocation supplying none of them."
+            }
+          }
+        },
         "grants": {
           "type": "array",
           "items": {
@@ -803,7 +835,7 @@
         },
         "handler_prints": {
           "type": "string",
-          "description": "Template string. {name} is replaced with the value of the arg/flag named 'name'; {source:name} is replaced with the provenance source label via ctx.source(name). A '{provided:name}' reference resolves through ctx.provided(name), rendering 'true' or 'false' (contract §23.6)."
+          "description": "Template string. {name} is replaced with the value of the arg/flag named 'name'; {source:name} is replaced with the provenance source label via ctx.source(name). A '{provided:name}' reference resolves through ctx.provided(name), rendering 'true' or 'false' (contract §23.6), and an '{unset:name}' reference resolves through ctx.unset(name) the same way (contract §27.6) -- the clear vocabulary's own accessor, and the only way a handler tells a CLEARED property from an untouched one, both of which deliver absence."
         },
         "handler_exit_code": {
           "type": "integer",
@@ -917,6 +949,7 @@
           "consequential": false,
           "dry_run_supported": false,
           "dry_run_unsupported_reason": false,
+          "update_of": false,
           "payload_schema": false,
           "owns_stdout": false,
           "grants": false,
@@ -1613,6 +1646,11 @@
           "type": "boolean",
           "default": true,
           "description": "Whether --no-flagname negation is supported. Only meaningful for bool-type flags."
+        },
+        "nullable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Declares that this flag is a CLEARABLE property of the command's update (contract §27.6). It mints --unset-<name>, which carries no value, delivers absence, reports provided() true and is answered by ctx.unset(name); at the machine doors the same act is spelled `null` on the property's own key (§24.11's carve-out). Absence means the property cannot be cleared, which is the baseline: --dump-schema emits the key only when true, and mints no second flag entry for the minted spelling. Declaring it on anything that is not a property of an update is a registration-time hard error, and it reserves the flag name `unset-<name>` on the same command."
         },
         "unique": {
           "type": "boolean"
