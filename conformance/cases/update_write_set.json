@@ -1147,6 +1147,175 @@
     }
   },
   {
+    "name": "update write set: an identity that is a token-spelled choice flag never joins the write set",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "target"
+            ],
+            "properties": [
+              "content",
+              "ttl"
+            ]
+          },
+          "flags": [
+            {
+              "name": "target",
+              "help": "which record to change",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "by-id",
+                  "help": "address it by identifier",
+                  "flags": [
+                    {
+                      "name": "record-id",
+                      "help": "identifier of the record to change",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "all-records",
+                  "help": "every record in the zone"
+                }
+              ]
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            }
+          ],
+          "handler_returns": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    "argv": [
+      "--json",
+      "update-record",
+      "--target",
+      "by-id",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": "",
+      "stdout_equals": "{\"interface_version\":2,\"app\":\"myapp\",\"app_version\":\"1.0.0\",\"command\":\"update-record\",\"exit_code\":0,\"payload\":null,\"dry_run\":false,\"writes\":{\"resource\":\"dns-record\",\"write_mode\":\"sparse\",\"written\":[\"content\"],\"cleared\":[],\"resent\":[],\"untouched\":[\"ttl\"]},\"preview\":[],\"preview_error\":null,\"diagnostics\":[]}\n"
+    }
+  },
+  {
+    "name": "update write set: the token-spelled identity's elected record reaches the handler while the dry-run line stays properties-only",
+    "app": {
+      "name": "myapp",
+      "version": "1.0.0",
+      "help": "test app",
+      "commands": [
+        {
+          "name": "update-record",
+          "help": "change one DNS record in place",
+          "effect": "mutating",
+          "update_of": {
+            "resource": "dns-record",
+            "write_mode": "sparse",
+            "identity": [
+              "target"
+            ],
+            "properties": [
+              "content",
+              "ttl"
+            ]
+          },
+          "flags": [
+            {
+              "name": "target",
+              "help": "which record to change",
+              "presence": "required",
+              "elect_by": "selector-token",
+              "choices": [
+                {
+                  "name": "by-id",
+                  "help": "address it by identifier",
+                  "flags": [
+                    {
+                      "name": "record-id",
+                      "help": "identifier of the record to change",
+                      "type": "str",
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "all-records",
+                  "help": "every record in the zone"
+                }
+              ]
+            },
+            {
+              "name": "content",
+              "help": "record content",
+              "presence": "optional",
+              "type": "str"
+            },
+            {
+              "name": "ttl",
+              "help": "time to live in seconds",
+              "presence": "optional",
+              "type": "int"
+            }
+          ],
+          "handler_prints": "target={target} provided_target={provided:target} content={content}",
+          "handler_effects": [
+            {
+              "method": "http",
+              "url": "https://api.example.com/dns_records/r7",
+              "http_method": "PATCH"
+            }
+          ]
+        }
+      ]
+    },
+    "argv": [
+      "--dry-run",
+      "update-record",
+      "--target",
+      "by-id",
+      "--record-id",
+      "r7",
+      "--content",
+      "hi"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stderr_equals": "",
+      "stdout_equals": "target=by-id(record_id=r7) provided_target=true content=hi\nDRY RUN — no changes were made. Would do:\n  writes: content (other properties unchanged)\n  1. net: PATCH https://api.example.com/dns_records/r7\n"
+    }
+  },
+  {
     "name": "update write set: an env-supplied property renders beside a typed one, so a configured value cannot join a write invisibly",
     "app": {
       "name": "myapp",
