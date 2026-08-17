@@ -4606,6 +4606,10 @@ _RECORD_SOURCES_ATTR = "__strictcli_sources__"
 _RECORD_SPELLING = "Choice(<value>, help=...)"
 _SELECTOR_SPELLING = "choice_flag(...)"
 _MEMBER_SELECTOR_SPELLING = 'choice_flag(..., elect_by="member-flags")'
+# The payload-carrying member's own declaration, which is where its short goes:
+# `member_value(...)` IS the electing flag's declaration in this language, the
+# way `MemberChoice`'s first argument is in Go (§24.12).
+_MEMBER_PAYLOAD_SHORT_SPELLING = "member_value(short=...)"
 
 
 @dataclass(frozen=True)
@@ -5129,6 +5133,11 @@ class _ChoiceDecl:
     help: str
     cls: type
     localns: dict
+    # The short of a PAYLOAD-LESS member's electing flag (§24.4, §24.12). A
+    # payload-carrying member declares its short on `member_value(short=...)`
+    # instead -- that field IS its electing flag's declaration -- and a
+    # token-spelled choice has no flag of its own to carry one at all.
+    short: str | None = None
 
 
 @dataclass(frozen=True)
@@ -5140,6 +5149,11 @@ class _ChoiceSpec:
     cls: type
     members: tuple[object, ...]  # Flag | _Selector, in declaration order
     payload: Flag | None = None  # member spelling's `value` field, if any
+    # The member flag's short, whichever spelling declared it: the one place
+    # every reader of a member's short looks (the cross-scope claim table, the
+    # `-x` token scan, the help line). None for a token-spelled choice, which
+    # is never a token of its own.
+    short: str | None = None
 
 
 @dataclass(frozen=True)
@@ -5225,6 +5239,33 @@ def _raise_token_choice_carries_payload(sel: str, c: str):
         f"payload: the token names the choice, and a choice that carries its "
         f"own value belongs to a member-spelled choice flag, declared with "
         f"{_MEMBER_SELECTOR_SPELLING}"
+    )
+
+
+def _raise_token_choice_carries_short(sel: str, c: str):
+    """Authored: a short on a token-spelled choice has no token to name.
+
+    Under token spelling the choice is named by the selector's own value, and
+    a value has no short form -- only a member-spelled choice puts a flag of
+    its own on the command line (§24.4).
+    """
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": a token-spelled choice cannot carry a '
+        f"short: the token names the choice, and only a member-spelled choice "
+        f"has a flag of its own to carry one"
+    )
+
+
+def _raise_member_short_on_payload_choice(sel: str, c: str):
+    """Authored: one member, one place to declare its short (§24.4, §24.12).
+
+    A payload-carrying member's electing flag IS its payload declaration, so
+    the short belongs there; carrying it on the choice as well would be two
+    declarations that must agree.
+    """
+    raise ValueError(
+        f'Choice "{c}" of "{sel}": a payload-carrying member declares its '
+        f"short on its payload: {_MEMBER_PAYLOAD_SHORT_SPELLING}"
     )
 
 
@@ -5579,7 +5620,9 @@ def _raise_selector_default_not_instance(sel: str, got: str):
 # --- the declaration surface -----------------------------------------------
 
 
-def choice(name: str, *, help: str):  # noqa: A002 - mirrors the framework keyword
+def choice(  # noqa: A002 - mirrors the framework keyword
+    name: str, *, help: str, short: str | None = None,
+):
     """Class decorator: declare one choice of a selector, and its scope.
 
     The decorated class becomes a **frozen, keyword-only dataclass** -- it is
@@ -5587,6 +5630,12 @@ def choice(name: str, *, help: str):  # noqa: A002 - mirrors the framework keywo
     useful repr, no mutable-default hazard and no field-ordering rule leaking
     out of ``dataclasses`` (§24.12). Its fields ARE the scope's flags, declared
     with :func:`sub_flag`, :func:`sub_choice_flag` or :func:`member_value`.
+
+    ``short`` declares the short form of a **payload-less member's** electing
+    flag: such a choice has no ``member_value`` field, so the decorator is the
+    only place its one token is declared. A payload-carrying member declares
+    its short on :func:`member_value` instead, and a token-spelled choice
+    cannot carry one at all -- both are registration errors (§24.4).
 
     Validation of the scope is deferred to the selector that claims this class,
     because every message a scope raises names both the choice and the selector.
@@ -5605,7 +5654,7 @@ def choice(name: str, *, help: str):  # noqa: A002 - mirrors the framework keywo
                 ))
         dc = dataclasses.dataclass(frozen=True, kw_only=True)(cls)
         setattr(dc, _CHOICE_SPEC_ATTR, _ChoiceDecl(
-            name=name, help=help, cls=dc, localns=localns,
+            name=name, help=help, cls=dc, localns=localns, short=short,
         ))
         return dc
 
@@ -5716,14 +5765,21 @@ def _scope_field(payload: dict, default: object):
     return field(default=default, metadata=meta)
 
 
-def member_value(*, help: str):  # noqa: A002
+def member_value(*, help: str, short: str | None = None):  # noqa: A002
     """Declare a member-spelled choice's own payload (§24.4, §24.12).
 
     A payload is exactly one value, delivered under the reserved name ``value``,
     and only under member spelling. It takes no presence keyword, because
     electing the member supplies it.
+
+    ``short`` is the electing flag's short form (``-r X`` for ``--role X``):
+    this field IS that flag's declaration, exactly as ``MemberChoice``'s first
+    argument is in Go. It is claimed across every simultaneously live scope
+    like any other short, and it renders beside the member on its help line.
     """
-    return field(metadata={_SCOPE_FIELD_KEY: {"kind": "payload", "help": help}})
+    return field(metadata={_SCOPE_FIELD_KEY: {
+        "kind": "payload", "help": help, "short": short,
+    }})
 
 
 def choice_flag(
@@ -6053,7 +6109,7 @@ def _build_choice_spec(
                 )
             payload = Flag(
                 name=decl.name, type=hints[f.name], help=meta["help"],
-                presence=_PRESENCE_REQUIRED,
+                presence=_PRESENCE_REQUIRED, short=meta["short"],
             )
             continue
         # The two reserved names, checked before anything else looks at the
@@ -6099,9 +6155,20 @@ def _build_choice_spec(
             )
         members.append(nested)
 
+    # The member's short, resolved to the ONE slot every reader looks at. Which
+    # declaration carries it follows the member's shape: a payload-carrying
+    # member's electing flag is its `member_value(...)`, a payload-less one has
+    # no such field and declares it on `@choice(...)` (§24.4, §24.12).
+    if decl.short is not None:
+        if elect_by != _ELECT_MEMBER_FLAGS:
+            _raise_token_choice_carries_short(sel_name, decl.name)
+        if payload is not None:
+            _raise_member_short_on_payload_choice(sel_name, decl.name)
+    short = decl.short if payload is None else payload.short
+
     return _ChoiceSpec(
         name=decl.name, help=decl.help, cls=cls,
-        members=tuple(members), payload=payload,
+        members=tuple(members), payload=payload, short=short,
     )
 
 
@@ -6238,6 +6305,22 @@ def _member_spelling_map(selectors: tuple[_Selector, ...]) -> dict[str, bool]:
     return out
 
 
+def _short_claim_path(site: _Site) -> tuple[tuple[str, str], ...]:
+    """The scope a site's short is claimed IN.
+
+    For every ordinary declaration that is the site's own path. A member site
+    is recorded at the path its selector sits on -- its NAME is a flag name
+    command-wide (§24.7) -- but the token it puts on the command line exists
+    only while that member is elected, so its short is claimed one segment
+    deeper. Two sibling members therefore never collide; what refuses them is
+    the election-token guard (§18.19 item 221).
+    """
+    if site.kind != "member":
+        return site.path
+    sel: _Selector = site.decl  # type: ignore[assignment]
+    return site.path + ((sel.name, site.choice.name),)
+
+
 def _paths_mutually_exclusive(
     a: tuple[tuple[str, str], ...], b: tuple[tuple[str, str], ...],
 ) -> bool:
@@ -6328,7 +6411,7 @@ def _validate_scoped_names(
     shorts: list[tuple[str, _Site]] = []
     for site in sites:
         if site.kind == "member":
-            short = site.choice.payload.short if site.choice.payload else None
+            short = site.choice.short
         else:
             short = getattr(site.decl, "short", None)
         if short:
@@ -6346,7 +6429,9 @@ def _validate_scoped_names(
             (s1, a), (s2, b) = shorts[i], shorts[j]
             if s1 != s2 or a.name == b.name:
                 continue
-            if _paths_mutually_exclusive(a.path, b.path):
+            if _paths_mutually_exclusive(
+                _short_claim_path(a), _short_claim_path(b),
+            ):
                 continue
             _raise_short_collides_across_scopes(cmd_name, s1, a.name, b.name)
 
@@ -15206,10 +15291,7 @@ def _build_and_validate_command(
     scoped_shorts: dict[str, tuple[str, ...]] = {}
     for site in site_list:
         if site.kind == "member":
-            short = (
-                site.choice.payload.short
-                if site.choice.payload is not None else None
-            )
+            short = site.choice.short
         else:
             short = getattr(site.decl, "short", None)
         if not short:
@@ -15849,14 +15931,17 @@ def _build_selector_spec(sel: _Selector) -> str:
 
 
 def _build_member_spec(spec: _ChoiceSpec) -> str:
-    """The left-column spec for one member flag under member spelling."""
+    """The left-column spec for one member flag under member spelling.
+
+    The short comes from the choice rather than from its payload: a
+    payload-less member declares one too, on `@choice(short=...)`.
+    """
     out = f"--{spec.name}"
+    if spec.short:
+        out += f", -{spec.short}"
     payload = spec.payload
-    if payload is not None:
-        if payload.short:
-            out += f", -{payload.short}"
-        if payload.type is not bool:
-            out += f" <{_TYPE_NAMES[payload.type]}>"
+    if payload is not None and payload.type is not bool:
+        out += f" <{_TYPE_NAMES[payload.type]}>"
     return out
 
 

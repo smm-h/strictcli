@@ -686,3 +686,223 @@ def test_a_later_scope_violation_outranks_an_earlier_missing_payload():
         "flag '--strict' is only valid under '--one-tag', but "
         "'--all-tags' was elected"
     )
+
+
+# ---------------------------------------------------------------------------
+# A member's short (§24.4, §24.12)
+#
+# The member flag is the only token member spelling puts on the command line,
+# so its short is an ordinary flag short: claimed across every simultaneously
+# live scope, typed as `-x`, and rendered beside the member on its help line.
+# Which declaration carries it follows the member's shape -- a payload-carrying
+# member's electing flag IS its `member_value(...)`, and a payload-less one has
+# no such field, so it declares the short on `@choice(...)`.
+# ---------------------------------------------------------------------------
+
+
+def _short_app():
+    @choice("role", help="one role")
+    class Role:
+        value: str = member_value(help="the role name", short="r")
+
+    @choice("cont", help="continue the previous session", short="c")
+    class Cont:
+        pass
+
+    @choice("plain", help="a plain session", short="p")
+    class Plain:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("launch", effect="read_only", help="launch it")
+    @choice_flag(
+        "start", help="how to start", presence="required",
+        elect_by="member-flags", choices=[Role, Cont, Plain],
+    )
+    def launch(ctx, start: Role | Cont | Plain):
+        match start:
+            case Role(value=v):
+                print(f"role={v}")
+            case Cont():
+                print("cont")
+            case Plain():
+                print("plain")
+
+    return app
+
+
+def test_a_payload_carrying_member_elects_by_its_short():
+    r = _short_app().test(["launch", "-r", "admin"])
+    assert r.exit_code == 0
+    assert r.stdout == "role=admin\n"
+
+
+def test_a_payload_carrying_members_short_consumes_the_next_token():
+    """`-r X` is the member's own value, exactly as `--role X` is."""
+    r = _short_app().test(["launch", "-r", "--plain"])
+    assert r.exit_code == 0
+    assert r.stdout == "role=--plain\n"
+
+
+def test_a_payload_less_member_elects_by_its_short():
+    r = _short_app().test(["launch", "-c"])
+    assert r.exit_code == 0
+    assert r.stdout == "cont\n"
+
+
+def test_a_member_short_is_refused_a_value():
+    r = _short_app().test(["launch", "-c", "extra"])
+    assert r.exit_code == 1
+    assert "unexpected argument 'extra'" in r.stderr
+
+
+def test_a_member_with_a_short_is_still_declined_by_the_long_negation():
+    """The short elects; the decline keeps its one spelling (§21.2)."""
+    r = _short_app().test(["launch", "--no-cont"])
+    assert r.exit_code == 1
+    assert (
+        "error: one of --role, --cont, --plain is required "
+        "(--no-cont declines an option; it does not choose one)\n"
+    ) in r.stderr
+
+
+def test_a_decline_beside_a_short_election_names_the_members_long_form():
+    """§21's A4 error, reached through a short: the message never says `-p`."""
+    r = _short_app().test(["launch", "--no-cont", "-p"])
+    assert r.exit_code == 1
+    assert (
+        "error: --no-cont cannot be combined with --plain "
+        "(--no-cont declines an option; it does not choose one)\n"
+    ) in r.stderr
+
+
+def test_two_members_elected_by_short_are_mutually_exclusive():
+    r = _short_app().test(["launch", "-c", "-p"])
+    assert r.exit_code == 1
+    assert "error: --cont and --plain are mutually exclusive\n" in r.stderr
+
+
+def test_a_member_short_renders_beside_the_member_in_help():
+    r = _short_app().test(["launch", "--help"])
+    assert r.exit_code == 0
+    assert "--role, -r <str>" in r.stdout
+    assert "--cont, -c" in r.stdout
+    assert "--plain, -p" in r.stdout
+
+
+def test_a_member_short_is_claimed_against_a_command_flag():
+    @choice("role", help="one role")
+    class Role:
+        value: str = member_value(help="the role name", short="r")
+
+    @choice("plain", help="a plain session")
+    class Plain:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    with pytest.raises(ValueError) as exc:
+
+        @app.command("launch", effect="read_only", help="launch it")
+        @strictcli.flag("repo", help="the repo", short="r", presence="optional")
+        @choice_flag(
+            "start", help="how to start", presence="required",
+            elect_by="member-flags", choices=[Role, Plain],
+        )
+        def launch(ctx, start: Role | Plain, repo: str):
+            pass
+
+    assert str(exc.value) == (
+        'command "launch": short \'-r\' is claimed by \'--role\' and '
+        "'--repo', which can be elected at the same time"
+    )
+
+
+def test_two_sibling_members_may_not_share_a_short():
+    """An election token is read before any election has happened (§24.7)."""
+
+    @choice("cont", help="continue", short="c")
+    class Cont:
+        pass
+
+    @choice("clean", help="start clean", short="c")
+    class Clean:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    with pytest.raises(ValueError) as exc:
+
+        @app.command("launch", effect="read_only", help="launch it")
+        @choice_flag(
+            "start", help="how to start", presence="required",
+            elect_by="member-flags", choices=[Cont, Clean],
+        )
+        def launch(ctx, start: Cont | Clean):
+            pass
+
+    assert str(exc.value) == (
+        'command "launch": short \'-c\' is reused by sibling scopes and also '
+        "claimed by '--cont', which elects: an election token is read before "
+        "any election has happened, so its short cannot be shared"
+    )
+
+
+def test_a_token_spelled_choice_cannot_carry_a_short():
+    @choice("email", help="by email", short="e")
+    class Email:
+        pass
+
+    @choice("sms", help="by sms")
+    class Sms:
+        pass
+
+    with pytest.raises(ValueError) as exc:
+        choice_flag(
+            "via", help="delivery channel", presence="required",
+            elect_by="selector-token", choices=[Email, Sms],
+        )
+    assert str(exc.value) == (
+        'Choice "email" of "via": a token-spelled choice cannot carry a '
+        "short: the token names the choice, and only a member-spelled choice "
+        "has a flag of its own to carry one"
+    )
+
+
+def test_a_payload_carrying_member_declares_its_short_on_the_payload():
+    @choice("role", help="one role", short="r")
+    class Role:
+        value: str = member_value(help="the role name")
+
+    @choice("plain", help="a plain session")
+    class Plain:
+        pass
+
+    with pytest.raises(ValueError) as exc:
+        choice_flag(
+            "start", help="how to start", presence="required",
+            elect_by="member-flags", choices=[Role, Plain],
+        )
+    assert str(exc.value) == (
+        'Choice "role" of "start": a payload-carrying member declares its '
+        "short on its payload: member_value(short=...)"
+    )
+
+
+def test_a_member_short_is_published_on_the_payload_entry(tmp_path, monkeypatch):
+    """§25.6's `value` entry is an ordinary flag entry, short included."""
+    import json
+
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "myapp"\nversion = "1.0.0"\n',
+    )
+    monkeypatch.chdir(tmp_path)
+    r = _short_app().test(["--dump-schema"])
+    assert r.exit_code == 0
+    dumped = json.loads((tmp_path / ".strictcli" / "schema.json").read_text())
+    sel = dumped["commands"]["launch"]["flags"][0]
+    role = sel["choices"][0]
+    assert role["name"] == "role"
+    assert role["flags"][0]["name"] == "value"
+    assert role["flags"][0]["short"] == "r"
