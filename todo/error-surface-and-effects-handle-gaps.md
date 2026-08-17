@@ -11,9 +11,9 @@ Per the owner's decision-origin convention: `[deliberate]` = the owner's explici
 decision (paraphrased). `[trust]` = adopted from a recommended option, weakly held,
 freely reversible. `[open]` = undecided.
 
-- **[deliberate]** The one-line form of the omitted-required-choices message is
-  implemented directly (not via this todo); the MULTI-LINE BLOCK form is deferred and
-  is item 1b below.
+- **[deliberate]** The one-line form of the omitted-required-choices message is DECIDED
+  and PENDING -- to be implemented directly rather than through this todo's triage; the
+  MULTI-LINE BLOCK form is deferred and is item 1b below.
 - **[deliberate]** An exclusive-create option on the effects handle is deferred to
   this todo; the consumer takes a simple check-then-write in the meantime.
 - **[trust]** The `--help`-vs-required-global-flag inconsistency (item 2) is to be
@@ -121,5 +121,6 @@ all hit by one consumer in a single migration:
   loudly where the check is described.
 
 All three implementations + conformance cases per the usual lockstep rule. Effort:
-1 (one-line form) is done elsewhere; 1b ~1 day across three implementations plus
-conformance; 2 small; 3a+3b ~1 day; 3c small; 3d medium (analyzer work).
+1 (one-line form, decided, NOT yet implemented anywhere) ~half a day across the three
+implementations plus the parity-exclusion and conformance-case updates; 1b ~1 day;
+2 small; 3a+3b ~1 day; 3c small; 3d medium (analyzer work).
