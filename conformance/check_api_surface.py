@@ -531,6 +531,16 @@ def _build_descriptors() -> list[EntityDescriptor]:
             # fact, and `flags` has no field at all because the scope is the
             # class body.
             python_entity_exclusions={"cls", "localns"},
+            # `short` is the electing flag's short, and which declaration
+            # holds it is the same three-surface divergence `elect_by` is:
+            # Go's MemberChoice takes the member FLAG, so the short is a
+            # field of that Flag rather than of ChoiceDecl, while Python's
+            # @choice(short=...) and TypeScript's choice({short}) carry a
+            # payload-less member's on the choice itself (and a
+            # payload-carrying member's on its payload, which is `value` and
+            # already schema-test-only). One case-schema key, three
+            # declaration surfaces -- B9 rather than a gap.
+            schema_entity_exclusions={"short"},
             schema_python_runtime={
                 "choice.flags": "Python's scope is the decorated class's own "
                 "dataclass fields, read off `cls` rather than held in a list",

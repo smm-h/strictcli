@@ -1315,6 +1315,10 @@
           "type": "string",
           "description": "Mandatory on a choice -- which is what makes a selector always render as a help block (§24.10), and what errChoiceHelpEmpty refuses."
         },
+        "short": {
+          "type": "string",
+          "description": "A PAYLOAD-LESS member's electing flag short (§24.4). Such a choice has no `value` to carry it, so the choice object is where it is declared -- Python's @choice(short=...) and TypeScript's choice({short}) both, while Go declares it on the bool member flag `MemberChoice` already takes. Spellable on a token-spelled choice and beside a `value` too: those are the inputs the two short refusals are asserted against."
+        },
         "value": {
           "type": "object",
           "required": [
@@ -1333,6 +1337,10 @@
             },
             "help": {
               "type": "string"
+            },
+            "short": {
+              "type": "string",
+              "description": "The electing flag's short form, declared HERE for a payload-carrying member: this declaration is that flag's declaration in every implementation -- Go's MemberChoice takes the flag itself, Python's member_value(short=...) and TypeScript's value: {short} are the same declaration under two idioms (§24.4, §24.12). Spellable beside the choice-level `short` too, which is the input the two-declarations refusal is asserted against."
             }
           },
           "description": "A member-spelled choice's own payload (§24.4). It is the choice object's own KEY here, and NOT the first entry of `flags` the way the dump places it (§25.6): a case spelling it the dump's way would be indistinguishable from a case declaring a scoped flag named `value`, which is the input errScopedNameValueReserved is asserted against. It declares no presence, because electing the member supplies the value. Spellable on a token-spelled choice too -- that is the input errTokenChoiceCarriesPayload is asserted against."

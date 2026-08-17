@@ -242,9 +242,15 @@ class _ChoiceClassEmitter:
         if "value" in choice:
             payload = choice["value"]
             field_order.append("value")
+            # The payload-carrying member's short goes on `member_value`: that
+            # field IS the electing flag's declaration in this language
+            # (§24.12).
+            payload_parts = [f"help={payload['help']!r}"]
+            if "short" in payload:
+                payload_parts.append(f"short={payload['short']!r}")
             body.append(
                 f"    value: {_scalar_annotation(payload['type'])} = "
-                f"strictcli.member_value(help={payload['help']!r})"
+                f"strictcli.member_value({', '.join(payload_parts)})"
             )
         # A nested selector's own classes must exist before the class whose
         # field annotates them, so they are emitted first (§24.1's recursion).
@@ -318,8 +324,13 @@ class _ChoiceClassEmitter:
             body.append("    pass")
 
         var = self._fresh(sel, choice["name"])
+        # The choice-level short: a payload-less member's own, and the input
+        # the two short refusals are asserted against.
+        decorator_parts = [f"{choice['name']!r}", f"help={choice['help']!r}"]
+        if "short" in choice:
+            decorator_parts.append(f"short={choice['short']!r}")
         self.lines.append(
-            f"{indent}@strictcli.choice({choice['name']!r}, help={choice['help']!r})"
+            f"{indent}@strictcli.choice({', '.join(decorator_parts)})"
         )
         self.lines.append(f"{indent}class {var}:")
         for line in body:

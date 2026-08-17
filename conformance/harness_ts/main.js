@@ -242,7 +242,18 @@ function buildChoice(cd) {
 		// The payload is a carrier plus its OWN help, which is what §25.6's
 		// `value` entry publishes and what the member's flattened MCP property
 		// is described by -- the choice's help documents electing it instead.
+		// `short` rides the payload because that declaration IS the electing
+		// flag's (§24.12).
 		spec.value = { carrier: scalarCarrier(cd.value.type), help: cd.value.help };
+		if ("short" in cd.value) {
+			spec.value.short = cd.value.short;
+		}
+	}
+	// The choice-level short: a payload-less member's own. Spellable beside a
+	// `value` and on a token-spelled choice too -- those are the inputs the two
+	// short refusals are asserted against.
+	if ("short" in cd) {
+		spec.short = cd.short;
 	}
 	if ("args" in cd) {
 		// A positional inside a scope is inexpressible through the declared

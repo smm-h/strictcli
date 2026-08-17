@@ -722,6 +722,14 @@ func buildChoice(cd map[string]interface{}, memberSpelled bool) *strictcli.Choic
 	// the `value` entry); a payload-less member is a bool, and electing it is
 	// the whole of what it says.
 	memberOpts := []strictcli.FlagOption{}
+	// The member's short. Go declares it on the electing flag whichever shape
+	// the member has, so the two case spellings -- the payload's `short` and
+	// the choice's own -- both land here (§24.4, §24.12).
+	if s, ok := payload["short"].(string); ok && carriesPayload {
+		memberOpts = append(memberOpts, strictcli.Short(s))
+	} else if s, ok := cd["short"].(string); ok {
+		memberOpts = append(memberOpts, strictcli.Short(s))
+	}
 	// The member flag's presence is `required`. The case may spell something
 	// else, and only so errMemberFlagPresence has a covering input.
 	switch presenceOf(cd) {

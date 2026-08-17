@@ -908,6 +908,26 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
         'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
     },
+    # -- The member-short round's two refusals (§24.4, §24.12) --
+    # Each is a place a short can be declared where no member flag exists to
+    # carry it. Both are Python/TypeScript-only: Go's declaration surface
+    # cannot express either state.
+    '*a token-spelled choice cannot carry a short: the token names the choice, and only a member-spelled choice has a flag of its own to carry one': {
+        'go': "excluded:Go's Choice(name, help, flags ...Flag) has no short slot at all -- only a member's electing Flag carries one -- so a short on a token-spelled choice is unconstructable in Go rather than refused (the class §18.19 item 213 records)",
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    'Choice * of *: a token-spelled choice cannot carry a short: the token names the choice, and only a member-spelled choice has a flag of its own to carry one': {
+        'go': "excluded:Go's Choice(name, help, flags ...Flag) has no short slot at all -- only a member's electing Flag carries one -- so a short on a token-spelled choice is unconstructable in Go rather than refused (the class §18.19 item 213 records)",
+        'typescript': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    '*a payload-carrying member declares its short on its payload: *': {
+        'go': "excluded:Go's MemberChoice takes ONE flag that types the payload AND carries the short, so a member declaring its short in two places has no Go spelling to refuse",
+        'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
+    },
+    'Choice * of *: a payload-carrying member declares its short on its payload: *': {
+        'go': "excluded:Go's MemberChoice takes ONE flag that types the payload AND carries the short, so a member declaring its short in two places has no Go spelling to refuse",
+        'typescript': 'excluded:the selector family pins ONE sentence in three spellings (contract §12.13), and each implementation carries only its own; cases/selector_member_short.json asserts each, per target',
+    },
     "*flag '--*' collides with a command-level flag of the same name: the scoped one could never be reached": {
         'go': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',
         'python': 'excluded:TypeScript parameterizes the `Choice "c" of "sel": ` prefix into a choicePrefix() helper where the siblings inline it; the inlined signatures carry the same sentence',

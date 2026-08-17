@@ -281,7 +281,15 @@ RICH_APP = {
                             # fixture exists to compare, while the payload
                             # entry's name, position, fragment and presence are
                             # still compared in full.
-                            "value": {"type": "str", "help": "One named operator"},
+                            # The member's short rides the payload, which is
+                            # the electing flag's own declaration (§24.12), and
+                            # publishes as the `value` entry's `short` key --
+                            # an ordinary flag-entry key in §25.9's order.
+                            "value": {
+                                "type": "str",
+                                "help": "One named operator",
+                                "short": "o",
+                            },
                             "flags": [
                                 {
                                     "name": "notify",
@@ -292,7 +300,14 @@ RICH_APP = {
                                 },
                             ],
                         },
-                        {"name": "everyone", "help": "Every subscriber"},
+                        # A payload-less member's short is declared on the
+                        # choice and publishes NOTHING: the choice has no
+                        # `value` entry to carry it, in any implementation.
+                        {
+                            "name": "everyone",
+                            "help": "Every subscriber",
+                            "short": "e",
+                        },
                     ],
                 },
                 {
