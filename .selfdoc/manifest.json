@@ -4013,6 +4013,16 @@
         },
         {
           "level": 3,
+          "text": "`_raise_token_choice_carries_short`",
+          "anchor": "_raise_token_choice_carries_short"
+        },
+        {
+          "level": 3,
+          "text": "`_raise_member_short_on_payload_choice`",
+          "anchor": "_raise_member_short_on_payload_choice"
+        },
+        {
+          "level": 3,
           "text": "`_raise_short_on_ambiguous_election`",
           "anchor": "_raise_short_on_ambiguous_election"
         },
@@ -4170,6 +4180,11 @@
           "level": 3,
           "text": "`_member_spelling_map`",
           "anchor": "_member_spelling_map"
+        },
+        {
+          "level": 3,
+          "text": "`_short_claim_path`",
+          "anchor": "_short_claim_path"
         },
         {
           "level": 3,
@@ -8828,6 +8843,11 @@
         },
         {
           "level": 3,
+          "text": "`MEMBER_PAYLOAD_SHORT_SPELLING`",
+          "anchor": "member_payload_short_spelling"
+        },
+        {
+          "level": 3,
           "text": "`RequiredFlagForm`",
           "anchor": "requiredflagform"
         },
@@ -8950,6 +8970,16 @@
           "level": 3,
           "text": "`errTokenChoiceCarriesPayload`",
           "anchor": "errtokenchoicecarriespayload"
+        },
+        {
+          "level": 3,
+          "text": "`errTokenChoiceCarriesShort`",
+          "anchor": "errtokenchoicecarriesshort"
+        },
+        {
+          "level": 3,
+          "text": "`errMemberShortOnPayloadChoice`",
+          "anchor": "errmembershortonpayloadchoice"
         },
         {
           "level": 3,
@@ -9597,6 +9627,11 @@
           "level": 3,
           "text": "`SurfaceName`",
           "anchor": "surfacename"
+        },
+        {
+          "level": 3,
+          "text": "`memberShort`",
+          "anchor": "membershort"
         },
         {
           "level": 3,
@@ -11129,6 +11164,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-16T06:16:03.966175+00:00",
+  "last_gen": "2026-08-17T14:29:22.063112+00:00",
   "theme": "minimal"
 }
