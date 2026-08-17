@@ -175,6 +175,19 @@ regression in all three languages at once.
 The published narrative version of this is `docs/language-idioms.md`; keep the two
 consistent when the design moves.
 
+## Consumer hand-rolling is a framework gap
+
+When consumers of strictcli start hand-rolling logic that belongs in the
+framework -- absence-to-fallback helpers, per-repo wrappers around one recurring
+idiom, guards the framework could enforce at registration -- the framework is
+doing something wrong. The N copies across consumers ARE the finding: design the
+framework mechanism that reduces N to 1, never bless the copies or document the
+workaround as the idiom. (Live example: the mutating-default ban made every
+fleet consumer grow its own `optStr`/`_opt_default`/`_absent` helper for
+absence-to-fallback resolution -- ten hand copies of one idiom is a framework
+gap, and the remedy is a framework-owned declared-fallback mechanism, not an
+eleventh helper.)
+
 ## Cross-language parity rules
 
 All implementations must:
