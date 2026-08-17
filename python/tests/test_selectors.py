@@ -2164,3 +2164,29 @@ def test_the_machine_boundary_reads_the_same_sentence():
         "flag '--watch' must be passed as --watch or --no-watch "
         "under '--mode watched'"
     )
+
+
+def test_a_scoped_flags_short_with_no_value_is_named_as_it_was_typed():
+    """§24.3: the scoped path quotes the token, as the root path always has."""
+
+    @choice("a", help="mode a")
+    class A:
+        target: str = sub_flag(help="the target", presence="required", short="t")
+
+    @choice("b", help="mode b")
+    class B:
+        pass
+
+    app = strictcli.App(name="myapp", version="1.0.0", help="test app")
+
+    @app.command("run", effect="read_only", help="run it")
+    @choice_flag(
+        "mode", help="the mode", presence="required",
+        elect_by="selector-token", choices=[A, B],
+    )
+    def run(ctx, mode: A | B):
+        print(repr(mode))
+
+    r = app.test(["run", "--mode", "a", "-t"])
+    assert r.exit_code == 1
+    assert "error: flag '-t' requires a value\n" in r.stderr

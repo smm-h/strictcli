@@ -14744,7 +14744,10 @@ def _parse_command(
             scoped_occs.append(_Occ(name, inline, tok, alts, seq=idx))
             return idx + 1
         if idx + 1 >= len(tokens):
-            raise _ParseError(f"flag '--{name}' requires a value")
+            # The token AS TYPED, which is what the root-scope path and both
+            # sibling implementations report: a reader who typed `-r` is told
+            # about `-r`, not about the long form it resolved to.
+            raise _ParseError(f"flag '{tok}' requires a value")
         scoped_occs.append(_Occ(name, tokens[idx + 1], tok, alts, seq=idx))
         return idx + 2
 

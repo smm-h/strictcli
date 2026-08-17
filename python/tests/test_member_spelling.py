@@ -906,3 +906,21 @@ def test_a_member_short_is_published_on_the_payload_entry(tmp_path, monkeypatch)
     assert role["name"] == "role"
     assert role["flags"][0]["name"] == "value"
     assert role["flags"][0]["short"] == "r"
+
+
+def test_a_short_with_nothing_after_it_is_named_as_it_was_typed():
+    """The refusal quotes the TOKEN, not the long form it resolved to.
+
+    The root-scope path has always reported the token as typed; the scoped one
+    reported the long name, which made a `-r` at the end of argv produce a
+    message about `--role` in this implementation alone.
+    """
+    r = _short_app().test(["launch", "-r"])
+    assert r.exit_code == 1
+    assert "error: flag '-r' requires a value\n" in r.stderr
+
+
+def test_a_long_member_token_with_nothing_after_it_is_named_in_full():
+    r = _short_app().test(["launch", "--role"])
+    assert r.exit_code == 1
+    assert "error: flag '--role' requires a value\n" in r.stderr
