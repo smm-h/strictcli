@@ -2866,13 +2866,15 @@ is §12.12's mechanism unchanged: **the sentence is byte-identical and the spell
 each language's own**. §12.12's `<required-spelling>` / `<optional-spelling>` / `<default-spelling>`
 table is reused verbatim; this section adds three rows -- `<record-spelling>` (§24.2's value-flag
 entry), `<selector-spelling>` (§24.12's selector constructor) and its member-spelled twin
-`<member-selector-spelling>`:
+`<member-selector-spelling>`. *(A fourth, `<member-payload-short-spelling>`, was added
+2026-08-17 by the member-short round, §18.36 item 331.)*
 
 | | Python | Go | TypeScript |
 |---|---|---|---|
 | `<record-spelling>` | `Choice(<value>, help=...)` | `Ch(<value>, "<help>")` | `{ value: <value>, help: "..." }` |
 | `<selector-spelling>` | `choice_flag(...)` | `ChoiceFlag(...)` | `choiceFlag(...)` |
 | `<member-selector-spelling>` | `choice_flag(..., elect_by="member-flags")` | `MemberChoiceFlag(...)` | `memberChoiceFlag(...)` |
+| `<member-payload-short-spelling>` | `member_value(short=...)` | *(unreachable: `MemberChoice` takes the member Flag itself)* | `choice({ value: { short } })` |
 
 **The scope path is itself a pinned format.** Every template below that names a scope renders it the
 same way, and three implementations must agree on it byte-for-byte at every depth:
@@ -3061,6 +3063,8 @@ a choice name is unique only within its selector, so the prefix names both.
 | `errMemberSelectorShort(sel)` | `Flag "<sel>": a member-spelled choice flag is never typed, so it cannot carry a short: declare the short on a member` |
 | `errMemberDefaultCarriesValue(sel, c)` | `Flag "<sel>": <default-spelling> elects choice "<c>", whose flag carries a value nothing supplies: only a payload-less member can be a default` |
 | `errTokenChoiceCarriesPayload(sel, c)` | `Choice "<c>" of "<sel>": a token-spelled choice cannot carry a payload: the token names the choice, and a choice that carries its own value belongs to a member-spelled choice flag, declared with <member-selector-spelling>` |
+| `errTokenChoiceCarriesShort(sel, c)` | `Choice "<c>" of "<sel>": a token-spelled choice cannot carry a short: the token names the choice, and only a member-spelled choice has a flag of its own to carry one`. *(added 2026-08-17, member-short round, §18.36 item 330)* **Go-excluded** -- `Choice(name, help, flags ...Flag)` has no short slot at all, so the state is unconstructable rather than refused, the class `errSelectorDefaultIncomplete` and `errMemberFlagPresence` are already in |
+| `errMemberShortOnPayloadChoice(sel, c)` | `Choice "<c>" of "<sel>": a payload-carrying member declares its short on its payload: <member-payload-short-spelling>`. *(added 2026-08-17, member-short round, §18.36 item 331)* **Go-excluded** -- `MemberChoice` takes ONE flag that types the payload and carries the short, so a member declaring it twice has no Go spelling |
 | `errChoicesEntryNotRecord(name, i)` | `Flag "<name>": choices entry <i> is a bare value: declare it as <record-spelling>` |
 | `errArgChoicesEntryNotRecord(name, i)` | `Arg "<name>": choices entry <i> is a bare value: declare it as <record-spelling>`. *(added 2026-08-15, implementation round, §18.19 item 219)* The **arg twin**: positionals keep `choices` in the record spelling (§24.7), and this catalog twins every flag/arg message that reaches both surfaces (`errFlagChoicesEmpty` / `errArgChoicesEmpty`, the whole default-type-mismatch family), so an arg reports itself as an arg rather than borrowing the flag prefix |
 | `errChoicesEntryIsChoiceClass(name, i, cls)` | `Flag "<name>": choices entry <i> is the choice class '<cls>', which declares a scope: a choice with a scope belongs to a choice flag, declared with <selector-spelling>`. **Python-only** -- Go's `Ch` and TypeScript's record literal are distinct types from a choice, so the sibling mis-declaration is a compile error (§24.12) |
@@ -9228,6 +9232,80 @@ implementations falsified, the other records a behavior all three already agree 
      one predicate already require, and it is recorded so the conformance corpus can case it rather
      than leave the interaction of the two sources untested.
 
+### 18.36 The member-short gap, closed (2026-08-17)
+
+Three items, continuing §18.35's numbering for the reason §18.14 gave: one ledger per campaign, and
+the scoped-selector construct is one campaign. This section is written from a consumer migration
+that hit the gap: an existing at-most-one group of flags was converted into a member-spelled
+selector -- the conversion §24.5 and the round's own changelog ask consumers to make -- and every
+short those flags carried was lost, in one language only.
+
+**What was read**, on disk: `python/strictcli/__init__.py`, `go/strictcli/selector.go`,
+`go/strictcli/help.go`, `go/strictcli/schema.go`, `typescript/src/factories.ts`,
+`typescript/src/parse.ts`, `typescript/src/help.ts` and `typescript/src/schema.ts`; and one running
+probe per behaviour, on all three targets, through the conformance harnesses.
+
+**Origin tags**, per §18.14's preamble: item 330 is a **closure** -- the capability was already
+stated, already reachable in Go, and already read by three machinery sites that no declaration
+surface could feed in the other two. Item 331 is **authored**: nothing pinned where a short goes
+when a language spells a member in two shapes. Item 332 is a **reading**, correcting one
+implementation against the other two.
+
+**Sites amended in place**: §24.4 (the member-short paragraph), §24.12 (the Python, Go and
+TypeScript bullets), §12.13 (two template rows and one spelling row).
+
+330. **A member's short is declarable in every language, and the machinery that already read it is
+     what proves the gap was a gap (§24.4, §24.12, §12.13).** §24.4 said a member-spelled selector
+     cannot carry a short and that "a short declared on a member is an ordinary flag short", and
+     `errMemberSelectorShort`'s remedy clause says the same in the imperative: *declare the short on
+     a member*. Go could obey it -- `MemberChoice(memberFlag Flag, ...)` takes the flag itself, so
+     `Short("r")` is an ordinary flag option -- while Python's `member_value(*, help)` and
+     TypeScript's `value: {carrier, help}` had no slot at all, and the payload `Flag` each built
+     carried `short = None` unconditionally. Three sites read that short anyway: the cross-scope
+     short-claim table walking member sites, the help renderer appending `, -<short>` to a member's
+     left column, and `errShortShapeMismatch` / `errShortOnAmbiguousElection`, both stated over
+     member scopes on purpose. **A framework may not promise a capability one of its declaration
+     surfaces cannot spell**, and the cost was concrete: a consumer making the conversion §24.5 asks
+     for lost `-c`, `-r` and `-p` with no migration that keeps the argv, because under member
+     spelling the members ARE the flags. Closed by giving the two languages the slot; Go's surface
+     is unchanged, and its behaviour is now compared rather than merely present.
+
+331. **Which declaration carries the short follows the member's SHAPE, and declaring it twice is
+     refused (§24.4, §24.12, §12.13).** A member's short belongs to its electing flag, and the three
+     languages spell that flag differently: Go has one `Flag` whichever shape the member has, so
+     there is one place; Python and TypeScript spell a payload-carrying member's electing flag as
+     its payload declaration (`member_value(...)` / `value: {carrier, help}`) and a payload-less
+     one's as the choice itself (a `@choice`-decorated class with no `value` field / a
+     `choice({help})` record). The rule is therefore **one place per shape, never two that must
+     agree** -- the same reasoning that made `MemberChoiceFlag` a twin constructor rather than an
+     option -- and the two states it forbids each get a template: a short on a **token-spelled**
+     choice, which puts no flag of its own on the command line at all
+     (`errTokenChoiceCarriesShort`), and a short beside a payload that already declares one
+     (`errMemberShortOnPayloadChoice`, carrying the new `<member-payload-short-spelling>` row).
+     Both are Go-excluded because neither state is constructable there. TypeScript additionally
+     types the second as `short?: never` on the value overload, so its ordinary caller meets a
+     compile error and only a widened or JSON-shaped one reaches the refusal -- §17's
+     accepted-ceiling reading, not a divergence.
+
+     A consequence worth pinning, because it decides which of two existing templates fires: a member
+     site's **name** is a flag name command-wide (§24.7) and is claimed at the scope its selector
+     sits on, but the **token** it puts on the command line exists only while that member is
+     elected, so its short is claimed one segment deeper. Two sibling members sharing a short are
+     therefore never simultaneously live, and what refuses them is `errShortOnAmbiguousElection`
+     (§18.19 item 221: an election token is read before any election has happened) rather than
+     `errShortCollidesAcrossScopes`. Go already claimed it at that depth; the reading is now stated
+     and cased.
+
+332. **A scoped token that consumes no value names itself AS TYPED (§24.3).** `-r` at the end of
+     argv produced `flag '--role' requires a value` in one implementation and `flag '-r' requires a
+     value` in the other two. The token-as-typed form is right on three counts: it is what the same
+     implementation's own root-scope path has always printed, it is what both siblings print, and it
+     is what the reader typed. The divergence long predates this round -- any scoped flag carrying a
+     short reaches it -- and no conformance case covered the shape, which is why three
+     implementations disagreed silently. Recorded as a **reading**, not a new rule: §24.3 already
+     requires the three to agree, and the corpus now has the case at both the member-token and the
+     ordinary-scoped-flag depth.
+
 ---
 
 ## 19. Machine mode and the envelope
@@ -10828,6 +10906,18 @@ What member spelling adds, and a mutex group could not express:
 and anything else is refused at registration (§12.13). A member-spelled selector **cannot carry a
 short** -- it is never typed -- and a short declared on a member is an ordinary flag short.
 
+*(Amended 2026-08-17, member-short round, §18.36 item 330.)* **Every language spells that short, on
+the declaration its member shape puts the electing flag on**: Go's `MemberChoice` takes the flag
+itself, so `Short("r")` on it was always the member's short; Python declares a payload-carrying
+member's on `member_value(short=...)` and a payload-less one's on `@choice(..., short=...)`;
+TypeScript's twin pair is `choice({ value: { short } })` and `choice({ help, short })`. A short
+declared where no member flag exists to carry it is refused (§12.13's `errTokenChoiceCarriesShort`
+and `errMemberShortOnPayloadChoice`). The short is claimed across every simultaneously live scope
+like any other, it renders beside its member on the help line, and it is claimed one scope segment
+deeper than the member's NAME is -- the name is a flag name command-wide (§24.7), the token exists
+only while that member is elected -- so two sibling members sharing a short take
+`errShortOnAmbiguousElection` rather than `errShortCollidesAcrossScopes`.
+
 **A payload is exactly one value, delivered under the reserved name `value`** (§24.7), and only
 under member spelling: a token-spelled choice is named by the token itself and has no payload to
 carry, so declaring one is a registration error (§12.13's `errTokenChoiceCarriesPayload`).
@@ -11534,6 +11624,11 @@ def send(ctx, via: Email | Sms | Webhook) -> int:
   is a decision, never an inference.
 - a member-spelled choice's payload is a field named `value`, declared `value: str =
   member_value(help=...)`; it takes no presence keyword, because electing the member supplies it.
+  *(Amended 2026-08-17, §18.36 item 330.)* It takes `short=` -- that field IS the electing flag's
+  declaration in this language -- and a **payload-less** member, which has no such field, takes its
+  short on the decorator instead: `@choice("cont", help=..., short="c")`. The decorator's keyword is
+  legal only there: on a token-spelled choice, and on a member that already declares one on its
+  payload, it is a registration error.
 - **the handler-annotation check is mandatory** (§12.13): the parameter bound to a selector must be
   annotated with exactly the declared union, `**kwargs` handlers are banned on selector-carrying
   commands, and annotations are resolved at registration through `typing.get_type_hints` against
@@ -11566,7 +11661,10 @@ line := sc.Match(via,
   carries a payload.
 - `MemberChoiceFlag(name, help, opts...)` with `MemberChoice(memberFlag, help, scope...)` is the
   member-spelled twin. It is a **twin constructor rather than an option**, so the spelling is one
-  declaration instead of two that must agree.
+  declaration instead of two that must agree. Because the member flag is an ordinary `Flag`, every
+  flag option composes on it unchanged -- `Short("r")` included, which is why the member-short round
+  added **nothing** to this surface (§18.36 item 330) and why the two refusals its siblings raise
+  have no Go state to refuse.
 - delivery is `*Elected` -- the elected `*ChoiceDecl` plus `Fields` -- and `Match` is **exhaustive
   against the declaration**: it compares the cases to the selector's choice list and panics naming
   what is missing. Go has no sealed union, so the check is at dispatch rather than at compile time;
@@ -11612,6 +11710,11 @@ via: choiceFlag("via", {
 - `memberChoiceFlag(...)` is the member-spelled twin factory (the `defineReadOnlyCommand` /
   `defineMutatingCommand` precedent), so the spelling is the factory's name and there is no option
   to forget. `choice({help, value, flags})` declares a member payload.
+  *(Amended 2026-08-17, §18.36 item 330.)* A member's short rides the same shape split Python's
+  does: `choice({ help, value: { carrier, help, short } })` for a payload-carrying member and
+  `choice({ help, short })` for a payload-less one. The value overload types its own `short?: never`,
+  so the two-declarations state is a **compile** error before it is the registration error a widened
+  or JSON-shaped caller meets.
 - presence stays a discriminated union on `presence`, and a selector's `default` is typed
   `keyof C & string`, so a default naming a choice that does not exist is a **compile** error
   before it is a registration error.
