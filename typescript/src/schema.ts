@@ -296,12 +296,24 @@ function serializeChoiceObject(
 		// `value` entry is an ordinary scoped-flag entry and its `help` is the
 		// payload's, never the choice's. The choice's help documents what
 		// electing it means and is what the member's help line renders.
-		scope.push({
-			name: CHOICE_VALUE_KEY,
-			help: c.value.help,
-			value_schema: scalarFragment(c.value.carrier.schema, undefined),
-			presence: "required",
-		});
+		// Key order is §25.9's flag-entry order, `short` included: the entry is
+		// an ordinary flag entry and the member's short is that flag's short.
+		scope.push(
+			c.value.short === undefined
+				? {
+						name: CHOICE_VALUE_KEY,
+						help: c.value.help,
+						value_schema: scalarFragment(c.value.carrier.schema, undefined),
+						presence: "required",
+					}
+				: {
+						name: CHOICE_VALUE_KEY,
+						help: c.value.help,
+						value_schema: scalarFragment(c.value.carrier.schema, undefined),
+						short: c.value.short,
+						presence: "required",
+					},
+		);
 	}
 	for (const sub of Object.values(c.flags)) {
 		scope.push(serializeDecl(sub));

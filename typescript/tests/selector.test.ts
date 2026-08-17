@@ -3408,3 +3408,190 @@ test("schema: a defaulted selector publishes the flat map", () => {
 		retries: 3n,
 	});
 });
+
+// =========================================================================
+// A member's short (§24.4, §24.12)
+//
+// The member flag is the only token member spelling puts on the command line,
+// so its short is an ordinary flag short. Which declaration carries it follows
+// the member's shape: a payload-carrying member's electing flag IS its
+// `value` declaration, and a payload-less one has none, so it declares the
+// short on the choice record itself.
+// =========================================================================
+
+function shortApp(): App {
+	const app = makeApp();
+	app.command(
+		defineReadOnlyCommand("launch", {
+			help: "launch",
+			flags: {
+				start: memberChoiceFlag(
+					"start",
+					{
+						role: choice({
+							help: "one role",
+							value: { carrier: t.str, help: "the role name", short: "r" },
+						}),
+						cont: choice({ help: "continue the previous session", short: "c" }),
+						plain: choice({ help: "a plain session", short: "p" }),
+					},
+					{ help: "how to start", presence: "required" },
+				),
+			},
+			handler: (a, ctx) => {
+				ctx.info(
+					a.start.choice === "role" ? `role=${a.start.value}` : a.start.choice,
+				);
+				return 0;
+			},
+		}),
+	);
+	return app;
+}
+
+test("member short: a payload-carrying member elects by its short", async () => {
+	const r = await shortApp().test(["launch", "-r", "admin"]);
+	assert.equal(r.exitCode, 0);
+	assert.equal(r.stdout, "role=admin\n");
+});
+
+test("member short: a payload-carrying member's short consumes the next token", async () => {
+	const r = await shortApp().test(["launch", "-r", "--plain"]);
+	assert.equal(r.exitCode, 0);
+	assert.equal(r.stdout, "role=--plain\n");
+});
+
+test("member short: a payload-less member elects by its short", async () => {
+	const r = await shortApp().test(["launch", "-c"]);
+	assert.equal(r.exitCode, 0);
+	assert.equal(r.stdout, "cont\n");
+});
+
+test("member short: two members elected by short are mutually exclusive", async () => {
+	const r = await shortApp().test(["launch", "-c", "-p"]);
+	assert.equal(
+		r.stderr,
+		errOut("--cont and --plain are mutually exclusive", "myapp launch"),
+	);
+});
+
+test("member short: a member with a short is still declined by the long negation", async () => {
+	const r = await shortApp().test(["launch", "--no-cont"]);
+	assert.equal(
+		r.stderr,
+		errOut(
+			"one of --role, --cont, --plain is required (--no-cont declines an option; it does not choose one)",
+			"myapp launch",
+		),
+	);
+});
+
+test("member short: a decline beside a short election names the member's long form", async () => {
+	const r = await shortApp().test(["launch", "--no-cont", "-p"]);
+	assert.equal(
+		r.stderr,
+		errOut(
+			"--no-cont cannot be combined with --plain (--no-cont declines an option; it does not choose one)",
+			"myapp launch",
+		),
+	);
+});
+
+test("member short: it renders beside the member on its help line", async () => {
+	const r = await shortApp().test(["launch", "--help"]);
+	assert.match(r.stdout, /--role, -r <str>/);
+	assert.match(r.stdout, /--cont, -c\s/);
+	assert.match(r.stdout, /--plain, -p\s/);
+});
+
+test("member short: it is claimed against a command-level flag", () => {
+	const app = makeApp();
+	rejects(
+		() =>
+			app.command(
+				defineReadOnlyCommand("launch", {
+					help: "launch",
+					flags: {
+						start: memberChoiceFlag(
+							"start",
+							{
+								role: choice({
+									help: "one role",
+									value: { carrier: t.str, help: "the role name", short: "r" },
+								}),
+								plain: choice({ help: "a plain session" }),
+							},
+							{ help: "how to start", presence: "required" },
+						),
+						repo: flag("repo", t.str, {
+							help: "the repo",
+							presence: "optional",
+							short: "r",
+						}),
+					},
+					handler: () => 0,
+				}),
+			),
+		errors.errShortCollidesAcrossScopes("launch", "r", "role", "repo"),
+	);
+});
+
+test("member short: two sibling members may not share one", () => {
+	const app = makeApp();
+	rejects(
+		() =>
+			app.command(
+				defineReadOnlyCommand("launch", {
+					help: "launch",
+					flags: {
+						start: memberChoiceFlag(
+							"start",
+							{
+								cont: choice({ help: "continue", short: "c" }),
+								clean: choice({ help: "start clean", short: "c" }),
+							},
+							{ help: "how to start", presence: "required" },
+						),
+					},
+					handler: () => 0,
+				}),
+			),
+		errors.errShortOnAmbiguousElection("launch", "c", "cont"),
+	);
+});
+
+test("member short: a token-spelled choice cannot carry one", () => {
+	rejects(
+		() =>
+			choiceFlag(
+				"via",
+				{
+					email: loose(choice({ help: "by email", short: "e" })),
+					sms: choice({ help: "by sms" }),
+				},
+				{ help: "delivery channel", presence: "required" },
+			),
+		errors.errTokenChoiceCarriesShort("via", "email"),
+	);
+});
+
+test("member short: a payload-carrying member declares it on the payload", () => {
+	rejects(
+		() =>
+			memberChoiceFlag(
+				"start",
+				{
+					role: loose(
+						choice({
+							help: "one role",
+							value: { carrier: t.str, help: "the role name" },
+							short: loose("r"),
+						}),
+					),
+					plain: choice({ help: "a plain session" }),
+				},
+				{ help: "how to start", presence: "required" },
+			),
+		errors.errMemberShortOnPayloadChoice("start", "role"),
+	);
+});

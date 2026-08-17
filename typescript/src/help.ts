@@ -34,6 +34,7 @@ import {
 	choiceValues,
 	elemSchemaOf,
 	flagOpts,
+	memberShort,
 	type Presence,
 	schemaKind,
 	unsetFlagName,
@@ -374,9 +375,12 @@ function buildMemberSpec(choiceName: string, c: AnyChoice): string {
 	// A payload-less member and a bool-payload member are both typed as a bare
 	// flag; only a value-carrying member renders the value it takes.
 	const payload = c.value;
+	const short = memberShort(c);
+	const spec =
+		short === undefined ? `--${choiceName}` : `--${choiceName}, -${short}`;
 	return payload === undefined || payload.carrier.schema === "bool"
-		? `--${choiceName}`
-		: `--${choiceName} <${payload.carrier.schema}>`;
+		? spec
+		: `${spec} <${payload.carrier.schema}>`;
 }
 
 /** The selector block: its own line, then one line per choice, then each scope. */

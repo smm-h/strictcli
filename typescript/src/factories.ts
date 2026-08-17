@@ -116,6 +116,7 @@ import {
 	errMemberDefaultCarriesValue,
 	errMemberFlagPresence,
 	errMemberSelectorShort,
+	errMemberShortOnPayloadChoice,
 	errMutatingDefault,
 	errNullableNotProperty,
 	errPayloadSchemaInvalid,
@@ -133,6 +134,7 @@ import {
 	errShortShapeMismatch,
 	errSiblingScopeShapeMismatch,
 	errTokenChoiceCarriesPayload,
+	errTokenChoiceCarriesShort,
 	errUnsetNameReserved,
 	errUpdateNameAmbiguous,
 	errUpdateNameBothRoles,
@@ -1396,6 +1398,13 @@ export interface ChoiceDef<F extends FlagMap> {
 	readonly kind: "choice";
 	readonly help: string;
 	readonly flags: F;
+	/**
+	 * A PAYLOAD-LESS member's electing flag short. Declared here because such a
+	 * choice has no `value` to carry it; a payload-carrying member declares it
+	 * on the payload, and a token-spelled choice cannot carry one at all --
+	 * both are registration errors (§24.4).
+	 */
+	readonly short?: string;
 }
 
 /**
@@ -1409,6 +1418,13 @@ export interface ChoiceDef<F extends FlagMap> {
 type ChoicePayload<Out> = {
 	readonly carrier: Carrier<Out, ScalarSchema>;
 	readonly help: string;
+	/**
+	 * The electing flag's short form (`-r X` for `--role X`). This declaration
+	 * IS that flag's declaration, so the short belongs here rather than beside
+	 * the choice -- a payload-less member has no payload and declares its own
+	 * short on the choice instead (§24.4, §24.12).
+	 */
+	readonly short?: string;
 };
 
 /**
@@ -1429,6 +1445,7 @@ export interface AnyChoice {
 	readonly help: string;
 	readonly flags: FlagMap;
 	readonly value?: ChoicePayload<unknown>;
+	readonly short?: string;
 }
 
 /** A selector's choice map: the choice name (as typed) to the choice it declares. */
@@ -1445,6 +1462,7 @@ export type ChoiceMap = Readonly<Record<string, AnyChoice>>;
 export function choice<const F extends FlagMap = Record<never, never>>(spec: {
 	readonly help: string;
 	readonly flags?: F;
+	readonly short?: string;
 }): ChoiceDef<F>;
 export function choice<
 	Out,
@@ -1453,16 +1471,21 @@ export function choice<
 	readonly help: string;
 	readonly value: ChoicePayload<Out>;
 	readonly flags?: F;
+	/** Never declared here: the payload carries a value-member's short. */
+	readonly short?: never;
 }): ValueChoiceDef<Out, F>;
 export function choice(spec: {
 	readonly help: string;
 	readonly value?: ChoicePayload<unknown>;
 	readonly flags?: FlagMap;
+	readonly short?: string;
 }): AnyChoice {
 	const flags = spec.flags ?? {};
-	return spec.value === undefined
-		? { kind: "choice", help: spec.help, flags }
-		: { kind: "choice", help: spec.help, flags, value: spec.value };
+	const base =
+		spec.short === undefined
+			? { kind: "choice" as const, help: spec.help, flags }
+			: { kind: "choice" as const, help: spec.help, flags, short: spec.short };
+	return spec.value === undefined ? base : { ...base, value: spec.value };
 }
 
 /**
@@ -1684,6 +1707,24 @@ function buildChoiceFlag<
 				errTokenChoiceCarriesPayload(name, choiceName),
 			);
 		}
+		// The same reasoning one step further: a token-spelled choice puts no
+		// flag of its own on the command line, so it has nothing to carry a
+		// short either (§24.4).
+		if (electBy === "selector-token" && c.short !== undefined) {
+			throw new RegistrationError(errTokenChoiceCarriesShort(name, choiceName));
+		}
+		// One member, one declaration of its short: a payload-carrying member's
+		// electing flag IS its payload (§24.12), so the choice-level slot is
+		// the payload-less member's alone.
+		if (
+			electBy === "member-flags" &&
+			c.short !== undefined &&
+			c.value !== undefined
+		) {
+			throw new RegistrationError(
+				errMemberShortOnPayloadChoice(name, choiceName),
+			);
+		}
 		if (electBy === "member-flags") {
 			// A member's choice name IS a flag name and inherits every flag-name
 			// rule, including the bans (§24.7).
@@ -1827,8 +1868,20 @@ export interface SurfaceName {
 	readonly shape: string;
 	/** For member spelling, the choice this name elects. */
 	readonly elects?: string;
+	/** The short this name claims; `undefined` when it declares none. */
+	readonly short: string | undefined;
 	/** The declaration the name belongs to. */
 	readonly decl: AnyDecl;
+}
+
+/**
+ * The short a member-spelled choice's electing flag claims, from whichever
+ * declaration its shape puts it on: the payload for a payload-carrying member,
+ * the choice itself for a payload-less one (§24.4, §24.12).
+ */
+export function memberShort(c: AnyChoice): string | undefined {
+	const short = c.value === undefined ? c.short : c.value.short;
+	return short === "" ? undefined : short;
 }
 
 /**
@@ -1843,18 +1896,28 @@ export function surfaceNames(decl: AnyDecl): SurfaceName[] {
 				name: decl.name,
 				takesValue: decl.schema !== "bool",
 				shape: decl.schema,
+				short: flagOpts(decl).short,
 				decl,
 			},
 		];
 	}
 	if (decl.electBy === "selector-token") {
-		return [{ name: decl.name, takesValue: true, shape: "choice", decl }];
+		return [
+			{
+				name: decl.name,
+				takesValue: true,
+				shape: "choice",
+				short: decl.opts.short,
+				decl,
+			},
+		];
 	}
 	return Object.entries(decl.choices).map(([choiceName, c]) => ({
 		name: choiceName,
 		takesValue: c.value !== undefined,
 		shape: c.value === undefined ? "bool" : c.value.carrier.schema,
 		elects: choiceName,
+		short: memberShort(c),
 		decl,
 	}));
 }
@@ -1916,6 +1979,8 @@ export interface ScopeIndexEntry {
 	readonly takesValue: boolean;
 	/** Set when the name is a member-spelled election (`--all-profiles`). */
 	readonly elects?: string;
+	/** The short this surface name claims; `undefined` when it declares none. */
+	readonly short: string | undefined;
 }
 
 /**
@@ -1934,8 +1999,14 @@ export function buildScopeIndex(decls: readonly AnyDecl[]): ScopeIndex {
 				const entries = index.get(s.name) ?? [];
 				entries.push(
 					s.elects === undefined
-						? { decl, path, takesValue: s.takesValue }
-						: { decl, path, takesValue: s.takesValue, elects: s.elects },
+						? { decl, path, takesValue: s.takesValue, short: s.short }
+						: {
+								decl,
+								path,
+								takesValue: s.takesValue,
+								elects: s.elects,
+								short: s.short,
+							},
 				);
 				index.set(s.name, entries);
 			}
@@ -1960,6 +2031,21 @@ export function buildScopeIndex(decls: readonly AnyDecl[]): ScopeIndex {
  * than against *sibling* deliberately: it is the formulation that still holds
  * if multi-elect is ever adopted (§24.13).
  */
+/**
+ * The scope a surface name's short is claimed IN. For every ordinary
+ * declaration that is its own path; a member election's name is a flag name
+ * command-wide (§24.7) but the token it puts on the command line exists only
+ * while that member is elected, so its short is claimed one segment deeper.
+ * Two sibling members therefore never collide -- what refuses them sharing a
+ * short is the election-token guard (§18.19 item 221).
+ */
+function shortClaimPath(e: ScopeIndexEntry): readonly ScopeStep[] {
+	if (e.elects === undefined || e.decl.kind !== "choice-flag") {
+		return e.path;
+	}
+	return [...e.path, { selector: e.decl, choiceName: e.elects }];
+}
+
 function simultaneouslyElectable(
 	a: readonly ScopeStep[],
 	b: readonly ScopeStep[],
@@ -2026,20 +2112,15 @@ function validateDeclTree(
 		string,
 		{ name: string; path: readonly ScopeStep[] }[]
 	>();
-	for (const entries of index.values()) {
+	for (const [name, entries] of index) {
 		for (const e of entries) {
-			// A member-spelled election's short belongs to its own choice flag,
-			// which cannot carry one at all (§24.4).
-			if (e.elects !== undefined) {
-				continue;
-			}
-			const short = e.decl.opts.short;
+			const short = e.short;
 			if (typeof short !== "string" || short === "") {
 				continue;
 			}
 			const claims = shorts.get(short) ?? [];
-			if (!claims.some((c) => c.name === e.decl.name)) {
-				claims.push({ name: e.decl.name, path: e.path });
+			if (!claims.some((c) => c.name === name)) {
+				claims.push({ name, path: shortClaimPath(e) });
 			}
 			shorts.set(short, claims);
 		}
@@ -2101,14 +2182,14 @@ function collectDeclSites(
 			continue;
 		}
 		for (const s of surfaceNames(decl)) {
-			// A member-spelled election's token belongs to its own choice flag,
-			// which cannot carry a short at all, and TypeScript's member payload
-			// has no short slot -- so a member site claims none.
+			// A member-spelled election's token is the member flag's own, and
+			// its short is declared by whichever of the two member shapes owns
+			// the electing flag's declaration (§24.4, §24.12).
 			out.push({
 				name: s.name,
 				kind: "election",
 				shape: valueShapeOf(s),
-				short: s.elects === undefined ? decl.opts.short : undefined,
+				short: s.short,
 			});
 		}
 		for (const c of Object.values(decl.choices)) {

@@ -101,7 +101,7 @@ export const SURFACE = {
 			name: "ChoiceFlagDef",
 			members: ["kind", "electBy", "name", "choices", "opts"],
 		},
-		{ name: "ChoiceDef", members: ["kind", "help", "flags"] },
+		{ name: "ChoiceDef", members: ["kind", "help", "flags", "short"] },
 		{ name: "ValueChoiceDef", members: ["kind", "help", "flags", "value"] },
 		{ name: "AtLeastOne", members: ["kind", "name", "members"] },
 		{ name: "AllOrNone", members: ["kind", "name", "members"] },

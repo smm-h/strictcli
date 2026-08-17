@@ -118,7 +118,10 @@ import { ParseError, RegistrationError } from "../src/errors.js";
 // property-role/presence refusals and the two clear-vocabulary ones -- plus the
 // two parse-time violations. `renderDeclFlag` and `renderDeclArg` are
 // renderers rather than templates and do not count.
-const EXPECTED_TEMPLATE_COUNT = 386;
+// The member-short round nets +2: the two places a short can be declared where
+// no member flag exists to carry it -- on a token-spelled choice, and beside a
+// payload-carrying member whose payload already declares one (§24.4, §24.12).
+const EXPECTED_TEMPLATE_COUNT = 388;
 
 function templateFunctions(): [string, (...args: never[]) => unknown][] {
 	// Widen to unknown first: the module also exports the two error classes,

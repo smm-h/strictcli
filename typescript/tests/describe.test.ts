@@ -540,8 +540,11 @@ test("registry: runtime keys of factory-built carriers match declaration order",
 		{ help: "h", presence: "required" },
 	);
 	assert.deepEqual(Object.keys(sel), runtimeMembers("ChoiceFlagDef"));
+	// A payload-less member's short is the choice record's own key, so the
+	// choice built here declares one -- otherwise the optional key never
+	// appears at runtime and the order assertion has nothing to compare.
 	assert.deepEqual(
-		Object.keys(api.choice({ help: "h" })),
+		Object.keys(api.choice({ help: "h", short: "h" })),
 		runtimeMembers("ChoiceDef"),
 	);
 	assert.deepEqual(

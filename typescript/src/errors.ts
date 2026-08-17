@@ -2273,6 +2273,13 @@ export const SELECTOR_SPELLING = "choiceFlag(...)";
 /** TypeScript's spelling of the member-spelled selector constructor (§24.12). */
 export const MEMBER_SELECTOR_SPELLING = "memberChoiceFlag(...)";
 
+/**
+ * Where a payload-carrying member's short goes in this language: the payload
+ * declaration IS the electing flag's declaration, the way `MemberChoice`'s
+ * first argument is in Go and `member_value(...)` is in Python (§24.12).
+ */
+export const MEMBER_PAYLOAD_SHORT_SPELLING = "choice({ value: { short } })";
+
 /** The `Choice "<c>" of "<sel>": ` prefix -- the round's one new prefix family. */
 function choicePrefix(choiceName: string, selector: string): string {
 	return `Choice ${q(choiceName)} of ${q(selector)}: `;
@@ -2494,6 +2501,24 @@ export function errMemberDefaultCarriesValue(
  */
 export function errTokenChoiceCarriesPayload(sel: string, c: string): string {
 	return `${choicePrefix(c, sel)}a token-spelled choice cannot carry a payload: the token names the choice, and a choice that carries its own value belongs to a member-spelled choice flag, declared with ${MEMBER_SELECTOR_SPELLING}`;
+}
+
+/**
+ * A short on a token-spelled choice names nothing: the selector's own value
+ * names the choice, and a value has no short form. Only a member-spelled
+ * choice puts a flag of its own on the command line (§24.4).
+ */
+export function errTokenChoiceCarriesShort(sel: string, c: string): string {
+	return `${choicePrefix(c, sel)}a token-spelled choice cannot carry a short: the token names the choice, and only a member-spelled choice has a flag of its own to carry one`;
+}
+
+/**
+ * One member, one place to declare its short (§24.4, §24.12). A
+ * payload-carrying member's electing flag IS its payload declaration, so a
+ * short beside the choice would be a second declaration that must agree.
+ */
+export function errMemberShortOnPayloadChoice(sel: string, c: string): string {
+	return `${choicePrefix(c, sel)}a payload-carrying member declares its short on its payload: ${MEMBER_PAYLOAD_SHORT_SPELLING}`;
 }
 
 /**

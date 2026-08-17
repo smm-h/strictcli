@@ -530,10 +530,9 @@ function newScopedLookups(decls: readonly AnyDecl[]): ScopedLookups {
 			negation.set(`--no-${name}`, target);
 		}
 		for (const e of entries) {
-			if (e.elects !== undefined) {
-				continue;
-			}
-			const sh = e.decl.opts.short;
+			// A member election's token carries a short like any other scoped
+			// token: the member flag IS what a reader types (§24.4).
+			const sh = e.short;
 			if (typeof sh === "string" && sh !== "") {
 				short.set(`-${sh}`, target);
 			}
