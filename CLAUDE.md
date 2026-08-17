@@ -162,6 +162,18 @@ regression in all three languages at once.
   as `excluded:` entries with the rationale, and assert them **per target** in a
   conformance case (`conformance/cases/presence_registration.json` is the model),
   never by forcing one shared spelling.
+- **Exhaustiveness is a first-class goal of every delivery API.** Wherever a
+  handler consumes a closed set (an elected choice, a tagged record, an
+  enum-like verdict), the blessed idiom is the language's
+  completeness-enforcing construct: TypeScript `switch` over the discriminated
+  union with `assertNever`, Python `match` with `assert_never` (made sound by
+  the mandatory handler annotation), Go `Match`/`When` (which names unhandled
+  choices at dispatch -- the closest Go offers to sealed exhaustiveness). This
+  holds for ALL features and ALL closed sets, not just selectors, and at every
+  set size -- a two-member set consumed by an if/else is never the documented
+  idiom, because the third member's arrival should be a compile error or a
+  named dispatch refusal, not a silent fall-through. New surface must ship with
+  its exhaustiveness story stated per language.
 - **Before proposing "make X the same in all three", name the SEMANTIC that
   differs.** If none differs, the difference is idiom and it stays. "The Go
   version doesn't look like the Python version" is not a finding.
