@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-17T14:29:38Z",
+  "generated_at": "2026-08-17T14:29:51Z",
   "package_count": 4,
   "packages": {
     "strictcli": {
@@ -37,7 +37,7 @@
       "targets": [
         "npm"
       ],
-      "version": "0.40.0",
+      "version": "0.40.1",
       "description": null,
       "deps": [],
       "rdeps": [],
