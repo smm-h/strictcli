@@ -295,3 +295,105 @@ func TestMemberOwnsAScope(t *testing.T) {
 		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
 	}
 }
+
+// --- A member's short (§24.4, §24.12) ---------------------------------------
+//
+// Go declares one Flag per member, so the short is that flag's own Short()
+// whichever shape the member has -- no second spelling, and nothing about the
+// construct is new here. What these lock in is the BEHAVIOR the siblings had
+// to grow a declaration surface to reach: the token elects, a payload-carrying
+// member's short consumes its value, and the short renders on the help line.
+
+func memberShortApp() *App {
+	return simpleApp("launch", "launch it", "start={start}",
+		WithFlags(MemberChoiceFlag("start", "how to start", Required(),
+			MemberChoice(StringFlag("role", "the role name", Required(), Short("r")), "one role"),
+			MemberChoice(BoolFlag("cont", "continue the previous session", Required(), Short("c")), "continue the previous session"),
+			MemberChoice(BoolFlag("plain", "a plain session", Required(), Short("p")), "a plain session"),
+		)))
+}
+
+func TestMemberPayloadShortElects(t *testing.T) {
+	r := memberShortApp().Test([]string{"launch", "-r", "admin"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "role") || !strings.Contains(r.Stdout, "admin") {
+		t.Fatalf("stdout = %q, want the elected role with its payload", r.Stdout)
+	}
+}
+
+// `-r X` is the member's own value, exactly as `--role X` is: the short
+// consumes the next token even when it looks like another member's flag.
+func TestMemberPayloadShortConsumesItsValue(t *testing.T) {
+	r := memberShortApp().Test([]string{"launch", "-r", "--plain"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "--plain") {
+		t.Fatalf("stdout = %q, want the literal value it consumed", r.Stdout)
+	}
+}
+
+func TestMemberPayloadLessShortElects(t *testing.T) {
+	r := memberShortApp().Test([]string{"launch", "-c"})
+	if r.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d: stderr=%q", r.ExitCode, r.Stderr)
+	}
+	if !strings.Contains(r.Stdout, "cont") {
+		t.Fatalf("stdout = %q, want the elected member", r.Stdout)
+	}
+}
+
+func TestMemberShortElectionsStayMutuallyExclusive(t *testing.T) {
+	r := memberShortApp().Test([]string{"launch", "-c", "-p"})
+	want := "error: --cont and --plain are mutually exclusive\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+// The short elects; the decline keeps its one spelling, and the message names
+// the member's LONG form however it was typed (§21.2).
+func TestMemberShortIsStillDeclinedByTheLongNegation(t *testing.T) {
+	r := memberShortApp().Test([]string{"launch", "--no-cont", "-p"})
+	want := "error: --no-cont cannot be combined with --plain " +
+		"(--no-cont declines an option; it does not choose one)\n"
+	if !strings.Contains(r.Stderr, want) {
+		t.Fatalf("stderr = %q, want it to contain %q", r.Stderr, want)
+	}
+}
+
+func TestMemberShortRendersOnTheHelpLine(t *testing.T) {
+	r := memberShortApp().Test([]string{"launch", "--help"})
+	for _, want := range []string{"--role, -r <str>", "--cont, -c", "--plain, -p"} {
+		if !strings.Contains(r.Stdout, want) {
+			t.Fatalf("help = %q, want it to contain %q", r.Stdout, want)
+		}
+	}
+}
+
+// Two sibling members can never be live together, so a shared short is not a
+// collision -- it is the election-token guard that refuses it (§18.19 item 221).
+func TestTwoSiblingMembersMayNotShareAShort(t *testing.T) {
+	expectPanic(t, `command "launch": short '-c' is reused by sibling scopes and also claimed by '--cont', which elects: an election token is read before any election has happened, so its short cannot be shared`, func() {
+		simpleApp("launch", "launch it", "",
+			WithFlags(MemberChoiceFlag("start", "how to start", Required(),
+				MemberChoice(BoolFlag("cont", "continue", Required(), Short("c")), "continue"),
+				MemberChoice(BoolFlag("clean", "start clean", Required(), Short("c")), "start clean"),
+			)))
+	})
+}
+
+func TestMemberShortCollidesWithACommandFlag(t *testing.T) {
+	expectPanic(t, `command "launch": short '-r' is claimed by '--role' and '--repo', which can be elected at the same time`, func() {
+		simpleApp("launch", "launch it", "",
+			WithFlags(
+				MemberChoiceFlag("start", "how to start", Required(),
+					MemberChoice(StringFlag("role", "the role name", Required(), Short("r")), "one role"),
+					MemberChoice(BoolFlag("plain", "a plain session", Required()), "a plain session"),
+				),
+				StringFlag("repo", "the repo", Optional(), Short("r")),
+			))
+	})
+}
