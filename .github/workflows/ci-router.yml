@@ -33,23 +33,21 @@ jobs:
         filters: |
           strictcli:
             - 'python/**'
-            - 'python/**'
-            - 'LICENSE'
-            - '.github/workflows/**'
+            - '.github/workflows/ci-router.yml'
             - '.rlsbl-monorepo/releasables/py-strictcli/CHANGELOG.md'
           go-strictcli:
             - 'go/**'
-            - '.github/workflows/**'
+            - '.github/workflows/ci-router.yml'
             - '.rlsbl-monorepo/releasables/go-strictcli/CHANGELOG.md'
           ts-strictcli:
             - 'typescript/**'
-            - '.github/workflows/**'
+            - '.github/workflows/ci-router.yml'
             - '.rlsbl-monorepo/releasables/ts-strictcli/CHANGELOG.md'
           conformance:
             - 'conformance/**'
             - 'python/**'
-            - 'go/**'
-            - 'typescript/**'
+            - '.github/workflows/ci-router.yml'
+        predicate-quantifier: some-with-excludes
   strictcli-ci-test:
     runs-on: ubuntu-latest
     strategy:
