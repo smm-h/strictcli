@@ -11,3 +11,7 @@ bump = "patch"
 include = ["pypi"]
 exclude = []
 description = "Strict parsing: reject underscore separators in ints and overflow-to-infinity floats"
+candidate_sha = "14047ca5e722aa5157c9e7a0b92456c1fb786055"
+
+[tree_hashes]
+python = "fb71f7ec21f376f46b3c25693a1cd91dffe0b983"

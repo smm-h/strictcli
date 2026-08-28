@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "minor"
 # Short description of this release (required)
@@ -10,3 +12,4 @@ arg(), command(), and check() decorators instead of generic Callable.\
 """
 include = ["pypi", "npm"]
 exclude = []
+unanchorable = true

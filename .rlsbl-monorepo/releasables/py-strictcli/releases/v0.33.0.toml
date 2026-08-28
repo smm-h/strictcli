@@ -12,3 +12,7 @@ include = ["pypi"]
 exclude = []
 description = "Connection env vars: a hermetic-suppressed, app-level env primitive for connection URLs"
 context = "Adds a third infra-env kind alongside infra roots and handshake vars. A connection env (e.g. a database DSN) is declared once at app level, read lazily with no default, and suppressed under --hermetic so connection-dependent behavior (including checks) skips visibly. Flags bind to it by reference and check functions can read it through the check context."
+candidate_sha = "f50f1d929540dcf473f19c134cdcbf8657ae679f"
+
+[tree_hashes]
+python = "d3f50c6bd7d54d085df61b07c4f3dd1d4cbdd001"

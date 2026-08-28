@@ -11,3 +11,7 @@ bump = "minor"
 include = ["pypi"]
 exclude = []
 description = "Add is_hermetic() to the check-side ConnectionEnvReader"
+candidate_sha = "9ac46f559c2c2c8a87d07e1c94c31f1f53586bfc"
+
+[tree_hashes]
+python = "24b862be3b4b34fa5923f2c2abe60f4075cb7918"

@@ -1,0 +1,6 @@
+# strictspec document version gate (do not remove)
+format_version = 1
+candidate_sha = "5bb71098d4c84cb7cb7836029c228ef281c1a27a"
+
+[tree_hashes]
+go = "5a4fd92caebd9885fc82c9c87f58f11771dd8182"

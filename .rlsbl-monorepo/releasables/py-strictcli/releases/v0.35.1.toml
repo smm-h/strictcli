@@ -44,3 +44,7 @@ corresponding PyPI artifact. It was never installable and never will be.
 # blog = false
 include = ["pypi"]
 exclude = []
+candidate_sha = "538146e706b13e54e213a21b428034934d3f9c13"
+
+[tree_hashes]
+python = "e9f745d675d6848dbfe45fd804e0ab41f691f6d5"

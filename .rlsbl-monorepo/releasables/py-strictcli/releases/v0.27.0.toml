@@ -12,3 +12,4 @@ include = ["pypi"]
 exclude = []
 description = "Public schema-dict accessor, divergence-aware config conflict mode with per-flag override, and validation-only ConfigField/flag coexistence"
 context = "Phase 2 additions, all backward compatible:\n- dump_schema_dict() exposes the CLI schema as a dict with no filesystem or\n  CWD access (the --dump-schema writer path adds project_id on top).\n- config_conflict_mode=\"error\" now only errors when the config and CLI/env\n  values actually diverge; identical values agree. A per-flag conflict_mode\n  kwarg overrides the app default for a single flag.\n- A config field whose name equals a flag's param name is a validation-only\n  annotation of that flag: it renders once (in config show/init) and its\n  default must agree with the flag's default (registration error otherwise)."
+unanchorable = true

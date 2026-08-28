@@ -12,3 +12,7 @@ include = ["go"]
 exclude = []
 description = "Connection env vars: a hermetic-suppressed, app-level env primitive for connection URLs"
 context = "Adds a third infra-env kind alongside infra roots and handshake vars. A connection env (e.g. a database DSN) is declared once at app level via WithConnectionEnv, read lazily with no default, and suppressed under --hermetic so connection-dependent behavior (including checks) skips visibly. Flags bind to it via ConnectionURLFlag and check functions can read it through the ConnectionEnvReader capability."
+candidate_sha = "ca1fc9fa632c878bf7ffa01fa8ae27dd2fec00ee"
+
+[tree_hashes]
+go = "9764e33b6ede241ea2c36c6ecea4a81120ee068e"

@@ -12,3 +12,7 @@ include = ["pypi"]
 exclude = []
 description = "cli-test-coverage skips instead of failing when run outside the app's own dev tree"
 context = "An installed app that runs its checks from a foreign project's directory anchored cli-test-coverage to that foreign cwd, which has no coverage manifest or shard files, so the check failed listing the app's entire command surface as uncovered. The check now applies subject-matter gating: when the anchored coverage root contains neither a manifest nor any shard files, it reports a visible skip naming the anchored path. When either exists, behavior is unchanged."
+candidate_sha = "33e47f9f043784d32b74a6b2c7850768334c3337"
+
+[tree_hashes]
+python = "eff73804f4125a314477dc77ae971273d1cbfbc3"

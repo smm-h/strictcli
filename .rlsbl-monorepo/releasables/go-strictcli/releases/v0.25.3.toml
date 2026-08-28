@@ -11,3 +11,7 @@ bump = "patch"
 include = ["go"]
 exclude = []
 description = "App-level help now lists global flags"
+candidate_sha = "5959181aab25ace4dd73a55908b1d892b0782f1d"
+
+[tree_hashes]
+go = "4842982f534802cbc5c70f325a72c34cb0ff9c95"

@@ -1,3 +1,6 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 bump = "patch"
 include = ["pypi", "npm"]
 exclude = []
+unanchorable = true

@@ -12,3 +12,4 @@ include = ["pypi"]
 exclude = []
 description = "Required booleans, Context type, schema project_id guard, tag contract global flags fix"
 context = "Breaking change: Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required. New Context type for structured handler communication. Schema dump now validates project_id. TagContract now checks global flags."
+unanchorable = true

@@ -11,3 +11,7 @@ bump = "minor"
 include = ["npm"]
 exclude = []
 description = "Add isHermetic() to the check-side ConnectionEnvReader"
+candidate_sha = "5d6a5eeac0ab0a44b9a9ffc4bed9a230c237afa0"
+
+[tree_hashes]
+typescript = "519fc2f924f62402610968d18d76501717bddf22"

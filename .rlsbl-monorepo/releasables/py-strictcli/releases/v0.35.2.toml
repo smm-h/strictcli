@@ -45,3 +45,7 @@ purpose is getting that content to the registry.
 # blog = false
 include = ["pypi"]
 exclude = []
+candidate_sha = "93e396451ca94e3bd7ace10ec452a44cbce08101"
+
+[tree_hashes]
+python = "d1a9f23ae29b1770b0457bd94cde392c5f4a9c03"

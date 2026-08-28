@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, major, hotfix, or prerelease
 bump = ""
 # Short description of this release (required)
@@ -10,3 +12,7 @@ context = "Versions <=0.30.1 were an npm wrapper that installed the Python packa
 # blog = false
 include = ["npm"]
 exclude = []
+candidate_sha = "5faf3436746eb5c595f275fcf24673f3f1b66ad9"
+
+[tree_hashes]
+typescript = "c21b343a0acd2aff52946d770214b84df9e43946"

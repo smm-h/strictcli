@@ -12,3 +12,4 @@ include = ["pypi"]
 exclude = []
 description = "Recovered full release history and added MIT license"
 context = "53 pre-releasable versioned changelog files were recovered from saferm archive, restoring complete release history in CHANGELOG.md. Project now includes MIT license."
+unanchorable = true

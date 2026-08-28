@@ -11,3 +11,7 @@ bump = "minor"
 include = ["pypi"]
 exclude = []
 description = "CLI test-coverage instrumentation, notes channel"
+candidate_sha = "4fb5a9c6b926b3c563874f783b423719fda57b12"
+
+[tree_hashes]
+python = "d6e0ff6058c541acb1df365753b2db490d2d4224"

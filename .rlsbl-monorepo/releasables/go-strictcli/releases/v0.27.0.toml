@@ -11,3 +11,7 @@ bump = "minor"
 include = ["go"]
 exclude = []
 description = "Add IsHermetic() to the check-side ConnectionEnvReader"
+candidate_sha = "83dd57f5960297e943c6d0aebffaa049e2425bbb"
+
+[tree_hashes]
+go = "da97ef6838712be9f8f00897e6dc4e3d35d75324"

@@ -1,3 +1,9 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 bump = "minor"
 include = ["plain"]
 exclude = []
+candidate_sha = "afaa0cbc35345fb5620edbbaa78c54e66da259c4"
+
+[tree_hashes]
+conformance = "2bdbc251a56ae46efc40339d757ab2fc2138de74"

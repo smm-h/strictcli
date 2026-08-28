@@ -12,3 +12,7 @@ include = ["npm"]
 exclude = []
 description = "Connection env vars: a hermetic-suppressed, app-level env primitive for connection URLs"
 context = "Adds a third infra-env kind alongside infra roots and handshake vars. A connection env (e.g. a database DSN) is declared once at app level via createApp connectionEnv, read lazily with no default, and suppressed under --hermetic so connection-dependent behavior (including checks) skips visibly. Flags bind to it via connectionUrl/connectionEnv and check functions can read it through the ConnectionEnvReader capability."
+candidate_sha = "8acca8410f819f8f17395d2d9d122098a80216cf"
+
+[tree_hashes]
+typescript = "2f3f6634ebb20dec5756af8fef944ffbbcc7751b"

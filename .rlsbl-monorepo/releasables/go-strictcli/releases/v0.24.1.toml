@@ -11,3 +11,7 @@ bump = "patch"
 include = ["go"]
 exclude = []
 description = "Fix coverage shard directory creation in test contexts"
+candidate_sha = "64b226ac44331c3a04d2fd5e17cb26b95bb2f54f"
+
+[tree_hashes]
+go = "0a56a77368387e5e6d11383fc7d96295fb62dbe3"
