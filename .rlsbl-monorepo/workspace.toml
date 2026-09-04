@@ -25,7 +25,7 @@ releasable = "ts-strictcli"
 [[projects]]
 path = "conformance/"
 name = "conformance"
-dev_node = true
+dev_only = true
 releasable = false
 
 [[projects]]
