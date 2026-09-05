@@ -2,6 +2,7 @@ package strictcli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -374,16 +375,19 @@ func loadConfig(appName string, pathOverride string, format string, isRuntimeFla
 	var result map[string]interface{}
 	switch format {
 	case "toml":
-		if err := tomledit.Unmarshal(data, &result); err != nil {
-			if pe, ok := err.(*tomledit.ParseError); ok {
+		parsed, err := tomledit.Unmarshal[map[string]interface{}](data)
+		if err != nil {
+			var pe *tomledit.Error
+			if errors.As(err, &pe) {
 				return configLoadResult{
-					parseErr: fmt.Sprintf("config file %s: %s (line %d, column %d)", path, pe.Message, pe.Line, pe.Column),
+					parseErr: fmt.Sprintf("config file %s: %s (line %d, column %d)", path, pe.Message, pe.Pos.Line, pe.Pos.Column),
 				}
 			}
 			return configLoadResult{
 				parseErr: fmt.Sprintf("config file %s: %s", path, err.Error()),
 			}
 		}
+		result = *parsed
 	default:
 		if err := json.Unmarshal(data, &result); err != nil {
 			if se, ok := err.(*json.SyntaxError); ok {
@@ -712,7 +716,7 @@ func ensureConfigDir(e *Effects, path string) int {
 // that unrelated formatting — blank lines, alignment, comment placement —
 // survives byte-for-byte; only the changed key is touched.
 func writeConfigFileTOML(e *Effects, path string, change configChange) int {
-	var doc *tomledit.DocumentNode
+	var doc *tomledit.Document
 	existingBytes, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {

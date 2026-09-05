@@ -315,10 +315,11 @@ func loadChecksToml(path string) (string, map[string]*checkDef, []string, error)
 // and check names in sorted order (for deterministic listing).
 func parseChecksToml(data []byte) (string, map[string]*checkDef, []string, error) {
 	// Unmarshal into a generic map for strict validation
-	var raw map[string]interface{}
-	if err := tomledit.Unmarshal(data, &raw); err != nil {
+	rawPtr, err := tomledit.Unmarshal[map[string]interface{}](data)
+	if err != nil {
 		return "", nil, nil, errChecksTomlParse(err)
 	}
+	raw := *rawPtr
 
 	// Validate top-level keys: only "app" and "checks" are allowed
 	for key := range raw {
