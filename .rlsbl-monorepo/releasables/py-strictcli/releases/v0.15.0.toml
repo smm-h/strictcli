@@ -8,4 +8,4 @@ description = "Config set type coercion and key validation"
 context = "config set now validates keys against registered flags and coerces string values to the flag's declared type before writing. This is a breaking change: unknown keys are rejected."
 include = ["pypi", "npm"]
 exclude = []
-unanchorable = true
+shipped_as = "strictcli@v0.15.0"

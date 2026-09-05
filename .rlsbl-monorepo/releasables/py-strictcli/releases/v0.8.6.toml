@@ -3,4 +3,4 @@ format_version = 1
 bump = "patch"
 include = ["pypi", "npm"]
 exclude = []
-unanchorable = true
+shipped_as = "strictcli@v0.8.6"

@@ -12,4 +12,4 @@ include = ["pypi"]
 exclude = []
 description = "checks_embed for inline TOML data"
 context = "Adds checks_embed parameter as an alternative to checks_path, allowing TOML bytes to be passed directly without requiring a file on disk."
-unanchorable = true
+shipped_as = "strictcli@v0.14.0"

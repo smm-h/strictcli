@@ -10,4 +10,4 @@ bump = "patch"
 include = ["pypi"]
 exclude = []
 description = "RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate."
-unanchorable = true
+shipped_as = "strictcli@v0.8.4"

@@ -8,4 +8,4 @@ description = "Error message fixes and help text improvements"
 context = ""
 include = ["pypi", "npm"]
 exclude = []
-unanchorable = true
+shipped_as = "strictcli@v0.16.1"

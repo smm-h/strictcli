@@ -3,4 +3,4 @@ format_version = 1
 bump = "minor"
 include = ["go"]
 exclude = []
-unanchorable = true
+shipped_as = "go/v0.6.0"

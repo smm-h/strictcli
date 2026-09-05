@@ -3,4 +3,4 @@ format_version = 1
 bump = "patch"
 include = ["go"]
 exclude = []
-unanchorable = true
+shipped_as = "go/v0.5.4"

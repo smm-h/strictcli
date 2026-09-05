@@ -4,4 +4,4 @@ format_version = 1
 bump = "minor"
 include = ["pypi", "npm"]
 exclude = []
-unanchorable = true
+shipped_as = "strictcli@v0.12.0"

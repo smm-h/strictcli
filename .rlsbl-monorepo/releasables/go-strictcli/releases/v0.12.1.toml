@@ -8,4 +8,4 @@ description = "Fix repeatable flag defaults not applied to handlers"
 context = ""
 include = ["go"]
 exclude = []
-unanchorable = true
+shipped_as = "go/v0.12.1"

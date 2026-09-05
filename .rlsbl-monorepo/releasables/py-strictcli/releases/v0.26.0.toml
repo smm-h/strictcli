@@ -12,4 +12,4 @@ arg(), command(), and check() decorators instead of generic Callable.\
 """
 include = ["pypi", "npm"]
 exclude = []
-unanchorable = true
+shipped_as = "strictcli@v0.26.0"

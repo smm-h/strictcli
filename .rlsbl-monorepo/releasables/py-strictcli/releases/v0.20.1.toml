@@ -8,4 +8,4 @@ description = "Fix keyword collision in flag parameter names"
 context = "Flags named after Python keywords (--global, --class, --import, etc.) now produce valid parameter names with a trailing underscore per PEP 8 convention."
 include = ["pypi", "npm"]
 exclude = []
-unanchorable = true
+shipped_as = "strictcli@v0.20.1"

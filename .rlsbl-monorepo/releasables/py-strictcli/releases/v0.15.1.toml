@@ -8,4 +8,4 @@ description = "Config show bool parity and negative values in config set"
 context = "config show now outputs lowercase true/false matching Go. config set accepts negative numeric values."
 include = ["pypi", "npm"]
 exclude = []
-unanchorable = true
+shipped_as = "strictcli@v0.15.1"

@@ -13,4 +13,4 @@ repeatable flags with --clear and --default. Breaking: config show requires --pl
 """
 include = ["go"]
 exclude = []
-unanchorable = true
+shipped_as = "go/v0.12.0"

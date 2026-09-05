@@ -8,4 +8,4 @@ description = "Public API for running checks programmatically, skip behavior fix
 context = "Adds App.RunChecks(), FormatCheckResults(), FormatCheckResultsJSON(), CheckRunResult, and RunChecksOptions. Also fixes a bug where explicit skip from a check implementation incorrectly set exit code to 1 and cascaded to dependents."
 include = ["go"]
 exclude = []
-unanchorable = true
+shipped_as = "go/v0.13.0"
