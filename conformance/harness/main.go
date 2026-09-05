@@ -510,10 +510,11 @@ func providerSpecMeta(sd map[string]interface{}) strictcli.CheckSpecMeta {
 // cross-check would then surface any genuine mismatch as a panic.
 func checkSeverities(tomlStr string) map[string]string {
 	result := map[string]string{}
-	var raw map[string]interface{}
-	if err := tomledit.Unmarshal([]byte(tomlStr), &raw); err != nil {
+	rawPtr, err := tomledit.Unmarshal[map[string]interface{}]([]byte(tomlStr))
+	if err != nil {
 		return result
 	}
+	raw := *rawPtr
 	checks, ok := raw["checks"].(map[string]interface{})
 	if !ok {
 		return result
