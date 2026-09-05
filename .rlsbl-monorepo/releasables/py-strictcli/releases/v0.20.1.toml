@@ -9,3 +9,7 @@ context = "Flags named after Python keywords (--global, --class, --import, etc.)
 include = ["pypi", "npm"]
 exclude = []
 shipped_as = "strictcli@v0.20.1"
+candidate_sha = "1cb2b9f21be96efc8d568acda4165f8218f66f21"
+
+[tree_hashes]
+python = "c9943c7515015bfec7197919299bf7c7edebf5c8"

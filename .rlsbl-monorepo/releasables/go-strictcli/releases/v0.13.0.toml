@@ -9,3 +9,7 @@ context = "Adds App.RunChecks(), FormatCheckResults(), FormatCheckResultsJSON(),
 include = ["go"]
 exclude = []
 shipped_as = "go/v0.13.0"
+candidate_sha = "58fa2f80249bbfa04fda5f03d41c5792fbf981e6"
+
+[tree_hashes]
+go = "d2bd066414547ad02969875914a84b43952951d9"

@@ -11,3 +11,7 @@ include = ["go"]
 exclude = []
 description = "RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate."
 shipped_as = "go/v0.5.1"
+candidate_sha = "3d73e297da9f57e4d0acec48196ac19ed480ee43"
+
+[tree_hashes]
+go = "db8868e2e5f21e3d52c89cf0b555c9465a08a8c7"

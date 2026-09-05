@@ -9,3 +9,7 @@ context = "Breaking: config show now requires --plain or --json. New features: u
 include = ["pypi", "npm"]
 exclude = []
 shipped_as = "strictcli@v0.16.0"
+candidate_sha = "29d73ea152f6d13542a173c01f97f9df4556cea1"
+
+[tree_hashes]
+python = "ad184af2536faa887a36ee878fff2f4c6f66d0fd"

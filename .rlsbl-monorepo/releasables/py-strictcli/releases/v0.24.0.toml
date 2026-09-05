@@ -13,3 +13,7 @@ exclude = []
 description = "Optional values skip choices validation; WARN check results satisfy depends_on; arg default-type validation."
 context = "Choices validation previously rejected optional flags/args that were not passed (None flowed into the choices check, producing \"invalid value 'None'\"). Validation is now skipped for absent optional values across flags, args, and globals via one shared helper. Check dependency semantics changed: a check that WARNs satisfies its dependents (WARN means passed-with-notes, not failed); only FAIL cascade-skips. Arg default-type validation gains str and list cases."
 shipped_as = "strictcli@v0.24.0"
+candidate_sha = "117ec5465401cd216b4f9126f3016a4591e57fdf"
+
+[tree_hashes]
+python = "a52699e9e0b108e78801af296fe7ba5cd60d3800"

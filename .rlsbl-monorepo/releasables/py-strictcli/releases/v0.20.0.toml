@@ -9,3 +9,7 @@ context = "Breaking: Command dataclass is now frozen=True with tuple fields (was
 include = ["pypi", "npm"]
 exclude = []
 shipped_as = "strictcli@v0.20.0"
+candidate_sha = "ef84c92c73a2ceb99c0379c350458161c3a8d0cf"
+
+[tree_hashes]
+python = "dbdd60362ec0c7cdba5703a5f5696f192c995b04"

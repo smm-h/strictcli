@@ -9,3 +9,7 @@ context = "WithConfigFormat(\"toml\") now correctly parses TOML config files (pr
 include = ["go"]
 exclude = []
 shipped_as = "go/v0.11.0"
+candidate_sha = "a6dff298b7a2dad7fa928b088eeb4f3f9c0b2cf5"
+
+[tree_hashes]
+go = "d890fa117d1aaaf42d13d7d5294a132f3c34ad48"

@@ -19,3 +19,7 @@ built-in flags.\
 include = ["pypi", "npm"]
 exclude = []
 shipped_as = "strictcli@v0.25.0"
+candidate_sha = "40d6d385d251006623e8879d88e50e1344abfee3"
+
+[tree_hashes]
+python = "6e3290f96bdaae8796d7bfa6cff23dd655da5950"

@@ -11,3 +11,7 @@ include = ["pypi"]
 exclude = []
 description = "RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate."
 shipped_as = "strictcli@v0.8.4"
+candidate_sha = "7c253362043d699077fe1ed763f8c2829c6f3ce5"
+
+[tree_hashes]
+python = "350c870a152a69998b51401a863eb88bb254c780"

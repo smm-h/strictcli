@@ -13,3 +13,7 @@ arg(), command(), and check() decorators instead of generic Callable.\
 include = ["pypi", "npm"]
 exclude = []
 shipped_as = "strictcli@v0.26.0"
+candidate_sha = "2c76b2749c33172b22f02588e474410325982c4c"
+
+[tree_hashes]
+python = "0efaf66cc05e3b8c36526e585bbe4501dec49490"

@@ -13,3 +13,7 @@ exclude = []
 description = "Recovered full release history and added MIT license"
 context = "53 pre-releasable versioned changelog files were recovered from saferm archive, restoring complete release history in CHANGELOG.md. Project now includes MIT license."
 shipped_as = "strictcli@v0.24.1"
+candidate_sha = "040633508871ce99520112bbe881e9fb3160c540"
+
+[tree_hashes]
+python = "63a6003d67a57dd0a8bf40f41e0d82b445fe46e0"

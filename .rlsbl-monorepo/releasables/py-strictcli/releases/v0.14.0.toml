@@ -13,3 +13,7 @@ exclude = []
 description = "checks_embed for inline TOML data"
 context = "Adds checks_embed parameter as an alternative to checks_path, allowing TOML bytes to be passed directly without requiring a file on disk."
 shipped_as = "strictcli@v0.14.0"
+candidate_sha = "6d1f0034e073474d4e465dec450f97cb79d508c7"
+
+[tree_hashes]
+python = "124ccbce70991918ed4dbc3389a6b72c84eadea7"

@@ -13,3 +13,7 @@ exclude = []
 description = "WithChecksEmbed for inline TOML data"
 context = "Deployed Go binaries that use strictcli's check system previously panicked when .strictcli/checks.toml was missing from the working directory. WithChecksEmbed(data []byte) lets consumers embed the TOML at compile time via //go:embed, eliminating the filesystem dependency."
 shipped_as = "go/v0.10.0"
+candidate_sha = "41814257864133d7078082de16c34cb43898a5d2"
+
+[tree_hashes]
+go = "e79ebce85077c12ec4bd42fffb61fba71db4ba01"

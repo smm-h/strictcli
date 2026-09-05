@@ -9,3 +9,7 @@ context = "config show now outputs lowercase bools matching Python. config set a
 include = ["go"]
 exclude = []
 shipped_as = "go/v0.11.1"
+candidate_sha = "d95fd0854b078fcae06c4b68405e1f8b3f973bd3"
+
+[tree_hashes]
+go = "95fe5b37c844787adc95fa9d683530fdb5e6c291"

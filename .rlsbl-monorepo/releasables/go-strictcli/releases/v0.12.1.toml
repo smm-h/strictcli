@@ -9,3 +9,7 @@ context = ""
 include = ["go"]
 exclude = []
 shipped_as = "go/v0.12.1"
+candidate_sha = "6a07c26910412b940a799862b6f06323c45b20e2"
+
+[tree_hashes]
+go = "70258ef89fa2b4ccd04908f7ac442f15dcf1c738"

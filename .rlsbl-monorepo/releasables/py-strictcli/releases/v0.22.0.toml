@@ -13,3 +13,7 @@ exclude = []
 description = "Required booleans, Context type, schema project_id guard, tag contract global flags fix"
 context = "Breaking change: Bool flags no longer auto-default to false. BoolFlag without explicit Default(false) is now required. New Context type for structured handler communication. Schema dump now validates project_id. TagContract now checks global flags."
 shipped_as = "strictcli@v0.22.0"
+candidate_sha = "f26db0e1a3ceaf7a1ca985314aca54c99b07ac9e"
+
+[tree_hashes]
+python = "758ccddf172f7705ea9fea6f5ada72a98d4f78cd"

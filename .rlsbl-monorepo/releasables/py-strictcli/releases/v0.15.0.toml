@@ -9,3 +9,7 @@ context = "config set now validates keys against registered flags and coerces st
 include = ["pypi", "npm"]
 exclude = []
 shipped_as = "strictcli@v0.15.0"
+candidate_sha = "d19e7da992714b8a2e6dd0e9a4dd3c605a7350f2"
+
+[tree_hashes]
+python = "77b1b451edfe78901cd38f9bb40e4ce197abd134"

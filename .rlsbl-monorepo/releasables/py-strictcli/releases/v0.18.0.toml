@@ -9,3 +9,7 @@ context = "Adds App.run_checks(), format_check_results(), format_check_results_j
 include = ["pypi", "npm"]
 exclude = []
 shipped_as = "strictcli@v0.18.0"
+candidate_sha = "86fcb64a8e383083bdd7b1650c8b6b37047aea43"
+
+[tree_hashes]
+python = "a0d7d85f909b0b290a49d7bb9a6b200e421194da"
