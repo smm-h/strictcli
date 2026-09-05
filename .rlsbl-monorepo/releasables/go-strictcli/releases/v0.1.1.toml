@@ -10,7 +10,7 @@ bump = "minor"
 include = ["go"]
 exclude = []
 description = "RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate."
-candidate_sha = "30c1a8db24cefbe6fe1be5f89e6a9f59c4cf0893"
+candidate_sha = "2a1ff1842cf83b5fbdea70fc413e81a83e69331a"
 
 [tree_hashes]
-"." = "6523a693829baef9bd4a997b25c43eea5f9d349d"
+go = "f1694a8c257e0ea2d5ef70e15277ebdaf7fcb394"
