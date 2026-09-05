@@ -10,6 +10,7 @@ format_version = 1
 bump = "minor"
 include = ["pypi"]
 exclude = []
+shipped_as = "strictcli@v0.28.0"
 description = "Check outcome model (sealed reporters, per-problem severity, purity partition), check providers, InfraEnv location roots, global-flag conflict fix, conformance parity."
 context = "Breaking changes (minor bump in 0.x):\n\n- CheckResult deleted. Check handlers now receive a ceiling-typed reporter\n  (ErrorReporter for error-severity checks, WarnReporter for warn-severity)\n  and return outcomes via reporter.passed / reporter.found / reporter.skipped.\n- @app.check replaced by @app.error_check / @app.warn_check decorators that\n  enforce the severity-form contract at registration time.\n- Check implementations change from fn(ctx) -> CheckResult to\n  fn(ctx, reporter) -> outcome.\n- Scope adapters return SkipCheck(reason=...) instead of CheckResult(\"skip\", ...)."
 candidate_sha = "897215c53fd3b89fe27ccb1ca7df6ad191153190"
