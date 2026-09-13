@@ -48,7 +48,6 @@ Single-file implementation (~7,900 lines, tomlkit dependency). Key internal stag
 ### Go (`go/strictcli/`)
 
 - **go/strictcli**: Package strictcli is a strict, zero-dependency CLI framework for Go with mandatory help text, type-safe flags, groups, and schema export.
-- **go/strictcli/testdata/noncomparable**: Package noncomparable is a compile-FAIL fixture package.
 
 Handlers use ctx-first signatures: `func(ctx *Context, args map[string]interface{}) Outcome`. The `Context` provides structured output, provenance, and infra access; `Outcome` is the branded return type replacing raw exit codes.
 

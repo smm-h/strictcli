@@ -1023,23 +1023,6 @@
       ]
     },
     {
-      "path": "go-strictcli-testdata-noncomparable.md",
-      "title": "go/strictcli/testdata/noncomparable",
-      "type": "doc",
-      "headings": [
-        {
-          "level": 1,
-          "text": "go/strictcli/testdata/noncomparable",
-          "anchor": "gostrictclitestdatanoncomparable"
-        },
-        {
-          "level": 2,
-          "text": "`go/strictcli/testdata/noncomparable`",
-          "anchor": "gostrictclitestdatanoncomparable"
-        }
-      ]
-    },
-    {
       "path": "go-strictcli.md",
       "title": "go/strictcli",
       "type": "doc",
@@ -11164,6 +11147,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-17T14:29:22.063112+00:00",
+  "last_gen": "2026-09-13T00:31:01.110720+00:00",
   "theme": "minimal"
 }

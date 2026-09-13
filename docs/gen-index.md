@@ -11,7 +11,6 @@ order: 90
 # API Reference
 
 - [go/strictcli](../go-strictcli/)
-- [go/strictcli/testdata/noncomparable](../go-strictcli-testdata-noncomparable/)
 - [python.strictcli](../python-strictcli/)
 - [typescript/src/app](../typescript-src-app/)
 - [typescript/src/atprefix](../typescript-src-atprefix/)
