@@ -1111,6 +1111,30 @@ Adds checks_embed parameter as an alternative to checks_path, allowing TOML byte
 
 # go-strictcli
 
+## 0.34.0
+
+The Go implementation migrates to go-toml-edit 0.4.0, raising the transitive dependency floor for every consumer and rewording TOML syntax diagnostics.
+
+<details>
+<summary>Context</summary>
+
+go-toml-edit 0.4.0 reshaped its API: Unmarshal[T](data) returns the decoded
+value, *tomledit.Error replaces *tomledit.ParseError, and tomledit.Document
+replaces tomledit.DocumentNode. strictcli's config loader and checks.toml
+reader were ported to it. strictcli's own API is unchanged, but Go's minimal
+version selection means a consumer that also uses go-toml-edit directly is
+raised to 0.4.0 and must migrate with it, so this is a breaking change for
+that consumer even though nothing in strictcli's surface moved. The new
+parser also phrases syntax errors differently (`expected a value, got
+newline` in place of `expected value, got Newline`); the surrounding
+`config file <path>: ... (line N, column M)` sentence is unchanged.
+
+</details>
+
+### Breaking
+
+- [go-strictcli] **Breaking (transitive dependency).** The Go implementation now requires `go-toml-edit` 0.4.0, up from 0.2.2. The strictcli API itself is unchanged, but Go's minimal version selection raises the dependency for every consumer, so a module that also uses `go-toml-edit` directly must migrate to its 0.4.0 API (`Unmarshal[T](data)` returning the value, `*tomledit.Error` in place of `*tomledit.ParseError`, `tomledit.Document` in place of `tomledit.DocumentNode`). Malformed-TOML config and `checks.toml` diagnostics are reworded by the new parser -- `expected value, got Newline` now reads `expected a value, got newline` -- while the surrounding `config file <path>: ... (line N, column M)` sentence is unchanged.
+
 ## 0.33.0
 
 The declaration-regime release: mandatory presence declarations, scoped selectors replacing mutex groups, real-JSON-Schema value fragments (schema v2), the co-occurrence constraint system, and the update-command construct.
@@ -1826,6 +1850,8 @@ Key additions: DataCommand/HandlerResult for structured returns, typed positiona
 
 ## 0.15.0
 
+Config set type coercion and key validation
+
 ### Breaking
 
 - [go-strictcli] **Breaking.** Command collection fields (`Flags`, `Args`, `FlagSets`, `Mutex`, `Dependencies`) are now unexported.
@@ -1836,6 +1862,8 @@ Key additions: DataCommand/HandlerResult for structured returns, typed positiona
 - [go-strictcli] **New.** Tag contracts: `App.TagContract()` validates at run time that tagged commands have required flags.
 
 ## 0.14.0
+
+Renamed Tag to FlagSet
 
 ### Breaking
 
@@ -1963,11 +1991,15 @@ Deployed Go binaries that use strictcli's check system previously panicked when 
 
 ## 0.9.0
 
+**New feature.** Schema dump (--dump-schema) now includes a project_id field read from go.mod, providing provenance for schema validation.
+
 ### Features
 
 - [go-strictcli] **New feature.** Schema dump (--dump-schema) now includes a project_id field read from go.mod, providing provenance for schema validation.
 
 ## 0.8.0
+
+**Breaking.** `WithChecksPath(path)` renamed to `WithChecks(path)`. CWD auto-discovery of checks.toml removed; checks must be explicitly enabled. checks.toml now requires a top-level `app` field matching the app name.
 
 ### Breaking
 
@@ -1979,11 +2011,15 @@ Deployed Go binaries that use strictcli's check system previously panicked when 
 
 ## 0.7.0
 
+**New feature.** `WithChecksPath` option for explicit checks.toml location, replacing CWD-based discovery.
+
 ### Features
 
 - [go-strictcli] **New feature.** `WithChecksPath` option for explicit checks.toml location, replacing CWD-based discovery.
 
 ## 0.6.0
+
+**New feature.** Added config_path and config_format support (WithConfigPath, WithConfigFormat options).
 
 ### Features
 
@@ -1993,11 +2029,15 @@ Deployed Go binaries that use strictcli's check system previously panicked when 
 
 ## 0.5.4
 
+**New feature.** Parse error help suggestions now include the subcommand name (e.g., `try 'myapp stream --help'` instead of `try 'myapp --help'`).
+
 ### Features
 
 - [go-strictcli] **New feature.** Parse error help suggestions now include the subcommand name (e.g., `try 'myapp stream --help'` instead of `try 'myapp --help'`).
 
 ## 0.5.3
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 ### Fixes
 
@@ -2005,19 +2045,27 @@ Deployed Go binaries that use strictcli's check system previously panicked when 
 
 ## 0.5.2
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 - No user-facing changes.
 
 ## 0.5.1
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 - No user-facing changes.
 
 ## 0.5.0
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 ### Features
 
 - [go-strictcli] **New feature.** Check system -- a first-class, security-hardened check/validation framework. Register checks in `.strictcli/checks.toml` (source of truth) with metadata (tags, severity, dependencies), implement them via `app.RegisterCheck()`, and run them with the auto-registered `check` command. Includes: tag-based filtering with a set-operation DSL (`&`, `|`, `^`, `-`, `!`), DAG-based dependency ordering, human/JSON output, `--list`/`--dry-run`/`--verbose` modes, `--ignore-warnings`, and `--dump-schema` integration. First external dependency: go-toml-edit for TOML parsing.
 
 ## 0.4.0
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 ### Features
 
@@ -2034,11 +2082,15 @@ Deployed Go binaries that use strictcli's check system previously panicked when 
 
 ## 0.3.1
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 ### Fixes
 
 - [go-strictcli] **Fix.** Harmonize Implies conflict error message with Python for exact parity.
 
 ## 0.3.0
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 ### Features
 
@@ -2046,11 +2098,15 @@ Deployed Go binaries that use strictcli's check system previously panicked when 
 
 ## 0.2.0
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 ### Features
 
 - [go-strictcli] **New feature.** `Implies` flag dependency type: when a trigger bool flag is set, automatically set a target bool flag. Explicit contradictions are parse errors.
 
 ## 0.1.1
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 ### Breaking
 
