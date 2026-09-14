@@ -2,6 +2,15 @@
 
 # py-strictcli
 
+## 0.41.2
+
+A plain CLI run no longer plants an empty .strictcli/coverage/ directory in the current directory, and the package describes itself with the project's canonical one-line description.
+
+### Fixes
+
+- [strictcli] Enabling CLI test coverage no longer plants an empty `.strictcli/coverage/` directory in whatever directory you run the CLI from. The directory is now created only when a test actually records coverage.
+- [strictcli] **The project describes itself consistently everywhere.** The PyPI page now carries one canonical one-line description covering all three implementations instead of a Python-only summary, alongside documentation, repository, issue and changelog links, real discovery keywords, and console/OS-independent classifiers.
+
 ## 0.41.1
 
 A member-spelled choice's member flag can declare a short, closing the gap that made converting a group of flags into a member-spelled selector drop every short they had.
@@ -570,6 +579,8 @@ CLI test-coverage instrumentation, notes channel
 
 ## 0.29.0
 
+Breaking: ctx-first handler signatures, Outcome return type, required version, tomlkit config writes, float canon, notes channel, 7 parity fixes
+
 ### Breaking
 
 - [strictcli] **Handler contract redesign.** Command and passthrough handlers now always receive `ctx` as their first argument (no annotation required), and must return `int` (exit code), `None` (exit 0), or `strictcli.outcome(exit_code, data)`. `Context.emit` is removed and any other return value is a hard error. `strictcli.outcome(...)` is the new way to return structured data.
@@ -695,6 +706,8 @@ built-in flags.
 - [strictcli] **`ctx.Source` provenance API.** `ctx.source(flag)` returns the origin of each flag value: `cli`, `env`, `config`, `default`, or `implied`.
 
 ## 0.24.2
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 - No user-facing changes.
 
@@ -839,6 +852,8 @@ Breaking: Command dataclass is now frozen=True with tuple fields (was mutable li
 
 ## 0.19.0
 
+Renamed Tag to FlagSet
+
 ### Breaking
 
 - [strictcli] **Breaking.** Renamed `Tag` to `FlagSet` and `tags=` parameter to `flag_sets=` across all API surfaces.
@@ -962,11 +977,15 @@ Adds checks_embed parameter as an alternative to checks_path, allowing TOML byte
 
 ## 0.13.0
 
+**New feature.** Schema dump (--dump-schema) now includes a project_id field read from pyproject.toml, providing provenance for schema validation.
+
 ### Features
 
 - [strictcli] **New feature.** Schema dump (--dump-schema) now includes a project_id field read from pyproject.toml, providing provenance for schema validation.
 
 ## 0.12.0
+
+**Breaking.** CWD auto-discovery of checks.toml removed; checks must be explicitly enabled via `checks_path=`. checks.toml now requires a top-level `app` field matching the app name.
 
 ### Breaking
 
@@ -974,11 +993,15 @@ Adds checks_embed parameter as an alternative to checks_path, allowing TOML byte
 
 ## 0.11.0
 
+**New feature.** `checks_path` parameter on `App` for explicit checks.toml location, replacing CWD-based discovery.
+
 ### Features
 
 - [strictcli] **New feature.** `checks_path` parameter on `App` for explicit checks.toml location, replacing CWD-based discovery.
 
 ## 0.10.0
+
+**New feature.** `--dump-schema` omits fields matching defaults and includes a top-level `defaults` object documenting what missing fields mean.
 
 ### Features
 
@@ -986,6 +1009,8 @@ Adds checks_embed parameter as an alternative to checks_path, allowing TOML byte
 - [strictcli] **New feature.** `@`-prefix for string flag values: `@path` reads from file, `@-` reads from stdin, `@@` escapes. 1 MB size limit, trailing whitespace stripped.
 
 ## 0.9.1
+
+**New feature.** Public `config_file_path` property on App.
 
 ### Features
 
@@ -997,11 +1022,15 @@ Adds checks_embed parameter as an alternative to checks_path, allowing TOML byte
 
 ## 0.9.0
 
+**New feature.** config_path and config_format options for TOML-based configuration file support.
+
 ### Features
 
 - [strictcli] **New feature.** config_path and config_format options for TOML-based configuration file support.
 
 ## 0.8.7
+
+**New feature.** Go implementation now includes subcommand name in parse error help suggestions, matching Python.
 
 ### Features
 
@@ -1013,11 +1042,15 @@ Adds checks_embed parameter as an alternative to checks_path, allowing TOML byte
 
 ## 0.8.6
 
+**New feature.** Parse error messages now suggest the correct subcommand help (e.g., `try 'app stream --help'` instead of `try 'app --help'`).
+
 ### Features
 
 - [strictcli] **New feature.** Parse error messages now suggest the correct subcommand help (e.g., `try 'app stream --help'` instead of `try 'app --help'`).
 
 ## 0.8.5
+
+**New feature.** App-level and command-level help output now includes a 'Global flags' section.
 
 ### Features
 
@@ -1029,23 +1062,33 @@ Adds checks_embed parameter as an alternative to checks_path, allowing TOML byte
 
 ## 0.8.4
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 ### Fixes
 
 - [strictcli] **Fix.** Allow empty `tags = []` in `.strictcli/checks.toml`. Checks without tags are valid -- they are addressable by `--name` and included in `--all`.
 
 ## 0.8.3
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 - No user-facing changes.
 
 ## 0.8.2
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 - No user-facing changes.
 
 ## 0.8.1
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 - No user-facing changes.
 
 ## 0.8.0
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 ### Features
 
@@ -1053,11 +1096,15 @@ Adds checks_embed parameter as an alternative to checks_path, allowing TOML byte
 
 ## 0.7.1
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 ### Features
 
 - [strictcli] **New feature.** Handlers with `**kwargs` signatures are accepted without strict parameter validation.
 
 ## 0.7.0
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 ### Features
 
@@ -1070,11 +1117,15 @@ Adds checks_embed parameter as an alternative to checks_path, allowing TOML byte
 
 ## 0.6.1
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 ### Fixes
 
 - [strictcli] **Fix.** Harmonize Implies and deprecated command error messages with Go for exact parity.
 
 ## 0.6.0
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 ### Features
 
@@ -1082,17 +1133,23 @@ Adds checks_embed parameter as an alternative to checks_path, allowing TOML byte
 
 ## 0.5.0
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 ### Features
 
 - [strictcli] **New feature.** `Implies` flag dependency type: when a trigger flag is set, automatically set a target bool flag to a specified value. Explicit contradictions are parse errors.
 
 ## 0.4.1
 
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
+
 ### Fixes
 
 - [strictcli] **CI publish fix.** Fixed publish workflow for GitHub Actions compatibility.
 
 ## 0.4.0
+
+RECOVERY OBLIGATION: no description was recoverable for this version (neither the GitHub Release notes nor the CHANGELOG.md section carried one). Author a real description from this version's changelog entries and regenerate.
 
 ### Breaking
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "strictcli"
-version = "0.41.1"
+version = "0.41.2"
 description = "A strict CLI framework for Python, Go and TypeScript that makes you declare every command, flag, argument and help string, and errors at registration time on anything left unstated (Python implementation)"
 readme = "README.md"
 license = "MIT"
