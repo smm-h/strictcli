@@ -1028,8 +1028,9 @@ export class AppImpl implements App {
 			this.loadChecks(this.checksEmbed);
 		}
 
-		// Test-coverage instrumentation: shard template, eager directory
-		// creation, and the built-in cli-test-coverage provider.
+		// Test-coverage instrumentation: anchored paths (the directory itself is
+		// created lazily on the first shard write) and the built-in
+		// cli-test-coverage provider.
 		if (this.testCoverage) {
 			initTestCoverage(this);
 		}
