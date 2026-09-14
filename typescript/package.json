@@ -2,15 +2,19 @@
 	"name": "strictcli",
 	"version": "0.40.1",
 	"type": "module",
-	"description": "TS-native strict CLI framework - declare everything, infer nothing",
+	"description": "A strict CLI framework for Python, Go and TypeScript that makes you declare every command, flag, argument and help string, and errors at registration time on anything left unstated (TypeScript implementation)",
 	"engines": {
 		"node": ">=22"
 	},
 	"license": "MIT",
+	"homepage": "https://smmh.dev/strictcli/",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/smm-h/strictcli.git",
 		"directory": "typescript"
+	},
+	"bugs": {
+		"url": "https://github.com/smm-h/strictcli/issues"
 	},
 	"exports": {
 		".": {
@@ -40,6 +44,13 @@
 		"@types/node": "^22.20.1"
 	},
 	"keywords": [
+		"strictcli",
+		"cli",
+		"cli-framework",
+		"command-line",
+		"argument-parser",
+		"argparse",
+		"framework",
 		"rlsbl"
 	]
 }
