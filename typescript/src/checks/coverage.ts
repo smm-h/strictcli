@@ -30,23 +30,31 @@ import { errorCheckSpec } from "./provider.js";
  * Enables test-coverage instrumentation on an app. Anchors the coverage root
  * to the cwd AT CONSTRUCTION TIME (both the recorder and the check provider
  * use these absolute paths, so tests which chdir still record into the repo
- * and a check evaluated from a foreign cwd reads the app's own repo state),
- * creates the shard directory eagerly (a failure here is a hard construction
- * error), and registers the built-in cli-test-coverage provider.
+ * and a check evaluated from a foreign cwd reads the app's own repo state)
+ * and registers the built-in cli-test-coverage provider.
+ *
+ * Only the PATHS are computed here. The directory itself is created lazily by
+ * recordCoverage, immediately before the first shard write: shards are written
+ * only on the test-harness paths (test() and call()), so a plain CLI
+ * invocation must leave no .strictcli/ behind in whatever directory it was run
+ * from.
  */
 export function initTestCoverage(app: AppImpl): void {
-	app.coverageDir = resolve(join(".strictcli", "coverage"));
-	app.coverageManifestPath = resolve(join(".strictcli", "test-coverage.json"));
-	// One shard per process (append semantics); uniqueness across concurrent
-	// writers comes from the PID, so there is no per-write shard counter.
-	app.coverageShardPath = join(app.coverageDir, `${process.pid}.jsonl`);
+	let root: string;
 	try {
-		mkdirSync(app.coverageDir, { recursive: true });
+		root = process.cwd();
 	} catch (e) {
 		throw new RegistrationError(
 			errTestCoverageCannotCreateDir((e as Error).message),
 		);
 	}
+	app.coverageDir = resolve(join(root, ".strictcli", "coverage"));
+	app.coverageManifestPath = resolve(
+		join(root, ".strictcli", "test-coverage.json"),
+	);
+	// One shard per process (append semantics); uniqueness across concurrent
+	// writers comes from the PID, so there is no per-write shard counter.
+	app.coverageShardPath = join(app.coverageDir, `${process.pid}.jsonl`);
 	app.registerCheckProvider(testCoverageProvider(app));
 }
 

@@ -65,11 +65,9 @@ function coverageApp(): App {
 	return app;
 }
 
-test("testCoverage creates the shard dir eagerly and shards on test()", async () => {
+test("testCoverage shards on test()", async () => {
 	await inTempDir(async () => {
 		const app = coverageApp();
-		assert.ok(existsSync(join(".strictcli", "coverage")));
-
 		await app.test(["deploy"]);
 		await app.test(["deploy"]);
 		const shards = readdirSync(join(".strictcli", "coverage"));
@@ -278,6 +276,45 @@ test("run() does not record coverage (test-only instrumentation)", async () => {
 		const app = coverageApp();
 		await app.run(["deploy"]);
 		process.exitCode = 0; // reset the exit code run() set
-		assert.deepEqual(readdirSync(join(".strictcli", "coverage")), []);
+		// Nothing recorded, so the lazy directory was never created either.
+		assert.equal(existsSync(join(".strictcli")), false);
+	});
+});
+
+// The coverage directory is lazy. Shards are written only on the test-harness
+// paths (test() and call()), so a plain CLI invocation must leave no
+// .strictcli/ behind in whatever directory it was run from. Sibling parity:
+// python/tests/test_coverage.py TestCoverageDirectoryIsLazy and
+// go/strictcli/coverage_test.go TestCoverageDirectoryIsLazy_*.
+
+test("coverage directory is lazy: construction leaves no directory", async () => {
+	await inTempDir(async (dir) => {
+		const app = coverageApp();
+		assert.ok(app !== undefined);
+		assert.equal(existsSync(join(dir, ".strictcli")), false);
+	});
+});
+
+test("coverage directory is lazy: recording creates the directory", async () => {
+	await inTempDir(async (dir) => {
+		const app = coverageApp();
+		await app.test(["deploy"]);
+		assert.ok(
+			existsSync(join(dir, ".strictcli", "coverage", `${process.pid}.jsonl`)),
+		);
+	});
+});
+
+test("coverage directory is lazy: the check skips when it is absent", async () => {
+	await inTempDir(async (dir) => {
+		const app = coverageApp();
+		assert.equal(existsSync(join(dir, ".strictcli")), false);
+
+		const { results } = await app.runChecks(CTX, {
+			nameGlob: "cli-test-coverage",
+		});
+		const r = results[0];
+		assert.ok(r !== undefined);
+		assert.equal(r.status, "skip");
 	});
 });
