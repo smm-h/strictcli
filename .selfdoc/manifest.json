@@ -2,8 +2,8 @@
   "schema_version": 1,
   "name": "strictcli",
   "slug": "strictcli",
-  "version": "0.39.0",
-  "description": "",
+  "version": "0.41.1",
+  "description": "A strict CLI framework for Python, Go and TypeScript that makes you declare every command, flag, argument and help string, and errors at registration time on anything left unstated",
   "language": "python",
   "base_url": "https://strictcli.smmh.dev",
   "pages": [
@@ -11147,6 +11147,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-13T00:31:01.110720+00:00",
+  "last_gen": "2026-09-14T14:53:35.615353+00:00",
   "theme": "minimal"
 }
