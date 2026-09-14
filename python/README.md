@@ -1,6 +1,6 @@
 # strictcli
 
-A strict CLI framework for Python.
+A strict CLI framework for Python, Go and TypeScript that makes you declare every command, flag, argument and help string, and errors at registration time on anything left unstated (Python implementation).
 
 strictcli makes you declare everything -- every command, flag, argument, and environment variable must have help text or the framework errors at registration time. Four types only: `str`, `bool`, `int`, `float`. No magic type inference, no implicit defaults.
 
