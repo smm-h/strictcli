@@ -1,9 +1,9 @@
----
-title: Process Trace Store
-description: "How strictcli records process ancestry: the STRICTCLI_TRACE_PARENT variable, an append-only JSONL store, ULIDs, hour partitions and the lookup rule."
-nav_group: "Guides"
-nav_order: 20
----
++++
+title = "Process Trace Store"
+description = "How strictcli records process ancestry: the STRICTCLI_TRACE_PARENT variable, an append-only JSONL store, ULIDs, hour partitions and the lookup rule."
+nav_group = "Guides"
+nav_order = 20
++++
 
 # Process Trace Store
 

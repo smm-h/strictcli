@@ -1,6 +1,6 @@
----
-title: CLAUDE.md
----
++++
+title = "CLAUDE.md"
++++
 # strictcli
 
 Strict CLI framework -- declare everything, infer nothing. Multiple first-class implementations kept in behavioral lockstep via a conformance test suite.

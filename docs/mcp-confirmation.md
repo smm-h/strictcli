@@ -1,9 +1,9 @@
----
-title: Consequential Confirmation over MCP
-description: "How a strictcli MCP server asks a human before running a consequential tool: the input-required round-trip, the requestState blob, and the handshake era."
-nav_group: "Guides"
-nav_order: 25
----
++++
+title = "Consequential Confirmation over MCP"
+description = "How a strictcli MCP server asks a human before running a consequential tool: the input-required round-trip, the requestState blob, and the handshake era."
+nav_group = "Guides"
+nav_order = 25
++++
 
 # Consequential Confirmation over MCP
 

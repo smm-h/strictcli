@@ -1,9 +1,9 @@
----
-title: Go Quickstart
-description: "Build Go CLIs with strictcli: WithEffect classification, Required/Optional/Default presence, choice flags with Match, constraints and update commands."
-nav_group: "Guides"
-nav_order: 1
----
++++
+title = "Go Quickstart"
+description = "Build Go CLIs with strictcli: WithEffect classification, Required/Optional/Default presence, choice flags with Match, constraints and update commands."
+nav_group = "Guides"
+nav_order = 1
++++
 
 # Go Quickstart
 

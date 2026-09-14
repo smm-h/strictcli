@@ -1,9 +1,9 @@
----
-title: Flag System
-description: "strictcli's flags and args: the three-way presence declaration, four types, bool tri-state, choice flags, named constraints and update commands."
-nav_group: "Guides"
-nav_order: 3
----
++++
+title = "Flag System"
+description = "strictcli's flags and args: the three-way presence declaration, four types, bool tri-state, choice flags, named constraints and update commands."
+nav_group = "Guides"
+nav_order = 3
++++
 
 # Flag System
 

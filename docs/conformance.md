@@ -1,9 +1,9 @@
----
-title: Cross-Language Conformance
-description: "How twelve conformance checks keep the Python, Go and TypeScript implementations behaviorally identical, from JSON cases to byte-identical schema dumps."
-nav_group: "Guides"
-nav_order: 10
----
++++
+title = "Cross-Language Conformance"
+description = "How twelve conformance checks keep the Python, Go and TypeScript implementations behaviorally identical, from JSON cases to byte-identical schema dumps."
+nav_group = "Guides"
+nav_order = 10
++++
 
 # Cross-Language Conformance
 
