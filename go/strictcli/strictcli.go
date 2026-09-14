@@ -695,8 +695,10 @@ func WithProcObserveAllowlist(prefixes [][]string) AppOption {
 }
 
 // WithTestCoverage enables CLI test-coverage instrumentation. Every Test() and
-// Call() invocation records the resolved command path to per-process shard files
-// (.strictcli/coverage/<pid>-<n>.jsonl). A built-in cli-test-coverage check
+// Call() invocation records the resolved command path to the process's shard
+// file (.strictcli/coverage/<pid>.jsonl), whose directory is created on the
+// first such record and never at construction -- a plain CLI run writes no
+// shard and leaves no directory. A built-in cli-test-coverage check
 // (auto-registered via the provider mechanism) merges shards and hard-FAILs
 // listing every command with zero coverage.
 func WithTestCoverage() AppOption {
@@ -1955,6 +1957,12 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		// recorder and the check provider use these absolute paths so that tests
 		// which chdir still record into the repo, and a check evaluated from a
 		// foreign cwd reads the app's own repo state.
+		//
+		// Only the PATHS are computed here. The directory itself is created
+		// lazily by recordCoverage, immediately before the first shard write:
+		// shards are written only on the test-harness paths (Test and Call), so
+		// a plain CLI invocation must leave no .strictcli/ behind in whatever
+		// directory it was run from.
 		root, err := os.Getwd()
 		if err != nil {
 			panic(errTestCoverageCannotCreateDir(err))
@@ -1962,9 +1970,6 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 		a.coverageDir = filepath.Join(root, ".strictcli", "coverage")
 		a.coverageManifestPath = filepath.Join(root, ".strictcli", "test-coverage.json")
 		a.coverageShardPath = filepath.Join(a.coverageDir, fmt.Sprintf("%d.jsonl", os.Getpid()))
-		if err := os.MkdirAll(a.coverageDir, 0o755); err != nil {
-			panic(errTestCoverageCannotCreateDir(err))
-		}
 		a.RegisterCheckProvider(a.testCoverageProvider)
 	}
 	return a

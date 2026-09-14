@@ -61,6 +61,19 @@ func makeGroupedCoverageApp(t *testing.T) *App {
 	return app
 }
 
+// writeCoverageManifest writes a committed manifest under the construction-anchored
+// .strictcli/ root, creating the directory: nothing else creates it until the
+// recorder writes its first shard.
+func writeCoverageManifest(t *testing.T, content []byte) {
+	t.Helper()
+	if err := os.MkdirAll(".strictcli", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(".strictcli", "test-coverage.json"), content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func readCoveredCommands(t *testing.T) map[string]bool {
 	t.Helper()
 	covered := make(map[string]bool)
@@ -240,9 +253,7 @@ func TestCoverageCheck_EmptyManifestPresentFailsListingAll(t *testing.T) {
 	// An empty-manifest file present means "coverage configured but empty" ->
 	// FAIL listing all, NOT a skip. The skip class triggers only when NEITHER a
 	// manifest NOR any shards exist.
-	if err := os.WriteFile(".strictcli/test-coverage.json", []byte("[]\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeCoverageManifest(t, []byte("[]\n"))
 
 	results, _, _, _ := app.RunChecks(
 		&testCheckCtx{root: "."},
@@ -361,9 +372,7 @@ func TestCoverageCheck_ManifestOnlyDeterministicPass(t *testing.T) {
 	app := makeTestCoverageApp(t)
 	// No Test()/Call() -- no shards. Write a complete committed manifest.
 	data, _ := json.MarshalIndent([]string{"build", "deploy", "status"}, "", "  ")
-	if err := os.WriteFile(".strictcli/test-coverage.json", append(data, '\n'), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeCoverageManifest(t, append(data, '\n'))
 
 	results, _, _, _ := app.RunChecks(&testCheckCtx{root: "."}, RunChecksOptions{RunAll: true})
 	cov := findCoverageResult(t, results)
@@ -375,7 +384,7 @@ func TestCoverageCheck_ManifestOnlyDeterministicPass(t *testing.T) {
 func TestCoverageCheck_ManifestUnionMonotonic(t *testing.T) {
 	app := makeTestCoverageApp(t)
 	data, _ := json.MarshalIndent([]string{"build", "deploy", "status"}, "", "  ")
-	os.WriteFile(".strictcli/test-coverage.json", append(data, '\n'), 0o644)
+	writeCoverageManifest(t, append(data, '\n'))
 	// This run records only one command.
 	app.Test([]string{"deploy"})
 
@@ -441,5 +450,87 @@ func TestCoverageDisabled_NoShardsCreated(t *testing.T) {
 
 	if _, err := os.Stat(".strictcli/coverage"); !os.IsNotExist(err) {
 		t.Fatal("coverage dir should not exist when disabled")
+	}
+}
+
+// TestCoverageDirectoryIsLazy_ConstructionLeavesNoDirectory pins that enabling
+// test coverage does not plant an empty .strictcli/ in the construction cwd. A
+// plain CLI invocation never records coverage, so it must leave no trace.
+func TestCoverageDirectoryIsLazy_ConstructionLeavesNoDirectory(t *testing.T) {
+	origDir, _ := os.Getwd()
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	app := NewApp("coverapp", "1.0.0", "coverage test app", WithTestCoverage())
+	app.Command("deploy", "deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectReadOnly))
+
+	if _, err := os.Stat(filepath.Join(dir, ".strictcli")); !os.IsNotExist(err) {
+		t.Fatal("construction must not create .strictcli/")
+	}
+}
+
+// TestCoverageDirectoryIsLazy_RecordingCreatesDirectory pins that the recorder
+// creates the coverage directory immediately before the first shard write.
+func TestCoverageDirectoryIsLazy_RecordingCreatesDirectory(t *testing.T) {
+	origDir, _ := os.Getwd()
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	app := NewApp("coverapp", "1.0.0", "coverage test app", WithTestCoverage())
+	app.Command("deploy", "deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectReadOnly))
+	app.Test([]string{"deploy"})
+
+	shard := filepath.Join(dir, ".strictcli", "coverage", fmt.Sprintf("%d.jsonl", os.Getpid()))
+	if _, err := os.Stat(shard); err != nil {
+		t.Fatalf("shard file must exist after a recorded dispatch: %v", err)
+	}
+}
+
+// TestCoverageDirectoryIsLazy_CheckSkipsWhenDirectoryAbsent pins that the
+// provider tolerates a coverage root that was never created.
+func TestCoverageDirectoryIsLazy_CheckSkipsWhenDirectoryAbsent(t *testing.T) {
+	origDir, _ := os.Getwd()
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	app := NewApp("coverapp", "1.0.0", "coverage test app", WithTestCoverage())
+	app.Command("deploy", "deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectReadOnly))
+	app.SetCheckContext(func() CheckContext { return &testCheckCtx{root: dir} })
+
+	if _, err := os.Stat(filepath.Join(dir, ".strictcli")); !os.IsNotExist(err) {
+		t.Fatal("construction must not create .strictcli/")
+	}
+
+	results, _, _, _ := app.RunChecks(
+		&testCheckCtx{root: dir},
+		RunChecksOptions{RunAll: true},
+	)
+	var cov *CheckRunResult
+	for i := range results {
+		if results[i].Name == "cli-test-coverage" {
+			cov = &results[i]
+			break
+		}
+	}
+	if cov == nil {
+		t.Fatal("cli-test-coverage check not found")
+	}
+	if cov.Status() != "skip" {
+		t.Fatalf("expected skip with no coverage state, got %s", cov.Status())
 	}
 }
