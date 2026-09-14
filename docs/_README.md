@@ -3,9 +3,7 @@ title: README.md
 ---
 # strictcli
 
-A strict CLI framework -- declare everything, infer nothing.
-
-strictcli has multiple first-class implementations kept in behavioral lockstep by a shared conformance test suite:
+strictcli is a strict CLI framework for Python, Go and TypeScript that makes you declare every command, flag, argument and help string, and errors at registration time on anything left unstated. It is for developers who would rather see a mistake when the CLI is declared than when someone runs it. The three implementations are first-class rather than ports of one another, and one shared conformance test suite holds them to identical behavior:
 
 | Implementation | Install | Docs |
 |---------------|---------|------|

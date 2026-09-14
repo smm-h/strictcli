@@ -1,5 +1,7 @@
 {
   "version": "0.41.1",
+  "description": "A strict CLI framework for Python, Go and TypeScript that makes you declare every command, flag, argument and help string, and errors at registration time on anything left unstated",
+  "repo": "https://github.com/smm-h/strictcli",
   "source": [
     {
       "path": "python/strictcli/",
