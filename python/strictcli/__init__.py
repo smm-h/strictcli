@@ -8978,6 +8978,12 @@ class App:
             # recorder and the check provider use these absolute paths so that
             # tests which chdir still record into the repo, and a check evaluated
             # from a foreign cwd reads the app's own repo state.
+            #
+            # Only the PATHS are computed here. The directory itself is created
+            # lazily by _record_coverage, immediately before the first shard
+            # write: shards are written only on the test-harness paths (test()
+            # and call()), so a plain CLI invocation must leave no .strictcli/
+            # behind in whatever directory it was run from.
             self._coverage_dir = os.path.abspath(
                 os.path.join(".strictcli", "coverage")
             )
@@ -8988,7 +8994,6 @@ class App:
                 self._coverage_dir,
                 f"{os.getpid()}.jsonl",
             )
-            os.makedirs(self._coverage_dir, exist_ok=True)
             self.register_check_provider(self._test_coverage_provider)
 
     def _validate_flag_infra_marker(self, f: Flag) -> None:

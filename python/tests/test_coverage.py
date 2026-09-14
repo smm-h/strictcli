@@ -206,6 +206,7 @@ class TestCoverageCheck:
         when NEITHER a manifest NOR any shards exist."""
         app = _make_app(tmp_path)
         manifest_path = tmp_path / ".strictcli" / "test-coverage.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text("[]\n")
 
         results, _, code = app.run_checks(
@@ -296,6 +297,7 @@ class TestManifestUnionVerdict:
         with no shard files (the machine never ran the suite)."""
         app = _make_app(tmp_path)
         manifest_path = tmp_path / ".strictcli" / "test-coverage.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(
             json.dumps(["build", "deploy", "status"], indent=2) + "\n"
         )
@@ -312,6 +314,7 @@ class TestManifestUnionVerdict:
         (anchored manifest), not the foreign directory."""
         app = _make_app(tmp_path)
         manifest_path = tmp_path / ".strictcli" / "test-coverage.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(
             json.dumps(["build", "deploy", "status"], indent=2) + "\n"
         )
@@ -330,6 +333,7 @@ class TestManifestUnionVerdict:
         """A run recording only a subset keeps prior commands covered (union)."""
         app = _make_app(tmp_path)
         manifest_path = tmp_path / ".strictcli" / "test-coverage.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(
             json.dumps(["build", "deploy", "status"], indent=2) + "\n"
         )
@@ -374,3 +378,35 @@ class TestCoverageDisabled:
 
         coverage_dir = tmp_path / ".strictcli" / "coverage"
         assert not coverage_dir.exists()
+
+
+class TestCoverageDirectoryIsLazy:
+    def test_construction_leaves_no_directory(self, tmp_path):
+        """Constructing an app with test_coverage=True must not create
+        .strictcli/ -- a plain CLI invocation never records coverage, so it must
+        not plant an empty directory in whatever cwd it was run from."""
+        app = _make_app(tmp_path)
+        assert app is not None
+        assert not (tmp_path / ".strictcli").exists()
+
+    def test_recording_creates_the_directory(self, tmp_path):
+        """The recorder creates the coverage directory immediately before the
+        first shard write."""
+        app = _make_app(tmp_path)
+        app.test(["deploy"])
+
+        shard = tmp_path / ".strictcli" / "coverage" / f"{os.getpid()}.jsonl"
+        assert shard.is_file()
+
+    def test_check_skips_when_directory_absent(self, tmp_path):
+        """The provider reads a coverage root that does not exist without
+        raising -- it reports the subject-matter SKIP."""
+        app = _make_app(tmp_path)
+        assert not (tmp_path / ".strictcli").exists()
+
+        results, _, _code = app.run_checks(
+            SimpleCtx(project_root=tmp_path),
+            run_all=True,
+        )
+        cov_result = next(r for r in results if r.name == "cli-test-coverage")
+        assert cov_result.status == "skip"
