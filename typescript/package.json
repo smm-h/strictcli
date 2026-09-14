@@ -1,6 +1,6 @@
 {
 	"name": "strictcli",
-	"version": "0.40.1",
+	"version": "0.40.2",
 	"type": "module",
 	"description": "A strict CLI framework for Python, Go and TypeScript that makes you declare every command, flag, argument and help string, and errors at registration time on anything left unstated (TypeScript implementation)",
 	"engines": {
