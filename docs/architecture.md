@@ -1,6 +1,6 @@
 +++
 title = "Architecture and Internals"
-description = "strictcli internals: the parse pipeline's four phases, presence, constraint and update resolution, registration checks, the v2 schema and the envelope."
+description = "strictcli internals: the parse pipeline's four phases, presence, constraint and update resolution, registration checks, the v2 schema and the envelope, and the declared test-coverage root."
 nav_group = "Guides"
 nav_order = 10
 +++

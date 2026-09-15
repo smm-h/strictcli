@@ -1,6 +1,6 @@
 +++
 title = "go/strictcli"
-description = "Package strictcli is a strict CLI framework that makes you declare every command, flag, argument and help string, and fails at registration time on anything left unstated."
+description = "Package strictcli: A CLI framework for the Era of Agents: nothing is inferred, everything is declared."
 generated = true
 nav_group = "API Reference"
 nav_order = 1
