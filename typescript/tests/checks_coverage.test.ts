@@ -2,9 +2,9 @@
  * Test-coverage instrumentation tests: shard files written by test(), the
  * canonical manifest, and the built-in cli-test-coverage provider check.
  *
- * Each test chdirs into a fresh temp directory because the shard dir
- * (.strictcli/coverage/) and manifest are anchored to the cwd at app
- * construction time, mirroring the siblings. Expectations derive from
+ * Each test chdirs into a fresh temp directory and declares that directory's
+ * .strictcli as the app's coverage directory, so the relative paths below and
+ * the declared paths name the same files. Expectations derive from
  * conformance/cases/test_coverage.json and go/strictcli/coverage.go /
  * Python _test_coverage_provider.
  */
@@ -38,13 +38,25 @@ async function inTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 	}
 }
 
+/**
+ * Creates the directory an app declares through testCoverageDir and returns
+ * its absolute path. The option takes effect only when the directory already
+ * exists at construction, which is what makes an installed distribution --
+ * whose declared path is gone -- uninstrumented.
+ */
+function declaredCoverageDir(dir: string): string {
+	const declared = join(dir, ".strictcli");
+	mkdirSync(declared, { recursive: true });
+	return declared;
+}
+
 /** The three-command mirror app from conformance test_coverage.json. */
 function coverageApp(): App {
 	const app = createApp({
 		name: "testapp",
 		version: "1.0.0",
 		help: "test",
-		testCoverage: true,
+		testCoverageDir: declaredCoverageDir(process.cwd()),
 	});
 	for (const [name, help, prints] of [
 		["deploy", "deploy the app", "deployed"],
@@ -65,7 +77,7 @@ function coverageApp(): App {
 	return app;
 }
 
-test("testCoverage shards on test()", async () => {
+test("testCoverageDir shards on test()", async () => {
 	await inTempDir(async () => {
 		const app = coverageApp();
 		await app.test(["deploy"]);
@@ -186,7 +198,7 @@ test("partial manifest fails honestly and rewrites the monotonic union", async (
 	});
 });
 
-test("coverage paths are anchored to the construction-time cwd", async () => {
+test("coverage paths are anchored to the declared directory", async () => {
 	await inTempDir(async (dir) => {
 		const app = coverageApp();
 		const foreign = mkdtempSync(join(tmpdir(), "strictcli-foreign-"));
@@ -215,7 +227,7 @@ test("group commands are covered by their dotted path", async () => {
 			name: "testapp",
 			version: "1.0.0",
 			help: "test",
-			testCoverage: true,
+			testCoverageDir: declaredCoverageDir(process.cwd()),
 		});
 		const infra = app.group("infra", { help: "infra commands" });
 		infra.command(
@@ -247,7 +259,7 @@ test("the injected check command is excluded from the coverage surface", async (
 			name: "empty",
 			version: "1.0.0",
 			help: "test",
-			testCoverage: true,
+			testCoverageDir: declaredCoverageDir(process.cwd()),
 		});
 		app.setCheckContext(() => CTX);
 		const result = await app.test(["check", "--all"]);
@@ -277,7 +289,7 @@ test("run() does not record coverage (test-only instrumentation)", async () => {
 		await app.run(["deploy"]);
 		process.exitCode = 0; // reset the exit code run() set
 		// Nothing recorded, so the lazy directory was never created either.
-		assert.equal(existsSync(join(".strictcli")), false);
+		assert.equal(existsSync(join(".strictcli", "coverage")), false);
 	});
 });
 
@@ -287,11 +299,11 @@ test("run() does not record coverage (test-only instrumentation)", async () => {
 // python/tests/test_coverage.py TestCoverageDirectoryIsLazy and
 // go/strictcli/coverage_test.go TestCoverageDirectoryIsLazy_*.
 
-test("coverage directory is lazy: construction leaves no directory", async () => {
+test("coverage directory is lazy: construction leaves no coverage/", async () => {
 	await inTempDir(async (dir) => {
 		const app = coverageApp();
 		assert.ok(app !== undefined);
-		assert.equal(existsSync(join(dir, ".strictcli")), false);
+		assert.equal(existsSync(join(dir, ".strictcli", "coverage")), false);
 	});
 });
 
@@ -308,7 +320,7 @@ test("coverage directory is lazy: recording creates the directory", async () => 
 test("coverage directory is lazy: the check skips when it is absent", async () => {
 	await inTempDir(async (dir) => {
 		const app = coverageApp();
-		assert.equal(existsSync(join(dir, ".strictcli")), false);
+		assert.equal(existsSync(join(dir, ".strictcli", "coverage")), false);
 
 		const { results } = await app.runChecks(CTX, {
 			nameGlob: "cli-test-coverage",
@@ -316,5 +328,81 @@ test("coverage directory is lazy: the check skips when it is absent", async () =
 		const r = results[0];
 		assert.ok(r !== undefined);
 		assert.equal(r.status, "skip");
+	});
+});
+
+// A declared directory that does not exist leaves coverage off. This is the
+// installed distribution: the path naming the source checkout is simply not
+// there, so the app registers no check, computes no paths and creates nothing.
+// Sibling parity: python/tests/test_coverage.py TestDeclaredDirectoryAbsent and
+// go/strictcli/coverage_test.go TestCoverageDeclaredDirAbsent_*.
+
+test("a declared directory that does not exist registers no check", async () => {
+	await inTempDir(async (dir) => {
+		const app = createApp({
+			name: "testapp",
+			version: "1.0.0",
+			help: "test",
+			testCoverageDir: join(dir, "nowhere", ".strictcli"),
+		});
+		app.command(
+			defineReadOnlyCommand("deploy", {
+				help: "deploy the app",
+				handler: () => 0,
+			}),
+		);
+		app.setCheckContext(() => CTX);
+
+		// The check system never turned on, so `check` is not a command either.
+		const result = await app.test(["check", "--all"]);
+		assert.equal(result.exitCode, 1);
+		assert.equal(result.stdout.includes("cli-test-coverage"), false);
+	});
+});
+
+test("a declared directory that does not exist creates nothing", async () => {
+	await inTempDir(async (dir) => {
+		const foreign = join(dir, "some-other-project");
+		mkdirSync(foreign, { recursive: true });
+		process.chdir(foreign);
+		const app = createApp({
+			name: "testapp",
+			version: "1.0.0",
+			help: "test",
+			testCoverageDir: join(dir, "gone", ".strictcli"),
+		});
+		app.command(
+			defineReadOnlyCommand("deploy", {
+				help: "deploy the app",
+				handler: () => 0,
+			}),
+		);
+
+		await app.test(["deploy"]);
+		app.call("deploy", {});
+
+		assert.equal(existsSync(join(dir, "gone")), false);
+		assert.deepEqual(readdirSync(foreign), []);
+		process.chdir(dir);
+	});
+});
+
+test("the retired boolean is refused naming the directory option", async () => {
+	await inTempDir(async () => {
+		assert.throws(
+			() =>
+				createApp({
+					name: "testapp",
+					version: "1.0.0",
+					help: "test",
+					// The retired spelling: refused at registration, never honoured.
+					testCoverage: true,
+				} as never),
+			{
+				message:
+					"testCoverage is not accepted; declare the directory holding " +
+					"coverage/ and test-coverage.json with testCoverageDir",
+			},
+		);
 	});
 });

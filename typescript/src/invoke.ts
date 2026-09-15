@@ -396,7 +396,7 @@ export async function invokeApp(
 	// CACHE_WRITEs land in this dispatch's effect log.
 	app.beginDispatch();
 	// Record test-coverage hit (command-level only).
-	if (app.testCoverage) {
+	if (app.coverageShardPath !== undefined) {
 		recordCoverage(app, commandPath);
 	}
 

@@ -1,8 +1,11 @@
 /**
  * CLI test-coverage instrumentation: per-process shard files recording which
  * commands app.test() exercised, plus the built-in cli-test-coverage
- * provider. The provider merges the committed manifest and shard files into
- * the covered set and compares it against the app's full command surface.
+ * provider. Both live under the directory the app declares through
+ * `testCoverageDir`, never under the process's working directory, so a
+ * consumer running an installed CLI from anywhere touches nothing. The
+ * provider merges the committed manifest and shard files into the covered set
+ * and compares it against the app's full command surface.
  *
  * Parity sources: go/strictcli/coverage.go with Python _record_coverage /
  * _collect_all_command_paths / _test_coverage_provider as the divergence
@@ -19,39 +22,31 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { AppImpl, GroupImpl } from "../app.js";
-import {
-	errTestCoverageCannotCreateDir,
-	RegistrationError,
-} from "../errors.js";
 import type { CheckSpec } from "./provider.js";
 import { errorCheckSpec } from "./provider.js";
 
 /**
- * Enables test-coverage instrumentation on an app. Anchors the coverage root
- * to the cwd AT CONSTRUCTION TIME (both the recorder and the check provider
- * use these absolute paths, so tests which chdir still record into the repo
- * and a check evaluated from a foreign cwd reads the app's own repo state)
- * and registers the built-in cli-test-coverage provider.
+ * Enables test-coverage instrumentation on an app, from the DECLARED
+ * directory: `coverage/` and `test-coverage.json` sit inside it, and both the
+ * recorder and the check provider use the absolute paths derived from it, so a
+ * chdir between construction and dispatch cannot move either.
  *
- * Only the PATHS are computed here. The directory itself is created lazily by
- * recordCoverage, immediately before the first shard write: shards are written
- * only on the test-harness paths (test() and call()), so a plain CLI
- * invocation must leave no .strictcli/ behind in whatever directory it was run
- * from.
+ * A declared directory that does not exist leaves the app uninstrumented: no
+ * paths, no provider, no writes anywhere. That is the installed distribution,
+ * whose declared path names a source checkout that is not there.
+ *
+ * Only the PATHS are computed here. The coverage/ subdirectory is created
+ * lazily by recordCoverage, immediately before the first shard write: shards
+ * are written only on the test-harness paths (test() and call()), so a plain
+ * CLI invocation leaves no coverage/ behind.
  */
-export function initTestCoverage(app: AppImpl): void {
-	let root: string;
-	try {
-		root = process.cwd();
-	} catch (e) {
-		throw new RegistrationError(
-			errTestCoverageCannotCreateDir((e as Error).message),
-		);
+export function initTestCoverage(app: AppImpl, declaredDir: string): void {
+	const root = resolve(declaredDir);
+	if (!isDir(root)) {
+		return;
 	}
-	app.coverageDir = resolve(join(root, ".strictcli", "coverage"));
-	app.coverageManifestPath = resolve(
-		join(root, ".strictcli", "test-coverage.json"),
-	);
+	app.coverageDir = join(root, "coverage");
+	app.coverageManifestPath = join(root, "test-coverage.json");
 	// One shard per process (append semantics); uniqueness across concurrent
 	// writers comes from the PID, so there is no per-write shard counter.
 	app.coverageShardPath = join(app.coverageDir, `${process.pid}.jsonl`);
@@ -63,7 +58,7 @@ export function initTestCoverage(app: AppImpl): void {
  * call() invocation appends one JSONL line to the per-process shard file.
  */
 export function recordCoverage(app: AppImpl, cmdPath: string): void {
-	if (!app.testCoverage || app.coverageShardPath === undefined) {
+	if (app.coverageShardPath === undefined) {
 		return;
 	}
 	mkdirSync(dirname(app.coverageShardPath), { recursive: true });
@@ -108,6 +103,15 @@ function isFile(path: string): boolean {
 	}
 }
 
+/** True when the path exists and is a directory. */
+function isDir(path: string): boolean {
+	try {
+		return statSync(path).isDirectory();
+	} catch {
+		return false;
+	}
+}
+
 /** Names of shard files (*.jsonl) in the coverage dir, or [] if unreadable. */
 function shardNames(coverageDir: string): string[] {
 	try {
@@ -118,13 +122,13 @@ function shardNames(coverageDir: string): string[] {
 }
 
 /**
- * The built-in check provider for cli-test-coverage, auto-registered when
- * the app enables testCoverage. The verdict is derived from committed state:
- * the covered set is the union of the committed manifest
- * (.strictcli/test-coverage.json) and any per-process shard files merged from
- * .strictcli/coverage/. Every live registered command path (minus the
- * injected check command) must be present in that union to pass; otherwise
- * the check fails naming each uncovered command.
+ * The built-in check provider for cli-test-coverage, auto-registered when the
+ * app declares a coverage directory that exists. The verdict is derived from
+ * committed state: the covered set is the union of the committed manifest
+ * (test-coverage.json in that directory) and any per-process shard files
+ * merged from its coverage/ subdirectory. Every live registered command path
+ * (minus the injected check command) must be present in that union to pass;
+ * otherwise the check fails naming each uncovered command.
  *
  * Because the verdict reads the committed manifest, it is deterministic on
  * every machine -- a machine that never ran the suite (no local shards) still
@@ -151,15 +155,13 @@ export function testCoverageProvider(app: AppImpl): () => CheckSpec[] {
 				const manifestPath = app.coverageManifestPath ?? "";
 
 				// Subject-matter gating (the sanctioned skip class, mirroring
-				// project-type gating): when the anchored coverage root holds
-				// NEITHER a committed manifest NOR any shard files, this is not
-				// the app's own development tree -- e.g. an installed app running
-				// its checks from a foreign project's cwd. Report a visible SKIP
-				// instead of failing with the app's entire command surface listed
-				// as uncovered. When EITHER exists, behavior is unchanged: a
-				// partial manifest still fails honestly, and an empty-manifest
-				// file present still means "coverage configured but empty" = fail
-				// listing all.
+				// project-type gating): when the declared coverage root holds
+				// NEITHER a committed manifest NOR any shard files, the suite has
+				// never run against it. Report a visible SKIP instead of failing
+				// with the app's entire command surface listed as uncovered. When
+				// EITHER exists, behavior is unchanged: a partial manifest still
+				// fails honestly, and an empty-manifest file present still means
+				// "coverage configured but empty" = fail listing all.
 				const manifestExists = manifestPath !== "" && isFile(manifestPath);
 				const shards = coverageDir !== "" ? shardNames(coverageDir) : [];
 				if (!manifestExists && shards.length === 0) {

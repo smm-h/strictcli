@@ -501,8 +501,14 @@ export function errChecksTomlAppMismatch(
 	return `checks.toml: app ${q(appName)} does not match app name ${q(expected)}`;
 }
 
-export function errTestCoverageCannotCreateDir(errStr: string): string {
-	return `test-coverage: cannot create .strictcli/coverage/: ${errStr}`;
+/**
+ * The retired boolean option's refusal (contract §12.12: one sentence, each
+ * language's own spellings inside it -- `testCoverage` / `testCoverageDir`
+ * here, `test_coverage` / `test_coverage_dir` in Python, `WithTestCoverage` /
+ * `WithTestCoverageDir` in Go).
+ */
+export function errTestCoverageBooleanRetired(): string {
+	return "testCoverage is not accepted; declare the directory holding coverage/ and test-coverage.json with testCoverageDir";
 }
 
 // ---------------------------------------------------------------------------

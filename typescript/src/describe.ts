@@ -413,7 +413,7 @@ export const SURFACE = {
 				"noDefaultConfigPath",
 				"procObserveAllowlist",
 				"schemaPath",
-				"testCoverage",
+				"testCoverageDir",
 				"version",
 			],
 		},

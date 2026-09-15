@@ -116,6 +116,7 @@ import {
 	errProcObserveAllowlistEmptyPrefix,
 	errProcObserveAllowlistNotStrings,
 	errTagContractViolation,
+	errTestCoverageBooleanRetired,
 	RegistrationError,
 } from "./errors.js";
 import {
@@ -202,8 +203,15 @@ export interface AppSpec {
 	readonly checksPath?: string;
 	/** Enables the check system with inline checks.toml text. */
 	readonly checksEmbed?: string;
-	/** Enables CLI test-coverage instrumentation (shards + built-in check). */
-	readonly testCoverage?: boolean;
+	/**
+	 * The directory holding this app's coverage state: `coverage/` (per-process
+	 * shard files) and `test-coverage.json` (the committed manifest). Declared,
+	 * never discovered. Absent means coverage is off. A declared directory that
+	 * does not exist at construction also means off -- no check registered, no
+	 * paths computed, nothing created -- which is the installed distribution,
+	 * whose declared path names a source checkout that is not there.
+	 */
+	readonly testCoverageDir?: string;
 	/**
 	 * Argv PREFIXES that make an `effects.run` an OBSERVE: it executes even in
 	 * dry mode, returns a real value, is never written to the would-do log, and
@@ -848,11 +856,12 @@ export class AppImpl implements App {
 	readonly checksPath: string | undefined;
 	readonly checksEmbed: string | undefined;
 	readonly checks: ChecksState = newChecksState();
-	// Test-coverage instrumentation state (checks/coverage.ts). All three
-	// paths are absolute, anchored to the cwd at construction time (sibling
-	// parity: tests which chdir still record into the repo, and a check
-	// evaluated from a foreign cwd reads the app's own repo state).
-	readonly testCoverage: boolean;
+	// Test-coverage instrumentation state (checks/coverage.ts). All three paths
+	// are absolute and sit under the DECLARED directory, and they stay
+	// undefined when that directory is absent -- which is what turns the whole
+	// mechanism off (sibling parity: Go's empty coverageShardPath, Python's
+	// None _coverage_shard_path).
+	readonly testCoverageDir: string | undefined;
 	/** App-level observe allowlist, validated and frozen at construction. */
 	readonly procObserveAllowlist: readonly (readonly string[])[];
 	/** The structured effect log of the most recent dispatch. */
@@ -1004,7 +1013,10 @@ export class AppImpl implements App {
 		}
 		this.checksPath = spec.checksPath;
 		this.checksEmbed = spec.checksEmbed;
-		this.testCoverage = spec.testCoverage ?? false;
+		if ("testCoverage" in spec) {
+			throw new RegistrationError(errTestCoverageBooleanRetired());
+		}
+		this.testCoverageDir = spec.testCoverageDir;
 		this.procObserveAllowlist = validateProcObserveAllowlist(
 			spec.procObserveAllowlist,
 		);
@@ -1028,11 +1040,11 @@ export class AppImpl implements App {
 			this.loadChecks(this.checksEmbed);
 		}
 
-		// Test-coverage instrumentation: anchored paths (the directory itself is
-		// created lazily on the first shard write) and the built-in
-		// cli-test-coverage provider.
-		if (this.testCoverage) {
-			initTestCoverage(this);
+		// Test-coverage instrumentation: the declared directory's derived paths
+		// (its coverage/ subdirectory is created lazily on the first shard
+		// write) and the built-in cli-test-coverage provider.
+		if (this.testCoverageDir !== undefined) {
+			initTestCoverage(this, this.testCoverageDir);
 		}
 	}
 
@@ -1375,7 +1387,7 @@ export class AppImpl implements App {
 				// CACHE_WRITEs land in this dispatch's log.
 				this.beginDispatch();
 				// Record test-coverage hit (command-level only, test mode only).
-				if (mode === "test" && this.testCoverage) {
+				if (mode === "test" && this.coverageShardPath !== undefined) {
 					recordCoverage(this, outcome.cmdPath);
 				}
 				const ctx = new Context(
@@ -1420,7 +1432,7 @@ export class AppImpl implements App {
 			case "command": {
 				this.beginDispatch();
 				// Record test-coverage hit (command-level only, test mode only).
-				if (mode === "test" && this.testCoverage) {
+				if (mode === "test" && this.coverageShardPath !== undefined) {
 					recordCoverage(this, outcome.cmdPath);
 				}
 				const ctx = new Context(

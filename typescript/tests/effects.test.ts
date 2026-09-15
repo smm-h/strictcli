@@ -10,6 +10,7 @@
 import { strict as assert } from "node:assert";
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	statSync,
@@ -33,6 +34,16 @@ const HEADER = "DRY RUN — no changes were made. Would do:\n";
 
 function tmp(): string {
 	return mkdtempSync(join(tmpdir(), "sc-effects-"));
+}
+
+/**
+ * Creates the directory an app declares through testCoverageDir and returns
+ * its absolute path -- the option takes effect only when it already exists.
+ */
+function declaredCoverageDir(dir: string): string {
+	const declared = join(dir, ".strictcli");
+	mkdirSync(declared, { recursive: true });
+	return declared;
 }
 
 /** An app with one mutating command whose handler is the test body. */
@@ -995,7 +1006,7 @@ test("effects: a coverage shard is a CACHE_WRITE that executes even in dry mode"
 			name: "t",
 			version: "1",
 			help: "h",
-			testCoverage: true,
+			testCoverageDir: declaredCoverageDir(dir),
 		});
 		app.command(defineReadOnlyCommand("look", { help: "h", handler: () => 0 }));
 		const r = await app.test(["--dry-run", "look"]);
@@ -1025,7 +1036,7 @@ test("effects: a CACHE_WRITE never consumes a would-do number", async () => {
 			name: "t",
 			version: "1",
 			help: "h",
-			testCoverage: true,
+			testCoverageDir: declaredCoverageDir(dir),
 		});
 		app.command(
 			defineMutatingCommand("rel", {
@@ -1062,7 +1073,7 @@ test("effects: a CACHE_WRITE never shifts the truncation step", async () => {
 			name: "t",
 			version: "1",
 			help: "h",
-			testCoverage: true,
+			testCoverageDir: declaredCoverageDir(dir),
 		});
 		app.command(
 			defineMutatingCommand("rel", {
@@ -1096,7 +1107,7 @@ test("effects: a CACHE_WRITE never trips read-only enforcement", async () => {
 			name: "t",
 			version: "1",
 			help: "h",
-			testCoverage: true,
+			testCoverageDir: declaredCoverageDir(dir),
 		});
 		app.command(defineReadOnlyCommand("look", { help: "h", handler: () => 0 }));
 		// A read_only command whose dispatch writes a coverage shard: no error.
