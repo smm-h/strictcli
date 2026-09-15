@@ -221,9 +221,9 @@ three code comments restated it verbatim -- and pins one probed reading: an env-
 property value beside a CLI `--unset-<prop>` resolves to the clear, by ordinary CLI-wins precedence,
 in all three.
 
-Placement note: this file uses the `docs/history/_*.md` convention established by
-`docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
-selfdoc's `resolve_all_docs` walks `docs/` recursively and treats every non-underscore `.md`
+Placement note: this file uses the `.stricttools/docs/history/_*.md` convention established by
+`.stricttools/docs/history/_ts-port-spec.md`. The underscore prefix keeps it off the published docs site --
+selfdoc's `resolve_all_docs` walks `.stricttools/docs/` recursively and treats every non-underscore `.md`
 as a page.
 
 ---
@@ -1894,7 +1894,7 @@ no way for an application to mint a `CACHE_WRITE`.
 >
 > Read this section's "everything else" sentence as governing what an application or a framework
 > command does *through the regime*. The trace write sits beside the regime and is specified in
-> §20 and in `docs/process-trace-store.md`.
+> §20 and in `.stricttools/docs/process-trace-store.md`.
 
 ---
 
@@ -5274,7 +5274,7 @@ forced by the ruled semantics, fixing spellings the rulings left open). The roun
 **Swept 2026-08-13**, after an independent audit found sites the round's own changes falsified and
 had left standing. The sweep amended §0, §2.5, §7.2, §7.5, §9.2, §12.1, §13, §14.2's printed
 literal, §18.2's items 4/6/8 and §20.1, and added the status note and the literal-path rule to
-`docs/process-trace-store.md`. **It decided nothing new.** Items 96-110 are untouched by it; items
+`.stricttools/docs/process-trace-store.md`. **It decided nothing new.** Items 96-110 are untouched by it; items
 111 and 112 gain the spellings it authored, marked below; and one sentence of item 112 is corrected,
 because a reading it presented as forced is authored (§20.1).
 
@@ -5417,7 +5417,7 @@ because a reading it presented as forced is authored (§20.1).
      *(This item was headed "one forced reading" until the sweep; see the correction below.)*
      `spawned_at`'s format, the write-failure marker's filename and its content, and
      the store line's encoding are pinned in the published spec page
-     (`docs/process-trace-store.md`), which is the artifact other tools implement against; §20
+     (`.stricttools/docs/process-trace-store.md`), which is the artifact other tools implement against; §20
      carries only the contract items. The entry's key names are **not** in this class -- they are
      ruled upstream and reproduced verbatim.
 
@@ -5708,8 +5708,8 @@ decide.
      capability. One name, two advertisements -- a legacy client can learn this server asks
      without inferring it from a revision date, which is the whole of decision 26.
 
-133. **The published page is `docs/mcp-confirmation.md`.** Decision 26's third surface. It is a
-     hand-written page on the published docs site (not under `docs/history/_*`, which is
+133. **The published page is `.stricttools/docs/mcp-confirmation.md`.** Decision 26's third surface. It is a
+     hand-written page on the published docs site (not under `.stricttools/docs/history/_*`, which is
      deliberately unpublished), and it carries the dialogue in both eras, the feature name, and
      what a client must declare. The quickstarts link to it rather than restating it.
 
@@ -9689,7 +9689,7 @@ universally: at the effects spawn seam it mints an identifier, appends one line 
 append-only store, and composes the child's environment with that identifier so the child records
 itself as a descendant. **The normative specification -- the environment variable, the line format,
 the partition rules, the append discipline, the identifier profile and the failure marker -- is the
-published page `docs/process-trace-store.md`,** which is the artifact other tools implement
+published page `.stricttools/docs/process-trace-store.md`,** which is the artifact other tools implement
 against. This section carries only what belongs to the effects contract: two ratified items, and
 the relationship to §16.
 
@@ -10154,7 +10154,7 @@ can see where its remainder went.
   revision's answer is `-32021` with `data.requiredCapabilities`, and that is the next round's,
   together with the published protocol page that shows the dialogue.~~ **Discharged.** `-32021`
   is emitted with the shape §22.3 now pins, and the dialogue is published at
-  `docs/mcp-confirmation.md` -- the third of campaign decision 26's three surfaces, the other two
+  `.stricttools/docs/mcp-confirmation.md` -- the third of campaign decision 26's three surfaces, the other two
   being the declared feature name and the conformance cases that assert the declaration matches
   the behaviour. §8.5's refusal is now reachable only from the legacy era, and only from a legacy
   client that cannot be asked (§22.7).
@@ -13194,7 +13194,7 @@ out-of-scope note exists to prevent.
 
 **Surfaces outside this document that the implementation round must carry**, recorded because this
 file is the only thing this round writes: strictcli's own `CLAUDE.md` (its `CoRequired(flags=[...])`
-line and the `dependencies=[...]` sentence), `docs/flag-system.md`, the conformance corpus's
+line and the `dependencies=[...]` sentence), `.stricttools/docs/flag-system.md`, the conformance corpus's
 constraint cases and `conformance/schema.json`'s `$defs`, and the fleet's own declarations -- every
 `CoRequired` in the fleet must be rewritten because the name is mandatory, which is the migration
 F.1 already schedules.
@@ -13930,7 +13930,7 @@ the write set is **derived from one predicate** (§23.6, no source filter); it i
 
 **Surfaces outside this document that the implementation round must carry**, recorded because this
 file is the only thing this round writes: strictcli's own `CLAUDE.md` (the presence bullet gains the
-property rule and the mutating-default ban), `docs/flag-system.md`, `docs/language-idioms.md` (the
+property rule and the mutating-default ban), `.stricttools/docs/flag-system.md`, `.stricttools/docs/language-idioms.md` (the
 three surfaces of §27.8 as a fourth reference case), the conformance corpus's update cases and
 `conformance/schema.json`'s `$defs`, the framework's own `config set` (§27.1's flagged consequence),
 and the fleet's own declarations, which F.1 already schedules.

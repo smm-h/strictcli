@@ -14,4 +14,3 @@ dist/
 .env.local
 *.local-only
 .rlsbl-monorepo/lock
-docs/_build/

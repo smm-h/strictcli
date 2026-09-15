@@ -3,10 +3,10 @@
 Durable design constants for the strictcli TypeScript implementation. This file is the
 committed home for decisions that must not live only in session memory.
 
-Placement note: this file lives at the repo root, NOT in `docs/`, because selfdoc walks
-`docs/` and treats every `.md` file there as a published docs-site page (see
+Placement note: this file lives at the repo root, NOT in `.stricttools/docs/`, because selfdoc walks
+`.stricttools/docs/` and treats every `.md` file there as a published docs-site page (see
 `resolve_all_docs` in selfdoc: it os.walks the docs dir with no managed-file allowlist).
-An internal port spec must not become a public docs page, so `docs/` is not safe for
+An internal port spec must not become a public docs page, so `.stricttools/docs/` is not safe for
 unmanaged files in this repo.
 
 ## npm deprecation notice (approved text)
@@ -342,7 +342,7 @@ entirely:
 - `rlsbl/git_util.py:81-110` (`filter_commits_for_releasable`) and `:228-240`
   (`affected_projects`): commits whose changed files match no project's path
   prefix or watch globs are attributed to no releasable, so commits touching
-  only repo-root files (docs/, README.md, CLAUDE.md, workflows, this spec)
+  only repo-root files (.stricttools/docs/, README.md, CLAUDE.md, workflows, this spec)
   require no changelog entry. If a push touches no project at all, the check
   passes with "no affected projects" (`rlsbl/checks/prepush.py:51-52`).
 
