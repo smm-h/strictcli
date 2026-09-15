@@ -2,6 +2,7 @@
 title = "go/strictcli"
 description = "Package strictcli: A CLI framework for the Era of Agents: nothing is inferred, everything is declared."
 generated = true
+seeded = true
 nav_group = "API Reference"
 nav_order = 1
 +++
