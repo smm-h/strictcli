@@ -3,7 +3,7 @@
   "name": "strictcli",
   "slug": "strictcli",
   "version": "0.41.1",
-  "description": "A strict CLI framework for Python, Go and TypeScript that makes you declare every command, flag, argument and help string, and errors at registration time on anything left unstated",
+  "description": "A CLI framework for the Era of Agents: nothing is inferred, everything is declared. First-class support for Go, Python, and TypeScript",
   "language": "python",
   "base_url": "https://strictcli.smmh.dev",
   "pages": [
@@ -186,6 +186,11 @@
           "level": 3,
           "text": "Schema freshness",
           "anchor": "schema-freshness"
+        },
+        {
+          "level": 2,
+          "text": "The test-coverage root",
+          "anchor": "the-test-coverage-root"
         },
         {
           "level": 2,
@@ -1711,6 +1716,11 @@
           "level": 3,
           "text": "`WithProcObserveAllowlist`",
           "anchor": "withprocobserveallowlist"
+        },
+        {
+          "level": 3,
+          "text": "`WithTestCoverageDir`",
+          "anchor": "withtestcoveragedir"
         },
         {
           "level": 3,
@@ -4656,6 +4666,11 @@
         },
         {
           "level": 3,
+          "text": "`_msg_test_coverage_boolean_retired`",
+          "anchor": "_msg_test_coverage_boolean_retired"
+        },
+        {
+          "level": 3,
           "text": "`App`",
           "anchor": "app"
         },
@@ -7526,8 +7541,8 @@
         },
         {
           "level": 3,
-          "text": "`errTestCoverageCannotCreateDir`",
-          "anchor": "errtestcoveragecannotcreatedir"
+          "text": "`errTestCoverageBooleanRetired`",
+          "anchor": "errtestcoveragebooleanretired"
         },
         {
           "level": 3,
@@ -11147,6 +11162,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-14T14:53:35.615353+00:00",
+  "last_gen": "2026-09-15T21:21:46.315018+00:00",
   "theme": "minimal"
 }
