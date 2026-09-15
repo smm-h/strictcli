@@ -466,13 +466,15 @@ type App struct {
 	connectionEnvs  map[string]string // env var -> help
 	connectionOrder []string          // env var names in declaration order
 
-	// Test-coverage instrumentation. When enabled, every Test() and Call()
-	// invocation records the resolved command path to per-process shard files
-	// so a check can verify that every command in the surface has been exercised.
-	testCoverage         bool
-	coverageShardPath    string // "<root>/.strictcli/coverage/<pid>.jsonl"
-	coverageDir          string // "<root>/.strictcli/coverage" (construction-anchored)
-	coverageManifestPath string // "<root>/.strictcli/test-coverage.json" (construction-anchored)
+	// Test-coverage instrumentation. When the declared directory exists, every
+	// Test() and Call() invocation records the resolved command path to
+	// per-process shard files so a check can verify that every command in the
+	// surface has been exercised. The three derived paths stay empty when the
+	// declared directory is absent, which is what turns the whole mechanism off.
+	testCoverageDir      string // the declared directory, as given
+	coverageShardPath    string // "<declared>/coverage/<pid>.jsonl"
+	coverageDir          string // "<declared>/coverage"
+	coverageManifestPath string // "<declared>/test-coverage.json"
 
 	// The effects regime. procObserveAllowlist is app-level observe
 	// authorization: a list of argv PREFIXES, matched element-wise by string
@@ -698,16 +700,30 @@ func WithProcObserveAllowlist(prefixes [][]string) AppOption {
 	}
 }
 
-// WithTestCoverage enables CLI test-coverage instrumentation. Every Test() and
-// Call() invocation records the resolved command path to the process's shard
-// file (.strictcli/coverage/<pid>.jsonl), whose directory is created on the
-// first such record and never at construction -- a plain CLI run writes no
-// shard and leaves no directory. A built-in cli-test-coverage check
-// (auto-registered via the provider mechanism) merges shards and hard-FAILs
-// listing every command with zero coverage.
+// WithTestCoverageDir declares the directory holding this app's coverage
+// state: coverage/ (per-process shard files) and test-coverage.json (the
+// committed manifest). Every Test() and Call() invocation records the resolved
+// command path to the process's shard file (<dir>/coverage/<pid>.jsonl), whose
+// directory is created on the first such record and never at construction -- a
+// plain CLI run writes no shard and leaves no directory. A built-in
+// cli-test-coverage check (auto-registered via the provider mechanism) merges
+// shards and hard-FAILs listing every command with zero coverage.
+//
+// The directory decides everything. Undeclared means coverage is off. A
+// declared directory that does not exist at construction also means off -- no
+// check registered, no paths computed, nothing created. That is the installed
+// distribution, whose declared path names a source checkout that is not there.
+func WithTestCoverageDir(path string) AppOption {
+	return func(a *App) {
+		a.testCoverageDir = path
+	}
+}
+
+// WithTestCoverage is the retired boolean option. It has no accepted spelling:
+// applying it is a registration-time panic naming the option that replaced it.
 func WithTestCoverage() AppOption {
 	return func(a *App) {
-		a.testCoverage = true
+		panic(errTestCoverageBooleanRetired)
 	}
 }
 
@@ -1955,26 +1971,26 @@ func NewApp(name, version, help string, opts ...AppOption) *App {
 			}
 		}
 	}
-	// Test-coverage instrumentation: register built-in provider.
-	if a.testCoverage {
-		// Anchor the coverage root to the cwd AT CONSTRUCTION TIME. Both the
-		// recorder and the check provider use these absolute paths so that tests
-		// which chdir still record into the repo, and a check evaluated from a
-		// foreign cwd reads the app's own repo state.
-		//
-		// Only the PATHS are computed here. The directory itself is created
-		// lazily by recordCoverage, immediately before the first shard write:
-		// shards are written only on the test-harness paths (Test and Call), so
-		// a plain CLI invocation must leave no .strictcli/ behind in whatever
-		// directory it was run from.
-		root, err := os.Getwd()
-		if err != nil {
-			panic(errTestCoverageCannotCreateDir(err))
+	// Test-coverage instrumentation: register the built-in provider, but only
+	// when the DECLARED directory exists. An app installed elsewhere finds it
+	// absent and stays uninstrumented: no provider, no paths, no writes
+	// anywhere -- in particular not into whatever directory the consumer
+	// happened to start the CLI from.
+	if a.testCoverageDir != "" {
+		root, err := filepath.Abs(a.testCoverageDir)
+		if err == nil {
+			if info, statErr := os.Stat(root); statErr == nil && info.IsDir() {
+				// Only the PATHS are computed here. The coverage directory
+				// itself is created lazily by recordCoverage, immediately
+				// before the first shard write: shards are written only on the
+				// test-harness paths (Test and Call), so a plain CLI invocation
+				// leaves no coverage/ behind.
+				a.coverageDir = filepath.Join(root, "coverage")
+				a.coverageManifestPath = filepath.Join(root, "test-coverage.json")
+				a.coverageShardPath = filepath.Join(a.coverageDir, fmt.Sprintf("%d.jsonl", os.Getpid()))
+				a.RegisterCheckProvider(a.testCoverageProvider)
+			}
 		}
-		a.coverageDir = filepath.Join(root, ".strictcli", "coverage")
-		a.coverageManifestPath = filepath.Join(root, ".strictcli", "test-coverage.json")
-		a.coverageShardPath = filepath.Join(a.coverageDir, fmt.Sprintf("%d.jsonl", os.Getpid()))
-		a.RegisterCheckProvider(a.testCoverageProvider)
 	}
 	return a
 }
@@ -2908,7 +2924,7 @@ func (a *App) Test(argv []string) Result {
 	a.beginDispatch()
 
 	// Record test-coverage hit (command-level only).
-	if a.testCoverage && pr.cmdPath != "" {
+	if a.coverageShardPath != "" && pr.cmdPath != "" {
 		a.recordCoverage(pr.cmdPath)
 	}
 

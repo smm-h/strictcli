@@ -327,9 +327,11 @@ func errChecksTomlAppMismatch(appName string, expected string) string {
 	return fmt.Sprintf("checks.toml: app %q does not match app name %q", appName, expected)
 }
 
-func errTestCoverageCannotCreateDir(err error) string {
-	return fmt.Sprintf("test-coverage: cannot create .strictcli/coverage/: %s", err)
-}
+// errTestCoverageBooleanRetired is the retired boolean option's refusal
+// (contract §12.12: one sentence, each language's own spellings inside it --
+// WithTestCoverage / WithTestCoverageDir here, test_coverage /
+// test_coverage_dir in Python, testCoverage / testCoverageDir in TypeScript).
+const errTestCoverageBooleanRetired = "WithTestCoverage is not accepted; declare the directory holding coverage/ and test-coverage.json with WithTestCoverageDir"
 
 // ---------------------------------------------------------------------------
 // strictcli.go — check registration

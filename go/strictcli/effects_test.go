@@ -1626,7 +1626,8 @@ func TestCoverageShardRecordsACacheWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chdir(cwd)
-	app := NewApp("app", "1.0.0", "h", WithTestCoverage())
+	app := NewApp("app", "1.0.0", "h",
+		WithTestCoverageDir(declaredCoverageDir(t, dir)))
 	app.Command("go", "h",
 		func(ctx *Context, kwargs map[string]interface{}) Outcome { return Exit(0) },
 		WithEffect(EffectReadOnly))
@@ -1651,7 +1652,8 @@ func TestCacheWritesDoNotConsumeWouldDoNumbers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chdir(cwd)
-	app := NewApp("app", "1.0.0", "h", WithTestCoverage())
+	app := NewApp("app", "1.0.0", "h",
+		WithTestCoverageDir(declaredCoverageDir(t, dir)))
 	app.Command("rel", "h", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		c, _ := ctx.Effects().Run([]any{"git", "tag", "v1"})
 		ctx.Effects().Run([]any{"push", c})
@@ -1688,7 +1690,8 @@ func TestCacheWritesDoNotShiftTheTruncationStep(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chdir(cwd)
-	app := NewApp("app", "1.0.0", "h", WithTestCoverage())
+	app := NewApp("app", "1.0.0", "h",
+		WithTestCoverageDir(declaredCoverageDir(t, dir)))
 	app.Command("rel", "h", func(ctx *Context, kwargs map[string]interface{}) Outcome {
 		c, _ := ctx.Effects().Run([]any{"git", "tag", "v1"})
 		_ = c.Stdout() // extraction: truncates

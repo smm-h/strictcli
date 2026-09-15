@@ -17,7 +17,7 @@ import (
 // from the PID and O_APPEND; one shard per process is sufficient, so there is
 // no per-write shard counter.
 func (a *App) recordCoverage(cmdPath string) {
-	if !a.testCoverage || a.coverageShardPath == "" {
+	if a.coverageShardPath == "" {
 		return
 	}
 	path := a.coverageShardPath
@@ -58,19 +58,19 @@ func (a *App) collectAllCommandPaths() map[string]bool {
 }
 
 // testCoverageProvider is the built-in check provider for cli-test-coverage.
-// Auto-registered when WithTestCoverage() is used.
+// Auto-registered when WithTestCoverageDir() names a directory that exists.
 //
 // The verdict is derived from committed state: the covered set is the union of
-// the committed manifest (.strictcli/test-coverage.json) and any per-process
-// shard files merged from .strictcli/coverage/. Every live registered command
-// path (minus the injected check command) must be present in that union to
-// pass; otherwise the check fails naming each uncovered command.
+// the committed manifest (test-coverage.json in the declared directory) and any
+// per-process shard files merged from its coverage/ subdirectory. Every live
+// registered command path (minus the injected check command) must be present in
+// that union to pass; otherwise the check fails naming each uncovered command.
 //
 // Because the verdict reads the committed manifest, it is deterministic on every
 // machine -- a machine that never ran the suite (no local shards) still gets a
 // stable verdict from the committed manifest alone. Both the coverage dir and
-// the manifest path are anchored to the App's construction-time cwd, so the
-// check evaluated from a foreign cwd reads the app's own repo state.
+// the manifest path sit under the DECLARED directory, so the check evaluated
+// from any cwd reads the app's own repo state.
 //
 // The manifest is rewritten as the monotonic union of its prior contents and
 // the freshly merged shards, but ONLY when that content actually changes -- a
@@ -84,15 +84,12 @@ func (a *App) testCoverageProvider() []CheckSpec {
 		manifestPath := a.coverageManifestPath
 
 		// Subject-matter gating (the sanctioned skip class, mirroring project-type
-		// gating): when the anchored coverage root holds NEITHER a committed
-		// manifest NOR any shard files, this is not the app's own development tree
-		// -- e.g. an installed app running its checks from a foreign project's cwd,
-		// where the construction-anchored root points at a directory with no
-		// coverage state. Report a visible SKIP instead of failing with the app's
-		// entire command surface listed as uncovered. When EITHER exists, behavior
-		// is unchanged: a partial manifest still fails honestly, and an
-		// empty-manifest file present still means "coverage configured but empty"
-		// = fail listing all.
+		// gating): when the declared coverage root holds NEITHER a committed
+		// manifest NOR any shard files, the suite has never run against it.
+		// Report a visible SKIP instead of failing with the app's entire command
+		// surface listed as uncovered. When EITHER exists, behavior is unchanged:
+		// a partial manifest still fails honestly, and an empty-manifest file
+		// present still means "coverage configured but empty" = fail listing all.
 		manifestExists := false
 		if manifestPath != "" {
 			if info, err := os.Stat(manifestPath); err == nil && !info.IsDir() {

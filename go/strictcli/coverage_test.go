@@ -16,6 +16,19 @@ type testCheckCtx struct {
 
 func (c *testCheckCtx) ProjectRoot() string { return c.root }
 
+// declaredCoverageDir creates the directory an app declares through
+// WithTestCoverageDir and returns its absolute path. The option takes effect
+// only when the directory already exists at construction, which is what makes
+// an installed distribution -- whose declared path is gone -- uninstrumented.
+func declaredCoverageDir(t *testing.T, root string) string {
+	t.Helper()
+	dir := filepath.Join(root, ".strictcli")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func makeTestCoverageApp(t *testing.T) *App {
 	t.Helper()
 	origDir, _ := os.Getwd()
@@ -24,7 +37,8 @@ func makeTestCoverageApp(t *testing.T) *App {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chdir(origDir) })
-	app := NewApp("coverapp", "1.0.0", "coverage test app", WithTestCoverage())
+	app := NewApp("coverapp", "1.0.0", "coverage test app",
+		WithTestCoverageDir(declaredCoverageDir(t, dir)))
 	app.Command("deploy", "deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithEffect(EffectReadOnly))
@@ -46,7 +60,8 @@ func makeGroupedCoverageApp(t *testing.T) *App {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chdir(origDir) })
-	app := NewApp("grpapp", "1.0.0", "grouped coverage test", WithTestCoverage())
+	app := NewApp("grpapp", "1.0.0", "grouped coverage test",
+		WithTestCoverageDir(declaredCoverageDir(t, dir)))
 	grp := app.Group("infra", "infrastructure commands")
 	grp.Command("deploy", "deploy infra", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
@@ -61,9 +76,8 @@ func makeGroupedCoverageApp(t *testing.T) *App {
 	return app
 }
 
-// writeCoverageManifest writes a committed manifest under the construction-anchored
-// .strictcli/ root, creating the directory: nothing else creates it until the
-// recorder writes its first shard.
+// writeCoverageManifest writes a committed manifest under the declared
+// .strictcli/ root, creating the directory when a caller has not already.
 func writeCoverageManifest(t *testing.T, content []byte) {
 	t.Helper()
 	if err := os.MkdirAll(".strictcli", 0o755); err != nil {
@@ -242,9 +256,9 @@ func TestCoverageCheck_ZeroStateSkips(t *testing.T) {
 	if !strings.Contains(cov.Outcome.message, "development tree") {
 		t.Fatalf("skip reason should mention the app's development tree, got %q", cov.Outcome.message)
 	}
-	// Reason names the anchored .strictcli path.
+	// Reason names the declared .strictcli path.
 	if !strings.Contains(cov.Outcome.message, filepath.Join(constructionDir, ".strictcli")) {
-		t.Fatalf("skip reason should name the anchored path, got %q", cov.Outcome.message)
+		t.Fatalf("skip reason should name the declared path, got %q", cov.Outcome.message)
 	}
 }
 
@@ -346,10 +360,10 @@ func findCoverageResult(t *testing.T, results []CheckRunResult) *CheckRunResult 
 	return nil
 }
 
-func TestCoverageRecording_AnchoredToConstructionCwd(t *testing.T) {
-	app := makeTestCoverageApp(t) // constructs with cwd == its temp dir
-	constructionDir, _ := os.Getwd()
-	defer os.Chdir(constructionDir)
+func TestCoverageRecording_AnchoredToDeclaredDir(t *testing.T) {
+	app := makeTestCoverageApp(t) // declares <temp dir>/.strictcli
+	declaredRoot, _ := os.Getwd()
+	defer os.Chdir(declaredRoot)
 
 	other := t.TempDir()
 	if err := os.Chdir(other); err != nil {
@@ -358,9 +372,9 @@ func TestCoverageRecording_AnchoredToConstructionCwd(t *testing.T) {
 
 	app.Test([]string{"deploy"})
 
-	shards, _ := filepath.Glob(filepath.Join(constructionDir, ".strictcli", "coverage", "*.jsonl"))
+	shards, _ := filepath.Glob(filepath.Join(declaredRoot, ".strictcli", "coverage", "*.jsonl"))
 	if len(shards) == 0 {
-		t.Fatal("shard must land under the construction cwd")
+		t.Fatal("shard must be written under the declared directory")
 	}
 	foreign, _ := filepath.Glob(filepath.Join(other, ".strictcli", "coverage", "*.jsonl"))
 	if len(foreign) != 0 {
@@ -441,7 +455,7 @@ func TestCoverageDisabled_NoShardsCreated(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chdir(origDir) })
-	// No WithTestCoverage()
+	// No WithTestCoverageDir()
 	app := NewApp("nocover", "1.0.0", "no coverage")
 	app.Command("greet", "say hello", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
@@ -454,8 +468,9 @@ func TestCoverageDisabled_NoShardsCreated(t *testing.T) {
 }
 
 // TestCoverageDirectoryIsLazy_ConstructionLeavesNoDirectory pins that enabling
-// test coverage does not plant an empty .strictcli/ in the construction cwd. A
-// plain CLI invocation never records coverage, so it must leave no trace.
+// test coverage does not plant a coverage/ subdirectory inside the declared
+// directory. A plain CLI invocation never records coverage, so it leaves no
+// trace.
 func TestCoverageDirectoryIsLazy_ConstructionLeavesNoDirectory(t *testing.T) {
 	origDir, _ := os.Getwd()
 	dir := t.TempDir()
@@ -464,13 +479,14 @@ func TestCoverageDirectoryIsLazy_ConstructionLeavesNoDirectory(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chdir(origDir) })
 
-	app := NewApp("coverapp", "1.0.0", "coverage test app", WithTestCoverage())
+	app := NewApp("coverapp", "1.0.0", "coverage test app",
+		WithTestCoverageDir(declaredCoverageDir(t, dir)))
 	app.Command("deploy", "deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithEffect(EffectReadOnly))
 
-	if _, err := os.Stat(filepath.Join(dir, ".strictcli")); !os.IsNotExist(err) {
-		t.Fatal("construction must not create .strictcli/")
+	if _, err := os.Stat(filepath.Join(dir, ".strictcli", "coverage")); !os.IsNotExist(err) {
+		t.Fatal("construction must not create coverage/")
 	}
 }
 
@@ -484,7 +500,8 @@ func TestCoverageDirectoryIsLazy_RecordingCreatesDirectory(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chdir(origDir) })
 
-	app := NewApp("coverapp", "1.0.0", "coverage test app", WithTestCoverage())
+	app := NewApp("coverapp", "1.0.0", "coverage test app",
+		WithTestCoverageDir(declaredCoverageDir(t, dir)))
 	app.Command("deploy", "deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithEffect(EffectReadOnly))
@@ -497,7 +514,7 @@ func TestCoverageDirectoryIsLazy_RecordingCreatesDirectory(t *testing.T) {
 }
 
 // TestCoverageDirectoryIsLazy_CheckSkipsWhenDirectoryAbsent pins that the
-// provider tolerates a coverage root that was never created.
+// provider tolerates a coverage/ subdirectory that was never created.
 func TestCoverageDirectoryIsLazy_CheckSkipsWhenDirectoryAbsent(t *testing.T) {
 	origDir, _ := os.Getwd()
 	dir := t.TempDir()
@@ -506,14 +523,15 @@ func TestCoverageDirectoryIsLazy_CheckSkipsWhenDirectoryAbsent(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chdir(origDir) })
 
-	app := NewApp("coverapp", "1.0.0", "coverage test app", WithTestCoverage())
+	app := NewApp("coverapp", "1.0.0", "coverage test app",
+		WithTestCoverageDir(declaredCoverageDir(t, dir)))
 	app.Command("deploy", "deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
 		return Exit(0)
 	}, WithEffect(EffectReadOnly))
 	app.SetCheckContext(func() CheckContext { return &testCheckCtx{root: dir} })
 
-	if _, err := os.Stat(filepath.Join(dir, ".strictcli")); !os.IsNotExist(err) {
-		t.Fatal("construction must not create .strictcli/")
+	if _, err := os.Stat(filepath.Join(dir, ".strictcli", "coverage")); !os.IsNotExist(err) {
+		t.Fatal("construction must not create coverage/")
 	}
 
 	results, _, _, _ := app.RunChecks(
@@ -533,4 +551,87 @@ func TestCoverageDirectoryIsLazy_CheckSkipsWhenDirectoryAbsent(t *testing.T) {
 	if cov.Status() != "skip" {
 		t.Fatalf("expected skip with no coverage state, got %s", cov.Status())
 	}
+}
+
+// TestCoverageDeclaredDirAbsent_RegistersNoCheck pins the installed
+// distribution: the declared directory names a source checkout that is not
+// present, so the app registers no cli-test-coverage check at all.
+func TestCoverageDeclaredDirAbsent_RegistersNoCheck(t *testing.T) {
+	origDir, _ := os.Getwd()
+	dir := t.TempDir()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	app := NewApp("coverapp", "1.0.0", "coverage test app",
+		WithTestCoverageDir(filepath.Join(dir, "nowhere", ".strictcli")))
+	app.Command("deploy", "deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectReadOnly))
+	app.SetCheckContext(func() CheckContext { return &testCheckCtx{root: dir} })
+
+	// The check system never turned on, so `check` is not a command either.
+	r := app.Test([]string{"check", "--all"})
+	if r.ExitCode != 1 {
+		t.Fatalf("expected the check command to be unroutable, got exit %d", r.ExitCode)
+	}
+	if strings.Contains(r.Stdout, "cli-test-coverage") {
+		t.Fatalf("cli-test-coverage must not be listed, got %q", r.Stdout)
+	}
+}
+
+// TestCoverageDeclaredDirAbsent_CreatesNothing pins that a declared directory
+// that does not exist leaves the filesystem untouched -- neither the declared
+// path nor the working directory the CLI was started in.
+func TestCoverageDeclaredDirAbsent_CreatesNothing(t *testing.T) {
+	origDir, _ := os.Getwd()
+	dir := t.TempDir()
+	foreign := filepath.Join(dir, "some-other-project")
+	if err := os.MkdirAll(foreign, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(foreign); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	app := NewApp("coverapp", "1.0.0", "coverage test app",
+		WithTestCoverageDir(filepath.Join(dir, "gone", ".strictcli")))
+	app.Command("deploy", "deploy the app", func(ctx *Context, args map[string]interface{}) Outcome {
+		return Exit(0)
+	}, WithEffect(EffectReadOnly))
+
+	app.Test([]string{"deploy"})
+	if _, err := app.Call("deploy", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "gone")); !os.IsNotExist(err) {
+		t.Fatal("a declared directory that does not exist must not be created")
+	}
+	entries, err := os.ReadDir(foreign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("the working directory must be untouched, found %v", entries)
+	}
+}
+
+// TestCoverageRetiredBooleanRefused pins that the retired boolean option is a
+// registration-time refusal naming the option that replaced it.
+func TestCoverageRetiredBooleanRefused(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("WithTestCoverage must panic at registration")
+		}
+		want := "WithTestCoverage is not accepted; declare the directory " +
+			"holding coverage/ and test-coverage.json with WithTestCoverageDir"
+		if got, ok := r.(string); !ok || got != want {
+			t.Fatalf("expected %q, got %v", want, r)
+		}
+	}()
+	NewApp("coverapp", "1.0.0", "coverage test app", WithTestCoverage())
 }

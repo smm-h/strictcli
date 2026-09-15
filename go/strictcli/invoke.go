@@ -107,7 +107,7 @@ func (a *App) invoke(commandPath string, kwargs map[string]interface{}, opts ...
 	a.beginDispatch()
 
 	// Record test-coverage hit (command-level only).
-	if a.testCoverage {
+	if a.coverageShardPath != "" {
 		a.recordCoverage(commandPath)
 	}
 
