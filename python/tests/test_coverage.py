@@ -1,12 +1,14 @@
 """Tests for the cli-test-coverage mechanism.
 
 Verifies that:
-- test_coverage=True enables recording of command hits
-- test() and call() both record to per-process shard files
+- test_coverage_dir=<existing dir> enables recording of command hits
+- test() and call() both record to per-process shard files under that directory
 - The cli-test-coverage check merges shards, compares against the command
   surface, and FAILs listing uncovered commands
 - Full coverage produces a PASS
 - Empty/stale manifest is a hard error
+- A declared directory that does not exist leaves the instrumentation off
+- The retired boolean is refused by name
 """
 
 import json
@@ -24,12 +26,18 @@ class SimpleCtx:
     project_root: Path
 
 
+def _coverage_root(tmp_path):
+    """The declared coverage directory, created so the option takes effect."""
+    root = tmp_path / ".strictcli"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
 def _make_app(tmp_path):
-    """Build a 3-command app with test_coverage enabled, rooted in tmp_path."""
-    os.chdir(tmp_path)
+    """Build a 3-command app whose coverage directory is tmp_path/.strictcli."""
     app = strictcli.App(
         name="coverapp", version="1.0.0", help="coverage test app",
-        test_coverage=True,
+        test_coverage_dir=str(_coverage_root(tmp_path)),
     )
 
     @app.command(name="deploy", effect="read_only", forwarding=strictcli.Forwarding(reason="test handler absorbs global flag values"), help="deploy the app")
@@ -50,10 +58,9 @@ def _make_app(tmp_path):
 
 def _make_grouped_app(tmp_path):
     """Build an app with grouped commands for dotted-path coverage."""
-    os.chdir(tmp_path)
     app = strictcli.App(
         name="grpapp", version="1.0.0", help="grouped coverage test",
-        test_coverage=True,
+        test_coverage_dir=str(_coverage_root(tmp_path)),
     )
 
     grp = app.group("infra", help="infrastructure commands")
@@ -273,20 +280,20 @@ class TestCoverageCheck:
 
 
 class TestCoverageChdirSafety:
-    def test_record_anchored_to_construction_cwd(self, tmp_path):
-        """test() records into the construction-time coverage dir, not the cwd
-        that a test happened to chdir into."""
-        app = _make_app(tmp_path)  # constructs with cwd == tmp_path
+    def test_record_anchored_to_declared_directory(self, tmp_path):
+        """test() records into the declared coverage dir, not the cwd that a
+        test happened to chdir into."""
+        app = _make_app(tmp_path)  # declares tmp_path/.strictcli
         other = tmp_path / "elsewhere"
         other.mkdir()
         os.chdir(other)
 
         app.test(["deploy"])
 
-        construction_shards = list(
+        declared_shards = list(
             (tmp_path / ".strictcli" / "coverage").glob("*.jsonl")
         )
-        assert construction_shards, "shard must land under the construction cwd"
+        assert declared_shards, "shard must be written under the declared dir"
         foreign = other / ".strictcli" / "coverage"
         assert not foreign.exists(), "must not record into the chdir'd cwd"
 
@@ -311,7 +318,7 @@ class TestManifestUnionVerdict:
 
     def test_check_from_foreign_cwd_reads_app_state(self, tmp_path):
         """The check evaluated from a foreign cwd reads the app's own repo state
-        (anchored manifest), not the foreign directory."""
+        (the declared manifest), not the foreign directory."""
         app = _make_app(tmp_path)
         manifest_path = tmp_path / ".strictcli" / "test-coverage.json"
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -364,7 +371,7 @@ class TestManifestUnionVerdict:
 
 class TestCoverageDisabled:
     def test_no_recording_when_disabled(self, tmp_path):
-        """test_coverage=False (default) produces no shard files."""
+        """An undeclared test_coverage_dir (the default) produces no shards."""
         os.chdir(tmp_path)
         app = strictcli.App(
             name="nocover", version="1.0.0", help="no coverage",
@@ -381,13 +388,13 @@ class TestCoverageDisabled:
 
 
 class TestCoverageDirectoryIsLazy:
-    def test_construction_leaves_no_directory(self, tmp_path):
-        """Constructing an app with test_coverage=True must not create
-        .strictcli/ -- a plain CLI invocation never records coverage, so it must
-        not plant an empty directory in whatever cwd it was run from."""
+    def test_construction_leaves_no_coverage_subdirectory(self, tmp_path):
+        """Constructing an app with a declared coverage directory must not
+        create coverage/ inside it -- a plain CLI invocation never records
+        coverage, so it must not plant an empty directory."""
         app = _make_app(tmp_path)
         assert app is not None
-        assert not (tmp_path / ".strictcli").exists()
+        assert not (tmp_path / ".strictcli" / "coverage").exists()
 
     def test_recording_creates_the_directory(self, tmp_path):
         """The recorder creates the coverage directory immediately before the
@@ -398,11 +405,11 @@ class TestCoverageDirectoryIsLazy:
         shard = tmp_path / ".strictcli" / "coverage" / f"{os.getpid()}.jsonl"
         assert shard.is_file()
 
-    def test_check_skips_when_directory_absent(self, tmp_path):
-        """The provider reads a coverage root that does not exist without
+    def test_check_skips_when_coverage_state_absent(self, tmp_path):
+        """The provider reads a declared root holding no coverage state without
         raising -- it reports the subject-matter SKIP."""
         app = _make_app(tmp_path)
-        assert not (tmp_path / ".strictcli").exists()
+        assert not (tmp_path / ".strictcli" / "coverage").exists()
 
         results, _, _code = app.run_checks(
             SimpleCtx(project_root=tmp_path),
@@ -410,3 +417,100 @@ class TestCoverageDirectoryIsLazy:
         )
         cov_result = next(r for r in results if r.name == "cli-test-coverage")
         assert cov_result.status == "skip"
+
+
+class TestDeclaredDirectoryAbsent:
+    """A declared directory that does not exist leaves coverage off.
+
+    This is the installed-wheel case: the path that names the source
+    checkout's ``.strictcli`` directory is simply not there once the CLI is
+    installed elsewhere, so the app registers no check, computes no paths and
+    creates nothing.
+    """
+
+    def test_missing_directory_registers_no_check(self, tmp_path):
+        missing = tmp_path / "nowhere" / ".strictcli"
+        app = strictcli.App(
+            name="coverapp", version="1.0.0", help="coverage test app",
+            test_coverage_dir=str(missing),
+        )
+
+        @app.command(name="deploy", effect="read_only", help="deploy the app")
+        def cmd_deploy(ctx):
+            pass
+
+        # No provider, so the check system never turns on: there is no `check`
+        # command to route to, and no cli-test-coverage to list.
+        result = app.test(["check", "--all"])
+        assert result.exit_code == 1
+        assert "cli-test-coverage" not in result.stdout
+        with pytest.raises(ValueError, match="checks are not enabled"):
+            app.run_checks(SimpleCtx(project_root=tmp_path), run_all=True)
+
+    def test_missing_directory_creates_nothing(self, tmp_path):
+        missing = tmp_path / "nowhere" / ".strictcli"
+        app = strictcli.App(
+            name="coverapp", version="1.0.0", help="coverage test app",
+            test_coverage_dir=str(missing),
+        )
+
+        @app.command(name="deploy", effect="read_only", help="deploy the app")
+        def cmd_deploy(ctx):
+            pass
+
+        app.test(["deploy"])
+        app.call("deploy")
+
+        assert not (tmp_path / "nowhere").exists()
+
+
+class TestForeignDirectoryRun:
+    """A consumer-style run from a foreign directory.
+
+    The installed CLI is started in some unrelated project. Its declared
+    coverage directory does not exist there, so `check` must neither list
+    cli-test-coverage nor write a `.strictcli/` into the foreign directory.
+    """
+
+    def test_foreign_run_lists_no_check_and_touches_nothing(self, tmp_path):
+        foreign = tmp_path / "some-other-project"
+        foreign.mkdir()
+        os.chdir(foreign)
+
+        app = strictcli.App(
+            name="coverapp", version="1.0.0", help="coverage test app",
+            test_coverage_dir=str(tmp_path / "gone" / ".strictcli"),
+        )
+
+        @app.command(name="deploy", effect="read_only", help="deploy the app")
+        def cmd_deploy(ctx):
+            pass
+
+        result = app.test(["check", "--all"])
+        assert "cli-test-coverage" not in result.stdout
+
+        assert not (foreign / ".strictcli").exists()
+        assert list(foreign.iterdir()) == []
+
+
+class TestRetiredBooleanRefused:
+    def test_boolean_true_is_refused_naming_the_directory_option(self):
+        with pytest.raises(ValueError) as exc:
+            strictcli.App(
+                name="coverapp", version="1.0.0", help="coverage test app",
+                test_coverage=True,
+            )
+        assert str(exc.value) == (
+            "test_coverage is not accepted; declare the directory holding "
+            "coverage/ and test-coverage.json with test_coverage_dir"
+        )
+
+    def test_boolean_false_is_refused_too(self):
+        """There is no accepted spelling of the retired option, not even the
+        one that used to mean "off" -- absence is how coverage is declared off."""
+        with pytest.raises(ValueError) as exc:
+            strictcli.App(
+                name="coverapp", version="1.0.0", help="coverage test app",
+                test_coverage=False,
+            )
+        assert "test_coverage_dir" in str(exc.value)

@@ -8724,6 +8724,17 @@ def warn_check_spec(
     )
 
 
+def _msg_test_coverage_boolean_retired() -> str:
+    """The retired boolean's refusal (contract §12.12: one sentence, each
+    language's own spellings inside it -- `test_coverage` / `test_coverage_dir`
+    here, `WithTestCoverage` / `WithTestCoverageDir` in Go, `testCoverage` /
+    `testCoverageDir` in TypeScript)."""
+    return (
+        "test_coverage is not accepted; declare the directory holding "
+        "coverage/ and test-coverage.json with test_coverage_dir"
+    )
+
+
 @dataclass
 class App:
     """The root CLI application."""
@@ -8761,13 +8772,25 @@ class App:
     proc_observe_allowlist: list[list[str]] | None = None
     checks_path: str | Path | None = None
     checks_embed: bytes | None = None
-    test_coverage: bool = False
+    # The directory holding this app's coverage state: `coverage/` (per-process
+    # shard files) and `test-coverage.json` (the committed manifest). Declared,
+    # never discovered. Absent means coverage is off -- no provider registered,
+    # no paths computed, nothing touched. A declared directory that does not
+    # exist at construction likewise leaves coverage off: that is the installed
+    # distribution, where the path naming the source checkout is simply gone.
+    test_coverage_dir: str | os.PathLike | None = None
+    # Refusal-only. The retired boolean has no accepted spelling; this field
+    # exists so that passing it names the option that replaced it instead of
+    # raising CPython's bare "unexpected keyword argument" TypeError.
+    test_coverage: bool | None = None
     flags: list[Flag] = field(default_factory=list)
     _commands: dict[str, Command] = field(default_factory=dict)
     _groups: dict[str, Group] = field(default_factory=dict)
     _deprecated: dict[str, DeprecatedCommand] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if self.test_coverage is not None:
+            raise ValueError(_msg_test_coverage_boolean_retired())
         _require_non_empty_str(self.version, "version", "App")
         _require_non_empty_str(self.help, "help", "App")
         # Check for duplicate and reserved global flag names
@@ -8973,28 +8996,27 @@ class App:
         self._coverage_dir: str | None = None
         self._coverage_manifest_path: str | None = None
         self._last_resolved_path: list[str] = []
-        if self.test_coverage:
-            # Anchor the coverage root to the cwd AT CONSTRUCTION TIME. Both the
-            # recorder and the check provider use these absolute paths so that
-            # tests which chdir still record into the repo, and a check evaluated
-            # from a foreign cwd reads the app's own repo state.
-            #
-            # Only the PATHS are computed here. The directory itself is created
-            # lazily by _record_coverage, immediately before the first shard
-            # write: shards are written only on the test-harness paths (test()
-            # and call()), so a plain CLI invocation must leave no .strictcli/
-            # behind in whatever directory it was run from.
-            self._coverage_dir = os.path.abspath(
-                os.path.join(".strictcli", "coverage")
-            )
-            self._coverage_manifest_path = os.path.abspath(
-                os.path.join(".strictcli", "test-coverage.json")
-            )
-            self._coverage_shard_path = os.path.join(
-                self._coverage_dir,
-                f"{os.getpid()}.jsonl",
-            )
-            self.register_check_provider(self._test_coverage_provider)
+        if self.test_coverage_dir is not None:
+            # The declared directory decides everything. An app installed
+            # elsewhere finds it absent and stays uninstrumented: no provider,
+            # no paths, no writes anywhere -- in particular not into whatever
+            # directory the consumer happened to start the CLI from.
+            root = os.path.abspath(os.fspath(self.test_coverage_dir))
+            if os.path.isdir(root):
+                # Only the PATHS are computed here. The coverage directory
+                # itself is created lazily by _record_coverage, immediately
+                # before the first shard write: shards are written only on the
+                # test-harness paths (test() and call()), so a plain CLI
+                # invocation leaves no coverage/ behind.
+                self._coverage_dir = os.path.join(root, "coverage")
+                self._coverage_manifest_path = os.path.join(
+                    root, "test-coverage.json"
+                )
+                self._coverage_shard_path = os.path.join(
+                    self._coverage_dir,
+                    f"{os.getpid()}.jsonl",
+                )
+                self.register_check_provider(self._test_coverage_provider)
 
     def _validate_flag_infra_marker(self, f: Flag) -> None:
         """Panic if a flag's default is a RelativeToRoot marker referencing an
@@ -9074,19 +9096,19 @@ class App:
     def _test_coverage_provider(self) -> list[CheckSpec]:
         """Built-in check provider for cli-test-coverage.
 
-        Registered automatically when test_coverage=True. The verdict is derived
-        from committed state: the covered set is the union of the committed
-        manifest (.strictcli/test-coverage.json) and any per-process shard files
-        merged from .strictcli/coverage/. Every live registered command path
-        (minus the injected check command) must be present in that union to pass;
-        otherwise the check fails naming each uncovered command.
+        Registered automatically when test_coverage_dir names a directory that
+        exists. The verdict is derived from committed state: the covered set is
+        the union of the committed manifest (test-coverage.json in that
+        directory) and any per-process shard files merged from its coverage/
+        subdirectory. Every live registered command path (minus the injected
+        check command) must be present in that union to pass; otherwise the
+        check fails naming each uncovered command.
 
         Because the verdict reads the committed manifest, it is deterministic on
         every machine -- a machine that never ran the suite (no local shards)
         still gets a stable verdict from the committed manifest alone. Both the
-        coverage dir and the manifest path are anchored to the App's
-        construction-time cwd, so the check evaluated from a foreign cwd reads
-        the app's own repo state.
+        coverage dir and the manifest path sit under the DECLARED directory, so
+        the check evaluated from any cwd reads the app's own repo state.
 
         The manifest is rewritten as the monotonic union of its prior contents
         and the freshly merged shards, but ONLY when that content actually
@@ -11515,7 +11537,7 @@ class App:
         self._begin_dispatch()
         cmd_path = ".".join(self._last_resolved_path + [cmd.name])
         # Record test-coverage hit (command-level only, test mode only).
-        if mode == "test" and self.test_coverage:
+        if mode == "test" and self._coverage_shard_path is not None:
             self._record_coverage(cmd_path)
         # Store sources for function handlers that need provenance info
         self._last_sources = sources
@@ -11782,7 +11804,7 @@ class App:
 
         self._begin_dispatch()
         # Record test-coverage hit (command-level only).
-        if self.test_coverage:
+        if self._coverage_shard_path is not None:
             self._record_coverage(command_path)
 
         # Passthrough commands: forward raw args to the passthrough handler

@@ -1147,7 +1147,8 @@ class TestCacheWrites:
 
     def test_cache_writes_never_appear_in_the_would_do_log(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        app = _app(test_coverage=True)
+        (tmp_path / ".strictcli").mkdir()
+        app = _app(test_coverage_dir=str(tmp_path / ".strictcli"))
 
         @app.command("run", help="run", effect="read_only")
         def _run(ctx):
@@ -1166,7 +1167,8 @@ class TestCacheWrites:
         would move user-visible numbering for no visible reason.
         """
         monkeypatch.chdir(tmp_path)
-        app = _app(test_coverage=True)
+        (tmp_path / ".strictcli").mkdir()
+        app = _app(test_coverage_dir=str(tmp_path / ".strictcli"))
 
         @app.command("rel", help="rel", effect="mutating")
         def _rel(ctx):
@@ -1189,7 +1191,8 @@ class TestCacheWrites:
     def test_cache_writes_do_not_shift_the_truncation_step(self, tmp_path,
                                                            monkeypatch):
         monkeypatch.chdir(tmp_path)
-        app = _app(test_coverage=True)
+        (tmp_path / ".strictcli").mkdir()
+        app = _app(test_coverage_dir=str(tmp_path / ".strictcli"))
 
         @app.command("rel", help="rel", effect="mutating")
         def _rel(ctx):
