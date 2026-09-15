@@ -856,25 +856,30 @@ def _run_case(case: dict, target: str) -> tuple[bool, list[str], subprocess.Comp
 
     # --dump-schema needs the target's project marker file (go.mod / pyproject.toml)
     # in the CWD to determine project_id. Create a temp dir with the right file.
-    # test_coverage needs a writable temp dir for .strictcli/coverage/ shard files.
+    # A test_coverage_dir case needs a writable temp dir: the declared directory
+    # is a path relative to it, and the shard files are written underneath.
     proj_dir = None
     if "--dump-schema" in case_argv:
         proj_dir = tempfile.mkdtemp(prefix="strictcli_proj_")
         descriptor.write_project_file(proj_dir, app_def["name"])
         run_cwd = proj_dir
-    elif app_def.get("test_coverage", False):
+    elif "test_coverage_dir" in app_def:
         proj_dir = tempfile.mkdtemp(prefix="strictcli_cov_")
         run_cwd = proj_dir
-        # Seed a committed coverage manifest so the check can be exercised on the
-        # empty-shard path (the app is construction-anchored to run_cwd, so it
-        # reads run_cwd/.strictcli/test-coverage.json). Target-agnostic: the same
-        # seeded file is read by both the Python and Go apps.
+        # The runner creates the fixture root and NOTHING below it, so the
+        # declared path itself carries the existence fact a case is pinning:
+        # "." names the fixture root (present, so the app instruments), and any
+        # other value names a directory that is absent (so it does not).
+        #
+        # Seed a committed coverage manifest so the check can be exercised on
+        # the empty-shard path. Target-agnostic: the same seeded file is read by
+        # all three implementations.
         seed_manifest = app_def.get("coverage_manifest")
         if seed_manifest is not None:
-            strictcli_dir = os.path.join(proj_dir, ".strictcli")
-            os.makedirs(strictcli_dir, exist_ok=True)
+            declared_dir = os.path.join(proj_dir, app_def["test_coverage_dir"])
+            os.makedirs(declared_dir, exist_ok=True)
             with open(
-                os.path.join(strictcli_dir, "test-coverage.json"),
+                os.path.join(declared_dir, "test-coverage.json"),
                 "w",
                 encoding="utf-8",
             ) as mf:

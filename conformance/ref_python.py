@@ -1296,7 +1296,7 @@ def generate(app_def: dict) -> str:
     """
     has_toml = bool(app_def.get("checks_toml"))
     has_providers = bool(app_def.get("providers"))
-    has_test_coverage = bool(app_def.get("test_coverage"))
+    has_test_coverage = "test_coverage_dir" in app_def
     has_checks = has_toml or has_providers or has_test_coverage
 
     lines = []
@@ -1446,8 +1446,8 @@ def generate(app_def: dict) -> str:
         app_parts.append(f"handshake_env={app_def['handshake_env']!r}")
     if has_toml:
         app_parts.append("checks_path=_checks_path")
-    if app_def.get("test_coverage", False):
-        app_parts.append("test_coverage=True")
+    if "test_coverage_dir" in app_def:
+        app_parts.append(f"test_coverage_dir={app_def['test_coverage_dir']!r}")
     if app_def.get("proc_observe_allowlist"):
         app_parts.append(
             f"proc_observe_allowlist={app_def['proc_observe_allowlist']!r}"
@@ -1603,7 +1603,7 @@ def generate(app_def: dict) -> str:
         lines.append("")
 
     # Pre-test argv lists: run app.test() for each before app.run().
-    # Used by test_coverage conformance cases to generate shard files.
+    # Used by test_coverage_dir conformance cases to generate shard files.
     for pre_argv in app_def.get("pre_test", []):
         lines.append(f"    app.test({pre_argv!r})")
     if app_def.get("pre_test"):

@@ -713,11 +713,12 @@ def _build_descriptors() -> list[EntityDescriptor]:
                 "app.handshake_env": "handshakeEnvs",
                 "app.connection_env": "connectionEnvs",
                 "app.tag_contracts": "tagContracts",
-                "app.test_coverage": "testCoverage",
+                "app.test_coverage_dir": "testCoverageDir",
                 # Effects contract §13. Go stores the allowlist unexported,
                 # as it does every other App-level declaration above.
                 "app.proc_observe_allowlist": "procObserveAllowlist",
             },
+            python_entity_exclusions={"test_coverage"},
             schema_python_runtime={
                 "app.tag_contracts": "_tag_contracts (set in __post_init__, not a dataclass field)",
                 "app.config_path_relative_to_root": "_config_path_declared (set in __post_init__; config_path itself holds the RESOLVED path once the marker is read)",
@@ -1034,7 +1035,10 @@ KNOWN_OPTION_FUNCS: set[str] = {
     "RelativeToRoot",
     # ConfigFieldOption constructors (from describe_go, not matched by old regex)
     "ConfigFieldDefault", "ConfigFieldHelp", "ConfigFieldType",
-    "WithTestCoverage",
+    # The declared coverage directory, plus the retired boolean it replaced.
+    # WithTestCoverage is API surface only in the sense that calling it is a
+    # registration-time refusal naming WithTestCoverageDir; it declares nothing.
+    "WithTestCoverageDir", "WithTestCoverage",
     # Effects regime (contract §1.2, §6.1, §6.2, §10.2). The per-effect-call
     # EffectOption constructors (Resource, SkipIfCurrent, UseGrant, Cwd,
     # EffectEnv, Check, Stream, Body, Header) are not CmdOption/AppOption

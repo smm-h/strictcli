@@ -5,7 +5,7 @@
       "name": "testapp",
       "version": "1.0.0",
       "help": "test",
-      "test_coverage": true,
+      "test_coverage_dir": ".",
       "commands": [
         {
           "name": "deploy",
@@ -55,7 +55,7 @@
       "name": "testapp",
       "version": "1.0.0",
       "help": "test",
-      "test_coverage": true,
+      "test_coverage_dir": ".",
       "commands": [
         {
           "name": "deploy",
@@ -109,7 +109,7 @@
       "name": "testapp",
       "version": "1.0.0",
       "help": "test",
-      "test_coverage": true,
+      "test_coverage_dir": ".",
       "commands": [
         {
           "name": "deploy",
@@ -152,12 +152,12 @@
     }
   },
   {
-    "name": "test-coverage: zero coverage state skips (foreign cwd, no manifest, no shards)",
+    "name": "test-coverage: zero coverage state skips (declared dir present, no manifest, no shards)",
     "app": {
       "name": "testapp",
       "version": "1.0.0",
       "help": "test",
-      "test_coverage": true,
+      "test_coverage_dir": ".",
       "commands": [
         {
           "name": "deploy",
@@ -192,6 +192,56 @@
         "SKIP",
         "cli-test-coverage",
         "development tree"
+      ]
+    }
+  },
+  {
+    "name": "test-coverage: a declared directory that does not exist registers no check",
+    "app": {
+      "name": "testapp",
+      "version": "1.0.0",
+      "help": "test",
+      "test_coverage_dir": "no-such-directory",
+      "commands": [
+        {
+          "name": "deploy",
+          "help": "deploy the app",
+          "effect": "read_only",
+          "flags": [],
+          "handler_prints": "deployed"
+        }
+      ],
+      "providers": [
+        [
+          {
+            "name": "prov-lint",
+            "tags": [
+              "release"
+            ],
+            "severity": "error",
+            "fast": true,
+            "pure": true,
+            "needs_network": false,
+            "depends_on": [],
+            "scope": "",
+            "mint": "passed",
+            "message": "provider lint ok"
+          }
+        ]
+      ]
+    },
+    "argv": [
+      "check",
+      "--all"
+    ],
+    "expect": {
+      "exit_code": 0,
+      "stdout_contains": [
+        "PASS",
+        "prov-lint"
+      ],
+      "stdout_not_contains": [
+        "cli-test-coverage"
       ]
     }
   }

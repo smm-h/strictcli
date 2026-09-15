@@ -572,9 +572,6 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
         "go": "coverage_deferred:Requires a file with restricted permissions, platform-dependent",
         "typescript": "coverage_deferred:Requires a file with restricted permissions, platform-dependent",
     },
-    'test-coverage: cannot create .strictcli/coverage/: *': {
-        "python": "excluded:Python uses os.makedirs which raises OSError, not a formatted message",
-    },
 
     # =======================================================================
     # TypeScript-present, Python/Go-excluded
@@ -705,6 +702,32 @@ SIGNATURE_STATUS: dict[str, dict[str, str]] = {
     },
     'proc_observe_allowlist entries must be lists of strings, got *': {
         "go": "excluded:Go's WithProcObserveAllowlist takes [][]string; a non-string element is a compile error",
+    },
+
+    # =======================================================================
+    # The retired test-coverage boolean (contract §12.12)
+    #
+    # The refusal names the option that replaced it, so it carries a
+    # per-language spelling for the same reason the presence family below does:
+    # one sentence, each language's own spellings inside it. Each
+    # implementation's red-green test asserts its own line -- Python
+    # tests/test_coverage.py TestRetiredBooleanRefused, Go
+    # coverage_test.go TestCoverageRetiredBooleanRefused, TypeScript
+    # checks_coverage.test.ts "the retired boolean is refused naming the
+    # directory option".
+    # =======================================================================
+
+    'test_coverage is not accepted; declare the directory holding coverage/ and test-coverage.json with test_coverage_dir': {
+        "go": "excluded:one sentence in three spellings (contract §12.12); Go carries the WithTestCoverage/WithTestCoverageDir line and asserts it in coverage_test.go",
+        "typescript": "excluded:one sentence in three spellings (contract §12.12); TypeScript carries the testCoverage/testCoverageDir line and asserts it in checks_coverage.test.ts",
+    },
+    'WithTestCoverage is not accepted; declare the directory holding coverage/ and test-coverage.json with WithTestCoverageDir': {
+        "python": "excluded:one sentence in three spellings (contract §12.12); Python carries the test_coverage/test_coverage_dir line and asserts it in tests/test_coverage.py",
+        "typescript": "excluded:one sentence in three spellings (contract §12.12); TypeScript carries the testCoverage/testCoverageDir line and asserts it in checks_coverage.test.ts",
+    },
+    'testCoverage is not accepted; declare the directory holding coverage/ and test-coverage.json with testCoverageDir': {
+        "python": "excluded:one sentence in three spellings (contract §12.12); Python carries the test_coverage/test_coverage_dir line and asserts it in tests/test_coverage.py",
+        "go": "excluded:one sentence in three spellings (contract §12.12); Go carries the WithTestCoverage/WithTestCoverageDir line and asserts it in coverage_test.go",
     },
 
     # =======================================================================

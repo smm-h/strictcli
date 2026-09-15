@@ -1340,8 +1340,8 @@ async function main() {
 	if ("checks_toml" in appDef) {
 		spec.checksEmbed = appDef.checks_toml;
 	}
-	if (appDef.test_coverage === true) {
-		spec.testCoverage = true;
+	if ("test_coverage_dir" in appDef) {
+		spec.testCoverageDir = appDef.test_coverage_dir;
 	}
 	if ("proc_observe_allowlist" in appDef) {
 		spec.procObserveAllowlist = appDef.proc_observe_allowlist;
@@ -1430,7 +1430,7 @@ async function main() {
 	if (
 		"checks_toml" in appDef ||
 		"providers" in appDef ||
-		"test_coverage" in appDef
+		"test_coverage_dir" in appDef
 	) {
 		app.setCheckContext(() => ({ projectRoot: "." }));
 	}
