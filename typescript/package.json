@@ -2,7 +2,7 @@
 	"name": "strictcli",
 	"version": "0.40.2",
 	"type": "module",
-	"description": "A strict CLI framework for Python, Go and TypeScript that makes you declare every command, flag, argument and help string, and errors at registration time on anything left unstated (TypeScript implementation)",
+	"description": "A CLI framework for the Era of Agents: nothing is inferred, everything is declared. First-class support for Go, Python, and TypeScript (TypeScript implementation)",
 	"engines": {
 		"node": ">=22"
 	},

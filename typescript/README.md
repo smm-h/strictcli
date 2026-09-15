@@ -1,6 +1,6 @@
 # strictcli
 
-A strict CLI framework for Python, Go and TypeScript that makes you declare every command, flag, argument and help string, and errors at registration time on anything left unstated (TypeScript implementation).
+A CLI framework for the Era of Agents: nothing is inferred, everything is declared. First-class support for Go, Python, and TypeScript (TypeScript implementation).
 
 strictcli takes the opposite stance from convention-over-configuration CLI
 libraries: every command, flag, argument, type, default, and help string is
