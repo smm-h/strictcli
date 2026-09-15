@@ -8,7 +8,7 @@ demands of a first-class server, and a new expression language, strictexpr,
 was designed for the fleet to adopt. Several findings are strictcli's to act
 on. All line references are as of 2026-09-15; verify before acting.
 
-## 1. A reserved runtime-facts object in the schema dump and the `--json` envelope
+## 1. A reserved runtime-facts object in the schema dump and the `--json` wrapper
 
 **Problem.** A runtime layered on go-strictcli proves facts about a command at
 check time — a purity level below read-only, the prefixes of every contact the
@@ -21,13 +21,13 @@ framework release.
 
 **Decision (owner, 2026-09-15, on recommendation).** go-strictcli reserves one
 namespaced object — in the schema dump per command, and in the `--json`
-envelope per dispatch — that a runtime fills and go-strictcli passes through
+wrapper per dispatch — that a runtime fills and go-strictcli passes through
 untouched. The runtime publishes a schema for that object's contents;
 consumers validate against the runtime's schema, not go-strictcli's. One
 framework change, ever; the layering stays right: the framework carries the
 object, the runtime defines its meaning.
 
-**Affected.** The schema-dump emitter and the machine-mode envelope in all
+**Affected.** The schema-dump emitter and the machine-mode wrapper in all
 three ports (Python `__init__.py`, `go/strictcli/strictcli.go`, the TypeScript
 port), the conformance cases that pin the dump's shape, and the
 `--dump-schema` documentation. Effort: small in each port; the conformance
@@ -132,7 +132,7 @@ process-wide first-panic-wins lock, and a way for a non-dispatching goroutine
 to end the dispatch with the same exit status and wrapper.
 
 **Fix.** A framework-level abort that any goroutine may call once, serialised
-so the log and the wrapper render exactly one time; `runSealed` participates
+so the log and the wrapper render once; `runSealed` participates
 in it. Effort: medium; needs its own fixtures.
 
 ## 7. Recorded, not a defect: the configuration editor's binary comes from the environment
