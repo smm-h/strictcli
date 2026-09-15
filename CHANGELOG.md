@@ -2,6 +2,18 @@
 
 # py-strictcli
 
+## 0.42.0
+
+Test coverage is anchored to a declared directory (test_coverage_dir, WithTestCoverageDir, testCoverageDir) instead of the current directory; the old boolean is refused. The package describes itself with the project's settled line.
+
+### Breaking
+
+- [strictcli] **Breaking.** CLI test-coverage instrumentation is declared as a directory, not a boolean: `test_coverage_dir="<path>"` names the directory holding `coverage/` and `test-coverage.json`. The old `test_coverage=True` is refused at registration with an error naming the new option. An undeclared directory, or a declared one that does not exist at construction, leaves coverage off entirely -- so an installed CLI run from a consumer's project no longer registers the `cli-test-coverage` check there or reads and writes coverage state relative to whatever directory it was started in.
+
+### Fixes
+
+- [strictcli] **Fix.** The package description is now the project's canonical one-line description.
+
 ## 0.41.2
 
 A plain CLI run no longer plants an empty .strictcli/coverage/ directory in the current directory, and the package describes itself with the project's canonical one-line description.

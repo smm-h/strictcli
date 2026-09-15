@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "0.41.2"
+__version__ = "0.42.0"
 
 __all__ = [
     "App", "Flag", "Arg", "FlagSet",
