@@ -28,7 +28,8 @@
   },
   "en/go-strictcli.md": {
     "content": "fdeec4c30ea7f755da9bceec5ec9a00f75acd02d258a2d78d5281cd669b32e19",
-    "description": "b1a079f8ed32fba4efbed82d5a64d275e6acca499e89af3f1394a7800dd0f14f",
+    "description": "05681c046c47708340a8026f570da52d50cdb8d275cfbb9b8c2e48df2d414bf6",
+    "seed_hash": "05681c046c47708340a8026f570da52d50cdb8d275cfbb9b8c2e48df2d414bf6",
     "source_docstring": "32254953e6bb700234fd9b034461a8fa108a67dc82db44765c0ff1a2007b5cd2"
   },
   "en/index.md": {
@@ -78,6 +79,7 @@
   "en/typescript-src-checks-coverage.md": {
     "content": "b49d8bf91167b6e6ca8f6c9d3598002943866562e31a79c8dbc0659273b792da",
     "description": "3e20686ddad5333619a8270229f5647b6925846f3c5470d281a086d2329795b9",
+    "seed_hash": "3e20686ddad5333619a8270229f5647b6925846f3c5470d281a086d2329795b9",
     "source_docstring": "ba47e92ff77040e7e7b84d606b10bcef0b0f2e691004bde512c61312768fa552"
   },
   "en/typescript-src-checks-effects_bypass.md": {
