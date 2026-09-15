@@ -1,4 +1,4 @@
-// Package strictcli is a strict CLI framework that makes you declare every command, flag, argument and help string, and fails at registration time on anything left unstated.
+// Package strictcli: A CLI framework for the Era of Agents: nothing is inferred, everything is declared. First-class support for Go, Python, and TypeScript.
 //
 // This is the Go implementation of strictcli. The Python and TypeScript
 // implementations are held to identical behavior -- same semantics, same help
