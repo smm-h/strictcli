@@ -621,8 +621,9 @@ at App construction:
 | undeclared | `.strictcli/schema.json` **anchored at the construction-time working directory** |
 
 The anchor is what keeps the write off the caller's working directory: a `chdir`
-between construction and dispatch cannot move the file, exactly as it cannot
-move the test-coverage root.
+between construction and dispatch cannot move the file. The test-coverage root
+(see below) keeps the write off the caller's working directory the same way,
+though it is declared rather than anchored.
 
 ### Schema version 2
 
@@ -1135,6 +1136,30 @@ The schema file is used by external tools (rlsbl uses it during release to
 verify the CLI surface is up-to-date). A `project_id` field prevents accidental
 overwrites across projects sharing a working directory: if the existing schema
 file has a different `project_id`, the write is refused.
+
+## The test-coverage root
+
+The built-in `cli-test-coverage` check reads and writes two things: per-process
+shard files under `coverage/`, appended by every `test()` and `call()` dispatch,
+and `test-coverage.json`, the committed manifest its verdict is derived from.
+Both live under one directory, and **that directory is declared, never
+discovered**:
+
+| Declaration | Result |
+|-------------|--------|
+| `test_coverage_dir="..."` (Python) / `WithTestCoverageDir(...)` (Go) / `testCoverageDir: "..."` (TypeScript), naming a directory that exists at construction | the check registers, and `coverage/` plus `test-coverage.json` resolve inside that directory |
+| the same declaration, naming a directory that does not exist at construction | coverage is off: no check registered, no paths computed, nothing created |
+| undeclared | coverage is off |
+
+Nothing here resolves against the process's working directory, which has two
+consequences. A test that changes directory between construction and dispatch
+still records into the declared directory. And an installed CLI started in a
+consumer's project registers no coverage check and writes nothing into that
+project -- its declared directory names a source checkout that is not there,
+which is exactly the second row.
+
+The `coverage/` subdirectory itself is created lazily, immediately before the
+first shard write, so a plain CLI run leaves no empty directory behind.
 
 ## How WithConfig works internally
 

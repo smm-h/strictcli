@@ -264,6 +264,8 @@ Enabled via `WithChecks(path)` (Go) / `checks_path=` (Python), pointing to a TOM
 
 **Schema integration**: `--dump-schema` includes a `checks` top-level key when checks are enabled.
 
+**`cli-test-coverage` (built-in provider check)**: enabled by declaring the directory that holds the app's coverage state -- `test_coverage_dir=` (Python) / `WithTestCoverageDir(path)` (Go) / `testCoverageDir:` (TypeScript). That directory is the anchor for everything the mechanism reads and writes: `coverage/<pid>.jsonl` shard files, appended by every `test()` and `call()` dispatch, and `test-coverage.json`, the committed manifest the verdict is derived from. Nothing is resolved against the process's working directory, so a `chdir` between construction and dispatch moves neither, and an installed CLI started in a consumer's project writes nothing there. The declaration is the whole switch: undeclared means off, and a declared directory that does not exist at construction also means off -- no check registered, no paths computed, nothing created, which is the state an installed distribution is in. The retired boolean (`test_coverage=True` / `WithTestCoverage()` / `testCoverage: true`) is refused at registration with an error naming the directory option.
+
 **Hooks**: strictcli does NOT manage `.git/hooks/`. External tools call `myapp check --tag pre-push` from their own hook scripts.
 
 ## Release workflow
