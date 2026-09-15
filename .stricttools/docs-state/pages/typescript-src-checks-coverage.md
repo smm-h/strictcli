@@ -2,7 +2,6 @@
 title = "typescript/src/checks/coverage"
 description = "CLI test-coverage instrumentation: per-process shard files recording which commands app.test() exercised, plus the built-in cli-test-coverage provider."
 generated = true
-seeded = true
 nav_group = "API Reference"
 nav_order = 4
 +++
